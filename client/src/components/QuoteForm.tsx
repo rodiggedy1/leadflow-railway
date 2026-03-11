@@ -3,10 +3,12 @@
  * Design: Warm Coral Hospitality — Playfair Display headlines, DM Sans body
  * Colors: Coral #E8603C, Warm bg #FFF8F5, Input bg #FFF0EC
  * Features: Staggered entrance, coral focus rings, success state with bounce animation
+ * Backend: tRPC quotes.submit → OpenPhone SMS
  */
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 
 const SERVICE_TYPES = [
   "Standard Cleaning",
@@ -80,7 +82,7 @@ function StarRating() {
   );
 }
 
-function SuccessState({ name }: { name: string }) {
+function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-6 text-center animate-fade-slide-up delay-0">
       <div
@@ -98,11 +100,17 @@ function SuccessState({ name }: { name: string }) {
         Quote Request Sent!
       </h2>
       <p className="text-base mb-2" style={{ color: "#6B4A3A", fontFamily: "'DM Sans', sans-serif" }}>
-        Thanks{name ? `, ${name.split(" ")[0]}` : ""}! We've received your request and you'll get a text shortly with your custom quote.
+        Thanks{name ? `, ${name.split(" ")[0]}` : ""}! We've received your request.
       </p>
-      <p className="text-sm" style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}>
-        Check your phone — our AI assistant will reach out within minutes.
-      </p>
+      {smsSent ? (
+        <p className="text-sm" style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}>
+          Check your phone — your custom quote was just texted to you from Maids in Black!
+        </p>
+      ) : (
+        <p className="text-sm" style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}>
+          Our team will be in touch with your custom quote shortly.
+        </p>
+      )}
     </div>
   );
 }
@@ -110,8 +118,21 @@ function SuccessState({ name }: { name: string }) {
 export default function QuoteForm() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<FormData>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [smsSent, setSmsSent] = useState(false);
+
+  const submitMutation = trpc.quotes.submit.useMutation({
+    onSuccess: (data) => {
+      setSmsSent(data.smsSent);
+      setSubmitted(true);
+      if (!data.smsSent) {
+        toast.warning("Quote received! We'll follow up shortly.");
+      }
+    },
+    onError: (err) => {
+      toast.error(err.message || "Something went wrong. Please try again.");
+    },
+  });
 
   const validate = (): boolean => {
     const newErrors: Partial<FormData> = {};
@@ -140,18 +161,10 @@ export default function QuoteForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-
-    setIsSubmitting(true);
-    try {
-      // Simulate API call — will be replaced with OpenPhone + ChatGPT integration
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-      setSubmitted(true);
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    submitMutation.mutate(form);
   };
+
+  const isSubmitting = submitMutation.isPending;
 
   return (
     <div
@@ -179,7 +192,7 @@ export default function QuoteForm() {
 
         <div className="px-8 pt-8 pb-10 sm:px-10 sm:pt-10">
           {submitted ? (
-            <SuccessState name={form.name} />
+            <SuccessState name={form.name} smsSent={smsSent} />
           ) : (
             <>
               {/* Header */}
@@ -253,7 +266,7 @@ export default function QuoteForm() {
                   <div className="animate-fade-slide-up delay-3">
                     <input
                       type="tel"
-                      placeholder="Phone"
+                      placeholder="Phone (e.g. +12025551234)"
                       value={form.phone}
                       onChange={(e) => handleChange("phone", e.target.value)}
                       className="quote-input"
