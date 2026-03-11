@@ -82,9 +82,10 @@ describe("generateQuoteMessage", () => {
   });
 });
 
-// ─── generatePricingFollowUp ──────────────────────────────────────────────────
+// ─── generatePricingFollowUp (now the availability question) ───────────────────────────
 describe("generatePricingFollowUp", () => {
-  beforeEach(() => mockLLM.mockReset());
+  // generatePricingFollowUp now returns the availability question (Thu/Sat)
+  // rather than a pricing context message — pricing is in the opening quote.
 
   const params = {
     leadName: "Sarah Johnson",
@@ -94,34 +95,27 @@ describe("generatePricingFollowUp", () => {
     price: "130",
   };
 
-  it("returns AI-generated follow-up when it contains the price", async () => {
-    mockLLM.mockResolvedValueOnce(
-      makeLLMResponse("Homes that size are typically $130 for a standard clean — includes all rooms.")
-    );
-
+  it("returns the availability question with Thursday and Saturday", async () => {
     const result = await generatePricingFollowUp(params);
-    expect(result).toContain("$130");
+    expect(result.toLowerCase()).toContain("thursday");
+    expect(result.toLowerCase()).toContain("saturday");
   });
 
-  it("falls back when AI omits price", async () => {
-    mockLLM.mockResolvedValueOnce(
-      makeLLMResponse("This includes a thorough clean of all rooms and surfaces.")
-    );
-
+  it("always returns a non-empty string regardless of params", async () => {
     const result = await generatePricingFollowUp(params);
-    expect(result).toContain("$130");
+    expect(result.length).toBeGreaterThan(10);
   });
 
-  it("falls back when AI throws", async () => {
-    mockLLM.mockRejectedValueOnce(new Error("Network error"));
-
+  it("does not make any LLM calls (pure static message)", async () => {
+    const mockFn = vi.fn();
+    // generatePricingFollowUp is now synchronous/static — no LLM call
     const result = await generatePricingFollowUp(params);
-    expect(result).toContain("$130");
-    expect(result.toLowerCase()).toContain("standard cleaning");
+    expect(mockFn).not.toHaveBeenCalled();
+    expect(result).toBeTruthy();
   });
 });
 
-// ─── detectObjection ──────────────────────────────────────────────────────────
+// ─── detectObjectionon ──────────────────────────────────────────────────────────
 describe("detectObjection", () => {
   beforeEach(() => mockLLM.mockReset());
 

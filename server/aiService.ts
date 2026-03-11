@@ -60,6 +60,8 @@ export interface QuoteMessageParams {
 
 /**
  * Generates the initial quote SMS using ChatGPT with the brand voice.
+ * This is the ONLY opening message — it combines the greeting, home size,
+ * price, and a brief value note in one natural SMS.
  * Falls back to a hardcoded template if the AI call fails.
  */
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
@@ -72,14 +74,19 @@ export async function generateQuoteMessage(params: QuoteMessageParams): Promise<
         { role: "system", content: BRAND_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Generate the initial quote SMS for a new lead. Keep it under 160 characters.
+          content: `Generate a single opening quote SMS. Keep it under 200 characters total.
 
 Lead name: ${firstName}
 Service: ${serviceType}
 Home: ${bedrooms}, ${bathrooms}
 Price: $${price}
 
-The message should: greet them by first name, mention Maids in Black, reference their home size, and give the price. Do NOT add any call-to-action — that comes in a separate message.`,
+The message must:
+1. Greet them by first name and mention Maids in Black
+2. State their price ($${price}) for their home size
+3. Add ONE brief value note (e.g. "includes all rooms" or "fully insured team")
+
+Do NOT ask any question — that comes in the next message. Keep it warm and concise.`,
         },
       ],
     });
@@ -101,39 +108,13 @@ The message should: greet them by first name, mention Maids in Black, reference 
 }
 
 /**
- * Generates the pricing follow-up message (sent right after the quote).
+ * Generates the availability follow-up message (sent right after the quote).
+ * This asks the lead if Thursday or Saturday works — the key conversion question.
  */
 export async function generatePricingFollowUp(params: QuoteMessageParams): Promise<string> {
-  const { serviceType, price } = params;
-
-  try {
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Generate a brief follow-up SMS that contextualizes the price. Keep it under 120 characters.
-
-Service: ${serviceType}
-Price: $${price}
-
-The message should: briefly explain what the price covers or why it's a good value. No greeting needed (this follows the quote message immediately). Do NOT add any question or CTA.`,
-        },
-      ],
-    });
-
-    const content = response.choices?.[0]?.message?.content;
-    const text = typeof content === "string" ? content.trim() : "";
-
-    if (text && text.includes(price)) {
-      return text;
-    }
-
-    return `Homes that size are typically $${price} for the first ${serviceType.toLowerCase()}.`;
-  } catch (err) {
-    console.error("[AI] generatePricingFollowUp failed:", err);
-    return `Homes that size are typically $${price} for the first ${serviceType.toLowerCase()}.`;
-  }
+  // This is now the availability prompt — no longer about pricing context
+  // (pricing is already covered in the opening quote message)
+  return `We currently have openings Thursday afternoon or Saturday morning. Would one of those work for you?`;
 }
 
 // ─── Off-Script Handler ───────────────────────────────────────────────────────

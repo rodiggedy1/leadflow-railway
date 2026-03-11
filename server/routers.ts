@@ -87,56 +87,52 @@ async function processQuoteInBackground(
 ): Promise<void> {
   const db = await getDb();
 
-  // ── Step 1: Generate AI messages (parallel, each has its own fallback) ──────
-  const [msg1, msg2] = await Promise.all([
-    generateQuoteMessage({
-      leadName: input.name,
-      bedrooms: input.bedrooms,
-      bathrooms: input.bathrooms,
-      serviceType: input.serviceType,
-      price,
-    }),
-    generatePricingFollowUp({
-      leadName: input.name,
-      bedrooms: input.bedrooms,
-      bathrooms: input.bathrooms,
-      serviceType: input.serviceType,
-      price,
-    }),
-  ]);
-  const msg3 = buildAvailabilityMessage();
+  // ── Step 1: Generate AI quote message (with fallback) ──────────────────────────────
+  // msg1 = combined quote + price + value note (single opening SMS)
+  // msg2 = availability question (Thursday or Saturday)
+  const msg1 = await generateQuoteMessage({
+    leadName: input.name,
+    bedrooms: input.bedrooms,
+    bathrooms: input.bathrooms,
+    serviceType: input.serviceType,
+    price,
+  });
+  const msg2 = await generatePricingFollowUp({
+    leadName: input.name,
+    bedrooms: input.bedrooms,
+    bathrooms: input.bathrooms,
+    serviceType: input.serviceType,
+    price,
+  });
 
-  // ── Step 2: Send SMS #1: Quote + price ───────────────────────────────────────
+  // ── Step 2: Send SMS #1: Quote + price + value note ────────────────────────────────
   const sms1 = await sendSms({ to: input.phone, content: msg1 });
   console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
 
-  // ── Step 3: Send SMS #2: Pricing follow-up (natural delay) ───────────────────
-  await delay(1500);
+  // ── Step 3: Send SMS #2: Availability question (natural delay) ─────────────────────
+  await delay(2000);
   const sms2 = await sendSms({ to: input.phone, content: msg2 });
   console.log(`[submitQuote] SMS2 sent: ${sms2.success}`);
-
-  // ── Step 4: Send SMS #3: Availability question ───────────────────────────────
-  await delay(1500);
-  const sms3 = await sendSms({ to: input.phone, content: msg3 });
-  console.log(`[submitQuote] SMS3 sent: ${sms3.success}`);
 
   if (!db) {
     console.warn("[submitQuote] No DB — skipping session and lead save");
     return;
   }
 
-  // ── Step 5: Create/update conversation session ───────────────────────────────
+  // ── Step 4: Create/update conversation session ───────────────────────────────────────
+  // Normalize phone: store in E.164 format (+1XXXXXXXXXX) so webhook lookups match
+  // Normalize phone to E.164 (+1XXXXXXXXXX) so webhook lookups always match
+  const normalizedPhone = normalizePhone(input.phone);
   const initialHistory = JSON.stringify([
     { role: "assistant", content: msg1 },
     { role: "assistant", content: msg2 },
-    { role: "assistant", content: msg3 },
   ]);
 
   try {
     const existing = await db
       .select()
       .from(conversationSessions)
-      .where(eq(conversationSessions.leadPhone, input.phone))
+      .where(eq(conversationSessions.leadPhone, normalizedPhone))
       .limit(1);
 
     if (existing.length > 0) {
@@ -154,10 +150,10 @@ async function processQuoteInBackground(
           callPreference: null,
           messageHistory: initialHistory,
         })
-        .where(eq(conversationSessions.leadPhone, input.phone));
+        .where(eq(conversationSessions.leadPhone, normalizedPhone));
     } else {
       await db.insert(conversationSessions).values({
-        leadPhone: input.phone,
+        leadPhone: normalizedPhone,
         leadName: input.name,
         stage: "AVAILABILITY",
         quotedPrice: price,
@@ -171,12 +167,12 @@ async function processQuoteInBackground(
     console.error("[submitQuote] Failed to create conversation session:", dbErr);
   }
 
-  // ── Step 6: Save lead record ──────────────────────────────────────────────────
+  // ── Step 5: Save lead record ──────────────────────────────────────────────────
   try {
     await db.insert(quoteLeads).values({
       name: input.name,
       email: input.email,
-      phone: input.phone,
+      phone: normalizedPhone,
       serviceType: input.serviceType,
       bedrooms: input.bedrooms,
       bathrooms: input.bathrooms,
@@ -188,7 +184,30 @@ async function processQuoteInBackground(
   }
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────────
+// ── Utilities ────────────────────────────────────────────────────────────────────────────────
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Normalizes a phone number to E.164 format (+1XXXXXXXXXX).
+ * Handles inputs like: "7259009272", "725-900-9272", "(725) 900-9272", "+17259009272"
+ */
+export function normalizePhone(phone: string): string {
+  // Strip everything except digits and leading +
+  const digits = phone.replace(/[^\d]/g, "");
+  // If already 11 digits starting with 1, add +
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+${digits}`;
+  }
+  // If 10 digits, assume US number
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  // If already has +, return as-is
+  if (phone.startsWith("+")) {
+    return phone.replace(/[^\d+]/g, "");
+  }
+  // Fallback: return with + prefix
+  return `+${digits}`;
 }

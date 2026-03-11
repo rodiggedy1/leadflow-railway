@@ -28,6 +28,7 @@ import { sendSms } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import type { ChatMessage, ConversationContext } from "./conversationEngine";
 import type { ConversationStage } from "../drizzle/schema";
+import { normalizePhone } from "./routers";
 
 export function registerWebhookRoutes(app: Express) {
   app.post("/api/webhooks/openphone", async (req, res) => {
@@ -43,12 +44,15 @@ export function registerWebhookRoutes(app: Express) {
       const msg = event?.data?.object;
       if (!msg || msg.direction !== "incoming") return;
 
-      const fromPhone: string = msg.from;
+      const rawPhone: string = msg.from;
       const inboundText: string = msg.body ?? "";
 
-      if (!fromPhone || !inboundText.trim()) return;
+      if (!rawPhone || !inboundText.trim()) return;
 
-      console.log(`[Webhook] Inbound SMS from ${fromPhone}: "${inboundText}"`);
+      // Normalize to E.164 to match how we stored it
+      const fromPhone = normalizePhone(rawPhone);
+
+      console.log(`[Webhook] Inbound SMS from ${fromPhone} (raw: ${rawPhone}): "${inboundText}"`);
 
       const db = await getDb();
       if (!db) {

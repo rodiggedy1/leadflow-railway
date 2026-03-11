@@ -37,3 +37,8 @@
 ## Bug Fixes
 
 - [x] Fix form submission hang: return instant response, run AI/SMS in background (fire-and-forget)
+
+## Bug Fixes (Round 2)
+
+- [x] Fix redundant SMS: merge quote + pricing into one message, keep availability as second
+- [x] Fix webhook: inbound replies not routing through conversation engine (phone normalization to E.164)
