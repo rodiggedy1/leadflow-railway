@@ -46,3 +46,7 @@
 ## Bug Fixes (Round 3)
 
 - [x] Debug: webhook not advancing conversation when lead replies "thursday" (fixed: text vs body field + phone normalization)
+
+## Bug Fixes (Round 4)
+
+- [x] Live conversation flow broken: fixed by registering OpenPhone webhook via API to published URL + text/body field fix

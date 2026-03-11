@@ -1,0 +1,16 @@
+{
+  "query": "UPDATE conversation_sessions SET stage = 'AVAILABILITY', messageHistory = '[]' WHERE id = 2;\nSELECT id, leadPhone, leadName, stage FROM conversation_sessions;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute UPDATE conversation_sessions SET stage = 'AVAILABILITY', messageHistory = '[]' WHERE id = 2;\nSELECT id, leadPhone, leadName, stage FROM conversation_sessions;",
+  "rows": [
+    {
+      "id": "2",
+      "leadPhone": "+13029816191",
+      "leadName": "Rohan gilkes",
+      "stage": "AVAILABILITY"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadPhone\tleadName\tstage\n2\t+13029816191\tRohan gilkes\tAVAILABILITY\n",
+  "stderr": "",
+  "execution_time_ms": 61
+}
