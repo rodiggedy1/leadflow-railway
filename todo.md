@@ -33,3 +33,7 @@
 - [x] Add OBJECTION stage: handles price pushback, reschedule requests, etc.
 - [x] Update conversation engine to route off-script replies through ChatGPT
 - [x] Write vitest tests for guardrailed AI responses (52/52 tests pass)
+
+## Bug Fixes
+
+- [x] Fix form submission hang: return instant response, run AI/SMS in background (fire-and-forget)

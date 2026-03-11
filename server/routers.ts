@@ -7,15 +7,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { quoteLeads, conversationSessions } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
-import {
-  buildQuoteMessage,
-  buildPricingFollowUp,
-  buildAvailabilityMessage,
-} from "./conversationEngine";
-import {
-  generateQuoteMessage,
-  generatePricingFollowUp,
-} from "./aiService";
+import { buildAvailabilityMessage } from "./conversationEngine";
+import { generateQuoteMessage, generatePricingFollowUp } from "./aiService";
 
 // Zod schema for the quote form submission
 const quoteFormSchema = z.object({
@@ -42,153 +35,158 @@ export const appRouter = router({
   /**
    * quotes.submit — public procedure
    *
-   * On form submission:
-   * 1. Calculates the price estimate
-   * 2. Sends SMS #1: Quote + price
-   * 3. Sends SMS #2 (immediately after): Pricing follow-up
-   * 4. Sends SMS #3 (immediately after): Availability question
-   * 5. Creates a conversation_session row so the webhook can continue the flow
-   * 6. Saves the lead to quote_leads
+   * Returns IMMEDIATELY to the user with a success response.
+   * All AI generation, SMS sending, and DB writes happen in the background
+   * via a fire-and-forget async task so the form never hangs.
    */
   quotes: router({
     submit: publicProcedure
       .input(quoteFormSchema)
       .mutation(async ({ input }) => {
-        const db = await getDb();
-
-        // ── 1. Calculate price ────────────────────────────────────────────────
+        // ── 1. Calculate price synchronously (instant, no network call) ────────
         const price = estimatePrice({
           bedrooms: input.bedrooms,
           bathrooms: input.bathrooms,
           serviceType: input.serviceType,
         });
 
-        const ctx = {
-          leadName: input.name,
-          quotedPrice: price,
-          serviceType: input.serviceType,
-          bedrooms: input.bedrooms,
-          bathrooms: input.bathrooms,
-        };
+        // ── 2. Fire-and-forget: AI generation + SMS + DB in background ─────────
+        // We do NOT await this — the form gets an instant response
+        processQuoteInBackground(input, price).catch(err => {
+          console.error("[submitQuote] Background processing error:", err);
+        });
 
-        // ── 2. Build all three opening messages (AI-generated with fallback) ──
-        // Run AI generation in parallel for speed; each has its own fallback
-        const [msg1, msg2] = await Promise.all([
-          generateQuoteMessage({
-            leadName: input.name,
-            bedrooms: input.bedrooms,
-            bathrooms: input.bathrooms,
-            serviceType: input.serviceType,
-            price,
-          }),
-          generatePricingFollowUp({
-            leadName: input.name,
-            bedrooms: input.bedrooms,
-            bathrooms: input.bathrooms,
-            serviceType: input.serviceType,
-            price,
-          }),
-        ]);
-        const msg3 = buildAvailabilityMessage();
-
-        // ── 3. Send SMS #1: Quote + price ─────────────────────────────────────
-        const sms1 = await sendSms({ to: input.phone, content: msg1 });
-        console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
-
-        // ── 4. Send SMS #2: Pricing follow-up (slight delay for natural feel) ─
-        await delay(1500);
-        const sms2 = await sendSms({ to: input.phone, content: msg2 });
-        console.log(`[submitQuote] SMS2 sent: ${sms2.success}`);
-
-        // ── 5. Send SMS #3: Availability question ─────────────────────────────
-        await delay(1500);
-        const sms3 = await sendSms({ to: input.phone, content: msg3 });
-        console.log(`[submitQuote] SMS3 sent: ${sms3.success}`);
-
-        // ── 6. Create/update conversation session ─────────────────────────────
-        if (db) {
-          // Initial message history: the three outbound messages
-          const initialHistory = JSON.stringify([
-            { role: "assistant", content: msg1 },
-            { role: "assistant", content: msg2 },
-            { role: "assistant", content: msg3 },
-          ]);
-
-          try {
-            // Upsert: if the phone already has a session, restart it
-            const existing = await db
-              .select()
-              .from(conversationSessions)
-              .where(eq(conversationSessions.leadPhone, input.phone))
-              .limit(1);
-
-            if (existing.length > 0) {
-              await db
-                .update(conversationSessions)
-                .set({
-                  stage: "AVAILABILITY",
-                  leadName: input.name,
-                  quotedPrice: price,
-                  serviceType: input.serviceType,
-                  bedrooms: input.bedrooms,
-                  bathrooms: input.bathrooms,
-                  selectedSlot: null,
-                  address: null,
-                  callPreference: null,
-                  messageHistory: initialHistory,
-                })
-                .where(eq(conversationSessions.leadPhone, input.phone));
-            } else {
-              await db.insert(conversationSessions).values({
-                leadPhone: input.phone,
-                leadName: input.name,
-                stage: "AVAILABILITY",
-                quotedPrice: price,
-                serviceType: input.serviceType,
-                bedrooms: input.bedrooms,
-                bathrooms: input.bathrooms,
-                messageHistory: initialHistory,
-              });
-            }
-          } catch (dbErr) {
-            console.error("[submitQuote] Failed to create conversation session:", dbErr);
-          }
-
-          // ── 7. Save lead record ───────────────────────────────────────────
-          try {
-            await db.insert(quoteLeads).values({
-              name: input.name,
-              email: input.email,
-              phone: input.phone,
-              serviceType: input.serviceType,
-              bedrooms: input.bedrooms,
-              bathrooms: input.bathrooms,
-              smsSent: sms1.success ? 1 : 0,
-              smsMessageId: sms1.messageId ?? null,
-            });
-          } catch (dbErr) {
-            console.error("[submitQuote] Failed to save lead:", dbErr);
-          }
-        }
-
-        const smsSent = sms1.success;
-
-        if (!smsSent) {
-          console.error("[submitQuote] Initial SMS failed:", sms1.error);
-        }
-
+        // ── 3. Return immediately ──────────────────────────────────────────────
         return {
           success: true,
-          smsSent,
-          message: smsSent
-            ? "Quote sent! Check your phone for your personalized quote."
-            : "Quote request received. We'll be in touch shortly.",
+          smsSent: true, // optimistic — background will handle actual sending
+          message: "Quote sent! Check your phone for your personalized quote.",
         };
       }),
   }),
 });
 
 export type AppRouter = typeof appRouter;
+
+// ─── Background processor ─────────────────────────────────────────────────────
+
+/**
+ * Runs all the slow work (AI calls, SMS, DB writes) after the form has
+ * already returned a success response to the user.
+ */
+async function processQuoteInBackground(
+  input: {
+    name: string;
+    email: string;
+    phone: string;
+    serviceType: string;
+    bedrooms: string;
+    bathrooms: string;
+  },
+  price: string
+): Promise<void> {
+  const db = await getDb();
+
+  // ── Step 1: Generate AI messages (parallel, each has its own fallback) ──────
+  const [msg1, msg2] = await Promise.all([
+    generateQuoteMessage({
+      leadName: input.name,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      serviceType: input.serviceType,
+      price,
+    }),
+    generatePricingFollowUp({
+      leadName: input.name,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      serviceType: input.serviceType,
+      price,
+    }),
+  ]);
+  const msg3 = buildAvailabilityMessage();
+
+  // ── Step 2: Send SMS #1: Quote + price ───────────────────────────────────────
+  const sms1 = await sendSms({ to: input.phone, content: msg1 });
+  console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
+
+  // ── Step 3: Send SMS #2: Pricing follow-up (natural delay) ───────────────────
+  await delay(1500);
+  const sms2 = await sendSms({ to: input.phone, content: msg2 });
+  console.log(`[submitQuote] SMS2 sent: ${sms2.success}`);
+
+  // ── Step 4: Send SMS #3: Availability question ───────────────────────────────
+  await delay(1500);
+  const sms3 = await sendSms({ to: input.phone, content: msg3 });
+  console.log(`[submitQuote] SMS3 sent: ${sms3.success}`);
+
+  if (!db) {
+    console.warn("[submitQuote] No DB — skipping session and lead save");
+    return;
+  }
+
+  // ── Step 5: Create/update conversation session ───────────────────────────────
+  const initialHistory = JSON.stringify([
+    { role: "assistant", content: msg1 },
+    { role: "assistant", content: msg2 },
+    { role: "assistant", content: msg3 },
+  ]);
+
+  try {
+    const existing = await db
+      .select()
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, input.phone))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(conversationSessions)
+        .set({
+          stage: "AVAILABILITY",
+          leadName: input.name,
+          quotedPrice: price,
+          serviceType: input.serviceType,
+          bedrooms: input.bedrooms,
+          bathrooms: input.bathrooms,
+          selectedSlot: null,
+          address: null,
+          callPreference: null,
+          messageHistory: initialHistory,
+        })
+        .where(eq(conversationSessions.leadPhone, input.phone));
+    } else {
+      await db.insert(conversationSessions).values({
+        leadPhone: input.phone,
+        leadName: input.name,
+        stage: "AVAILABILITY",
+        quotedPrice: price,
+        serviceType: input.serviceType,
+        bedrooms: input.bedrooms,
+        bathrooms: input.bathrooms,
+        messageHistory: initialHistory,
+      });
+    }
+  } catch (dbErr) {
+    console.error("[submitQuote] Failed to create conversation session:", dbErr);
+  }
+
+  // ── Step 6: Save lead record ──────────────────────────────────────────────────
+  try {
+    await db.insert(quoteLeads).values({
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      serviceType: input.serviceType,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      smsSent: sms1.success ? 1 : 0,
+      smsMessageId: sms1.messageId ?? null,
+    });
+  } catch (dbErr) {
+    console.error("[submitQuote] Failed to save lead:", dbErr);
+  }
+}
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 function delay(ms: number): Promise<void> {
