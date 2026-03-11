@@ -3,9 +3,15 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { quoteLeads } from "../drizzle/schema";
-import { sendSms, buildQuoteSmsMessage } from "./openphone";
+import { quoteLeads, conversationSessions } from "../drizzle/schema";
+import { sendSms, estimatePrice } from "./openphone";
+import {
+  buildQuoteMessage,
+  buildPricingFollowUp,
+  buildAvailabilityMessage,
+} from "./conversationEngine";
 
 // Zod schema for the quote form submission
 const quoteFormSchema = z.object({
@@ -30,11 +36,15 @@ export const appRouter = router({
   }),
 
   /**
-   * submitQuote — public procedure
-   * 1. Validates the form data
-   * 2. Saves the lead to the database
-   * 3. Sends an SMS via OpenPhone to the lead's phone number
-   * 4. Returns success status and the estimated price
+   * quotes.submit — public procedure
+   *
+   * On form submission:
+   * 1. Calculates the price estimate
+   * 2. Sends SMS #1: Quote + price
+   * 3. Sends SMS #2 (immediately after): Pricing follow-up
+   * 4. Sends SMS #3 (immediately after): Availability question
+   * 5. Creates a conversation_session row so the webhook can continue the flow
+   * 6. Saves the lead to quote_leads
    */
   quotes: router({
     submit: publicProcedure
@@ -42,22 +52,90 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
 
-        // Build the SMS message
-        const smsContent = buildQuoteSmsMessage({
-          name: input.name,
+        // ── 1. Calculate price ────────────────────────────────────────────────
+        const price = estimatePrice({
           bedrooms: input.bedrooms,
           bathrooms: input.bathrooms,
           serviceType: input.serviceType,
         });
 
-        // Send the SMS via OpenPhone
-        const smsResult = await sendSms({
-          to: input.phone,
-          content: smsContent,
-        });
+        const ctx = {
+          leadName: input.name,
+          quotedPrice: price,
+          serviceType: input.serviceType,
+          bedrooms: input.bedrooms,
+          bathrooms: input.bathrooms,
+        };
 
-        // Save the lead to the database (regardless of SMS success)
+        // ── 2. Build all three opening messages ───────────────────────────────
+        const msg1 = buildQuoteMessage(ctx);
+        const msg2 = buildPricingFollowUp(ctx);
+        const msg3 = buildAvailabilityMessage();
+
+        // ── 3. Send SMS #1: Quote + price ─────────────────────────────────────
+        const sms1 = await sendSms({ to: input.phone, content: msg1 });
+        console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
+
+        // ── 4. Send SMS #2: Pricing follow-up (slight delay for natural feel) ─
+        await delay(1500);
+        const sms2 = await sendSms({ to: input.phone, content: msg2 });
+        console.log(`[submitQuote] SMS2 sent: ${sms2.success}`);
+
+        // ── 5. Send SMS #3: Availability question ─────────────────────────────
+        await delay(1500);
+        const sms3 = await sendSms({ to: input.phone, content: msg3 });
+        console.log(`[submitQuote] SMS3 sent: ${sms3.success}`);
+
+        // ── 6. Create/update conversation session ─────────────────────────────
         if (db) {
+          // Initial message history: the three outbound messages
+          const initialHistory = JSON.stringify([
+            { role: "assistant", content: msg1 },
+            { role: "assistant", content: msg2 },
+            { role: "assistant", content: msg3 },
+          ]);
+
+          try {
+            // Upsert: if the phone already has a session, restart it
+            const existing = await db
+              .select()
+              .from(conversationSessions)
+              .where(eq(conversationSessions.leadPhone, input.phone))
+              .limit(1);
+
+            if (existing.length > 0) {
+              await db
+                .update(conversationSessions)
+                .set({
+                  stage: "AVAILABILITY",
+                  leadName: input.name,
+                  quotedPrice: price,
+                  serviceType: input.serviceType,
+                  bedrooms: input.bedrooms,
+                  bathrooms: input.bathrooms,
+                  selectedSlot: null,
+                  address: null,
+                  callPreference: null,
+                  messageHistory: initialHistory,
+                })
+                .where(eq(conversationSessions.leadPhone, input.phone));
+            } else {
+              await db.insert(conversationSessions).values({
+                leadPhone: input.phone,
+                leadName: input.name,
+                stage: "AVAILABILITY",
+                quotedPrice: price,
+                serviceType: input.serviceType,
+                bedrooms: input.bedrooms,
+                bathrooms: input.bathrooms,
+                messageHistory: initialHistory,
+              });
+            }
+          } catch (dbErr) {
+            console.error("[submitQuote] Failed to create conversation session:", dbErr);
+          }
+
+          // ── 7. Save lead record ───────────────────────────────────────────
           try {
             await db.insert(quoteLeads).values({
               name: input.name,
@@ -66,32 +144,34 @@ export const appRouter = router({
               serviceType: input.serviceType,
               bedrooms: input.bedrooms,
               bathrooms: input.bathrooms,
-              smsSent: smsResult.success ? 1 : 0,
-              smsMessageId: smsResult.messageId ?? null,
+              smsSent: sms1.success ? 1 : 0,
+              smsMessageId: sms1.messageId ?? null,
             });
           } catch (dbErr) {
-            console.error("[submitQuote] Failed to save lead to DB:", dbErr);
-            // Don't throw — SMS was already sent, we still want to return success
+            console.error("[submitQuote] Failed to save lead:", dbErr);
           }
         }
 
-        if (!smsResult.success) {
-          console.error("[submitQuote] SMS failed:", smsResult.error);
-          // Return partial success so the user still sees the thank-you screen
-          return {
-            success: true,
-            smsSent: false,
-            message: "Quote request received. We'll be in touch shortly.",
-          };
+        const smsSent = sms1.success;
+
+        if (!smsSent) {
+          console.error("[submitQuote] Initial SMS failed:", sms1.error);
         }
 
         return {
           success: true,
-          smsSent: true,
-          message: smsContent,
+          smsSent,
+          message: smsSent
+            ? "Quote sent! Check your phone for your personalized quote."
+            : "Quote request received. We'll be in touch shortly.",
         };
       }),
   }),
 });
 
 export type AppRouter = typeof appRouter;
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

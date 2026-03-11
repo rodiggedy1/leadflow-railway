@@ -10,3 +10,17 @@
 - [x] Connect QuoteForm frontend to tRPC submitQuote mutation
 - [x] Write vitest test for submitQuote procedure
 - [x] Test end-to-end: form submit → SMS received on phone (11/11 tests pass)
+
+## AI Conversation Flow (OpenPhone + ChatGPT)
+
+- [x] Design conversation state machine (stages: QUOTE_SENT → AVAILABILITY → SLOT_CHOICE → ADDRESS → CONFIRMATION → DONE)
+- [x] Add conversation_sessions table to DB schema (tracks stage, lead phone, collected data)
+- [x] Build AI conversation engine (ChatGPT decides reply based on stage + lead reply)
+- [x] Build OpenPhone webhook endpoint (POST /api/webhooks/openphone) to receive inbound SMS
+- [x] Stage 1: Send quote + price on form submit
+- [x] Stage 2: Immediately follow up with availability (Thu afternoon / Sat morning)
+- [x] Stage 3: Guided slot choice (Thursday 1PM vs Saturday 9AM)
+- [x] Stage 4: Address capture after slot selected
+- [x] Stage 5: Confirmation message + call scheduling question
+- [x] Stage 6: Handle "call now" vs "call in a few minutes" response
+- [x] Write vitest tests for conversation engine (30/30 tests pass)

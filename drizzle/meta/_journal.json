@@ -15,6 +15,20 @@
       "when": 1773258657182,
       "tag": "0001_chief_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773260401634,
+      "tag": "0002_flawless_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1773260461188,
+      "tag": "0003_majestic_bug",
+      "breakpoints": true
     }
   ]
 }

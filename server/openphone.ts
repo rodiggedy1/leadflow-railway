@@ -90,7 +90,7 @@ export function buildQuoteSmsMessage(params: {
  * Simple price estimation table.
  * Replace with ChatGPT-powered dynamic pricing when ready.
  */
-function estimatePrice(params: {
+export function estimatePrice(params: {
   bedrooms: string;
   bathrooms: string;
   serviceType: string;

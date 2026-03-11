@@ -41,3 +41,52 @@ export const quoteLeads = mysqlTable("quote_leads", {
 
 export type QuoteLead = typeof quoteLeads.$inferSelect;
 export type InsertQuoteLead = typeof quoteLeads.$inferInsert;
+
+/**
+ * Conversation stages for the AI SMS flow:
+ * QUOTE_SENT     → Initial quote + price sent, waiting for any reply
+ * AVAILABILITY   → Availability message sent, waiting for yes/no
+ * SLOT_CHOICE    → Slot options sent (Thu 1PM / Sat 9AM), waiting for choice
+ * ADDRESS        → Slot confirmed, waiting for address
+ * CONFIRMATION   → Address captured, confirmation + call question sent
+ * CALL_SCHEDULED → Lead said call now / in a few minutes
+ * DONE           → Conversation complete
+ * UNHANDLED      → AI couldn't parse the reply, needs human review
+ */
+export const conversationStages = [
+  "QUOTE_SENT",
+  "AVAILABILITY",
+  "SLOT_CHOICE",
+  "ADDRESS",
+  "CONFIRMATION",
+  "CALL_SCHEDULED",
+  "DONE",
+  "UNHANDLED",
+] as const;
+
+export type ConversationStage = (typeof conversationStages)[number];
+
+// Conversation sessions — one row per lead phone number, tracks the AI flow state
+export const conversationSessions = mysqlTable("conversation_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  leadPhone: varchar("leadPhone", { length: 30 }).notNull().unique(), // E.164 format
+  leadName: varchar("leadName", { length: 255 }),
+  stage: mysqlEnum("stage", conversationStages as unknown as [string, ...string[]]).default("QUOTE_SENT").notNull(),
+  // Collected data across the conversation
+  quotedPrice: varchar("quotedPrice", { length: 20 }),
+  serviceType: varchar("serviceType", { length: 100 }),
+  bedrooms: varchar("bedrooms", { length: 50 }),
+  bathrooms: varchar("bathrooms", { length: 50 }),
+  selectedSlot: varchar("selectedSlot", { length: 100 }), // e.g. "Thursday 1PM"
+  address: text("address"),
+  callPreference: varchar("callPreference", { length: 50 }), // "now" | "few_minutes"
+  // Full message history as JSON array for ChatGPT context (stored as JSON string)
+  messageHistory: varchar("messageHistory", { length: 5000 }).default("[]").notNull(),
+  // Link back to the original quote lead
+  quoteLeadId: int("quoteLeadId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConversationSession = typeof conversationSessions.$inferSelect;
+export type InsertConversationSession = typeof conversationSessions.$inferInsert;
