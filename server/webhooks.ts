@@ -42,17 +42,29 @@ export function registerWebhookRoutes(app: Express) {
       if (event?.type !== "message.received") return;
 
       const msg = event?.data?.object;
-      if (!msg || msg.direction !== "incoming") return;
+
+      // Log the full payload for debugging
+      console.log(`[Webhook] Event type: ${event?.type}, direction: ${msg?.direction}`);
+      console.log(`[Webhook] Payload: from=${msg?.from} to=${JSON.stringify(msg?.to)} body=${msg?.body ?? msg?.text}`);
+
+      if (!msg || msg.direction !== "incoming") {
+        console.log(`[Webhook] Skipping: not an incoming message (direction=${msg?.direction})`);
+        return;
+      }
 
       const rawPhone: string = msg.from;
-      const inboundText: string = msg.body ?? "";
+      // OpenPhone uses 'text' field; fall back to 'body' for compatibility
+      const inboundText: string = msg.text ?? msg.body ?? "";
 
-      if (!rawPhone || !inboundText.trim()) return;
+      if (!rawPhone || !inboundText.trim()) {
+        console.warn(`[Webhook] Skipping: empty phone or text (phone=${rawPhone}, text=${inboundText})`);
+        return;
+      }
 
       // Normalize to E.164 to match how we stored it
       const fromPhone = normalizePhone(rawPhone);
 
-      console.log(`[Webhook] Inbound SMS from ${fromPhone} (raw: ${rawPhone}): "${inboundText}"`);
+      console.log(`[Webhook] Inbound SMS from ${fromPhone}: "${inboundText}"`);
 
       const db = await getDb();
       if (!db) {
@@ -70,7 +82,10 @@ export function registerWebhookRoutes(app: Express) {
       const session = sessions[0];
 
       if (!session) {
-        console.warn(`[Webhook] No conversation session found for ${fromPhone}. Ignoring.`);
+        console.warn(`[Webhook] No conversation session found for ${fromPhone}. Stored sessions may use different format.`);
+        // Log all sessions for debugging
+        const allSessions = await db.select().from(conversationSessions).limit(10);
+        console.warn(`[Webhook] All sessions: ${JSON.stringify(allSessions.map(s => ({id: s.id, phone: s.leadPhone, stage: s.stage})))}`);
         return;
       }
 

@@ -42,3 +42,7 @@
 
 - [x] Fix redundant SMS: merge quote + pricing into one message, keep availability as second
 - [x] Fix webhook: inbound replies not routing through conversation engine (phone normalization to E.164)
+
+## Bug Fixes (Round 3)
+
+- [x] Debug: webhook not advancing conversation when lead replies "thursday" (fixed: text vs body field + phone normalization)
