@@ -1,3 +1,10 @@
+/* =============================================================
+   LeadFlow Quote Form — Design System
+   Philosophy: Warm Coral Hospitality
+   Fonts: Playfair Display (headlines) + DM Sans (body)
+   Primary: Coral #E8603C | Background: Warm off-white #FFF8F5
+   ============================================================= */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -40,77 +47,56 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Coral brand tokens */
+  --color-coral: #E8603C;
+  --color-coral-light: #F0A090;
+  --color-coral-dark: #C94A28;
+  --color-warm-bg: #FFF8F5;
+  --color-input-bg: #FFF0EC;
+  --color-amber-star: #F5A623;
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
+  /* Coral primary */
+  --primary: oklch(0.59 0.18 30);
+  --primary-foreground: oklch(1 0 0);
+
+  /* Warm neutral palette */
+  --background: oklch(0.99 0.005 55);
+  --foreground: oklch(0.18 0.01 55);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
+  --card-foreground: oklch(0.18 0.01 55);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
+  --popover-foreground: oklch(0.18 0.01 55);
+  --secondary: oklch(0.96 0.01 40);
+  --secondary-foreground: oklch(0.35 0.01 55);
+  --muted: oklch(0.96 0.008 50);
+  --muted-foreground: oklch(0.55 0.015 50);
+  --accent: oklch(0.96 0.01 40);
+  --accent-foreground: oklch(0.18 0.01 55);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
-}
+  --border: oklch(0.88 0.02 40);
+  --input: oklch(0.88 0.02 40);
+  --ring: oklch(0.59 0.18 30);
 
-.dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --radius: 0.75rem;
+
+  --chart-1: oklch(0.59 0.18 30);
+  --chart-2: oklch(0.72 0.14 40);
+  --chart-3: oklch(0.82 0.10 50);
+  --chart-4: oklch(0.90 0.06 55);
+  --chart-5: oklch(0.95 0.03 60);
+
+  --sidebar: oklch(0.99 0.005 55);
+  --sidebar-foreground: oklch(0.18 0.01 55);
+  --sidebar-primary: oklch(0.59 0.18 30);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0.01 40);
+  --sidebar-accent-foreground: oklch(0.18 0.01 55);
+  --sidebar-border: oklch(0.88 0.02 40);
+  --sidebar-ring: oklch(0.59 0.18 30);
 }
 
 @layer base {
@@ -119,6 +105,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'DM Sans', sans-serif;
+  }
+  h1, h2, h3 {
+    font-family: 'Playfair Display', serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -134,24 +124,11 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -162,16 +139,142 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
+  }
+
+  /* Quote form specific styles */
+  .quote-input {
+    font-family: 'DM Sans', sans-serif;
+    background-color: #FFF0EC;
+    border: 1.5px solid #F0A090;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 15px;
+    color: #2D2D2D;
+    width: 100%;
+    transition: border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .quote-input::placeholder {
+    color: #B07060;
+    font-weight: 400;
+  }
+
+  .quote-input:focus {
+    border-color: #E8603C;
+    background-color: #FFF8F5;
+    box-shadow: 0 0 0 3px rgba(232, 96, 60, 0.12);
+  }
+
+  .quote-select-wrapper {
+    position: relative;
+  }
+
+  .quote-select-wrapper::after {
+    content: '';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #E8603C;
+    pointer-events: none;
+  }
+
+  .quote-cta {
+    font-family: 'DM Sans', sans-serif;
+    background: linear-gradient(135deg, #E8603C 0%, #D44E2A 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 16px 24px;
+    font-size: 17px;
+    font-weight: 600;
+    width: 100%;
+    cursor: pointer;
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    letter-spacing: 0.01em;
+    box-shadow: 0 4px 14px rgba(232, 96, 60, 0.35);
+  }
+
+  .quote-cta:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(232, 96, 60, 0.45);
+    background: linear-gradient(135deg, #ED6B46 0%, #D95530 100%);
+  }
+
+  .quote-cta:active:not(:disabled) {
+    transform: translateY(0px);
+    box-shadow: 0 2px 8px rgba(232, 96, 60, 0.3);
+  }
+
+  .quote-cta:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  /* Staggered entrance animation */
+  @keyframes fadeSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-slide-up {
+    animation: fadeSlideUp 0.45s ease forwards;
+    opacity: 0;
+  }
+
+  .delay-0 { animation-delay: 0ms; }
+  .delay-1 { animation-delay: 60ms; }
+  .delay-2 { animation-delay: 120ms; }
+  .delay-3 { animation-delay: 180ms; }
+  .delay-4 { animation-delay: 240ms; }
+  .delay-5 { animation-delay: 300ms; }
+  .delay-6 { animation-delay: 360ms; }
+  .delay-7 { animation-delay: 420ms; }
+
+  /* Star pulse */
+  @keyframes starPop {
+    0% { transform: scale(0.5); opacity: 0; }
+    70% { transform: scale(1.15); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .animate-star {
+    animation: starPop 0.4s ease forwards;
+    opacity: 0;
+  }
+
+  /* Success checkmark */
+  @keyframes successBounce {
+    0% { transform: scale(0.5); opacity: 0; }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .animate-success {
+    animation: successBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
 }
