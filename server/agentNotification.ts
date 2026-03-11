@@ -60,6 +60,28 @@ export function buildAgentSmsNotification(lead: LeadBriefing): string {
 }
 
 /**
+ * Builds a concise new-lead alert SMS for when a form is first submitted.
+ * Lighter than the full briefing — just the essentials so support knows immediately.
+ */
+export function buildNewLeadAlert(lead: Pick<LeadBriefing, "name" | "phone" | "serviceType" | "bedrooms" | "bathrooms" | "price">): string {
+  const isOffice = lead.serviceType === "Office Cleaning";
+  const sizeInfo = isOffice
+    ? `Office: ${lead.bedrooms}`
+    : `${lead.bedrooms} / ${lead.bathrooms}`;
+
+  return [
+    `🆕 NEW QUOTE REQUEST — Maids in Black`,
+    ``,
+    `👤 ${lead.name}`,
+    `📱 ${lead.phone}`,
+    `🏠 ${lead.serviceType} — ${sizeInfo}`,
+    `💰 Quoted: $${lead.price}`,
+    ``,
+    `AI conversation started. Monitor for updates.`,
+  ].join("\n");
+}
+
+/**
  * Sends both an SMS to the support line and a push notification to the owner.
  * Called when a lead reaches the CONFIRMATION stage and requests a call.
  */

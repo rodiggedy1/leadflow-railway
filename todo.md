@@ -73,3 +73,7 @@
 - [x] Build agentNotification service: SMS summary + push notification to 202-888-5362
 - [x] Wire notification into CONFIRMATION stage when lead requests a call
 - [x] Write tests for agent notification service (72/72 tests pass)
+
+## New Lead Submission Alert
+
+- [x] Send immediate SMS to 202-888-5362 when a new quote form is submitted (77/77 tests pass)

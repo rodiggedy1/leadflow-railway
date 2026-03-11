@@ -7,8 +7,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { quoteLeads, conversationSessions } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
-import { buildAvailabilityMessage } from "./conversationEngine";
 import { generateQuoteMessage, generatePricingFollowUp } from "./aiService";
+import { buildNewLeadAlert, notifyAgentOfLead } from "./agentNotification";
 
 // Zod schema for the quote form submission
 const quoteFormSchema = z.object({
@@ -85,11 +85,22 @@ async function processQuoteInBackground(
   },
   price: string
 ): Promise<void> {
-  const db = await getDb();
+  const normalizedPhone = normalizePhone(input.phone);
 
-  // ── Step 1: Generate AI quote message (with fallback) ──────────────────────────────
-  // msg1 = combined quote + price + value note (single opening SMS)
-  // msg2 = availability question (Thursday or Saturday)
+  // ── Step 1: Alert support team immediately (fire-and-forget) ──────────────
+  const alertMsg = buildNewLeadAlert({
+    name: input.name,
+    phone: normalizedPhone,
+    serviceType: input.serviceType,
+    bedrooms: input.bedrooms,
+    bathrooms: input.bathrooms,
+    price,
+  });
+  sendSms({ to: "+12028885362", content: alertMsg }).catch(err =>
+    console.error("[submitQuote] Failed to send new lead alert to support:", err)
+  );
+
+  // ── Step 2: Generate AI quote messages (with fallback) ────────────────────
   const msg1 = await generateQuoteMessage({
     leadName: input.name,
     bedrooms: input.bedrooms,
@@ -105,24 +116,22 @@ async function processQuoteInBackground(
     price,
   });
 
-  // ── Step 2: Send SMS #1: Quote + price + value note ────────────────────────────────
+  // ── Step 3: Send SMS #1: Quote + price + value note to lead ───────────────
   const sms1 = await sendSms({ to: input.phone, content: msg1 });
   console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
 
-  // ── Step 3: Send SMS #2: Availability question (natural delay) ─────────────────────
+  // ── Step 4: Send SMS #2: Availability question (natural delay) ────────────
   await delay(2000);
   const sms2 = await sendSms({ to: input.phone, content: msg2 });
   console.log(`[submitQuote] SMS2 sent: ${sms2.success}`);
 
+  const db = await getDb();
   if (!db) {
     console.warn("[submitQuote] No DB — skipping session and lead save");
     return;
   }
 
-  // ── Step 4: Create/update conversation session ───────────────────────────────────────
-  // Normalize phone: store in E.164 format (+1XXXXXXXXXX) so webhook lookups match
-  // Normalize phone to E.164 (+1XXXXXXXXXX) so webhook lookups always match
-  const normalizedPhone = normalizePhone(input.phone);
+  // ── Step 5: Create/update conversation session ────────────────────────────
   const initialHistory = JSON.stringify([
     { role: "assistant", content: msg1 },
     { role: "assistant", content: msg2 },
@@ -167,7 +176,7 @@ async function processQuoteInBackground(
     console.error("[submitQuote] Failed to create conversation session:", dbErr);
   }
 
-  // ── Step 5: Save lead record ──────────────────────────────────────────────────
+  // ── Step 6: Save lead record ──────────────────────────────────────────────
   try {
     await db.insert(quoteLeads).values({
       name: input.name,
@@ -184,7 +193,8 @@ async function processQuoteInBackground(
   }
 }
 
-// ── Utilities ────────────────────────────────────────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -194,20 +204,15 @@ function delay(ms: number): Promise<void> {
  * Handles inputs like: "7259009272", "725-900-9272", "(725) 900-9272", "+17259009272"
  */
 export function normalizePhone(phone: string): string {
-  // Strip everything except digits and leading +
   const digits = phone.replace(/[^\d]/g, "");
-  // If already 11 digits starting with 1, add +
   if (digits.length === 11 && digits.startsWith("1")) {
     return `+${digits}`;
   }
-  // If 10 digits, assume US number
   if (digits.length === 10) {
     return `+1${digits}`;
   }
-  // If already has +, return as-is
   if (phone.startsWith("+")) {
     return phone.replace(/[^\d+]/g, "");
   }
-  // Fallback: return with + prefix
   return `+${digits}`;
 }

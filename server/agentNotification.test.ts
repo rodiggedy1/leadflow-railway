@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { buildAgentSmsNotification, notifyAgentOfLead, type LeadBriefing } from "./agentNotification";
+import { buildAgentSmsNotification, buildNewLeadAlert, notifyAgentOfLead, type LeadBriefing } from "./agentNotification";
 
 // Mock sendSms from openphone
 vi.mock("./openphone", () => ({
@@ -89,6 +89,33 @@ describe("buildAgentSmsNotification", () => {
     const msg = buildAgentSmsNotification(minimalLead);
     expect(msg).toContain("Jane");
     expect(msg).toContain("$329");
+    expect(msg).not.toContain("undefined");
+  });
+});
+
+describe("buildNewLeadAlert", () => {
+  it("includes the lead name", () => {
+    const msg = buildNewLeadAlert({ name: "Alice", phone: "+12025551234", serviceType: "Standard Cleaning", bedrooms: "2 Bedrooms", bathrooms: "1 Bathroom", price: "209" });
+    expect(msg).toContain("Alice");
+  });
+
+  it("includes the phone number", () => {
+    const msg = buildNewLeadAlert({ name: "Alice", phone: "+12025551234", serviceType: "Standard Cleaning", bedrooms: "2 Bedrooms", bathrooms: "1 Bathroom", price: "209" });
+    expect(msg).toContain("+12025551234");
+  });
+
+  it("includes the quoted price", () => {
+    const msg = buildNewLeadAlert({ name: "Alice", phone: "+12025551234", serviceType: "Standard Cleaning", bedrooms: "2 Bedrooms", bathrooms: "1 Bathroom", price: "209" });
+    expect(msg).toContain("$209");
+  });
+
+  it("shows sqft for office cleaning", () => {
+    const msg = buildNewLeadAlert({ name: "Bob", phone: "+12025551234", serviceType: "Office Cleaning", bedrooms: "1,000\u20132,000 sq ft", bathrooms: "", price: "180" });
+    expect(msg).toContain("1,000\u20132,000 sq ft");
+  });
+
+  it("does not contain undefined", () => {
+    const msg = buildNewLeadAlert({ name: "Alice", phone: "+12025551234", serviceType: "Deep Cleaning", bedrooms: "3 Bedrooms", bathrooms: "2 Bathrooms", price: "349" });
     expect(msg).not.toContain("undefined");
   });
 });
