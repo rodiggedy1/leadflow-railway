@@ -15,8 +15,6 @@ const SERVICE_TYPES = [
   "Deep Cleaning",
   "Move-In / Move-Out Cleaning",
   "Post-Construction Cleaning",
-  "Office Cleaning",
-  "Recurring Service",
 ];
 
 const BEDROOM_OPTIONS = [
@@ -25,7 +23,10 @@ const BEDROOM_OPTIONS = [
   "2 Bedrooms",
   "3 Bedrooms",
   "4 Bedrooms",
-  "5+ Bedrooms",
+  "5 Bedrooms",
+  "6 Bedrooms",
+  "7 Bedrooms",
+  "7+ Bedrooms",
 ];
 
 const BATHROOM_OPTIONS = [
@@ -34,7 +35,9 @@ const BATHROOM_OPTIONS = [
   "2 Bathrooms",
   "2.5 Bathrooms",
   "3 Bathrooms",
-  "3.5+ Bathrooms",
+  "3.5 Bathrooms",
+  "4 Bathrooms",
+  "4+ Bathrooms",
 ];
 
 interface FormData {

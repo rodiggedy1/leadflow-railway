@@ -80,6 +80,41 @@ describe("buildQuoteSmsMessage", () => {
       serviceType: "Standard Cleaning",
     });
     expect(msg).toMatch(/\$\d+/);
+    // Real price: 1 bed, 1 bath, standard = $179
+    expect(msg).toContain("$179");
+  });
+
+  it("calculates correct price: 3 bed, 2 bath, standard = $259", () => {
+    const msg = buildQuoteSmsMessage({
+      name: "Test",
+      bedrooms: "3 Bedrooms",
+      bathrooms: "2 Bathrooms",
+      serviceType: "Standard Cleaning",
+    });
+    // 3 bed base $229 + 1 extra bath $30 = $259
+    expect(msg).toContain("$259");
+  });
+
+  it("calculates correct price: 2 bed, 1 bath, deep clean = $269", () => {
+    const msg = buildQuoteSmsMessage({
+      name: "Test",
+      bedrooms: "2 Bedrooms",
+      bathrooms: "1 Bathroom",
+      serviceType: "Deep Cleaning",
+    });
+    // 2 bed base $209 + $60 surcharge = $269
+    expect(msg).toContain("$269");
+  });
+
+  it("calculates correct price: 4 bed, 3 bath, move-in/out = $399", () => {
+    const msg = buildQuoteSmsMessage({
+      name: "Test",
+      bedrooms: "4 Bedrooms",
+      bathrooms: "3 Bathrooms",
+      serviceType: "Move-In / Move-Out Cleaning",
+    });
+    // 4 bed base $279 + 2 extra baths $60 + $60 surcharge = $399
+    expect(msg).toContain("$399");
   });
 
   it("applies the deep cleaning multiplier (higher price than standard)", () => {

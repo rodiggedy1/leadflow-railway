@@ -54,3 +54,8 @@
 ## Feature: Flexible Slot Scheduling
 
 - [x] Accept any date/time request in SLOT_CHOICE stage (not just Thu/Sat) — AI says yes and confirms
+
+## Real Pricing Integration
+
+- [x] Replace placeholder prices with real Maids in Black pricing table (bedroom/bathroom matrix + service type surcharge)
+- [x] Update form service type dropdown to include Standard, Deep Clean, Move In/Out, Post Construction

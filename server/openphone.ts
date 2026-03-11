@@ -87,8 +87,19 @@ export function buildQuoteSmsMessage(params: {
 }
 
 /**
- * Simple price estimation table.
- * Replace with ChatGPT-powered dynamic pricing when ready.
+ * Real Maids in Black pricing table.
+ *
+ * Standard base prices (1 bathroom included):
+ *   1 bed = $179, 2 bed = $209, 3 bed = $229, 4 bed = $279,
+ *   5 bed = $319, 6 bed = $379, 7 bed = $419
+ *
+ * Additional bathrooms: +$30 each beyond the first.
+ *
+ * Service type surcharge:
+ *   Standard Cleaning: +$0
+ *   Deep Cleaning: +$60
+ *   Move-In / Move-Out Cleaning: +$60
+ *   Post-Construction Cleaning: +$60
  */
 export function estimatePrice(params: {
   bedrooms: string;
@@ -97,40 +108,45 @@ export function estimatePrice(params: {
 }): string {
   const { bedrooms, bathrooms, serviceType } = params;
 
-  // Base price by bedroom count
+  // Base price by bedroom count (includes 1 bathroom)
   const bedroomBase: Record<string, number> = {
-    "Studio": 80,
-    "1 Bedroom": 100,
-    "2 Bedrooms": 130,
-    "3 Bedrooms": 160,
-    "4 Bedrooms": 190,
-    "5+ Bedrooms": 220,
+    "Studio":       179,
+    "1 Bedroom":    179,
+    "2 Bedrooms":   209,
+    "3 Bedrooms":   229,
+    "4 Bedrooms":   279,
+    "5 Bedrooms":   319,
+    "6 Bedrooms":   379,
+    "7 Bedrooms":   419,
+    "7+ Bedrooms":  419,
   };
 
-  // Bathroom multiplier
-  const bathroomAdd: Record<string, number> = {
-    "1 Bathroom": 0,
-    "1.5 Bathrooms": 15,
-    "2 Bathrooms": 25,
-    "2.5 Bathrooms": 35,
-    "3 Bathrooms": 45,
-    "3.5+ Bathrooms": 60,
+  // Additional bathrooms beyond the first: $30 each
+  const bathroomCount: Record<string, number> = {
+    "1 Bathroom":     1,
+    "1.5 Bathrooms":  1,  // treat as 1 (half-baths don't add)
+    "2 Bathrooms":    2,
+    "2.5 Bathrooms":  2,
+    "3 Bathrooms":    3,
+    "3.5 Bathrooms":  3,
+    "4 Bathrooms":    4,
+    "4+ Bathrooms":   4,
   };
 
-  // Service type multiplier
-  const serviceMultiplier: Record<string, number> = {
-    "Standard Cleaning": 1.0,
-    "Deep Cleaning": 1.5,
-    "Move-In / Move-Out Cleaning": 1.6,
-    "Post-Construction Cleaning": 1.8,
-    "Office Cleaning": 1.2,
-    "Recurring Service": 0.9,
+  // Service type flat surcharge
+  const serviceSurcharge: Record<string, number> = {
+    "Standard Cleaning":          0,
+    "Deep Cleaning":              60,
+    "Move-In / Move-Out Cleaning": 60,
+    "Post-Construction Cleaning": 60,
   };
 
-  const base = bedroomBase[bedrooms] ?? 120;
-  const bathExtra = bathroomAdd[bathrooms] ?? 0;
-  const multiplier = serviceMultiplier[serviceType] ?? 1.0;
+  const base = bedroomBase[bedrooms] ?? 179;
+  const baths = bathroomCount[bathrooms] ?? 1;
+  const extraBaths = Math.max(0, baths - 1);
+  const bathExtra = extraBaths * 30;
+  const surcharge = serviceSurcharge[serviceType] ?? 0;
 
-  const total = Math.round((base + bathExtra) * multiplier);
+  const total = base + bathExtra + surcharge;
   return total.toString();
 }
