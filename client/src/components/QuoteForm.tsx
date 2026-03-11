@@ -4,6 +4,7 @@
  * Colors: Coral #E8603C, Warm bg #FFF8F5, Input bg #FFF0EC
  * Features: Staggered entrance, coral focus rings, success state with bounce animation
  * Backend: tRPC quotes.submit → OpenPhone SMS
+ * Office Cleaning: swaps bedroom/bathroom for square footage selector
  */
 
 import { useState } from "react";
@@ -15,6 +16,7 @@ const SERVICE_TYPES = [
   "Deep Cleaning",
   "Move-In / Move-Out Cleaning",
   "Post-Construction Cleaning",
+  "Office Cleaning",
 ];
 
 const BEDROOM_OPTIONS = [
@@ -40,6 +42,17 @@ const BATHROOM_OPTIONS = [
   "4+ Bathrooms",
 ];
 
+// Square footage ranges for office cleaning
+const SQFT_OPTIONS = [
+  "Under 500 sq ft",
+  "500–1,000 sq ft",
+  "1,000–2,000 sq ft",
+  "2,000–3,000 sq ft",
+  "3,000–5,000 sq ft",
+  "5,000–10,000 sq ft",
+  "10,000+ sq ft",
+];
+
 interface FormData {
   name: string;
   email: string;
@@ -47,6 +60,7 @@ interface FormData {
   serviceType: string;
   bedrooms: string;
   bathrooms: string;
+  squareFootage: string;
 }
 
 const INITIAL_FORM: FormData = {
@@ -56,6 +70,7 @@ const INITIAL_FORM: FormData = {
   serviceType: "Standard Cleaning",
   bedrooms: "1 Bedroom",
   bathrooms: "1 Bathroom",
+  squareFootage: "500–1,000 sq ft",
 };
 
 function StarRating() {
@@ -120,9 +135,11 @@ function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
 
 export default function QuoteForm() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
-  const [errors, setErrors] = useState<Partial<FormData>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [submitted, setSubmitted] = useState(false);
   const [smsSent, setSmsSent] = useState(false);
+
+  const isOffice = form.serviceType === "Office Cleaning";
 
   const submitMutation = trpc.quotes.submit.useMutation({
     onSuccess: (data) => {
@@ -138,7 +155,7 @@ export default function QuoteForm() {
   });
 
   const validate = (): boolean => {
-    const newErrors: Partial<FormData> = {};
+    const newErrors: Partial<Record<keyof FormData, string>> = {};
     if (!form.name.trim()) newErrors.name = "Name is required";
     if (!form.email.trim()) {
       newErrors.email = "Email is required";
@@ -164,7 +181,18 @@ export default function QuoteForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    submitMutation.mutate(form);
+
+    // Build the payload — for office cleaning pass sqft as bedrooms
+    const payload = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      serviceType: form.serviceType,
+      bedrooms: isOffice ? form.squareFootage : form.bedrooms,
+      bathrooms: isOffice ? "N/A" : form.bathrooms,
+    };
+
+    submitMutation.mutate(payload);
   };
 
   const isSubmitting = submitMutation.isPending;
@@ -210,7 +238,7 @@ export default function QuoteForm() {
                   className="text-3xl sm:text-4xl font-bold leading-tight mb-3"
                   style={{ fontFamily: "'Playfair Display', serif", color: "#1E1E1E" }}
                 >
-                  Maid Service Quote
+                  {isOffice ? "Office Cleaning Quote" : "Maid Service Quote"}
                   <br />
                   <span style={{ color: "#E8603C" }}>Washington DC</span>
                 </h1>
@@ -295,32 +323,50 @@ export default function QuoteForm() {
                   </div>
                 </div>
 
-                {/* Row 3: Bedrooms + Bathrooms */}
+                {/* Row 3: Bedrooms + Bathrooms  OR  Square Footage (for Office Cleaning) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                  <div className="animate-fade-slide-up delay-4 quote-select-wrapper">
-                    <select
-                      value={form.bedrooms}
-                      onChange={(e) => handleChange("bedrooms", e.target.value)}
-                      className="quote-input"
-                      style={{ paddingRight: "40px" }}
-                    >
-                      {BEDROOM_OPTIONS.map((b) => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="animate-fade-slide-up delay-4 quote-select-wrapper">
-                    <select
-                      value={form.bathrooms}
-                      onChange={(e) => handleChange("bathrooms", e.target.value)}
-                      className="quote-input"
-                      style={{ paddingRight: "40px" }}
-                    >
-                      {BATHROOM_OPTIONS.map((b) => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {isOffice ? (
+                    /* Full-width square footage selector */
+                    <div className="animate-fade-slide-up delay-4 quote-select-wrapper sm:col-span-2">
+                      <select
+                        value={form.squareFootage}
+                        onChange={(e) => handleChange("squareFootage", e.target.value)}
+                        className="quote-input"
+                        style={{ paddingRight: "40px" }}
+                      >
+                        {SQFT_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="animate-fade-slide-up delay-4 quote-select-wrapper">
+                        <select
+                          value={form.bedrooms}
+                          onChange={(e) => handleChange("bedrooms", e.target.value)}
+                          className="quote-input"
+                          style={{ paddingRight: "40px" }}
+                        >
+                          {BEDROOM_OPTIONS.map((b) => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="animate-fade-slide-up delay-4 quote-select-wrapper">
+                        <select
+                          value={form.bathrooms}
+                          onChange={(e) => handleChange("bathrooms", e.target.value)}
+                          className="quote-input"
+                          style={{ paddingRight: "40px" }}
+                        >
+                          {BATHROOM_OPTIONS.map((b) => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* CTA Button */}

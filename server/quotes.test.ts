@@ -117,6 +117,26 @@ describe("buildQuoteSmsMessage", () => {
     expect(msg).toContain("$399");
   });
 
+  it("calculates correct office cleaning price: 500-1000 sqft = $120", () => {
+    const msg = buildQuoteSmsMessage({
+      name: "Corp",
+      bedrooms: "500\u20131,000 sq ft",
+      bathrooms: "N/A",
+      serviceType: "Office Cleaning",
+    });
+    expect(msg).toContain("$120");
+  });
+
+  it("calculates correct office cleaning price: 3000-5000 sqft = $375", () => {
+    const msg = buildQuoteSmsMessage({
+      name: "Corp",
+      bedrooms: "3,000\u20135,000 sq ft",
+      bathrooms: "N/A",
+      serviceType: "Office Cleaning",
+    });
+    expect(msg).toContain("$375");
+  });
+
   it("applies the deep cleaning multiplier (higher price than standard)", () => {
     const standard = buildQuoteSmsMessage({
       name: "Bob",

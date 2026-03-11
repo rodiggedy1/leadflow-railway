@@ -59,3 +59,10 @@
 
 - [x] Replace placeholder prices with real Maids in Black pricing table (bedroom/bathroom matrix + service type surcharge)
 - [x] Update form service type dropdown to include Standard, Deep Clean, Move In/Out, Post Construction
+
+## Office Cleaning Feature
+
+- [x] Add Office Cleaning service type back to form
+- [x] Swap bedroom/bathroom dropdowns for square footage selector when Office Cleaning is selected
+- [x] Add office cleaning pricing by square footage (industry-standard per-sqft rates)
+- [x] Update tRPC schema and pricing engine to handle sqft-based quotes

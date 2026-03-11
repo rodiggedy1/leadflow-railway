@@ -133,6 +133,25 @@ export function estimatePrice(params: {
     "4+ Bathrooms":   4,
   };
 
+  // ── Office Cleaning: square footage-based pricing ──────────────────────────
+  // Industry-standard commercial cleaning rates: ~$0.07–$0.15/sqft
+  // Using $0.10/sqft as the base rate (mid-market DC commercial rate)
+  if (serviceType === "Office Cleaning") {
+    const officePricing: Record<string, number> = {
+      "Under 500 sq ft":       75,   // minimum visit charge
+      "500\u20131,000 sq ft":     120,
+      "1,000\u20132,000 sq ft":   175,
+      "2,000\u20133,000 sq ft":   250,
+      "3,000\u20135,000 sq ft":   375,
+      "5,000\u201310,000 sq ft":   650,
+      "10,000+ sq ft":         999,  // custom quote — AI will note this
+    };
+    // bedrooms field holds the sqft range when service is Office Cleaning
+    const price = officePricing[bedrooms];
+    if (price) return price.toString();
+    return "custom"; // triggers AI to say "let's get you a custom quote"
+  }
+
   // Service type flat surcharge
   const serviceSurcharge: Record<string, number> = {
     "Standard Cleaning":          0,
