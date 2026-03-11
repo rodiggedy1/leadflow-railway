@@ -50,3 +50,7 @@
 ## Bug Fixes (Round 4)
 
 - [x] Live conversation flow broken: fixed by registering OpenPhone webhook via API to published URL + text/body field fix
+
+## Feature: Flexible Slot Scheduling
+
+- [x] Accept any date/time request in SLOT_CHOICE stage (not just Thu/Sat) — AI says yes and confirms

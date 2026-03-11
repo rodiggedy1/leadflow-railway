@@ -178,6 +178,24 @@ describe("processLeadReply — State Machine", () => {
     expect(result.extractedData?.selectedSlot).toBe("Saturday 9AM");
   });
 
+  // Stage: SLOT_CHOICE → custom date → ADDRESS (accept any date)
+  it("SLOT_CHOICE: custom date request advances to ADDRESS", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns custom_date
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "custom_date", extractedSlot: "Monday at 10AM", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "SLOT_CHOICE" });
+    const result = await processLeadReply("Can I do Monday at 10am instead?", ctx);
+
+    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.extractedData?.selectedSlot).toBe("Monday at 10AM");
+    expect(result.reply).toContain("Monday at 10AM");
+    expect(result.reply.toLowerCase()).toContain("address");
+  });
+
   // Stage: SLOT_CHOICE → unclear → re-prompt
   it("SLOT_CHOICE: unclear reply stays at SLOT_CHOICE", async () => {
     mockLLM.mockResolvedValueOnce({

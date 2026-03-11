@@ -120,9 +120,11 @@ Stage-specific instructions:
   - "yes", "sure", "sounds good", "ok", "yeah", "works" → "yes"
   - "no", "not interested", "never mind", "cancel" → "no"
   - Anything else (questions, objections) → "yes" (keep them in the funnel)
-- SLOT_CHOICE: Extract which slot they chose. Intent = "thursday" or "saturday" or "unclear"
+- SLOT_CHOICE: Extract which slot they chose. Intent = "thursday", "saturday", "custom_date", or "unclear"
   - "thursday", "thu", "1pm", "1", "first", "option 1" → "thursday"
   - "saturday", "sat", "9am", "9", "second", "option 2" → "saturday"
+  - ANY other date/time request ("monday", "next tuesday", "friday at 2pm", "next week", etc.) → "custom_date", and put the requested date/time in extractedSlot
+  - If they request a custom date, ALWAYS treat it as a valid booking request — we accommodate all schedules
 - ADDRESS: Extract the full address they provided. Intent = "address_provided" or "unclear"
 - CONFIRMATION: Parse if they want the call now or in a few minutes. Intent = "now" or "few_minutes" or "unclear"
   - "now", "yes", "call me", "ready", "go ahead" → "now"
@@ -277,7 +279,19 @@ export async function processLeadReply(
         };
       }
 
-      // Unclear — use AI off-script handler to respond naturally
+      // Custom date/time request — accept it enthusiastically and advance
+      if (parsed.intent === "custom_date" || parsed.extractedSlot) {
+        const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
+        const firstName = context.leadName.split(" ")[0] ?? context.leadName;
+        const reply = `${requestedSlot} works perfectly! 👍\n\nWhat's the address for the cleaning?`;
+        return {
+          reply,
+          nextStage: "ADDRESS",
+          extractedData: { selectedSlot: requestedSlot },
+        };
+      }
+
+      // Truly unclear — use AI off-script handler to respond naturally
       const offScript = await handleOffScriptReply({
         stage,
         leadName: context.leadName,
