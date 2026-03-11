@@ -8,7 +8,8 @@ import { getDb } from "./db";
 import { quoteLeads, conversationSessions } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp } from "./aiService";
-import { buildNewLeadAlert, notifyAgentOfLead } from "./agentNotification";
+// CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
+const CS_SUPPORT_NUMBER = "+12028885362";
 
 // Zod schema for the quote form submission
 const quoteFormSchema = z.object({
@@ -87,17 +88,13 @@ async function processQuoteInBackground(
 ): Promise<void> {
   const normalizedPhone = normalizePhone(input.phone);
 
-  // ── Step 1: Alert support team immediately (fire-and-forget) ──────────────
-  const alertMsg = buildNewLeadAlert({
-    name: input.name,
-    phone: normalizedPhone,
-    serviceType: input.serviceType,
-    bedrooms: input.bedrooms,
-    bathrooms: input.bathrooms,
-    price,
-  });
-  sendSms({ to: "+12028885362", content: alertMsg }).catch(err =>
-    console.error("[submitQuote] Failed to send new lead alert to support:", err)
+  // ── Step 1: Alert support team immediately (simple direct SMS) ───────────
+  const isOffice = input.serviceType === "Office Cleaning";
+  const sizeInfo = isOffice ? input.bedrooms : `${input.bedrooms} / ${input.bathrooms}`;
+  const alertMsg = `New Quote Request - Maids in Black\n\nName: ${input.name}\nPhone: ${normalizedPhone}\nService: ${input.serviceType}\nSize: ${sizeInfo}\nQuote: $${price}`;
+
+  sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
+    console.error("[submitQuote] CS alert SMS failed:", err)
   );
 
   // ── Step 2: Generate AI quote messages (with fallback) ────────────────────
