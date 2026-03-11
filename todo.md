@@ -81,3 +81,12 @@
 ## Dynamic Availability Slots
 
 - [x] Replace hardcoded Thu/Sat with rolling next-2-days logic (skip Sundays, start tomorrow) — 88/88 tests pass
+
+## Leads Dashboard (/admin)
+
+- [x] Backend tRPC query: list all leads with session data (stage, price, slot, address, time)
+- [x] Funnel stats bar: total leads, by stage breakdown
+- [x] Lead table: name, phone, service, price, stage badge, slot, address, time elapsed
+- [x] Stage badge colors: QUOTE_SENT=blue, AVAILABILITY=yellow, SLOT_CHOICE=orange, ADDRESS=purple, CONFIRMATION=teal, DONE=green, UNHANDLED=red
+- [x] Wire /admin route in App.tsx
+- [x] Write tests for the leads query (93/93 tests pass)

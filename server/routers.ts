@@ -1,9 +1,9 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { quoteLeads, conversationSessions } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -30,6 +30,41 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
+    }),
+  }),
+
+  /**
+   * leads.list — lists all conversation sessions for the admin dashboard
+   * leads.stats — funnel breakdown counts by stage
+   */
+  leads: router({
+    list: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const sessions = await db
+        .select()
+        .from(conversationSessions)
+        .orderBy(desc(conversationSessions.updatedAt))
+        .limit(500);
+      return sessions;
+    }),
+    stats: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return { total: 0, byStage: {} };
+      const rows = await db
+        .select({
+          stage: conversationSessions.stage,
+          count: sql<number>`count(*)`,
+        })
+        .from(conversationSessions)
+        .groupBy(conversationSessions.stage);
+      const byStage: Record<string, number> = {};
+      let total = 0;
+      for (const row of rows) {
+        byStage[row.stage] = Number(row.count);
+        total += Number(row.count);
+      }
+      return { total, byStage };
     }),
   }),
 
