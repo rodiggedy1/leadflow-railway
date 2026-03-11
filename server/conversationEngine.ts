@@ -1,6 +1,12 @@
 /**
  * AI Conversation Engine — Maids in Black SMS Flow
  *
+ * Architecture:
+ * - The STATE MACHINE always controls stage transitions. ChatGPT never decides what stage to go to.
+ * - ChatGPT handles two things only:
+ *     1. Intent parsing (what did the lead mean?)
+ *     2. Off-script replies & objections (handled by aiService.ts)
+ *
  * Stages:
  *   QUOTE_SENT     → Quote + price sent. Any reply triggers availability message.
  *   AVAILABILITY   → "Thu afternoon or Sat morning?" sent. Waiting for yes/no.
@@ -9,11 +15,16 @@
  *   CONFIRMATION   → Address captured. Confirmation + call question sent.
  *   CALL_SCHEDULED → Lead chose call now or in a few minutes.
  *   DONE           → Conversation complete.
- *   UNHANDLED      → AI couldn't parse reply; needs human review.
+ *   UNHANDLED      → Needs human review.
  */
 
 import { invokeLLM } from "./_core/llm";
 import type { ConversationStage } from "../drizzle/schema";
+import {
+  handleOffScriptReply,
+  handleObjection,
+  detectObjection,
+} from "./aiService";
 
 export interface ConversationContext {
   stage: ConversationStage;
@@ -43,6 +54,8 @@ export interface StageResult {
 }
 
 // ─── Static message templates ─────────────────────────────────────────────────
+// These are used as fallbacks and for the initial burst messages.
+// The AI service generates personalized versions when possible.
 
 export function buildQuoteMessage(ctx: Pick<ConversationContext, "leadName" | "quotedPrice" | "bedrooms" | "bathrooms" | "serviceType">): string {
   const firstName = ctx.leadName.split(" ")[0] ?? ctx.leadName;
@@ -104,13 +117,16 @@ Your job is to extract intent and data from the lead's SMS reply. Respond ONLY w
 Stage-specific instructions:
 - QUOTE_SENT: Any reply (even "ok", "thanks", "?") means they're engaged. Intent = "engaged"
 - AVAILABILITY: Parse if they said yes/interested or no/not interested. Intent = "yes" or "no"
+  - "yes", "sure", "sounds good", "ok", "yeah", "works" → "yes"
+  - "no", "not interested", "never mind", "cancel" → "no"
+  - Anything else (questions, objections) → "yes" (keep them in the funnel)
 - SLOT_CHOICE: Extract which slot they chose. Intent = "thursday" or "saturday" or "unclear"
   - "thursday", "thu", "1pm", "1", "first", "option 1" → "thursday"
   - "saturday", "sat", "9am", "9", "second", "option 2" → "saturday"
 - ADDRESS: Extract the full address they provided. Intent = "address_provided" or "unclear"
 - CONFIRMATION: Parse if they want the call now or in a few minutes. Intent = "now" or "few_minutes" or "unclear"
-  - "now", "yes", "call me", "ready" → "now"
-  - "few minutes", "few", "later", "minute", "wait" → "few_minutes"
+  - "now", "yes", "call me", "ready", "go ahead" → "now"
+  - "few minutes", "few", "later", "minute", "wait", "give me" → "few_minutes"
 
 Respond with this exact JSON structure:
 {
@@ -154,7 +170,6 @@ Respond with this exact JSON structure:
     return JSON.parse(content);
   } catch (err) {
     console.error("[ConversationEngine] LLM parse error:", err);
-    // Fallback: treat any reply as engaged if in early stages
     return {
       intent: stage === "QUOTE_SENT" ? "engaged" : "unclear",
       extractedSlot: undefined,
@@ -169,6 +184,12 @@ Respond with this exact JSON structure:
 
 /**
  * Processes an inbound SMS reply from a lead and returns the next reply + stage.
+ *
+ * For each stage, we:
+ * 1. Check for objections first (price pushback, not available, etc.)
+ * 2. Parse the intent with ChatGPT
+ * 3. Advance the state machine based on intent
+ * 4. If the reply is off-script/unclear, use the AI off-script handler
  */
 export async function processLeadReply(
   leadReply: string,
@@ -176,16 +197,47 @@ export async function processLeadReply(
 ): Promise<StageResult> {
   const { stage } = context;
 
-  switch (stage) {
-    // ── Stage 1: Quote was sent, any reply → send availability ────────────────
-    case "QUOTE_SENT": {
+  // ── Terminal stages — no further processing ────────────────────────────────
+  if (stage === "DONE" || stage === "CALL_SCHEDULED") {
+    return {
+      reply: `Thanks again! We look forward to serving you. 🏠✨`,
+      nextStage: "DONE",
+    };
+  }
+
+  // ── QUOTE_SENT: Any reply → send availability (no objection check needed) ──
+  if (stage === "QUOTE_SENT") {
+    return {
+      reply: buildAvailabilityMessage(),
+      nextStage: "AVAILABILITY",
+    };
+  }
+
+  // ── For all other stages: check for objections first ──────────────────────
+  // Only check objections in stages where the lead might push back
+  if (["AVAILABILITY", "SLOT_CHOICE", "ADDRESS", "CONFIRMATION"].includes(stage)) {
+    const objectionType = await detectObjection(leadReply);
+
+    if (objectionType) {
+      console.log(`[ConversationEngine] Objection detected: ${objectionType} at stage ${stage}`);
+      const objectionResult = await handleObjection(objectionType, {
+        leadName: context.leadName,
+        quotedPrice: context.quotedPrice,
+        serviceType: context.serviceType,
+      });
+
+      // For "not_available" objection at AVAILABILITY stage, we can advance
+      // to a flexible scheduling response but stay in AVAILABILITY
       return {
-        reply: buildAvailabilityMessage(),
-        nextStage: "AVAILABILITY",
+        reply: objectionResult.reply,
+        nextStage: objectionResult.nextStage ?? (stage as ConversationStage),
       };
     }
+  }
 
-    // ── Stage 2: Availability sent → parse yes/no, send slot choice ───────────
+  // ── Parse intent and advance state machine ─────────────────────────────────
+  switch (stage) {
+    // ── Stage 2: Availability ─────────────────────────────────────────────────
     case "AVAILABILITY": {
       const parsed = await parseLeadReply(stage, leadReply, context);
 
@@ -196,14 +248,14 @@ export async function processLeadReply(
         };
       }
 
-      // Any positive or unclear response → show slot choice
+      // Positive or unclear → show slot choice
       return {
         reply: buildSlotChoiceMessage(),
         nextStage: "SLOT_CHOICE",
       };
     }
 
-    // ── Stage 3: Slot choice sent → parse which slot, ask for address ─────────
+    // ── Stage 3: Slot choice ──────────────────────────────────────────────────
     case "SLOT_CHOICE": {
       const parsed = await parseLeadReply(stage, leadReply, context);
 
@@ -225,23 +277,43 @@ export async function processLeadReply(
         };
       }
 
-      // Unclear — re-prompt
+      // Unclear — use AI off-script handler to respond naturally
+      const offScript = await handleOffScriptReply({
+        stage,
+        leadName: context.leadName,
+        quotedPrice: context.quotedPrice,
+        serviceType: context.serviceType,
+        selectedSlot: context.selectedSlot,
+        messageHistory: context.messageHistory,
+        leadReply,
+      });
+
       return {
-        reply: `Just to confirm — would you prefer:\n• Thursday 1PM\n• Saturday 9AM\n\nReply with Thursday or Saturday!`,
+        reply: offScript.reply,
         nextStage: "SLOT_CHOICE",
       };
     }
 
-    // ── Stage 4: Address requested → capture address, send confirmation ───────
+    // ── Stage 4: Address ──────────────────────────────────────────────────────
     case "ADDRESS": {
       const parsed = await parseLeadReply(stage, leadReply, context);
-
       const address = parsed.extractedAddress ?? leadReply.trim();
       const slot = context.selectedSlot ?? "Saturday 9AM";
 
       if (!address || address.length < 5) {
+        // Use AI to ask for address more naturally
+        const offScript = await handleOffScriptReply({
+          stage,
+          leadName: context.leadName,
+          quotedPrice: context.quotedPrice,
+          serviceType: context.serviceType,
+          selectedSlot: slot,
+          messageHistory: context.messageHistory,
+          leadReply,
+        });
+
         return {
-          reply: `Could you share the full address for the cleaning? (e.g., 123 Main St, Washington DC 20001)`,
+          reply: offScript.reply,
           nextStage: "ADDRESS",
         };
       }
@@ -253,10 +325,9 @@ export async function processLeadReply(
       };
     }
 
-    // ── Stage 5: Confirmation sent → parse call preference ────────────────────
+    // ── Stage 5: Confirmation ─────────────────────────────────────────────────
     case "CONFIRMATION": {
       const parsed = await parseLeadReply(stage, leadReply, context);
-
       const pref = parsed.extractedCallPreference ?? parsed.intent;
 
       if (pref === "now" || pref === "few_minutes") {
@@ -267,28 +338,47 @@ export async function processLeadReply(
         };
       }
 
-      // Unclear — re-prompt
-      return {
-        reply: `Should we call you now or in a few minutes to confirm your booking?`,
-        nextStage: "CONFIRMATION",
-      };
-    }
+      // Unclear — use AI to handle naturally
+      const offScript = await handleOffScriptReply({
+        stage,
+        leadName: context.leadName,
+        quotedPrice: context.quotedPrice,
+        serviceType: context.serviceType,
+        selectedSlot: context.selectedSlot,
+        messageHistory: context.messageHistory,
+        leadReply,
+      });
 
-    // ── Stage 6: Call scheduled → done ────────────────────────────────────────
-    case "CALL_SCHEDULED":
-    case "DONE": {
       return {
-        reply: `Thanks again! We look forward to seeing you. 🏠✨`,
-        nextStage: "DONE",
+        reply: offScript.reply,
+        nextStage: "CONFIRMATION",
       };
     }
 
     // ── Unhandled / fallback ───────────────────────────────────────────────────
     default: {
-      return {
-        reply: `Thanks for your message! A member of our team will follow up with you shortly.`,
-        nextStage: "UNHANDLED",
-      };
+      // Try the AI off-script handler as a last resort
+      try {
+        const offScript = await handleOffScriptReply({
+          stage,
+          leadName: context.leadName,
+          quotedPrice: context.quotedPrice,
+          serviceType: context.serviceType,
+          selectedSlot: context.selectedSlot,
+          messageHistory: context.messageHistory,
+          leadReply,
+        });
+
+        return {
+          reply: offScript.reply,
+          nextStage: "UNHANDLED",
+        };
+      } catch {
+        return {
+          reply: `Thanks for your message! A member of our team will follow up with you shortly.`,
+          nextStage: "UNHANDLED",
+        };
+      }
     }
   }
 }

@@ -24,3 +24,12 @@
 - [x] Stage 5: Confirmation message + call scheduling question
 - [x] Stage 6: Handle "call now" vs "call in a few minutes" response
 - [x] Write vitest tests for conversation engine (30/30 tests pass)
+
+## ChatGPT Integration (Guardrailed AI)
+
+- [x] Write Maids in Black brand system prompt with strict guardrails
+- [x] Replace static price table with ChatGPT dynamic pricing message generator
+- [x] Add off-script handler: ChatGPT answers FAQs then steers back to booking flow
+- [x] Add OBJECTION stage: handles price pushback, reschedule requests, etc.
+- [x] Update conversation engine to route off-script replies through ChatGPT
+- [x] Write vitest tests for guardrailed AI responses (52/52 tests pass)

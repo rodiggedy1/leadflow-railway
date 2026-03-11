@@ -132,6 +132,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: AVAILABILITY → no → DONE
   it("AVAILABILITY: negative reply ends conversation", async () => {
+    // Call 1: detectObjection returns "on_track" (no objection)
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns intent "no"
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "no", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -144,6 +147,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: SLOT_CHOICE → thursday → ADDRESS
   it("SLOT_CHOICE: 'thursday' reply captures slot and advances to ADDRESS", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns thursday
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "thursday", extractedSlot: "Thursday 1PM", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -158,6 +164,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: SLOT_CHOICE → saturday → ADDRESS
   it("SLOT_CHOICE: 'saturday' reply captures slot and advances to ADDRESS", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns saturday
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "saturday", extractedSlot: "Saturday 9AM", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -199,6 +208,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: CONFIRMATION → now → CALL_SCHEDULED
   it("CONFIRMATION: 'call now' advances to CALL_SCHEDULED", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns now
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "now", extractedSlot: null, extractedAddress: null, extractedCallPreference: "now", confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -212,6 +224,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: CONFIRMATION → few minutes → CALL_SCHEDULED
   it("CONFIRMATION: 'few minutes' advances to CALL_SCHEDULED", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns few_minutes
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "few_minutes", extractedSlot: null, extractedAddress: null, extractedCallPreference: "few_minutes", confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);

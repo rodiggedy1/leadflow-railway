@@ -12,6 +12,10 @@ import {
   buildPricingFollowUp,
   buildAvailabilityMessage,
 } from "./conversationEngine";
+import {
+  generateQuoteMessage,
+  generatePricingFollowUp,
+} from "./aiService";
 
 // Zod schema for the quote form submission
 const quoteFormSchema = z.object({
@@ -67,9 +71,24 @@ export const appRouter = router({
           bathrooms: input.bathrooms,
         };
 
-        // ── 2. Build all three opening messages ───────────────────────────────
-        const msg1 = buildQuoteMessage(ctx);
-        const msg2 = buildPricingFollowUp(ctx);
+        // ── 2. Build all three opening messages (AI-generated with fallback) ──
+        // Run AI generation in parallel for speed; each has its own fallback
+        const [msg1, msg2] = await Promise.all([
+          generateQuoteMessage({
+            leadName: input.name,
+            bedrooms: input.bedrooms,
+            bathrooms: input.bathrooms,
+            serviceType: input.serviceType,
+            price,
+          }),
+          generatePricingFollowUp({
+            leadName: input.name,
+            bedrooms: input.bedrooms,
+            bathrooms: input.bathrooms,
+            serviceType: input.serviceType,
+            price,
+          }),
+        ]);
         const msg3 = buildAvailabilityMessage();
 
         // ── 3. Send SMS #1: Quote + price ─────────────────────────────────────

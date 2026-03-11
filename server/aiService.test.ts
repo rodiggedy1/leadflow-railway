@@ -1,0 +1,274 @@
+/**
+ * Tests for the Guardrailed AI Service (aiService.ts)
+ *
+ * All LLM calls are mocked — tests verify:
+ * 1. Message generation uses AI output when valid
+ * 2. Fallbacks trigger when AI output is invalid or fails
+ * 3. Objection detection classifies correctly
+ * 4. Off-script handler always returns a reply with a nudge back
+ * 5. Guardrails: price is always present in quote messages
+ */
+
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import {
+  generateQuoteMessage,
+  generatePricingFollowUp,
+  handleOffScriptReply,
+  handleObjection,
+  detectObjection,
+} from "./aiService";
+
+// ─── Mock LLM ─────────────────────────────────────────────────────────────────
+vi.mock("./_core/llm", () => ({
+  invokeLLM: vi.fn(),
+}));
+
+import { invokeLLM } from "./_core/llm";
+const mockLLM = vi.mocked(invokeLLM);
+
+function makeLLMResponse(content: string) {
+  return {
+    choices: [{ message: { content }, index: 0, finish_reason: "stop" }],
+  } as any;
+}
+
+// ─── generateQuoteMessage ─────────────────────────────────────────────────────
+describe("generateQuoteMessage", () => {
+  beforeEach(() => mockLLM.mockReset());
+
+  const params = {
+    leadName: "Sarah Johnson",
+    bedrooms: "2 Bedrooms",
+    bathrooms: "1 Bathroom",
+    serviceType: "Standard Cleaning",
+    price: "130",
+  };
+
+  it("returns AI-generated message when it contains the price", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("Hi Sarah! Maids in Black has your quote ready: $130 for your 2 bed/1 bath home.")
+    );
+
+    const result = await generateQuoteMessage(params);
+    expect(result).toContain("$130");
+    expect(result).toContain("Sarah");
+  });
+
+  it("falls back to template when AI omits the price", async () => {
+    // AI response doesn't include the price — safety guardrail should trigger
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("Hi Sarah! Thanks for reaching out to Maids in Black!")
+    );
+
+    const result = await generateQuoteMessage(params);
+    // Fallback template always includes the price
+    expect(result).toContain("$130");
+    expect(result).toContain("Maids in Black");
+  });
+
+  it("falls back to template when AI call fails", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("API timeout"));
+
+    const result = await generateQuoteMessage(params);
+    expect(result).toContain("$130");
+    expect(result).toContain("Sarah");
+  });
+
+  it("falls back to template when AI returns empty content", async () => {
+    mockLLM.mockResolvedValueOnce(makeLLMResponse(""));
+
+    const result = await generateQuoteMessage(params);
+    expect(result).toContain("$130");
+  });
+});
+
+// ─── generatePricingFollowUp ──────────────────────────────────────────────────
+describe("generatePricingFollowUp", () => {
+  beforeEach(() => mockLLM.mockReset());
+
+  const params = {
+    leadName: "Sarah Johnson",
+    bedrooms: "2 Bedrooms",
+    bathrooms: "1 Bathroom",
+    serviceType: "Standard Cleaning",
+    price: "130",
+  };
+
+  it("returns AI-generated follow-up when it contains the price", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("Homes that size are typically $130 for a standard clean — includes all rooms.")
+    );
+
+    const result = await generatePricingFollowUp(params);
+    expect(result).toContain("$130");
+  });
+
+  it("falls back when AI omits price", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("This includes a thorough clean of all rooms and surfaces.")
+    );
+
+    const result = await generatePricingFollowUp(params);
+    expect(result).toContain("$130");
+  });
+
+  it("falls back when AI throws", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("Network error"));
+
+    const result = await generatePricingFollowUp(params);
+    expect(result).toContain("$130");
+    expect(result.toLowerCase()).toContain("standard cleaning");
+  });
+});
+
+// ─── detectObjection ──────────────────────────────────────────────────────────
+describe("detectObjection", () => {
+  beforeEach(() => mockLLM.mockReset());
+
+  it("returns 'price_too_high' for price objection", async () => {
+    mockLLM.mockResolvedValueOnce(makeLLMResponse("price_too_high"));
+    const result = await detectObjection("That's too expensive for me");
+    expect(result).toBe("price_too_high");
+  });
+
+  it("returns 'not_available' for scheduling objection", async () => {
+    mockLLM.mockResolvedValueOnce(makeLLMResponse("not_available"));
+    const result = await detectObjection("Neither of those days work for me");
+    expect(result).toBe("not_available");
+  });
+
+  it("returns 'need_to_think' for hesitation", async () => {
+    mockLLM.mockResolvedValueOnce(makeLLMResponse("need_to_think"));
+    const result = await detectObjection("I need to think about it");
+    expect(result).toBe("need_to_think");
+  });
+
+  it("returns null for on_track replies", async () => {
+    mockLLM.mockResolvedValueOnce(makeLLMResponse("on_track"));
+    const result = await detectObjection("Saturday works for me!");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for off_script replies", async () => {
+    mockLLM.mockResolvedValueOnce(makeLLMResponse("off_script"));
+    const result = await detectObjection("Do you clean ovens?");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when AI fails", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("LLM error"));
+    const result = await detectObjection("some reply");
+    expect(result).toBeNull();
+  });
+});
+
+// ─── handleObjection ──────────────────────────────────────────────────────────
+describe("handleObjection", () => {
+  beforeEach(() => mockLLM.mockReset());
+
+  const ctx = {
+    leadName: "Mike Davis",
+    quotedPrice: "155",
+    serviceType: "Deep Cleaning",
+  };
+
+  it("returns AI response for price_too_high objection", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("We totally understand! Our team is fully insured and we guarantee satisfaction. Does Thu or Sat still work?")
+    );
+
+    const result = await handleObjection("price_too_high", ctx);
+    expect(result.reply).toBeTruthy();
+    expect(result.reply.length).toBeGreaterThan(10);
+  });
+
+  it("falls back gracefully when AI fails for price_too_high", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("AI down"));
+
+    const result = await handleObjection("price_too_high", ctx);
+    expect(result.reply).toContain("insured");
+    expect(result.nextStage).toBeNull();
+  });
+
+  it("falls back gracefully for not_available", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("AI down"));
+
+    const result = await handleObjection("not_available", ctx);
+    expect(result.reply.toLowerCase()).toContain("work");
+    expect(result.nextStage).toBeNull();
+  });
+
+  it("falls back gracefully for need_to_think", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("AI down"));
+
+    const result = await handleObjection("need_to_think", ctx);
+    expect(result.reply).toBeTruthy();
+  });
+
+  it("falls back gracefully for already_have_cleaner", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("AI down"));
+
+    const result = await handleObjection("already_have_cleaner", ctx);
+    expect(result.reply).toBeTruthy();
+  });
+});
+
+// ─── handleOffScriptReply ─────────────────────────────────────────────────────
+describe("handleOffScriptReply", () => {
+  beforeEach(() => mockLLM.mockReset());
+
+  const baseCtx = {
+    stage: "AVAILABILITY" as const,
+    leadName: "Lisa Chen",
+    quotedPrice: "120",
+    serviceType: "Standard Cleaning",
+    selectedSlot: null,
+    messageHistory: [
+      { role: "assistant" as const, content: "We have openings Thu or Sat. Does that work?" },
+    ],
+    leadReply: "Do you bring your own supplies?",
+  };
+
+  it("returns AI reply for off-script question", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("Yes, we bring all supplies and equipment! Does Thursday or Saturday work for you?")
+    );
+
+    const result = await handleOffScriptReply(baseCtx);
+    expect(result.reply).toBeTruthy();
+    expect(result.shouldAdvanceStage).toBe(false);
+  });
+
+  it("falls back gracefully when AI fails", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("LLM timeout"));
+
+    const result = await handleOffScriptReply(baseCtx);
+    expect(result.reply).toBeTruthy();
+    expect(result.reply.length).toBeGreaterThan(10);
+    expect(result.shouldAdvanceStage).toBe(false);
+  });
+
+  it("always returns shouldAdvanceStage = false", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("Great question! Our team can answer that on your confirmation call. Does Thu or Sat work?")
+    );
+
+    const result = await handleOffScriptReply(baseCtx);
+    expect(result.shouldAdvanceStage).toBe(false);
+  });
+
+  it("handles ADDRESS stage off-script replies", async () => {
+    mockLLM.mockResolvedValueOnce(
+      makeLLMResponse("We clean all rooms included in your package. What's the address for your Saturday cleaning?")
+    );
+
+    const result = await handleOffScriptReply({
+      ...baseCtx,
+      stage: "ADDRESS",
+      selectedSlot: "Saturday 9AM",
+      leadReply: "What rooms do you clean?",
+    });
+
+    expect(result.reply).toBeTruthy();
+  });
+});
