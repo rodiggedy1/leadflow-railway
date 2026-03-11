@@ -25,10 +25,12 @@ import {
   handleObjection,
   detectObjection,
 } from "./aiService";
+import { notifyAgentOfLead } from "./agentNotification";
 
 export interface ConversationContext {
   stage: ConversationStage;
   leadName: string;
+  leadPhone: string;
   quotedPrice: string;
   serviceType: string;
   bedrooms: string;
@@ -345,6 +347,20 @@ export async function processLeadReply(
       const pref = parsed.extractedCallPreference ?? parsed.intent;
 
       if (pref === "now" || pref === "few_minutes") {
+        // Fire-and-forget: notify support agent via SMS + push notification
+        notifyAgentOfLead({
+          name: context.leadName,
+          phone: context.leadPhone,
+          serviceType: context.serviceType,
+          bedrooms: context.bedrooms ?? "",
+          bathrooms: context.bathrooms ?? "",
+          price: context.quotedPrice,
+          selectedSlot: context.selectedSlot ?? undefined,
+          address: context.address ?? undefined,
+        }).catch((err) =>
+          console.error("[ConversationEngine] Agent notification failed:", err)
+        );
+
         return {
           reply: buildCallScheduledMessage(pref),
           nextStage: "CALL_SCHEDULED",

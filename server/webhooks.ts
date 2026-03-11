@@ -110,6 +110,7 @@ export function registerWebhookRoutes(app: Express) {
       const context: ConversationContext = {
         stage: session.stage as ConversationStage,
         leadName: session.leadName ?? "there",
+        leadPhone: fromPhone,
         quotedPrice: session.quotedPrice ?? "0",
         serviceType: session.serviceType ?? "Standard Cleaning",
         bedrooms: session.bedrooms ?? "1 Bedroom",

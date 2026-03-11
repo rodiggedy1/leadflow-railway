@@ -66,3 +66,10 @@
 - [x] Swap bedroom/bathroom dropdowns for square footage selector when Office Cleaning is selected
 - [x] Add office cleaning pricing by square footage (industry-standard per-sqft rates)
 - [x] Update tRPC schema and pricing engine to handle sqft-based quotes
+
+## Agent Notification Feature (Call + SMS to Support)
+
+- [x] Research OpenPhone outbound calls API (TTS message support — not available in standard tier)
+- [x] Build agentNotification service: SMS summary + push notification to 202-888-5362
+- [x] Wire notification into CONFIRMATION stage when lead requests a call
+- [x] Write tests for agent notification service (72/72 tests pass)
