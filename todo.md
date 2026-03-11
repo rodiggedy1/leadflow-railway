@@ -77,3 +77,7 @@
 ## New Lead Submission Alert
 
 - [x] Send immediate SMS to 202-888-5362 when a new quote form is submitted (77/77 tests pass)
+
+## Dynamic Availability Slots
+
+- [x] Replace hardcoded Thu/Sat with rolling next-2-days logic (skip Sundays, start tomorrow) — 88/88 tests pass

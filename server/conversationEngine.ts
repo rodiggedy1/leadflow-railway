@@ -26,6 +26,7 @@ import {
   detectObjection,
 } from "./aiService";
 import { notifyAgentOfLead } from "./agentNotification";
+import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
 
 export interface ConversationContext {
   stage: ConversationStage;
@@ -69,11 +70,13 @@ export function buildPricingFollowUp(ctx: Pick<ConversationContext, "serviceType
 }
 
 export function buildAvailabilityMessage(): string {
-  return `We currently have openings Thursday afternoon or Saturday morning. Would one of those work for you?`;
+  const slots = getNextAvailableSlots(2);
+  return formatAvailabilityQuestion(slots);
 }
 
 export function buildSlotChoiceMessage(): string {
-  return `Great — I can reserve:\n• Thursday 1PM\n• Saturday 9AM\n\nWhich would you prefer?`;
+  const slots = getNextAvailableSlots(2);
+  return formatSlotChoiceQuestion(slots);
 }
 
 export function buildAddressRequestMessage(slot: string): string {

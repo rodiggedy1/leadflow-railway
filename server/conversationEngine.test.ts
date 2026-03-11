@@ -64,16 +64,18 @@ describe("Message Builders", () => {
     expect(msg).toContain("standard cleaning");
   });
 
-  it("buildAvailabilityMessage mentions Thursday and Saturday", () => {
+  it("buildAvailabilityMessage mentions two upcoming days", () => {
     const msg = buildAvailabilityMessage();
-    expect(msg).toContain("Thursday");
-    expect(msg).toContain("Saturday");
+    // Dynamic slots — verify it's a well-formed availability question
+    expect(msg).toContain("openings");
+    expect(msg).toContain("Would one of those work");
   });
 
-  it("buildSlotChoiceMessage shows both time slots", () => {
+  it("buildSlotChoiceMessage shows two slot options", () => {
     const msg = buildSlotChoiceMessage();
-    expect(msg).toContain("Thursday 1PM");
-    expect(msg).toContain("Saturday 9AM");
+    // Dynamic slots — verify the structure is correct
+    expect(msg).toContain("I can reserve");
+    expect(msg).toContain("Which would you prefer");
   });
 
   it("buildAddressRequestMessage asks for address", () => {
@@ -112,7 +114,8 @@ describe("processLeadReply — State Machine", () => {
     const result = await processLeadReply("ok thanks", ctx);
 
     expect(result.nextStage).toBe("AVAILABILITY");
-    expect(result.reply).toContain("Thursday");
+    // Dynamic slots — verify it's an availability question
+    expect(result.reply).toContain("openings");
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
@@ -126,8 +129,9 @@ describe("processLeadReply — State Machine", () => {
     const result = await processLeadReply("yes that works!", ctx);
 
     expect(result.nextStage).toBe("SLOT_CHOICE");
-    expect(result.reply).toContain("Thursday 1PM");
-    expect(result.reply).toContain("Saturday 9AM");
+    // Dynamic slots — verify the slot choice structure is correct
+    expect(result.reply).toContain("I can reserve");
+    expect(result.reply).toContain("Which would you prefer");
   });
 
   // Stage: AVAILABILITY → no → DONE
@@ -206,7 +210,8 @@ describe("processLeadReply — State Machine", () => {
     const result = await processLeadReply("hmm not sure", ctx);
 
     expect(result.nextStage).toBe("SLOT_CHOICE");
-    expect(result.reply).toContain("Thursday");
+    // For unclear replies, the engine re-prompts — just verify it stays at SLOT_CHOICE
+    expect(result.reply).toBeTruthy();
   });
 
   // Stage: ADDRESS → address provided → CONFIRMATION
