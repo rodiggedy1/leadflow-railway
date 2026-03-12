@@ -301,11 +301,47 @@ function LogCallDialog({ session, onClose }: { session: Session; onClose: () => 
 
 // ── Conversation Drawer ───────────────────────────────────────────────────────
 
-function ConversationDrawer({ session, onClose }: { session: Session; onClose: () => void }) {
+function ConversationDrawer({
+  session,
+  onClose,
+  currentAgentId,
+}: {
+  session: Session;
+  onClose: () => void;
+  currentAgentId: number;
+}) {
   let messages: { role: string; content: string }[] = [];
   try { messages = JSON.parse(session.messageHistory || "[]"); } catch { messages = []; }
 
+  const utils = trpc.useUtils();
+
+  // Claim / release
+  const claimLead = trpc.agents.claimLead.useMutation({
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead claimed!"); },
+    onError: (err) => toast.error(err.message),
+  });
+  const unclaimLead = trpc.agents.unclaimLead.useMutation({
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead released"); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const isMine = session.assignedAgentId === currentAgentId;
+  const isUnassigned = !session.assignedAgentId;
+
+  // Internal notes
+  const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
+  const [notes, setNotes] = useState(notesData?.notes ?? "");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const updateNotes = trpc.agents.updateNotes.useMutation({
+    onSuccess: () => { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Sync notes when data loads
   const { data: callLogs = [] } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
+
+  // Keep local notes in sync with fetched data
+  const loadedNotes = notesData?.notes ?? "";
 
   return (
     <div
@@ -354,6 +390,42 @@ function ConversationDrawer({ session, onClose }: { session: Session; onClose: (
             </span>
           )}
         </div>
+
+        {/* Claim / Release bar */}
+        {!session.isBooked && (
+          <div className="px-5 py-2.5 border-b flex items-center justify-between gap-2" style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }}>
+            <div className="text-xs text-blue-700">
+              {isMine
+                ? <span className="font-medium">You own this lead</span>
+                : isUnassigned
+                ? <span>This lead is <b>unassigned</b></span>
+                : <span>Assigned to <b>{session.assignedAgentName}</b></span>}
+            </div>
+            <div className="flex gap-1.5">
+              {isMine ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2.5 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50 bg-white"
+                  onClick={() => unclaimLead.mutate({ sessionId: session.id })}
+                  disabled={unclaimLead.isPending}
+                >
+                  <UserX className="w-3 h-3" /> Release
+                </Button>
+              ) : isUnassigned ? (
+                <Button
+                  size="sm"
+                  className="h-7 px-2.5 text-xs gap-1 text-white"
+                  style={{ backgroundColor: "#E8603C" }}
+                  onClick={() => claimLead.mutate({ sessionId: session.id })}
+                  disabled={claimLead.isPending}
+                >
+                  <UserCheck className="w-3 h-3" /> Claim Lead
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
@@ -405,7 +477,36 @@ function ConversationDrawer({ session, onClose }: { session: Session; onClose: (
           )}
         </div>
 
-        <div className="px-5 py-3 border-t flex justify-end">
+        {/* Internal Notes */}
+        <div className="px-5 py-3 border-t" style={{ borderColor: "#F0D8D0" }}>
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+            Internal Notes
+          </label>
+          <Textarea
+            placeholder="e.g. Left voicemail, price objection, follow up Friday..."
+            value={notes !== "" ? notes : loadedNotes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            className="resize-none text-sm"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-gray-400">Visible to agents and admins only</span>
+            <div className="flex items-center gap-2">
+              {notesSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-3 text-xs"
+                onClick={() => updateNotes.mutate({ sessionId: session.id, notes: notes !== "" ? notes : loadedNotes })}
+                disabled={updateNotes.isPending}
+              >
+                {updateNotes.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save Notes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t flex justify-end" style={{ borderColor: "#F0D8D0" }}>
           <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
         </div>
       </div>
@@ -553,7 +654,7 @@ function LeadCard({
         <LogCallDialog session={session} onClose={() => setShowLogCall(false)} />
       )}
       {showConversation && (
-        <ConversationDrawer session={session} onClose={() => setShowConversation(false)} />
+        <ConversationDrawer session={session} onClose={() => setShowConversation(false)} currentAgentId={currentAgentId} />
       )}
     </>
   );

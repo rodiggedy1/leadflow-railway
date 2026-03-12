@@ -442,6 +442,43 @@ export const appRouter = router({
       }),
 
     /**
+     * agents.updateNotes — save or update internal notes for a lead session.
+     * Accessible by any authenticated agent (or admin agent).
+     */
+    updateNotes: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        notes: z.string().max(5000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx); // require agent auth
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ internalNotes: input.notes })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.getNotes — fetch internal notes for a lead session.
+     */
+    getNotes: publicProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx); // require agent auth
+        const db = await getDb();
+        if (!db) return { notes: null };
+        const [row] = await db
+          .select({ internalNotes: conversationSessions.internalNotes })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        return { notes: row?.internalNotes ?? null };
+      }),
+
+    /**
      * agents.performance — per-agent leaderboard stats.
      * Returns for each active agent:
      *   callsThisWeek, bookingsThisWeek, totalAssigned, bookingsAllTime, conversionRate

@@ -55,6 +55,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
 import SmsSimulator from "@/components/SmsSimulator";
@@ -431,6 +432,16 @@ function ConversationDrawer({
 
   const activeAgents = agentList.filter(a => a.isActive);
 
+  // Internal notes
+  const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
+  const [notes, setNotes] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const updateNotes = trpc.agents.updateNotes.useMutation({
+    onSuccess: () => { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000); },
+    onError: (e) => toast.error(e.message),
+  });
+  const loadedNotes = notesData?.notes ?? "";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
@@ -591,6 +602,35 @@ function ConversationDrawer({
               </div>
             ))
           )}
+        </div>
+
+        {/* Internal Notes */}
+        <div className="px-4 py-3 border-t">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+            Internal Notes
+          </label>
+          <Textarea
+            placeholder="e.g. Left voicemail, price objection, follow up Friday..."
+            value={notes !== "" ? notes : loadedNotes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            className="resize-none text-sm"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-gray-400">Visible to agents and admins only</span>
+            <div className="flex items-center gap-2">
+              {notesSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-3 text-xs"
+                onClick={() => updateNotes.mutate({ sessionId: session.id, notes: notes !== "" ? notes : loadedNotes })}
+                disabled={updateNotes.isPending}
+              >
+                {updateNotes.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Notes"}
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

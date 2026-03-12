@@ -108,6 +108,9 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   bookedByAgentId: int("bookedByAgentId"),
   bookedByAgentName: varchar("bookedByAgentName", { length: 255 }),
 
+  /** Internal notes visible only to admins and agents — not shown to leads */
+  internalNotes: text("internalNotes"),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -280,3 +280,15 @@
 - [x] Update adminUpdateStage procedure to accept new stages
 - [x] Add metrics cards to admin dashboard: Booked Revenue, Jobs Booked, Conversion Rate
 - [x] Update leads.test.ts to match new stats shape and two-query mock — 121/121 tests pass
+
+## Claim Lead & Internal Notes — COMPLETED
+
+- [x] Add internalNotes column to conversation_sessions schema
+- [x] Run pnpm db:push to migrate DB
+- [x] Add agents.claimLead procedure (agent assigns themselves to a session)
+- [x] Add agents.updateNotes procedure (agent/admin saves notes for a session)
+- [x] Add agents.getNotes procedure (fetch notes for a session)
+- [x] Add Claim Lead button inside agent workspace ConversationDrawer
+- [x] Add internal notes textarea to agent workspace ConversationDrawer
+- [x] Add internal notes textarea to admin ConversationDrawer
+- [x] Write vitest tests for claimLead, updateNotes, and getNotes — 136/136 tests pass
