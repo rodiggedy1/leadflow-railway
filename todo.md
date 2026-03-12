@@ -154,3 +154,7 @@
 
 - [x] Fix: leads disappearing from admin dashboard — fixed timezone mismatch in buildDateConditions (UTC boundary now covers all local timezones)
 - [x] Add morning/afternoon preference step after day selection — new TIME_PREF stage inserted between SLOT_CHOICE and ADDRESS; 102/102 tests pass
+
+## Critical Regression Fix
+
+- [x] Fix: AVAILABILITY stage jumps to DONE when lead says a day name (e.g. "Friday") — moved day-name check BEFORE LLM parse so "Friday" is never misclassified as "no"; 102/102 tests pass

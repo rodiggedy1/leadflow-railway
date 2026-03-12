@@ -258,19 +258,11 @@ export async function processLeadReply(
 
   // ── Parse intent and advance state machine ─────────────────────────────────
   switch (stage) {
-    // ── Stage 2: Availability ─────────────────────────────────────────────────
+    // ── Stage 2: Availability ──────────────────────────────────────────────────────
     case "AVAILABILITY": {
-      const parsed = await parseLeadReply(stage, leadReply, context);
-
-      if (parsed.intent === "no") {
-        return {
-          reply: `No problem! Feel free to reach out whenever you're ready. We'd love to help you get your home sparkling clean. 🏠`,
-          nextStage: "DONE",
-        };
-      }
-
-      // Check if the lead named a specific slot in their reply
-      // e.g. "Friday works" or "Let's do Saturday" — skip SLOT_CHOICE entirely
+      // ⚠️ IMPORTANT: Check for specific day name FIRST, before any LLM call.
+      // If the lead says "Friday" or "Thursday", the LLM might parse it as "no"
+      // because it's not "yes/sure/ok". Day-name detection must be purely string-based.
       const dynamicSlotsForAvail = getNextAvailableSlots(2);
       const slot1 = dynamicSlotsForAvail[0];
       const slot2 = dynamicSlotsForAvail[1];
@@ -292,14 +284,22 @@ export async function processLeadReply(
         };
       }
 
+      // No specific day mentioned — use LLM to determine yes/no intent
+      const parsed = await parseLeadReply(stage, leadReply, context);
+
+      if (parsed.intent === "no") {
+        return {
+          reply: `No problem! Feel free to reach out whenever you're ready. We'd love to help you get your home sparkling clean. 🏠`,
+          nextStage: "DONE",
+        };
+      }
+
       // Positive but no specific day mentioned → show slot choice
       return {
         reply: buildSlotChoiceMessage(),
         nextStage: "SLOT_CHOICE",
       };
-    }
-
-    // ── Stage 3: Slot choice ──────────────────────────────────────────────────
+    } // ── Stage 3: Slot choice ──────────────────────────────────────────────────
     case "SLOT_CHOICE": {
       const parsed = await parseLeadReply(stage, leadReply, context);
 
