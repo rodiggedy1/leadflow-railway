@@ -122,6 +122,8 @@ Everything in standard cleaning, plus:
 
 - Maids in Black brings all professional-grade cleaning products and equipment.
 - Customers do not need to provide anything.
+- **Pet-safe products:** When a customer selects the "I Have Pets" add-on, the team uses pet-safe cleaning products and pays extra attention to pet areas (fur, dander, pet beds, etc.).
+- **Green/eco-friendly:** When a customer selects the "Green Cleaning" add-on, the team uses eco-friendly, non-toxic products.
 - If you prefer specific products, just let them know.
 
 ---
