@@ -473,7 +473,7 @@ function ConversationDrawer({
                 value={session.stage}
                 onValueChange={(val) => {
                   if (val === session.stage) return;
-                  updateStageMutation.mutate({ sessionId: session.id, stage: val as "QUOTE_SENT" | "AVAILABILITY" | "SLOT_CHOICE" | "TIME_PREF" | "ADDRESS" | "CONFIRMATION" | "CALL_SCHEDULED" | "DONE" | "UNHANDLED" });
+                  updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
                 }}
                 disabled={updateStageMutation.isPending}
               >
@@ -491,6 +491,8 @@ function ConversationDrawer({
                     "CALL_SCHEDULED",
                     "DONE",
                     "UNHANDLED",
+                    "BOOKED",
+                    "NOT_INTERESTED",
                   ] as const).map(s => (
                     <SelectItem key={s} value={s} className="text-xs">
                       {STAGE_CONFIG[s as Stage]?.label ?? s}

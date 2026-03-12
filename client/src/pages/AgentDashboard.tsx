@@ -103,8 +103,9 @@ const STAGE_LABELS: Record<string, string> = {
   CALL_SCHEDULED: "Call Scheduled",
   DONE:           "Done",
   UNHANDLED:      "Needs Review",
+  BOOKED:         "Booked ✔",
+  NOT_INTERESTED: "Not Interested",
 };
-
 const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   QUOTE_SENT:     { bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe" },
   AVAILABILITY:   { bg: "#fef3c7", text: "#92400e", border: "#fde68a" },
@@ -114,6 +115,8 @@ const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }>
   CALL_SCHEDULED: { bg: "#e0e7ff", text: "#1e3a5f", border: "#c7d2fe" },
   DONE:           { bg: "#dcfce7", text: "#14532d", border: "#bbf7d0" },
   UNHANDLED:      { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
+  BOOKED:         { bg: "#bbf7d0", text: "#14532d", border: "#4ade80" },
+  NOT_INTERESTED: { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
