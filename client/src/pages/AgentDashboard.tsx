@@ -1,20 +1,13 @@
 /**
- * AgentDashboard — Personal workspace for each sales agent
- *
- * Features:
- * - Manus OAuth login gate (agents must be logged in)
- * - View all leads (unassigned + own) and claim them
- * - Log call attempts with outcome + notes
- * - Mark leads as booked
- * - See full conversation history per lead
+ * AgentDashboard — Personal workspace for each sales agent.
+ * Uses email + password auth — no Manus account required.
  */
 import { useState, useMemo } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -30,6 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Phone,
   PhoneCall,
@@ -43,11 +37,9 @@ import {
   RefreshCw,
   UserCheck,
   UserX,
-  X,
   MessageSquare,
-  DollarSign,
-  MapPin,
-  Calendar,
+  LogIn,
+  Loader2,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -78,38 +70,45 @@ type Session = {
 type CallOutcome = "ANSWERED" | "NO_ANSWER" | "VOICEMAIL" | "BUSY" | "BOOKED" | "CALLBACK";
 
 const OUTCOME_OPTIONS: { value: CallOutcome; label: string; icon: React.ReactNode; color: string }[] = [
-  { value: "ANSWERED",  label: "Answered",         icon: <PhoneCall className="w-4 h-4" />, color: "#16a34a" },
-  { value: "NO_ANSWER", label: "No Answer",         icon: <PhoneMissed className="w-4 h-4" />, color: "#d97706" },
-  { value: "VOICEMAIL", label: "Left Voicemail",    icon: <Phone className="w-4 h-4" />, color: "#7c3aed" },
-  { value: "BUSY",      label: "Busy",              icon: <PhoneOff className="w-4 h-4" />, color: "#dc2626" },
-  { value: "BOOKED",    label: "Booked!",           icon: <CheckCircle2 className="w-4 h-4" />, color: "#E8603C" },
-  { value: "CALLBACK",  label: "Call Back Later",   icon: <Clock className="w-4 h-4" />, color: "#0891b2" },
+  { value: "ANSWERED",  label: "Answered",       icon: <PhoneCall className="w-4 h-4" />, color: "#16a34a" },
+  { value: "NO_ANSWER", label: "No Answer",       icon: <PhoneMissed className="w-4 h-4" />, color: "#d97706" },
+  { value: "VOICEMAIL", label: "Left Voicemail",  icon: <Phone className="w-4 h-4" />, color: "#7c3aed" },
+  { value: "BUSY",      label: "Busy",            icon: <PhoneOff className="w-4 h-4" />, color: "#dc2626" },
+  { value: "BOOKED",    label: "Booked!",         icon: <CheckCircle2 className="w-4 h-4" />, color: "#E8603C" },
+  { value: "CALLBACK",  label: "Call Back Later", icon: <Clock className="w-4 h-4" />, color: "#0891b2" },
 ];
 
 const STAGE_LABELS: Record<string, string> = {
-  QUOTE_SENT:    "Quote Sent",
-  AVAILABILITY:  "Availability",
-  SLOT_CHOICE:   "Slot Choice",
-  ADDRESS:       "Address",
-  CONFIRMATION:  "Confirmation",
-  CALL_SCHEDULED:"Call Scheduled",
-  DONE:          "Done",
-  UNHANDLED:     "Needs Review",
+  QUOTE_SENT:     "Quote Sent",
+  AVAILABILITY:   "Availability",
+  SLOT_CHOICE:    "Slot Choice",
+  ADDRESS:        "Address",
+  CONFIRMATION:   "Confirmation",
+  CALL_SCHEDULED: "Call Scheduled",
+  DONE:           "Done",
+  UNHANDLED:      "Needs Review",
+};
+
+const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  QUOTE_SENT:     { bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe" },
+  AVAILABILITY:   { bg: "#fef3c7", text: "#92400e", border: "#fde68a" },
+  SLOT_CHOICE:    { bg: "#ffedd5", text: "#9a3412", border: "#fed7aa" },
+  ADDRESS:        { bg: "#f3e8ff", text: "#6b21a8", border: "#e9d5ff" },
+  CONFIRMATION:   { bg: "#ccfbf1", text: "#134e4a", border: "#99f6e4" },
+  CALL_SCHEDULED: { bg: "#e0e7ff", text: "#1e3a5f", border: "#c7d2fe" },
+  DONE:           { bg: "#dcfce7", text: "#14532d", border: "#bbf7d0" },
+  UNHANDLED:      { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function timeAgo(date: Date | string | null): string {
   if (!date) return "—";
-  const now = Date.now();
-  const then = new Date(date).getTime();
-  const diffMs = now - then;
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${Math.floor(diffHours / 24)}d ago`;
+  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 function formatPhone(phone: string): string {
@@ -118,19 +117,6 @@ function formatPhone(phone: string): string {
   if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
   return phone;
 }
-
-// ── Stage badge ───────────────────────────────────────────────────────────────
-
-const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  QUOTE_SENT:    { bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe" },
-  AVAILABILITY:  { bg: "#fef3c7", text: "#92400e", border: "#fde68a" },
-  SLOT_CHOICE:   { bg: "#ffedd5", text: "#9a3412", border: "#fed7aa" },
-  ADDRESS:       { bg: "#f3e8ff", text: "#6b21a8", border: "#e9d5ff" },
-  CONFIRMATION:  { bg: "#ccfbf1", text: "#134e4a", border: "#99f6e4" },
-  CALL_SCHEDULED:{ bg: "#e0e7ff", text: "#1e3a5f", border: "#c7d2fe" },
-  DONE:          { bg: "#dcfce7", text: "#14532d", border: "#bbf7d0" },
-  UNHANDLED:     { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
-};
 
 function StageBadge({ stage }: { stage: string }) {
   const c = STAGE_COLORS[stage] ?? { bg: "#f3f4f6", text: "#374151", border: "#e5e7eb" };
@@ -144,17 +130,90 @@ function StageBadge({ stage }: { stage: string }) {
   );
 }
 
+// ── Login Form ────────────────────────────────────────────────────────────────
+
+function AgentLoginForm({ onSuccess }: { onSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const loginMutation = trpc.agents.login.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Welcome back, ${data.agent.name}!`);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Login failed"),
+  });
+
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>
+      <div className="bg-white rounded-2xl border shadow-lg p-8 max-w-sm w-full mx-4" style={{ borderColor: "#F0D8D0" }}>
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
+            style={{ backgroundColor: "#E8603C" }}>
+            <User className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Agent Login</h1>
+          <p className="text-sm text-gray-500 mt-1">Sign in to access your leads workspace</p>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!email || !password) return;
+            loginMutation.mutate({ email: email.trim(), password });
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="agent-email">Email</Label>
+            <Input
+              id="agent-email"
+              type="email"
+              placeholder="agent@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+              disabled={loginMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="agent-password">Password</Label>
+            <Input
+              id="agent-password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loginMutation.isPending}
+            />
+          </div>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loginMutation.isPending || !email || !password}
+            style={{ backgroundColor: "#E8603C", color: "white" }}
+          >
+            {loginMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in…</>
+            ) : (
+              <><LogIn className="w-4 h-4 mr-2" /> Sign In</>
+            )}
+          </Button>
+        </form>
+
+        <p className="text-center text-xs text-gray-400 mt-4">
+          Contact your admin if you need access or forgot your password.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Log Call Dialog ───────────────────────────────────────────────────────────
 
-function LogCallDialog({
-  session,
-  onClose,
-  onSuccess,
-}: {
-  session: Session;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
+function LogCallDialog({ session, onClose }: { session: Session; onClose: () => void }) {
   const [outcome, setOutcome] = useState<CallOutcome>("ANSWERED");
   const [notes, setNotes] = useState("");
   const utils = trpc.useUtils();
@@ -162,9 +221,7 @@ function LogCallDialog({
   const logCall = trpc.agents.logCall.useMutation({
     onSuccess: () => {
       utils.leads.list.invalidate();
-      utils.agents.myLeads.invalidate();
       toast.success(`Call logged: ${OUTCOME_OPTIONS.find(o => o.value === outcome)?.label}`);
-      onSuccess();
       onClose();
     },
     onError: (err) => toast.error(err.message),
@@ -179,7 +236,6 @@ function LogCallDialog({
             Log Call — {session.leadName ?? formatPhone(session.leadPhone)}
           </DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 py-2">
           <div>
             <label className="text-sm font-medium text-gray-700 mb-2 block">Call Outcome</label>
@@ -201,11 +257,10 @@ function LogCallDialog({
               ))}
             </div>
           </div>
-
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1.5 block">Notes (optional)</label>
             <Textarea
-              placeholder="What happened on the call? Any follow-up needed?"
+              placeholder="What happened on the call?"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={3}
@@ -213,7 +268,6 @@ function LogCallDialog({
             />
           </div>
         </div>
-
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
@@ -229,90 +283,98 @@ function LogCallDialog({
   );
 }
 
-// ── Call History Dialog ───────────────────────────────────────────────────────
-
-function CallHistoryDialog({ session, onClose }: { session: Session; onClose: () => void }) {
-  const { data: logs = [], isLoading } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Call History — {session.leadName ?? formatPhone(session.leadPhone)}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-2 max-h-80 overflow-y-auto py-2">
-          {isLoading ? (
-            <p className="text-center text-gray-400 py-6">Loading…</p>
-          ) : logs.length === 0 ? (
-            <p className="text-center text-gray-400 py-6">No calls logged yet</p>
-          ) : (
-            logs.map(log => {
-              const opt = OUTCOME_OPTIONS.find(o => o.value === log.outcome);
-              return (
-                <div key={log.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                  <span style={{ color: opt?.color ?? "#374151", marginTop: 2 }}>{opt?.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold" style={{ color: opt?.color }}>{opt?.label ?? log.outcome}</span>
-                      <span className="text-xs text-gray-400">{timeAgo(log.calledAt)}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">by {log.agentName}</p>
-                    {log.notes && <p className="text-sm text-gray-700 mt-1">{log.notes}</p>}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ── Conversation Drawer ───────────────────────────────────────────────────────
 
 function ConversationDrawer({ session, onClose }: { session: Session; onClose: () => void }) {
   let messages: { role: string; content: string }[] = [];
   try { messages = JSON.parse(session.messageHistory || "[]"); } catch { messages = []; }
 
+  const { data: callLogs = [] } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+      onClick={onClose}
     >
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b">
+      <div
+        className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#F0D8D0" }}>
           <div>
-            <h2 className="font-semibold text-gray-900">{session.leadName ?? "Unknown Lead"}</h2>
-            <p className="text-sm text-gray-500">{formatPhone(session.leadPhone)}</p>
+            <h3 className="font-semibold text-gray-900">{session.leadName ?? formatPhone(session.leadPhone)}</h3>
+            <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <StageBadge stage={session.stage} />
-            <Button variant="ghost" size="sm" onClick={onClose}><X className="w-4 h-4" /></Button>
-          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+        {/* Details */}
+        <div className="px-5 py-3 bg-gray-50 border-b text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+          {session.serviceType && <span>Service: <b>{session.serviceType}</b></span>}
+          {session.quotedPrice && <span>Price: <b>{session.quotedPrice}</b></span>}
+          {session.selectedSlot && <span>Slot: <b>{session.selectedSlot}</b></span>}
+          {session.address && <span>Address: <b>{session.address}</b></span>}
+          {session.isBooked === 1 && (
+            <span className="text-green-700 font-semibold">
+              ✓ Booked{session.bookedByAgentName ? ` by ${session.bookedByAgentName}` : ""}
+            </span>
+          )}
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+            <MessageSquare className="w-3.5 h-3.5" /> SMS Conversation
+          </p>
           {messages.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
-          ) : messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div
-                className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
-                style={msg.role === "user"
-                  ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: 4 }
-                  : { backgroundColor: "#f3f4f6", color: "#1f2937", borderBottomLeftRadius: 4 }}
-              >
-                {msg.content}
+            <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>
+          ) : (
+            messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className="max-w-[80%] rounded-2xl px-3.5 py-2 text-sm"
+                  style={
+                    msg.role === "user"
+                      ? { backgroundColor: "#E8603C", color: "white" }
+                      : { backgroundColor: "#f3f4f6", color: "#111827" }
+                  }
+                >
+                  {msg.content}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
+
+          {/* Call logs */}
+          {callLogs.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4 mb-2 flex items-center gap-1">
+                <PhoneCall className="w-3.5 h-3.5" /> Call History
+              </p>
+              {callLogs.map(log => {
+                const opt = OUTCOME_OPTIONS.find(o => o.value === log.outcome);
+                return (
+                  <div key={log.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                    <span style={{ color: opt?.color ?? "#374151", marginTop: 1 }}>{opt?.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between">
+                        <span className="font-semibold" style={{ color: opt?.color }}>{opt?.label ?? log.outcome}</span>
+                        <span className="text-gray-400">{timeAgo(log.calledAt)}</span>
+                      </div>
+                      <p className="text-gray-500">by {log.agentName}</p>
+                      {log.notes && <p className="text-gray-700 mt-0.5">{log.notes}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
-        <div className="p-4 border-t text-xs text-gray-400 flex justify-between">
-          <span>Started {timeAgo(session.createdAt)}</span>
-          <span>Updated {timeAgo(session.updatedAt)}</span>
+
+        <div className="px-5 py-3 border-t flex justify-end">
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
         </div>
       </div>
     </div>
@@ -323,179 +385,138 @@ function ConversationDrawer({ session, onClose }: { session: Session; onClose: (
 
 function LeadCard({
   session,
-  currentUserId,
-  currentUserRole,
+  currentAgentId,
   onRefresh,
 }: {
   session: Session;
-  currentUserId: number;
-  currentUserRole: string;
+  currentAgentId: number;
   onRefresh: () => void;
 }) {
-  const [showLogCall, setShowLogCall] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showConversation, setShowConversation] = useState(false);
   const utils = trpc.useUtils();
-
-  const isMyLead = session.assignedAgentId === currentUserId;
-  const isClaimed = Boolean(session.assignedAgentId);
-  const isAdmin = currentUserRole === "admin";
-  const isBooked = session.isBooked === 1;
+  const [showLogCall, setShowLogCall] = useState(false);
+  const [showConversation, setShowConversation] = useState(false);
 
   const claimLead = trpc.agents.claimLead.useMutation({
-    onSuccess: () => {
-      utils.leads.list.invalidate();
-      utils.agents.myLeads.invalidate();
-      toast.success("Lead claimed — assigned to you.");
-      onRefresh();
-    },
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead claimed!"); },
     onError: (err) => toast.error(err.message),
   });
-
   const unclaimLead = trpc.agents.unclaimLead.useMutation({
-    onSuccess: () => {
-      utils.leads.list.invalidate();
-      utils.agents.myLeads.invalidate();
-      toast.success("Lead released — now unassigned.");
-      onRefresh();
-    },
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead released"); },
+    onError: (err) => toast.error(err.message),
+  });
+  const markBooked = trpc.agents.markBooked.useMutation({
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Marked as booked!"); },
     onError: (err) => toast.error(err.message),
   });
 
-  const markBooked = trpc.agents.markBooked.useMutation({
-    onSuccess: () => {
-      utils.leads.list.invalidate();
-      utils.agents.myLeads.invalidate();
-      toast.success("🎉 Lead marked as booked!");
-      onRefresh();
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const isMine = session.assignedAgentId === currentAgentId;
+  const isBooked = session.isBooked === 1;
 
   return (
     <>
-      <div
-        className="bg-white rounded-2xl border p-4 flex flex-col gap-3 shadow-sm transition-shadow hover:shadow-md"
+      <Card
+        className="transition-all hover:shadow-md"
         style={{
-          borderColor: isBooked ? "#bbf7d0" : isMyLead ? "#fed7aa" : "#F0D8D0",
-          borderWidth: isBooked || isMyLead ? "2px" : "1px",
+          borderColor: isBooked ? "#bbf7d0" : isMine ? "#bfdbfe" : "#F0D8D0",
+          backgroundColor: isBooked ? "#f0fdf4" : isMine ? "#eff6ff" : "white",
         }}
       >
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-gray-900 text-sm">
-                {session.leadName ?? "Unknown"}
-              </span>
-              <StageBadge stage={session.stage} />
-              {isBooked && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
-                  <CheckCircle2 className="w-3 h-3" /> Booked
-                  {session.bookedByAgentName && ` · ${session.bookedByAgentName}`}
+        <CardContent className="p-4">
+          {/* Top row */}
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-gray-900 text-sm">
+                  {session.leadName ?? "Unknown"}
                 </span>
-              )}
+                <span className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</span>
+                <StageBadge stage={session.stage} />
+                {isBooked && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+                    <CheckCircle2 className="w-3 h-3" /> Booked
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                {session.serviceType && <span>{session.serviceType}</span>}
+                {session.quotedPrice && <span className="font-medium text-gray-700">{session.quotedPrice}</span>}
+                {session.selectedSlot && <span>📅 {session.selectedSlot}</span>}
+                {session.lastCalledAt && (
+                  <span>📞 Last called {timeAgo(session.lastCalledAt)}
+                    {session.lastCalledByAgentName ? ` by ${session.lastCalledByAgentName}` : ""}
+                  </span>
+                )}
+                {session.assignedAgentName && !isMine && (
+                  <span className="text-blue-600">👤 {session.assignedAgentName}</span>
+                )}
+                {isBooked && session.bookedByAgentName && (
+                  <span className="text-green-700">✓ Booked by {session.bookedByAgentName}</span>
+                )}
+              </div>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-              <Phone className="w-3 h-3" /> {formatPhone(session.leadPhone)}
-            </p>
           </div>
-          {session.quotedPrice && (
-            <span className="font-bold text-sm flex items-center gap-0.5 shrink-0" style={{ color: "#E8603C" }}>
-              <DollarSign className="w-3.5 h-3.5" />{session.quotedPrice}
-            </span>
-          )}
-        </div>
 
-        {/* Service info */}
-        <div className="flex flex-wrap gap-3 text-xs text-gray-600">
-          {session.serviceType && (
-            <span>
-              <span className="text-gray-400">Service:</span> {session.serviceType}
-              {session.bedrooms && ` · ${session.bedrooms} bd / ${session.bathrooms} ba`}
-            </span>
-          )}
-          {session.selectedSlot && (
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-gray-400" /> {session.selectedSlot}
-            </span>
-          )}
-          {session.address && (
-            <span className="flex items-center gap-1 truncate max-w-full">
-              <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
-              <span className="truncate">{session.address}</span>
-            </span>
-          )}
-        </div>
+          {/* Action buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs gap-1"
+              onClick={() => setShowConversation(true)}
+            >
+              <MessageSquare className="w-3 h-3" /> History
+            </Button>
 
-        {/* Agent + call status */}
-        <div className="flex flex-wrap gap-2 text-xs">
-          {isClaimed ? (
-            <span className="flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded-lg border border-orange-100">
-              <UserCheck className="w-3 h-3" />
-              {isMyLead ? "Assigned to you" : `Assigned to ${session.assignedAgentName}`}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-              <User className="w-3 h-3" /> Unassigned
-            </span>
-          )}
-          {session.lastCalledAt && (
-            <span className="flex items-center gap-1 text-gray-500 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-              <Clock className="w-3 h-3" />
-              Last called {timeAgo(session.lastCalledAt)}
-              {session.lastCalledByAgentName && ` by ${session.lastCalledByAgentName}`}
-            </span>
-          )}
-        </div>
+            {!isBooked && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2.5 text-xs gap-1"
+                  onClick={() => setShowLogCall(true)}
+                >
+                  <PhoneCall className="w-3 h-3" /> Log Call
+                </Button>
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
-          {!isClaimed && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs"
-              onClick={() => claimLead.mutate({ sessionId: session.id })}
-              disabled={claimLead.isPending}>
-              <UserCheck className="w-3.5 h-3.5" style={{ color: "#E8603C" }} /> Claim
-            </Button>
-          )}
-          {(isMyLead || isAdmin) && isClaimed && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs text-gray-500"
-              onClick={() => unclaimLead.mutate({ sessionId: session.id })}
-              disabled={unclaimLead.isPending}>
-              <UserX className="w-3.5 h-3.5" /> Release
-            </Button>
-          )}
-          {(isMyLead || isAdmin) && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs"
-              onClick={() => setShowLogCall(true)}
-              style={{ color: "#E8603C", borderColor: "#E8603C" }}>
-              <PhoneCall className="w-3.5 h-3.5" /> Log Call
-            </Button>
-          )}
-          {(isMyLead || isAdmin) && !isBooked && (
-            <Button size="sm" className="gap-1.5 text-xs"
-              onClick={() => markBooked.mutate({ sessionId: session.id })}
-              disabled={markBooked.isPending}
-              style={{ backgroundColor: "#16a34a", color: "white" }}>
-              <CheckCircle2 className="w-3.5 h-3.5" /> Mark Booked
-            </Button>
-          )}
-          <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-gray-500 ml-auto"
-            onClick={() => setShowHistory(true)}>
-            <Clock className="w-3.5 h-3.5" /> Calls
-          </Button>
-          <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-gray-500"
-            onClick={() => setShowConversation(true)}>
-            <MessageSquare className="w-3.5 h-3.5" /> SMS
-          </Button>
-        </div>
-      </div>
+                {isMine ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={() => unclaimLead.mutate({ sessionId: session.id })}
+                    disabled={unclaimLead.isPending}
+                  >
+                    <UserX className="w-3 h-3" /> Release
+                  </Button>
+                ) : !session.assignedAgentId ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                    onClick={() => claimLead.mutate({ sessionId: session.id })}
+                    disabled={claimLead.isPending}
+                  >
+                    <UserCheck className="w-3 h-3" /> Claim
+                  </Button>
+                ) : null}
+
+                <Button
+                  size="sm"
+                  className="h-7 px-2.5 text-xs gap-1 text-white"
+                  style={{ backgroundColor: "#16a34a" }}
+                  onClick={() => markBooked.mutate({ sessionId: session.id })}
+                  disabled={markBooked.isPending}
+                >
+                  <CheckCircle2 className="w-3 h-3" /> Mark Booked
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {showLogCall && (
-        <LogCallDialog session={session} onClose={() => setShowLogCall(false)} onSuccess={onRefresh} />
-      )}
-      {showHistory && (
-        <CallHistoryDialog session={session} onClose={() => setShowHistory(false)} />
+        <LogCallDialog session={session} onClose={() => setShowLogCall(false)} />
       )}
       {showConversation && (
         <ConversationDrawer session={session} onClose={() => setShowConversation(false)} />
@@ -504,55 +525,37 @@ function LeadCard({
   );
 }
 
-// ── Login Gate ────────────────────────────────────────────────────────────────
+// ── Main Export ───────────────────────────────────────────────────────────────
 
-function LoginGate() {
-  return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>
-      <div className="bg-white rounded-2xl border shadow-lg p-8 max-w-sm w-full mx-4 text-center" style={{ borderColor: "#F0D8D0" }}>
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-          style={{ backgroundColor: "#E8603C" }}>
-          <User className="w-7 h-7 text-white" />
-        </div>
-        <h1 className="text-xl font-bold text-gray-900 mb-2">Agent Login</h1>
-        <p className="text-gray-500 text-sm mb-6">
-          Sign in with your Manus account to access the agent workspace.
-        </p>
-        <Button
-          className="w-full"
-          style={{ backgroundColor: "#E8603C", color: "white" }}
-          onClick={() => { window.location.href = getLoginUrl(); }}
-        >
-          Sign In to Continue
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Agent Dashboard ──────────────────────────────────────────────────────
-
-type ViewMode = "my" | "all" | "unassigned" | "booked";
+type ViewMode = "all" | "my" | "unassigned" | "booked";
 
 export default function AgentDashboard() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const utils = trpc.useUtils();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [stageFilter, setStageFilter] = useState("all");
 
-  const {
-    data: allSessions = [],
-    isLoading,
-    refetch,
-    isFetching,
-  } = trpc.leads.list.useQuery(undefined, {
-    enabled: isAuthenticated,
-    refetchInterval: 30000,
+  // Agent session
+  const { data: agentMe, isLoading: agentLoading, refetch: refetchMe } = trpc.agents.me.useQuery(undefined, {
+    retry: false,
+  });
+
+  const logoutMutation = trpc.agents.logout.useMutation({
+    onSuccess: () => {
+      utils.agents.me.invalidate();
+      toast.success("Signed out");
+    },
+  });
+
+  // Leads
+  const { data: allSessions = [], isLoading, refetch, isFetching } = trpc.leads.list.useQuery(undefined, {
+    enabled: !!agentMe,
+    refetchInterval: 30_000,
   });
 
   const filtered = useMemo(() => {
-    return allSessions.filter(s => {
-      if (viewMode === "my" && s.assignedAgentId !== user?.id) return false;
+    return (allSessions as Session[]).filter(s => {
+      if (viewMode === "my" && s.assignedAgentId !== agentMe?.id) return false;
       if (viewMode === "unassigned" && s.assignedAgentId !== null) return false;
       if (viewMode === "booked" && s.isBooked !== 1) return false;
       if (stageFilter !== "all" && s.stage !== stageFilter) return false;
@@ -567,13 +570,14 @@ export default function AgentDashboard() {
       }
       return true;
     });
-  }, [allSessions, viewMode, stageFilter, search, user?.id]);
+  }, [allSessions, viewMode, stageFilter, search, agentMe?.id]);
 
-  const myCount = allSessions.filter(s => s.assignedAgentId === user?.id).length;
-  const unassignedCount = allSessions.filter(s => !s.assignedAgentId).length;
-  const bookedCount = allSessions.filter(s => s.isBooked === 1).length;
+  const myCount = (allSessions as Session[]).filter(s => s.assignedAgentId === agentMe?.id).length;
+  const unassignedCount = (allSessions as Session[]).filter(s => !s.assignedAgentId).length;
+  const bookedCount = (allSessions as Session[]).filter(s => s.isBooked === 1).length;
 
-  if (loading) {
+  // Loading state
+  if (agentLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>
         <RefreshCw className="w-6 h-6 animate-spin" style={{ color: "#E8603C" }} />
@@ -581,15 +585,16 @@ export default function AgentDashboard() {
     );
   }
 
-  if (!isAuthenticated || !user) {
-    return <LoginGate />;
+  // Not logged in → show login form
+  if (!agentMe) {
+    return <AgentLoginForm onSuccess={() => refetchMe()} />;
   }
 
   const VIEW_TABS: { value: ViewMode; label: string; count: number }[] = [
-    { value: "all",        label: "All Leads",   count: allSessions.length },
-    { value: "my",         label: "My Leads",    count: myCount },
-    { value: "unassigned", label: "Unassigned",  count: unassignedCount },
-    { value: "booked",     label: "Booked",      count: bookedCount },
+    { value: "all",        label: "All Leads",  count: (allSessions as Session[]).length },
+    { value: "my",         label: "My Leads",   count: myCount },
+    { value: "unassigned", label: "Unassigned", count: unassignedCount },
+    { value: "booked",     label: "Booked",     count: bookedCount },
   ];
 
   return (
@@ -604,10 +609,7 @@ export default function AgentDashboard() {
             <div>
               <h1 className="font-semibold text-gray-900 leading-tight">Agent Workspace</h1>
               <p className="text-xs text-gray-500">
-                Signed in as <span className="font-medium text-gray-700">{user.name ?? user.email ?? "Agent"}</span>
-                {user.role === "admin" && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-semibold">Admin</span>
-                )}
+                Signed in as <span className="font-medium text-gray-700">{agentMe.name}</span>
               </p>
             </div>
           </div>
@@ -615,7 +617,7 @@ export default function AgentDashboard() {
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
             </Button>
-            <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5 text-gray-500">
+            <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()} className="gap-1.5 text-gray-500">
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </Button>
           </div>
@@ -700,8 +702,7 @@ export default function AgentDashboard() {
               <LeadCard
                 key={session.id}
                 session={session as Session}
-                currentUserId={user.id}
-                currentUserRole={user.role}
+                currentAgentId={agentMe.id}
                 onRefresh={() => refetch()}
               />
             ))}

@@ -105,3 +105,14 @@
 - [x] Agent login gate — Manus OAuth required, redirects to login if unauthenticated
 - [x] Admin dashboard — added Agent, Last Called, Booking columns + agent filter dropdown
 - [x] 97/97 tests pass
+
+## Agent Auth (No Manus Account Required) — COMPLETED
+
+- [x] Add agents table: id, name, email, passwordHash, isActive, createdAt
+- [x] Backend: agents.login (email+password → JWT cookie), agents.logout, agents.me
+- [x] Backend: agents.create (admin only — create new agent accounts)
+- [x] Backend: agents.list / agents.setActive / agents.resetPassword (admin only)
+- [x] Replace Manus OAuth gate on /agent with email/password login form
+- [x] Update all agent procedures to use agent JWT session instead of Manus user session
+- [x] Admin dashboard: Agents tab (list agents, create new, deactivate/activate, reset password)
+- [x] 97/97 tests pass

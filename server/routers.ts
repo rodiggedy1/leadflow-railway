@@ -1,13 +1,15 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, AGENT_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, between, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { getDb } from "./db";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp } from "./aiService";
+import bcrypt from "bcryptjs";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -88,20 +90,77 @@ export const appRouter = router({
   }),
 
   /**
-   * agents — protected procedures for agent actions on leads
+   * agents — agent auth + lead action procedures.
    *
-   * All procedures require the agent to be logged in via Manus OAuth.
-   * The agent's user.id and user.name are taken from ctx.user.
+   * Agents authenticate with email + password (no Manus account needed).
+   * Their session is stored in a separate "agent_session_id" cookie.
+   * The agentSession is read from the cookie on each request.
    */
   agents: router({
     /**
-     * agents.claimLead — assign a lead to the calling agent
-     * If the lead is already claimed by another agent, throws FORBIDDEN.
-     * Admins can always reassign.
+     * agents.login — authenticate with email + password, set agent session cookie.
      */
-    claimLead: protectedProcedure
+    login: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const agent = await getAgentByEmail(input.email.toLowerCase().trim());
+        if (!agent || !agent.isActive) {
+          throw new Error("Invalid email or password");
+        }
+        const valid = await bcrypt.compare(input.password, agent.passwordHash);
+        if (!valid) {
+          throw new Error("Invalid email or password");
+        }
+        const token = await signAgentSession({
+          agentId: agent.id,
+          agentName: agent.name,
+          agentEmail: agent.email,
+        });
+        const cookieOpts = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(AGENT_COOKIE_NAME, token, {
+          ...cookieOpts,
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        });
+        return { success: true, agent: { id: agent.id, name: agent.name, email: agent.email } };
+      }),
+
+    /**
+     * agents.logout — clear the agent session cookie.
+     */
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOpts = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(AGENT_COOKIE_NAME, { ...cookieOpts, maxAge: -1 });
+      return { success: true };
+    }),
+
+    /**
+     * agents.me — return the current agent from the session cookie, or null.
+     */
+    me: publicProcedure.query(async ({ ctx }) => {
+      const session = await verifyAgentSession(
+        (() => {
+          const cookieHeader = ctx.req.headers.cookie;
+          if (!cookieHeader) return null;
+          const { parse } = require("cookie") as typeof import("cookie");
+          return parse(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
+        })()
+      );
+      if (!session) return null;
+      const agent = await getAgentById(session.agentId);
+      if (!agent || !agent.isActive) return null;
+      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive };
+    }),
+
+    /**
+     * agents.claimLead — assign a lead to the calling agent.
+     */
+    claimLead: publicProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
       .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const [session] = await db
@@ -110,31 +169,23 @@ export const appRouter = router({
           .where(eq(conversationSessions.id, input.sessionId))
           .limit(1);
         if (!session) throw new Error("Lead not found");
-        // Only admins can steal a lead already claimed by someone else
-        if (
-          session.assignedAgentId &&
-          session.assignedAgentId !== ctx.user.id &&
-          ctx.user.role !== "admin"
-        ) {
+        if (session.assignedAgentId && session.assignedAgentId !== agentSession.agentId) {
           throw new Error("This lead is already claimed by another agent");
         }
         await db
           .update(conversationSessions)
-          .set({
-            assignedAgentId: ctx.user.id,
-            assignedAgentName: ctx.user.name ?? "Unknown Agent",
-          })
+          .set({ assignedAgentId: agentSession.agentId, assignedAgentName: agentSession.agentName })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
 
     /**
-     * agents.unclaimLead — release a lead back to unassigned
-     * Only the owning agent or an admin can unclaim.
+     * agents.unclaimLead — release a lead back to unassigned.
      */
-    unclaimLead: protectedProcedure
+    unclaimLead: publicProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
       .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const [session] = await db
@@ -143,10 +194,7 @@ export const appRouter = router({
           .where(eq(conversationSessions.id, input.sessionId))
           .limit(1);
         if (!session) throw new Error("Lead not found");
-        if (
-          session.assignedAgentId !== ctx.user.id &&
-          ctx.user.role !== "admin"
-        ) {
+        if (session.assignedAgentId !== agentSession.agentId) {
           throw new Error("You can only unclaim leads assigned to you");
         }
         await db
@@ -158,41 +206,36 @@ export const appRouter = router({
 
     /**
      * agents.logCall — record a call attempt with outcome and optional notes.
-     * Also updates lastCalledAt / lastCalledByAgent on the session.
      */
-    logCall: protectedProcedure
-      .input(
-        z.object({
-          sessionId: z.number().int().positive(),
-          outcome: z.enum(callOutcomes as unknown as [string, ...string[]]),
-          notes: z.string().max(1000).optional(),
-        })
-      )
+    logCall: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        outcome: z.enum(callOutcomes as unknown as [string, ...string[]]),
+        notes: z.string().max(1000).optional(),
+      }))
       .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const now = new Date();
-        // Insert call log row
         await db.insert(leadCallLogs).values({
           sessionId: input.sessionId,
-          agentId: ctx.user.id,
-          agentName: ctx.user.name ?? "Unknown Agent",
+          agentId: agentSession.agentId,
+          agentName: agentSession.agentName,
           outcome: input.outcome,
           notes: input.notes ?? null,
           calledAt: now,
         });
-        // Update the session's last-called fields
         const updates: Record<string, unknown> = {
           lastCalledAt: now,
-          lastCalledByAgentId: ctx.user.id,
-          lastCalledByAgentName: ctx.user.name ?? "Unknown Agent",
+          lastCalledByAgentId: agentSession.agentId,
+          lastCalledByAgentName: agentSession.agentName,
         };
-        // If outcome is BOOKED, also mark as booked
         if (input.outcome === "BOOKED") {
           updates.isBooked = 1;
           updates.bookedAt = now;
-          updates.bookedByAgentId = ctx.user.id;
-          updates.bookedByAgentName = ctx.user.name ?? "Unknown Agent";
+          updates.bookedByAgentId = agentSession.agentId;
+          updates.bookedByAgentName = agentSession.agentName;
         }
         await db
           .update(conversationSessions)
@@ -202,16 +245,12 @@ export const appRouter = router({
       }),
 
     /**
-     * agents.markBooked — explicitly mark a lead as booked (without logging a call).
+     * agents.markBooked — explicitly mark a lead as booked.
      */
-    markBooked: protectedProcedure
-      .input(
-        z.object({
-          sessionId: z.number().int().positive(),
-          notes: z.string().max(1000).optional(),
-        })
-      )
+    markBooked: publicProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
       .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const now = new Date();
@@ -220,25 +259,9 @@ export const appRouter = router({
           .set({
             isBooked: 1,
             bookedAt: now,
-            bookedByAgentId: ctx.user.id,
-            bookedByAgentName: ctx.user.name ?? "Unknown Agent",
+            bookedByAgentId: agentSession.agentId,
+            bookedByAgentName: agentSession.agentName,
           })
-          .where(eq(conversationSessions.id, input.sessionId));
-        return { success: true };
-      }),
-
-    /**
-     * agents.unmarkBooked — undo a booking (admin only).
-     */
-    unmarkBooked: protectedProcedure
-      .input(z.object({ sessionId: z.number().int().positive() }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "admin") throw new Error("Admin only");
-        const db = await getDb();
-        if (!db) throw new Error("Database unavailable");
-        await db
-          .update(conversationSessions)
-          .set({ isBooked: 0, bookedAt: null, bookedByAgentId: null, bookedByAgentName: null })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
@@ -246,9 +269,10 @@ export const appRouter = router({
     /**
      * agents.getCallLogs — get all call log entries for a specific session.
      */
-    getCallLogs: protectedProcedure
+    getCallLogs: publicProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx); // require auth
         const db = await getDb();
         if (!db) return [];
         return db
@@ -261,28 +285,83 @@ export const appRouter = router({
     /**
      * agents.myLeads — get all leads assigned to the current agent.
      */
-    myLeads: protectedProcedure
-      .input(
-        z.object({
-          dateFrom: z.string().optional(),
-          dateTo: z.string().optional(),
-        }).optional()
-      )
-      .query(async ({ input, ctx }) => {
+    myLeads: publicProcedure.query(async ({ ctx }) => {
+      const agentSession = await getAgentSessionFromCtx(ctx);
+      const db = await getDb();
+      if (!db) return [];
+      return db
+        .select()
+        .from(conversationSessions)
+        .where(eq(conversationSessions.assignedAgentId, agentSession.agentId))
+        .orderBy(desc(conversationSessions.updatedAt))
+        .limit(500);
+    }),
+
+    // ── Admin-only agent management ────────────────────────────────────────────
+
+    /**
+     * agents.create — admin creates a new agent account.
+     * Requires Manus admin session (ctx.user.role === 'admin').
+     */
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        email: z.string().email().max(320),
+        password: z.string().min(6).max(128),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new Error("Admin only");
+        const existing = await getAgentByEmail(input.email.toLowerCase().trim());
+        if (existing) throw new Error("An agent with this email already exists");
+        const passwordHash = await bcrypt.hash(input.password, 12);
+        await createAgent({
+          name: input.name,
+          email: input.email.toLowerCase().trim(),
+          passwordHash,
+        });
+        return { success: true };
+      }),
+
+    /**
+     * agents.list — admin lists all agent accounts.
+     */
+    list: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new Error("Admin only");
+      const all = await getAllAgents();
+      // Never return passwordHash to the client
+      return all.map(a => ({
+        id: a.id,
+        name: a.name,
+        email: a.email,
+        isActive: a.isActive,
+        createdAt: a.createdAt,
+      }));
+    }),
+
+    /**
+     * agents.setActive — admin activates or deactivates an agent.
+     */
+    setActive: protectedProcedure
+      .input(z.object({ agentId: z.number().int().positive(), isActive: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new Error("Admin only");
+        await setAgentActive(input.agentId, input.isActive ? 1 : 0);
+        return { success: true };
+      }),
+
+    /**
+     * agents.resetPassword — admin resets an agent's password.
+     */
+    resetPassword: protectedProcedure
+      .input(z.object({ agentId: z.number().int().positive(), newPassword: z.string().min(6) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new Error("Admin only");
         const db = await getDb();
-        if (!db) return [];
-        const conditions = [
-          eq(conversationSessions.assignedAgentId, ctx.user.id),
-          ...(buildDateConditions(input?.dateFrom, input?.dateTo)
-            ? [buildDateConditions(input?.dateFrom, input?.dateTo)!]
-            : []),
-        ];
-        return db
-          .select()
-          .from(conversationSessions)
-          .where(and(...conditions))
-          .orderBy(desc(conversationSessions.updatedAt))
-          .limit(500);
+        if (!db) throw new Error("Database unavailable");
+        const { agents: agentsTable } = await import("../drizzle/schema");
+        const passwordHash = await bcrypt.hash(input.newPassword, 12);
+        await db.update(agentsTable).set({ passwordHash }).where(eq(agentsTable.id, input.agentId));
+        return { success: true };
       }),
   }),
 
@@ -485,4 +564,21 @@ function buildDateConditions(dateFrom?: string, dateTo?: string) {
     conditions.push(lte(conversationSessions.createdAt, to));
   }
   return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+/**
+ * Extracts and verifies the agent session from the request cookie.
+ * Throws an error if the agent is not authenticated or inactive.
+ */
+async function getAgentSessionFromCtx(ctx: { req: { headers: { cookie?: string } } }) {
+  const cookieHeader = ctx.req.headers.cookie;
+  if (!cookieHeader) throw new Error("Agent not authenticated");
+  const { parse } = require("cookie") as typeof import("cookie");
+  const token = parse(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
+  const session = await verifyAgentSession(token);
+  if (!session) throw new Error("Agent not authenticated");
+  // Verify agent is still active in DB
+  const agent = await getAgentById(session.agentId);
+  if (!agent || !agent.isActive) throw new Error("Agent account is inactive or not found");
+  return session;
 }

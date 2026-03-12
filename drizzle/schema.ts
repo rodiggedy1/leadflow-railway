@@ -147,3 +147,20 @@ export const leadCallLogs = mysqlTable("lead_call_logs", {
 
 export type LeadCallLog = typeof leadCallLogs.$inferSelect;
 export type InsertLeadCallLog = typeof leadCallLogs.$inferInsert;
+
+/**
+ * agents — internal agent accounts (no Manus OAuth required)
+ * Created by admins; agents log in with email + password.
+ */
+export const agents = mysqlTable("agents", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  isActive: int("isActive").default(1).notNull(), // 1 = active, 0 = deactivated
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Agent = typeof agents.$inferSelect;
+export type InsertAgent = typeof agents.$inferInsert;

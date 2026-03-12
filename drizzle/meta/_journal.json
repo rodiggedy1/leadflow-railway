@@ -36,6 +36,13 @@
       "when": 1773276142768,
       "tag": "0004_funny_pyro",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1773276844374,
+      "tag": "0005_curvy_mister_fear",
+      "breakpoints": true
     }
   ]
 }

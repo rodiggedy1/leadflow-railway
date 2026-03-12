@@ -37,7 +37,22 @@ import {
   UserCheck,
   CheckCircle2,
   PhoneCall,
+  Users,
+  UserPlus,
+  KeyRound,
+  ShieldOff,
+  ShieldCheck,
+  Loader2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 // ── Stage configuration ────────────────────────────────────────────────────────
 
@@ -374,7 +389,213 @@ function getPresetDates(preset: DatePreset): { from: string; to: string } | null
 
 // ── Main dashboard ────────────────────────────────────────────────────────────
 
+// ── Agent Management Panel ───────────────────────────────────────────────────
+
+function AgentManagement() {
+  const utils = trpc.useUtils();
+  const { data: agentList = [], isLoading } = trpc.agents.list.useQuery();
+  const [showCreate, setShowCreate] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPassword2, setNewPassword2] = useState("");
+  const [resetPw, setResetPw] = useState("");
+
+  const createMutation = trpc.agents.create.useMutation({
+    onSuccess: () => {
+      utils.agents.list.invalidate();
+      toast.success("Agent account created!");
+      setShowCreate(false);
+      setNewName(""); setNewEmail(""); setNewPassword(""); setNewPassword2("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const setActiveMutation = trpc.agents.setActive.useMutation({
+    onSuccess: () => utils.agents.list.invalidate(),
+    onError: (e) => toast.error(e.message),
+  });
+
+  const resetPasswordMutation = trpc.agents.resetPassword.useMutation({
+    onSuccess: () => {
+      utils.agents.list.invalidate();
+      toast.success("Password reset!");
+      setResetTarget(null);
+      setResetPw("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <div className="py-2">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Agent Accounts</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Manage who can access the agent workspace at /agent</p>
+        </div>
+        <Button
+          size="sm"
+          className="gap-1.5"
+          style={{ backgroundColor: "#E8603C", color: "white" }}
+          onClick={() => setShowCreate(true)}
+        >
+          <UserPlus className="w-4 h-4" /> Add Agent
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="py-12 text-center text-gray-400">
+          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+          Loading agents…
+        </div>
+      ) : agentList.length === 0 ? (
+        <div className="py-12 text-center text-gray-400 bg-white rounded-2xl border" style={{ borderColor: "#F0D8D0" }}>
+          <Users className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+          <p className="font-medium text-gray-600">No agents yet</p>
+          <p className="text-sm mt-1">Click "Add Agent" to create the first agent account.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: "#F0D8D0" }}>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b" style={{ borderColor: "#F0D8D0" }}>
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Name</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Email</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Created</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {agentList.map((agent) => (
+                <tr key={agent.id} className="border-t hover:bg-gray-50" style={{ borderColor: "#f3f4f6" }}>
+                  <td className="px-4 py-3 font-medium text-gray-900">{agent.name}</td>
+                  <td className="px-4 py-3 text-gray-600">{agent.email}</td>
+                  <td className="px-4 py-3">
+                    {agent.isActive ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                        <ShieldCheck className="w-3 h-3" /> Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                        <ShieldOff className="w-3 h-3" /> Inactive
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">
+                    {new Date(agent.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs gap-1"
+                        onClick={() => setResetTarget({ id: agent.id, name: agent.name })}
+                      >
+                        <KeyRound className="w-3 h-3" /> Reset PW
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`h-7 px-2 text-xs gap-1 ${agent.isActive ? "text-red-600 hover:bg-red-50" : "text-green-600 hover:bg-green-50"}`}
+                        onClick={() => setActiveMutation.mutate({ agentId: agent.id, isActive: !agent.isActive })}
+                        disabled={setActiveMutation.isPending}
+                      >
+                        {agent.isActive ? (
+                          <><ShieldOff className="w-3 h-3" /> Deactivate</>
+                        ) : (
+                          <><ShieldCheck className="w-3 h-3" /> Activate</>
+                        )}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Create Agent Dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create Agent Account</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label>Full Name</Label>
+              <Input placeholder="Jane Smith" value={newName} onChange={e => setNewName(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input type="email" placeholder="jane@example.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Password</Label>
+              <Input type="password" placeholder="Min 6 characters" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Confirm Password</Label>
+              <Input type="password" placeholder="Repeat password" value={newPassword2} onChange={e => setNewPassword2(e.target.value)} />
+            </div>
+            {newPassword && newPassword2 && newPassword !== newPassword2 && (
+              <p className="text-xs text-red-600">Passwords do not match</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button
+              onClick={() => createMutation.mutate({ name: newName, email: newEmail, password: newPassword })}
+              disabled={
+                createMutation.isPending ||
+                !newName || !newEmail || !newPassword ||
+                newPassword !== newPassword2
+              }
+              style={{ backgroundColor: "#E8603C", color: "white" }}
+            >
+              {createMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              Create Agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={() => setResetTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Password — {resetTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label>New Password</Label>
+              <Input type="password" placeholder="Min 6 characters" value={resetPw} onChange={e => setResetPw(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+            <Button
+              onClick={() => resetTarget && resetPasswordMutation.mutate({ agentId: resetTarget.id, newPassword: resetPw })}
+              disabled={resetPasswordMutation.isPending || resetPw.length < 6}
+              style={{ backgroundColor: "#E8603C", color: "white" }}
+            >
+              {resetPasswordMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              Reset Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+
 export default function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState<"leads" | "agents">("leads");
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -475,26 +696,40 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            {unhandledCount > 0 && (
+            {unhandledCount > 0 && activeTab === "leads" && (
               <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-xs font-semibold px-3 py-1.5 rounded-full">
                 ⚠ {unhandledCount} need{unhandledCount === 1 ? "s" : ""} review
               </span>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              disabled={isFetching}
-              className="gap-2"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            {activeTab === "leads" && (
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
+                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            )}
           </div>
+        </div>
+        {/* Tab navigation */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#F0D8D0" }}>
+          {(["leads", "agents"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+              style={activeTab === tab
+                ? { borderColor: "#E8603C", color: "#E8603C" }
+                : { borderColor: "transparent", color: "#6b7280" }}
+            >
+              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+              {tab === "leads" ? "Leads" : "Agents"}
+            </button>
+          ))}
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {activeTab === "agents" && <AgentManagement />}
+        {activeTab === "leads" && <>
         {/* Summary + date filter row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
           <div className="flex items-baseline gap-2">
@@ -807,6 +1042,7 @@ export default function AdminDashboard() {
         <p className="text-xs text-gray-400 mt-4 text-center">
           Auto-refreshes every 30 seconds · Click any row or stage card to filter · Click a stage card again to clear
         </p>
+        </>}
       </main>
 
       {/* Conversation drawer */}

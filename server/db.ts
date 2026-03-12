@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, agents, type Agent } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,45 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ── Agent DB helpers ──────────────────────────────────────────────────────────
+
+export async function getAgentByEmail(email: string): Promise<Agent | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(agents).where(eq(agents.email, email)).limit(1);
+  return result[0];
+}
+
+export async function getAgentById(id: number): Promise<Agent | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(agents).where(eq(agents.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getAllAgents(): Promise<Agent[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(agents).orderBy(agents.createdAt);
+}
+
+export async function createAgent(data: {
+  name: string;
+  email: string;
+  passwordHash: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(agents).values({
+    name: data.name,
+    email: data.email,
+    passwordHash: data.passwordHash,
+    isActive: 1,
+  });
+}
+
+export async function setAgentActive(id: number, isActive: 0 | 1): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(agents).set({ isActive }).where(eq(agents.id, id));
+}
