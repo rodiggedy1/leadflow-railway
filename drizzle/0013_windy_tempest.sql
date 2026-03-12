@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` ADD `aiMode` int DEFAULT 1 NOT NULL;

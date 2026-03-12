@@ -5,7 +5,7 @@
  * quoted prices, selected slots, addresses, and time elapsed.
  * Supports date range filtering and stage filtering.
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,8 @@ import {
   Medal,
   TrendingUp,
   Trash2,
+  Send,
+  BotOff,
 } from "lucide-react";
 import {
   Dialog,
@@ -398,6 +400,7 @@ type DrawerSession = {
   assignedAgentId: number | null;
   assignedAgentName: string | null;
   bookedAmount: number | null;
+  aiMode: number;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -469,6 +472,55 @@ function ConversationDrawer({
     },
     onError: (e) => toast.error(e.message),
   });
+
+  // Reply / send message
+  const [replyText, setReplyText] = useState("");
+  const [localMessages, setLocalMessages] = useState<{ role: string; content: string }[]>(messages);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-refresh conversation every 5s when drawer is open
+  const { data: freshSession } = trpc.leads.list.useQuery(undefined, {
+    refetchInterval: 5000,
+    select: (sessions) => sessions.find(s => s.id === session.id),
+  });
+
+  // Sync local messages when fresh data arrives
+  useEffect(() => {
+    if (freshSession?.messageHistory) {
+      try {
+        const fresh = JSON.parse(freshSession.messageHistory);
+        setLocalMessages(fresh);
+      } catch { /* ignore */ }
+    }
+  }, [freshSession?.messageHistory]);
+
+  // Scroll to bottom when messages update
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [localMessages]);
+
+  const sendMessageMutation = trpc.leads.sendMessage.useMutation({
+    onSuccess: (_, vars) => {
+      setLocalMessages(prev => [...prev, { role: "assistant", content: vars.message }]);
+      setReplyText("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const setAiModeMutation = trpc.leads.setAiMode.useMutation({
+    onSuccess: (_, vars) => {
+      onSessionUpdate({ aiMode: vars.aiMode });
+      utils.leads.list.invalidate();
+      toast.success(vars.aiMode === 1 ? "AI auto-reply enabled" : "Manual mode — you're now in control");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const handleSend = () => {
+    const text = replyText.trim();
+    if (!text) return;
+    sendMessageMutation.mutate({ sessionId: session.id, message: text });
+  };
 
   // Delete lead
   const deleteLeadMutation = trpc.leads.deleteLead.useMutation({
@@ -688,10 +740,10 @@ function ConversationDrawer({
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.length === 0 ? (
+          {localMessages.length === 0 ? (
             <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
           ) : (
-            messages.map((msg, i) => (
+            localMessages.map((msg, i) => (
               <div
                 key={i}
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
@@ -709,6 +761,51 @@ function ConversationDrawer({
               </div>
             ))
           )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Reply input */}
+        <div className="px-4 py-3 border-t bg-white">
+          {/* AI / Manual toggle */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500">
+              {session.aiMode === 1
+                ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
+                : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you’re in control</span>
+              }
+            </span>
+            <button
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                session.aiMode === 1
+                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                  : "border-green-300 text-green-700 hover:bg-green-50"
+              }`}
+              onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
+              disabled={setAiModeMutation.isPending}
+            >
+              {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Type a message to send via SMS..."
+              value={replyText}
+              onChange={e => setReplyText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              className="flex-1 text-sm h-9"
+            />
+            <Button
+              size="sm"
+              className="h-9 px-3 shrink-0"
+              style={{ backgroundColor: "#E8603C" }}
+              onClick={handleSend}
+              disabled={sendMessageMutation.isPending || !replyText.trim()}
+            >
+              {sendMessageMutation.isPending
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" />}
+            </Button>
+          </div>
         </div>
 
         {/* Internal Notes */}

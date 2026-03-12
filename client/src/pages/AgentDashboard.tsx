@@ -2,7 +2,7 @@
  * AgentDashboard — Personal workspace for each sales agent.
  * Uses email + password auth — no Manus account required.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
@@ -42,6 +42,9 @@ import {
   LogIn,
   Loader2,
   XCircle,
+  Send,
+  Bot,
+  BotOff,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -82,6 +85,7 @@ type Session = {
   bookedByAgentName: string | null;
   bookedAmount: number | null;
   internalNotes: string | null;
+  aiMode: number;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -321,6 +325,52 @@ function ConversationDrawer({
 
   const utils = trpc.useUtils();
 
+  // Reply / send message
+  const [replyText, setReplyText] = useState("");
+  const [localMessages, setLocalMessages] = useState<{ role: string; content: string }[]>(messages);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-refresh conversation every 5s
+  const { data: freshSession } = trpc.leads.list.useQuery(undefined, {
+    refetchInterval: 5000,
+    select: (sessions) => sessions.find(s => s.id === session.id),
+  });
+
+  useEffect(() => {
+    if (freshSession?.messageHistory) {
+      try {
+        const fresh = JSON.parse(freshSession.messageHistory);
+        setLocalMessages(fresh);
+      } catch { /* ignore */ }
+    }
+  }, [freshSession?.messageHistory]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [localMessages]);
+
+  const sendMessageMutation = trpc.leads.sendMessage.useMutation({
+    onSuccess: (_, vars) => {
+      setLocalMessages(prev => [...prev, { role: "assistant", content: vars.message }]);
+      setReplyText("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const setAiModeMutation = trpc.leads.setAiMode.useMutation({
+    onSuccess: (_, vars) => {
+      utils.leads.list.invalidate();
+      toast.success(vars.aiMode === 1 ? "AI auto-reply enabled" : "Manual mode — you’re in control");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSend = () => {
+    const text = replyText.trim();
+    if (!text) return;
+    sendMessageMutation.mutate({ sessionId: session.id, message: text });
+  };
+
   // Claim / release
   const claimLead = trpc.agents.claimLead.useMutation({
     onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead claimed!"); },
@@ -478,10 +528,10 @@ function ConversationDrawer({
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
             <MessageSquare className="w-3.5 h-3.5" /> SMS Conversation
           </p>
-          {messages.length === 0 ? (
+          {localMessages.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>
           ) : (
-            messages.map((msg, i) => (
+            localMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
                   className="max-w-[80%] rounded-2xl px-3.5 py-2 text-sm"
@@ -496,32 +546,77 @@ function ConversationDrawer({
               </div>
             ))
           )}
-
-          {/* Call logs */}
-          {callLogs.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-4 mb-2 flex items-center gap-1">
-                <PhoneCall className="w-3.5 h-3.5" /> Call History
-              </p>
-              {callLogs.map(log => {
-                const opt = OUTCOME_OPTIONS.find(o => o.value === log.outcome);
-                return (
-                  <div key={log.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                    <span style={{ color: opt?.color ?? "#374151", marginTop: 1 }}>{opt?.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between">
-                        <span className="font-semibold" style={{ color: opt?.color }}>{opt?.label ?? log.outcome}</span>
-                        <span className="text-gray-400">{timeAgo(log.calledAt)}</span>
-                      </div>
-                      <p className="text-gray-500">by {log.agentName}</p>
-                      {log.notes && <p className="text-gray-700 mt-0.5">{log.notes}</p>}
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-          )}
+          <div ref={messagesEndRef} />
         </div>
+
+        {/* Reply input */}
+        <div className="px-5 py-3 border-t bg-white" style={{ borderColor: "#F0D8D0" }}>
+          {/* AI / Manual toggle */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs">
+              {session.aiMode === 1
+                ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
+                : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you’re in control</span>
+              }
+            </span>
+            <button
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                session.aiMode === 1
+                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                  : "border-green-300 text-green-700 hover:bg-green-50"
+              }`}
+              onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
+              disabled={setAiModeMutation.isPending}
+            >
+              {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Type a message to send via SMS..."
+              value={replyText}
+              onChange={e => setReplyText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              className="flex-1 text-sm h-9"
+            />
+            <Button
+              size="sm"
+              className="h-9 px-3 shrink-0"
+              style={{ backgroundColor: "#E8603C" }}
+              onClick={handleSend}
+              disabled={sendMessageMutation.isPending || !replyText.trim()}
+            >
+              {sendMessageMutation.isPending
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Call logs */}
+        {callLogs.length > 0 && (
+          <div className="px-5 pb-3 space-y-2" style={{ borderColor: "#F0D8D0" }}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+              <PhoneCall className="w-3.5 h-3.5" /> Call History
+            </p>
+            {callLogs.map(log => {
+              const opt = OUTCOME_OPTIONS.find(o => o.value === log.outcome);
+              return (
+                <div key={log.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                  <span style={{ color: opt?.color ?? "#374151", marginTop: 1 }}>{opt?.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between">
+                      <span className="font-semibold" style={{ color: opt?.color }}>{opt?.label ?? log.outcome}</span>
+                      <span className="text-gray-400">{timeAgo(log.calledAt)}</span>
+                    </div>
+                    <p className="text-gray-500">by {log.agentName}</p>
+                    {log.notes && <p className="text-gray-700 mt-0.5">{log.notes}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Booked Amount — shown when lead is booked */}
         {session.isBooked === 1 && (

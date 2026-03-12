@@ -109,8 +109,24 @@ export function registerWebhookRoutes(app: Express) {
         history = [];
       }
 
-      // Append the lead's inbound message to history
+      // Append the lead's inbound message to history first (always stored)
       history.push({ role: "user", content: inboundText });
+
+      // Trim history to last 20 messages to stay within varchar(5000)
+      if (history.length > 20) {
+        history = history.slice(-20);
+      }
+
+      // If agent has taken over (aiMode = 0), just store the inbound message and stop.
+      // The agent will reply manually from the app.
+      if (session.aiMode === 0) {
+        console.log(`[Webhook] Manual mode for session ${session.id} — storing inbound, skipping AI reply.`);
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, session.id));
+        return;
+      }
 
       // Compute dynamic slots for SLOT_CHOICE stage context
       // These are the next 2 available days from today — matching what was offered
@@ -151,9 +167,7 @@ export function registerWebhookRoutes(app: Express) {
       history.push({ role: "assistant", content: result.reply });
 
       // Trim history to last 20 messages to stay within varchar(5000)
-      if (history.length > 20) {
-        history = history.slice(-20);
-      }
+      if (history.length > 20) history = history.slice(-20);
 
       // Update the session in DB
       await db

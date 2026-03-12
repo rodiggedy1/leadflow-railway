@@ -205,6 +205,72 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.sendMessage — agent or admin sends an outbound SMS to a lead from the app.
+     * Stores the message in messageHistory and sends via OpenPhone.
+     */
+    sendMessage: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        message: z.string().min(1).max(1600),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+
+        // Fetch the session to get the lead's phone and current history
+        const [session] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) throw new Error("Session not found");
+
+        // Parse and update history
+        let history: Array<{ role: string; content: string }> = [];
+        try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+        history.push({ role: "assistant", content: input.message });
+        if (history.length > 20) history = history.slice(-20);
+
+        // Save to DB
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, input.sessionId));
+
+        // Send via OpenPhone
+        const smsResult = await sendSms({ to: session.leadPhone, content: input.message });
+        if (!smsResult.success) {
+          console.error(`[sendMessage] Failed to send SMS to ${session.leadPhone}:`, smsResult.error);
+          // Don't throw — message is already stored in history
+        }
+
+        console.log(`[sendMessage] Agent ${agentSession.agentName} sent to ${session.leadPhone}: "${input.message}"`);
+        return { success: true, smsSent: smsResult.success };
+      }),
+
+    /**
+     * leads.setAiMode — toggle AI auto-reply on/off for a lead.
+     * aiMode=1 means AI handles replies; aiMode=0 means agent handles manually.
+     * Accessible by any authenticated agent or admin.
+     */
+    setAiMode: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        aiMode: z.number().int().min(0).max(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ aiMode: input.aiMode })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
      * leads.deleteLead — permanently delete a lead and all associated call logs.
      * Admin only.
      */

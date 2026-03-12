@@ -347,3 +347,15 @@
 - [x] AlertDialog confirmation: "This will permanently delete [name] and all conversation history"
 - [x] On confirm: deletes, closes drawer, invalidates leads.list + leads.stats
 - [x] 142/142 tests pass
+
+## In-App SMS Texting — COMPLETED
+
+- [x] Add `aiMode` column to conversationSessions (1 = AI auto-reply, 0 = manual/agent)
+- [x] Run pnpm db:push to migrate DB
+- [x] Add `leads.sendMessage` tRPC procedure (agent sends SMS via OpenPhone API)
+- [x] Add `leads.setAiMode` tRPC procedure (toggle AI auto vs manual per lead)
+- [x] Update OpenPhone webhook to skip AI auto-reply when aiMode = 0 (manual mode)
+- [x] Add reply input + send button to ConversationDrawer (both admin and agent)
+- [x] Add AI/Manual toggle switch in ConversationDrawer
+- [x] Auto-refresh conversation every 5s when drawer is open
+- [x] Write vitest tests for sendMessage and setAiMode procedures

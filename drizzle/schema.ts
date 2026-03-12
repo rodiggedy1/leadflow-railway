@@ -111,6 +111,11 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   /** Internal notes visible only to admins and agents — not shown to leads */
   internalNotes: text("internalNotes"),
   /**
+   * AI mode: 1 = AI auto-replies to inbound SMS (default), 0 = manual/agent takes over.
+   * When an agent takes over, the AI stops responding and the agent replies from the app.
+   */
+  aiMode: int("aiMode").default(1).notNull(),
+  /**
    * Actual booked/invoiced amount in dollars (integer cents-free).
    * If set, this overrides quotedPrice + extras for revenue calculations.
    * Admin can edit this after marking a lead as BOOKED.
