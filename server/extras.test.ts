@@ -31,44 +31,62 @@ describe("EXTRAS_LIST", () => {
 });
 
 describe("generateQuoteMessage", () => {
-  it("includes extras note when extras are provided", async () => {
+  it("shows itemized breakdown with total when extras are provided", async () => {
     const msg = await generateQuoteMessage({
       leadName: "Jane Smith",
       bedrooms: "2 Bedrooms",
       bathrooms: "2 Bathrooms",
       serviceType: "Standard Cleaning",
-      price: "180",
+      price: "209",
       extras: ["clean_inside_oven", "load_of_laundry"],
     });
     expect(msg).toContain("Jane");
-    expect(msg).toContain("$180");
-    expect(msg).toContain("clean inside oven");
-    expect(msg).toContain("load of laundry");
+    // Base price line
+    expect(msg).toContain("$209");
+    // Extras lines
+    expect(msg).toContain("Clean Inside Oven: $30");
+    expect(msg).toContain("Load of Laundry: $20");
+    // Grand total: 209 + 30 + 20 = 259
+    expect(msg).toContain("Total: $259");
   });
 
-  it("omits extras note when no extras are selected", async () => {
+  it("shows plain message when no extras are selected", async () => {
     const msg = await generateQuoteMessage({
       leadName: "John Doe",
       bedrooms: "3 Bedrooms",
       bathrooms: "2 Bathrooms",
       serviceType: "Deep Cleaning",
-      price: "250",
+      price: "319",
       extras: [],
     });
     expect(msg).toContain("John");
-    expect(msg).toContain("$250");
-    expect(msg).not.toContain("extras");
+    expect(msg).toContain("$319");
+    // No itemized breakdown
+    expect(msg).not.toContain("Total:");
   });
 
-  it("omits extras note when extras is undefined", async () => {
+  it("shows plain message when extras is undefined", async () => {
     const msg = await generateQuoteMessage({
       leadName: "Alice",
       bedrooms: "1 Bedroom",
       bathrooms: "1 Bathroom",
       serviceType: "Standard Cleaning",
-      price: "120",
+      price: "179",
     });
-    expect(msg).not.toContain("extras");
+    expect(msg).not.toContain("Total:");
+  });
+
+  it("calculates grand total correctly for multiple extras", async () => {
+    const msg = await generateQuoteMessage({
+      leadName: "Bob",
+      bedrooms: "2 Bedrooms",
+      bathrooms: "1 Bathroom",
+      serviceType: "Standard Cleaning",
+      price: "209",
+      extras: ["clean_inside_cabinets", "green_cleaning", "wash_dishes"],
+    });
+    // 209 + 30 + 20 + 20 = 279
+    expect(msg).toContain("Total: $279");
   });
 });
 

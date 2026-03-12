@@ -184,3 +184,11 @@
 - [x] Store selected extras in DB with lead
 - [x] Show selected extras in admin dashboard and agent workspace
 - [x] Mention extras in intro SMS
+
+## Extras Pricing & AI Awareness
+
+- [x] Add per-extra pricing to EXTRAS_LIST (shared constant)
+- [x] Update intro SMS to show base price + itemized extras + total
+- [x] Pass extras context into AI conversation engine (system prompt + session data)
+- [x] AI acknowledges specific extras when lead asks about them during SMS flow
+- [x] Update tests to cover new pricing breakdown and extras-aware AI responses

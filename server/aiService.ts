@@ -12,6 +12,7 @@
 
 import { invokeLLM } from "./_core/llm";
 import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
+import { resolveExtras } from "../shared/extras";
 
 // ─── Brand System Prompt ──────────────────────────────────────────────────────
 
@@ -90,6 +91,8 @@ export interface OffScriptContext {
   selectedSlot?: string | null;
   messageHistory: Array<{ role: "assistant" | "user"; content: string }>;
   leadReply: string;
+  /** Extras the lead selected on the quote form (human-readable labels) */
+  extrasContext?: string | null;
 }
 
 export interface OffScriptResult {
@@ -103,7 +106,7 @@ export interface OffScriptResult {
  * Falls back to a safe generic response if AI fails.
  */
 export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffScriptResult> {
-  const { stage, leadName, quotedPrice, serviceType, selectedSlot, messageHistory, leadReply } = ctx;
+  const { stage, leadName, quotedPrice, serviceType, selectedSlot, messageHistory, leadReply, extrasContext } = ctx;
   const firstName = leadName.split(" ")[0] ?? leadName;
 
   // Build the next expected action based on current stage
@@ -127,15 +130,16 @@ export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffSc
 Lead name: ${firstName}
 Current stage: ${stage}
 Quoted price: $${quotedPrice}
-Service: ${serviceType}
+Service: ${serviceType}${extrasContext ? `\nSelected add-ons: ${extrasContext}` : ""}
 Lead's message: "${leadReply}"
 
 Instructions:
 1. Respond naturally to their message in 1-2 sentences max
-2. If they asked a question, answer it briefly (or say our team will cover it on the call)
-3. End your reply by gently steering back: ${nextAction}
-4. Keep total reply under 200 characters
-5. Do NOT repeat information already sent`,
+2. If they asked a question about a selected add-on, confirm we will take care of it
+3. If they asked a question, answer it briefly (or say our team will cover it on the call)
+4. End your reply by gently steering back: ${nextAction}
+5. Keep total reply under 200 characters
+6. Do NOT repeat information already sent`,
         },
       ],
     });
@@ -268,10 +272,20 @@ function buildFallbackQuoteMessage(
   price: string,
   extras?: string[]
 ): string {
-  const extrasNote = extras && extras.length > 0
-    ? ` I also noted your extras: ${extras.map(k => k.replace(/_/g, " ")).join(", ")}.`
-    : "";
-  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.${extrasNote}`;
+  const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
+  const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
+  const basePrice = parseInt(price, 10) || 0;
+  const grandTotal = basePrice + extrasTotal;
+
+  if (resolvedExtras.length === 0) {
+    return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
+  }
+
+  const extrasLines = resolvedExtras
+    .map(e => `  + ${e.label}: $${e.price}`)
+    .join("\n");
+
+  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black.\n\nYour quote:\n  ${serviceType} (${bedrooms} / ${bathrooms}): $${price}\n${extrasLines}\n  ─────────────\n  Total: $${grandTotal}\n\nOur fully insured team handles everything — including your selected add-ons!`;
 }
 
 function buildFallbackOffScript(nextAction: string): string {

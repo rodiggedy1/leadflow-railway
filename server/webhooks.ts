@@ -120,6 +120,12 @@ export function registerWebhookRoutes(app: Express) {
           ? [dynamicSlots[0]!.label, dynamicSlots[1]!.label]
           : null;
 
+      // Parse extras from the session (stored as JSON string)
+      let sessionExtras: string[] | null = null;
+      if (session.extras) {
+        try { sessionExtras = JSON.parse(session.extras); } catch { sessionExtras = null; }
+      }
+
       // Build context for the conversation engine
       const context: ConversationContext = {
         stage: session.stage as ConversationStage,
@@ -133,6 +139,7 @@ export function registerWebhookRoutes(app: Express) {
         address: session.address,
         messageHistory: history,
         offeredSlots,
+        extras: sessionExtras,
       };
 
       // Process the reply through the AI engine

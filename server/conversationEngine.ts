@@ -41,6 +41,8 @@ export interface ConversationContext {
   messageHistory: ChatMessage[];
   /** The two slot labels that were offered in the AVAILABILITY/SLOT_CHOICE messages (e.g. ["Friday, March 13", "Saturday, March 14"]) */
   offeredSlots?: [string, string] | null;
+  /** JSON-encoded array of extra keys selected on the quote form */
+  extras?: string[] | null;
 }
 
 export interface ChatMessage {
@@ -221,6 +223,11 @@ export async function processLeadReply(
 ): Promise<StageResult> {
   const { stage } = context;
 
+  // Build a human-readable extras string for AI context (e.g. "Clean Inside Oven, Load of Laundry")
+  const extrasContext = context.extras && context.extras.length > 0
+    ? context.extras.map(k => k.replace(/_/g, " ")).join(", ")
+    : null;
+
   // ── Terminal stages — no further processing ────────────────────────────────
   if (stage === "DONE" || stage === "CALL_SCHEDULED") {
     return {
@@ -382,6 +389,7 @@ export async function processLeadReply(
         selectedSlot: context.selectedSlot,
         messageHistory: context.messageHistory,
         leadReply,
+        extrasContext,
       });
 
       return {
@@ -427,6 +435,7 @@ export async function processLeadReply(
           selectedSlot: slot,
           messageHistory: context.messageHistory,
           leadReply,
+          extrasContext,
         });
 
         return {
@@ -478,6 +487,7 @@ export async function processLeadReply(
         selectedSlot: context.selectedSlot,
         messageHistory: context.messageHistory,
         leadReply,
+        extrasContext,
       });
 
       return {
@@ -498,6 +508,7 @@ export async function processLeadReply(
           selectedSlot: context.selectedSlot,
           messageHistory: context.messageHistory,
           leadReply,
+          extrasContext,
         });
 
         return {
