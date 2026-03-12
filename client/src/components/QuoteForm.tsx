@@ -460,54 +460,63 @@ function ExtrasStep({ selectedExtras, onToggle, onBack, onContinue, isSubmitting
 function ExitIntentModal({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(61,31,20,0.55)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      style={{ background: "rgba(61,31,20,0.60)", backdropFilter: "blur(6px)" }}
       onClick={onStay}
     >
       <div
-        className="relative w-full max-w-sm rounded-2xl overflow-hidden"
+        className="relative w-full max-w-xl rounded-2xl overflow-hidden flex flex-col sm:flex-row"
         style={{
           background: "#FFFFFF",
-          boxShadow: "0 24px 60px rgba(180,80,40,0.22), 0 4px 16px rgba(0,0,0,0.1)",
+          boxShadow: "0 32px 80px rgba(180,80,40,0.28), 0 4px 20px rgba(0,0,0,0.12)",
+          minHeight: "320px",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Coral top bar */}
-        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, #E8603C 0%, #F0A090 50%, #E8603C 100%)" }} />
-
-        <div className="px-7 pt-6 pb-7">
-          {/* Madison photo + name */}
-          <div className="flex items-center gap-3 mb-4">
-            <img
-              src={MADISON_PHOTO}
-              alt="Madison"
-              className="w-14 h-14 rounded-full object-cover shrink-0"
-              style={{ border: "2.5px solid #F5D5C8" }}
-            />
-            <div>
-              <p className="font-semibold text-sm" style={{ color: "#3D1F14", fontFamily: "'DM Sans', sans-serif" }}>Madison</p>
-              <p className="text-xs" style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}>Cleaning Coordinator · Maids in Black</p>
-            </div>
+        {/* Left — Madison photo panel */}
+        <div
+          className="relative sm:w-2/5 w-full h-48 sm:h-auto shrink-0 overflow-hidden"
+          style={{ background: "#F5D5C8" }}
+        >
+          <img
+            src={MADISON_PHOTO}
+            alt="Madison"
+            className="w-full h-full object-cover object-top"
+          />
+          {/* Name badge overlay */}
+          <div
+            className="absolute bottom-3 left-3 right-3 rounded-lg px-3 py-2"
+            style={{ background: "rgba(255,255,255,0.88)", backdropFilter: "blur(4px)" }}
+          >
+            <p className="text-sm font-bold leading-tight" style={{ color: "#3D1F14", fontFamily: "'DM Sans', sans-serif" }}>Madison</p>
+            <p className="text-xs" style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}>Cleaning Coordinator</p>
           </div>
+        </div>
 
-          {/* Message */}
+        {/* Right — text + CTAs */}
+        <div className="flex flex-col justify-center px-6 py-7 sm:px-7">
+          {/* Coral accent */}
+          <div
+            className="w-8 h-1 rounded-full mb-4"
+            style={{ background: "linear-gradient(90deg, #E8603C, #F0A090)" }}
+          />
+
           <p
-            className="text-base font-semibold leading-snug mb-1"
+            className="text-xl font-bold leading-snug mb-2"
             style={{ color: "#3D1F14", fontFamily: "'Playfair Display', serif" }}
           >
             Wait — your quote is almost ready!
           </p>
           <p
-            className="text-sm leading-relaxed mb-5"
+            className="text-sm leading-relaxed mb-6"
             style={{ color: "#6B4033", fontFamily: "'DM Sans', sans-serif" }}
           >
-            It only takes 30 more seconds. I'll text you a custom price for your home right away — no commitment needed.
+            It only takes 30 more seconds. I'll personally text you a custom price for your home — no commitment needed.
           </p>
 
-          {/* CTAs */}
           <button
             onClick={onStay}
-            className="w-full py-3 rounded-xl text-sm font-semibold text-white mb-2.5 transition-opacity hover:opacity-90"
+            className="w-full py-3 rounded-xl text-sm font-semibold text-white mb-3 transition-opacity hover:opacity-90"
             style={{
               background: "linear-gradient(135deg, #E8603C 0%, #D44E2A 100%)",
               boxShadow: "0 4px 14px rgba(232,96,60,0.35)",
@@ -518,7 +527,7 @@ function ExitIntentModal({ onStay, onLeave }: { onStay: () => void; onLeave: () 
           </button>
           <button
             onClick={onLeave}
-            className="w-full py-2 text-xs text-center transition-colors hover:opacity-70"
+            className="w-full py-1.5 text-xs text-center transition-colors hover:opacity-60"
             style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
           >
             No thanks, I'll pass
