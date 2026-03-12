@@ -312,6 +312,67 @@ function LogCallDialog({ session, onClose }: { session: Session; onClose: () => 
 
 // ── Conversation Drawer ───────────────────────────────────────────────────────
 
+/** Collapsible internal notes panel — saves vertical space in the agent drawer */
+function AgentNotesSection({
+  session,
+  notes,
+  setNotes,
+  loadedNotes,
+  notesSaved,
+  updateNotes,
+}: {
+  session: Session;
+  notes: string;
+  setNotes: (v: string) => void;
+  loadedNotes: string;
+  notesSaved: boolean;
+  updateNotes: ReturnType<typeof trpc.agents.updateNotes.useMutation>;
+}) {
+  const [open, setOpen] = useState(false);
+  const currentNotes = notes !== "" ? notes : loadedNotes;
+  return (
+    <div className="border-t" style={{ borderColor: "#F0D8D0" }}>
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:bg-orange-50 transition-colors"
+        onClick={() => setOpen(v => !v)}
+      >
+        <span className="flex items-center gap-1.5">
+          Internal Notes
+          {currentNotes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />}
+        </span>
+        <span className="text-gray-400">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="px-5 pb-3">
+          <Textarea
+            placeholder="e.g. Left voicemail, price objection, follow up Friday..."
+            value={currentNotes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            className="resize-none text-sm"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-gray-400">Visible to agents and admins only</span>
+            <div className="flex items-center gap-2">
+              {notesSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-3 text-xs"
+                onClick={() => updateNotes.mutate({ sessionId: session.id, notes: currentNotes })}
+                disabled={updateNotes.isPending}
+              >
+                {updateNotes.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save Notes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConversationDrawer({
   session,
   onClose,
@@ -424,7 +485,7 @@ function ConversationDrawer({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+        className="bg-white rounded-2xl w-full max-w-lg h-[90vh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -524,28 +585,30 @@ function ConversationDrawer({
           </div>
         )}
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
-            <MessageSquare className="w-3.5 h-3.5" /> SMS Conversation
-          </p>
+        {/* Messages — flex-1 min-h-0 so it fills all remaining drawer space */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-2 bg-gray-50">
           {localMessages.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>
           ) : (
-            localMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className="max-w-[80%] rounded-2xl px-3.5 py-2 text-sm"
-                  style={
-                    msg.role === "user"
-                      ? { backgroundColor: "#E8603C", color: "white" }
-                      : { backgroundColor: "#f3f4f6", color: "#111827" }
-                  }
-                >
-                  {msg.content}
+            localMessages.map((msg, i) => {
+              // role=="user" means the LEAD sent it (inbound) → show on LEFT
+              // role=="assistant" means AI/agent sent it (outbound) → show on RIGHT
+              const isOutbound = msg.role === "assistant";
+              return (
+                <div key={i} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                    style={
+                      isOutbound
+                        ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
+                        : { backgroundColor: "#ffffff", color: "#111827", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
+                    }
+                  >
+                    {msg.content}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -652,34 +715,15 @@ function ConversationDrawer({
           </div>
         )}
 
-        {/* Internal Notes */}
-        <div className="px-5 py-3 border-t" style={{ borderColor: "#F0D8D0" }}>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-            Internal Notes
-          </label>
-          <Textarea
-            placeholder="e.g. Left voicemail, price objection, follow up Friday..."
-            value={notes !== "" ? notes : loadedNotes}
-            onChange={e => setNotes(e.target.value)}
-            rows={3}
-            className="resize-none text-sm"
-          />
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-gray-400">Visible to agents and admins only</span>
-            <div className="flex items-center gap-2">
-              {notesSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-3 text-xs"
-                onClick={() => updateNotes.mutate({ sessionId: session.id, notes: notes !== "" ? notes : loadedNotes })}
-                disabled={updateNotes.isPending}
-              >
-                {updateNotes.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save Notes"}
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* Internal Notes — collapsible to save space */}
+        <AgentNotesSection
+          session={session}
+          notes={notes}
+          setNotes={setNotes}
+          loadedNotes={loadedNotes}
+          notesSaved={notesSaved}
+          updateNotes={updateNotes}
+        />
 
         <div className="px-5 py-3 border-t flex justify-end" style={{ borderColor: "#F0D8D0" }}>
           <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
