@@ -5,7 +5,7 @@
  * quoted prices, selected slots, addresses, and time elapsed.
  * Supports date range filtering and stage filtering.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,8 @@ import {
   ShieldCheck,
   Loader2,
   Bot,
+  LogIn,
+  Lock,
 } from "lucide-react";
 import {
   Dialog,
@@ -56,6 +58,85 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
 import SmsSimulator from "@/components/SmsSimulator";
+
+// ── Admin Login Screen ────────────────────────────────────────────────────────
+function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const loginMutation = trpc.agents.login.useMutation({
+    onSuccess: (data) => {
+      if (!data.agent.isAdmin) {
+        toast.error("Access denied. Admin credentials required.");
+        return;
+      }
+      toast.success(`Welcome back, ${data.agent.name}!`);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Login failed"),
+  });
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>
+      <div className="bg-white rounded-2xl border shadow-lg p-8 max-w-sm w-full mx-4" style={{ borderColor: "#F0D8D0" }}>
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: "#E8603C" }}>
+            <Lock className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Admin Access</h1>
+          <p className="text-sm text-gray-500 mt-1">Sign in with your admin credentials</p>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!email || !password) return;
+            loginMutation.mutate({ email: email.trim(), password });
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="admin-email">Email</Label>
+            <Input
+              id="admin-email"
+              type="email"
+              placeholder="admin@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+              disabled={loginMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="admin-password">Password</Label>
+            <Input
+              id="admin-password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loginMutation.isPending}
+            />
+          </div>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loginMutation.isPending || !email || !password}
+            style={{ backgroundColor: "#E8603C", color: "white" }}
+          >
+            {loginMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in…</>
+            ) : (
+              <><LogIn className="w-4 h-4 mr-2" /> Sign In</>
+            )}
+          </Button>
+        </form>
+        <p className="text-center text-xs text-gray-400 mt-4">
+          This area is restricted to admin users only.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ── Stage configuration ────────────────────────────────────────────────────────
 
@@ -696,6 +777,14 @@ function AgentManagement() {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  // ── Auth state (must come before all other hooks) ────────────────────────────────────
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false });
+  const isAdmin = meQuery.data?.isAdmin === true;
+  const authChecked = !meQuery.isLoading;
+  const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
+
+  // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
   const [activeTab, setActiveTab] = useState<"leads" | "agents" | "simulator">("leads");
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
@@ -732,13 +821,14 @@ export default function AdminDashboard() {
     isLoading: sessionsLoading,
     refetch,
     isFetching,
-  } = trpc.leads.list.useQuery(dateRange, { refetchInterval: 30000 });
+  } = trpc.leads.list.useQuery(dateRange, { refetchInterval: 30000, enabled: isAdmin || isAuthenticated });
 
   const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,
+    enabled: isAdmin || isAuthenticated,
   });
 
-  // Collect unique agent names for the agent filter dropdown
+  // Collect unique agent names for the agent filter dropdown (declared unconditionally)
   const agentNames = useMemo(() => {
     const names = new Set<string>();
     sessions.forEach(s => {
@@ -767,6 +857,19 @@ export default function AdminDashboard() {
   }, [sessions, stageFilter, agentFilter, search]);
 
   const unhandledCount = stats?.byStage?.["UNHANDLED"] ?? 0;
+
+  // ── Auth guards (after ALL hooks) ─────────────────────────────────────────────────────
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#E8603C" }} />
+      </div>
+    );
+  }
+
+  if (!isAdmin && !isAuthenticated) {
+    return <AdminLoginScreen onSuccess={handleLoginSuccess} />;
+  }
 
   const DATE_PRESETS: { value: DatePreset; label: string }[] = [
     { value: "all", label: "All time" },

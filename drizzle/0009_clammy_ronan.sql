@@ -1,0 +1,1 @@
+ALTER TABLE `agents` ADD `isAdmin` int DEFAULT 0 NOT NULL;

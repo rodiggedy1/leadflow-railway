@@ -240,3 +240,8 @@
 ## Phone Number Formatting
 
 - [x] Auto-format phone field as XXX-XXX-XXXX while typing
+
+## Admin Security
+
+- [x] Block admin dashboard from unauthenticated/non-admin users — show login screen
+- [x] Enforce auth guard on all admin tRPC procedures

@@ -14,6 +14,7 @@ export type AgentSessionPayload = {
   agentId: number;
   agentName: string;
   agentEmail: string;
+  isAdmin: boolean;
 };
 
 function getSecret() {
@@ -30,6 +31,7 @@ export async function signAgentSession(
     agentId: payload.agentId,
     agentName: payload.agentName,
     agentEmail: payload.agentEmail,
+    isAdmin: payload.isAdmin,
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setExpirationTime(expirationSeconds)
@@ -45,7 +47,7 @@ export async function verifyAgentSession(
     const { payload } = await jwtVerify(token, getSecret(), {
       algorithms: ["HS256"],
     });
-    const { agentId, agentName, agentEmail } = payload as Record<string, unknown>;
+    const { agentId, agentName, agentEmail, isAdmin } = payload as Record<string, unknown>;
     if (
       typeof agentId !== "number" ||
       typeof agentName !== "string" ||
@@ -53,7 +55,7 @@ export async function verifyAgentSession(
     ) {
       return null;
     }
-    return { agentId, agentName, agentEmail };
+    return { agentId, agentName, agentEmail, isAdmin: isAdmin === true };
   } catch {
     return null;
   }

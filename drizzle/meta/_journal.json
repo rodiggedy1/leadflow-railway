@@ -64,6 +64,13 @@
       "when": 1773284224295,
       "tag": "0008_woozy_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1773327931723,
+      "tag": "0009_clammy_ronan",
+      "breakpoints": true
     }
   ]
 }

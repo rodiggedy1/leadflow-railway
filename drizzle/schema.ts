@@ -161,6 +161,7 @@ export const agents = mysqlTable("agents", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   isActive: int("isActive").default(1).notNull(), // 1 = active, 0 = deactivated
+  isAdmin: int("isAdmin").default(0).notNull(), // 1 = admin, 0 = regular agent
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -121,13 +121,14 @@ export const appRouter = router({
           agentId: agent.id,
           agentName: agent.name,
           agentEmail: agent.email,
+          isAdmin: agent.isAdmin === 1,
         });
         const cookieOpts = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(AGENT_COOKIE_NAME, token, {
           ...cookieOpts,
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         });
-        return { success: true, agent: { id: agent.id, name: agent.name, email: agent.email } };
+        return { success: true, agent: { id: agent.id, name: agent.name, email: agent.email, isAdmin: agent.isAdmin === 1 } };
       }),
 
     /**
@@ -154,7 +155,7 @@ export const appRouter = router({
       if (!session) return null;
       const agent = await getAgentById(session.agentId);
       if (!agent || !agent.isActive) return null;
-      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive };
+      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive, isAdmin: agent.isAdmin === 1 };
     }),
 
     /**
