@@ -120,6 +120,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: AVAILABILITY → yes → SLOT_CHOICE
   it("AVAILABILITY: positive reply advances to SLOT_CHOICE", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns intent "yes"
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "yes", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -133,19 +136,36 @@ describe("processLeadReply — State Machine", () => {
     expect(result.reply).toContain("Which would you prefer");
   });
 
-  // Stage: AVAILABILITY → no → DONE
-  it("AVAILABILITY: negative reply ends conversation", async () => {
+  // Stage: AVAILABILITY → hard opt-out → DONE
+  it("AVAILABILITY: explicit hard opt-out ends conversation", async () => {
     // Call 1: detectObjection returns "on_track" (no objection)
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns intent "no"
+    // Call 2: parseLeadReply returns intent "no" with high confidence (hard opt-out like "not interested")
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "no", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
     const ctx = makeContext({ stage: "AVAILABILITY" });
-    const result = await processLeadReply("no thanks", ctx);
+    const result = await processLeadReply("not interested, remove me", ctx);
 
     expect(result.nextStage).toBe("DONE");
+  });
+
+  // Stage: AVAILABILITY → soft no / unclear → re-engage (stay in AVAILABILITY)
+  it("AVAILABILITY: soft no or unclear reply re-engages instead of ending", async () => {
+    // Call 1: detectObjection returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply returns intent "unclear" ("no thanks" alone is not a hard opt-out)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "AVAILABILITY" });
+    const result = await processLeadReply("no thanks", ctx);
+
+    // Should re-engage, not end the conversation
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).toContain("openings");
   });
 
   // Stage: SLOT_CHOICE → slot1 → ADDRESS

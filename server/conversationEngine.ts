@@ -131,10 +131,13 @@ Your job is to extract intent and data from the lead's SMS reply. Respond ONLY w
 
 Stage-specific instructions:
 - QUOTE_SENT: Any reply (even "ok", "thanks", "?") means they're engaged. Intent = "engaged"
-- AVAILABILITY: Parse if they said yes/interested or no/not interested. Intent = "yes" or "no"
-  - "yes", "sure", "sounds good", "ok", "yeah", "works" → "yes"
-  - "no", "not interested", "never mind", "cancel" → "no"
-  - Anything else (questions, objections) → "yes" (keep them in the funnel)
+- AVAILABILITY: Parse if they said yes/interested or explicitly opted out. Intent = "yes", "specific_day", "no", or "unclear"
+  - "yes", "sure", "sounds good", "ok", "yeah", "works", "that works", "perfect", "great" → "yes"
+  - Any day name ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday") → "specific_day", put the day name in extractedSlot
+  - Any time mention ("morning", "afternoon", "9am", "next week") → "yes" (they're interested, just specifying)
+  - ONLY hard explicit opt-out → "no": "not interested", "remove me", "stop", "unsubscribe", "don't contact me", "cancel"
+  - "no" alone, "not now", "busy", "maybe later", "not sure" → "unclear" (NOT "no" — they haven't opted out)
+  - Anything else, questions, objections → "unclear" (keep them in the funnel, re-engage)
 - SLOT_CHOICE: The two available slots offered were: Slot 1 = "${context.offeredSlots?.[0] ?? "first option"}", Slot 2 = "${context.offeredSlots?.[1] ?? "second option"}". Extract which slot they chose. Intent = "slot1", "slot2", "custom_date", or "unclear"
   - If they mention the day name of slot 1, "first", "option 1", "1" → "slot1", put the full slot 1 label in extractedSlot
   - If they mention the day name of slot 2, "second", "option 2", "2" → "slot2", put the full slot 2 label in extractedSlot
@@ -260,41 +263,77 @@ export async function processLeadReply(
   switch (stage) {
     // ── Stage 2: Availability ──────────────────────────────────────────────────────
     case "AVAILABILITY": {
-      // ⚠️ IMPORTANT: Check for specific day name FIRST, before any LLM call.
-      // If the lead says "Friday" or "Thursday", the LLM might parse it as "no"
-      // because it's not "yes/sure/ok". Day-name detection must be purely string-based.
       const dynamicSlotsForAvail = getNextAvailableSlots(2);
       const slot1 = dynamicSlotsForAvail[0];
       const slot2 = dynamicSlotsForAvail[1];
       const replyLower = leadReply.toLowerCase();
 
-      if (slot1 && slot1.shortLabel && replyLower.includes(slot1.shortLabel.toLowerCase())) {
+      // Step 1: Pure string check — any day of the week mentioned goes to TIME_PREF
+      // This runs BEFORE the LLM so day names are never misclassified as "no"
+      const ALL_DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const mentionedDay = ALL_DAY_NAMES.find(d => replyLower.includes(d));
+
+      if (mentionedDay) {
+        // Try to match against one of the offered slots first
+        if (slot1 && slot1.shortLabel.toLowerCase() === mentionedDay) {
+          return {
+            reply: buildTimePrefMessage(slot1.label),
+            nextStage: "TIME_PREF",
+            extractedData: { selectedSlot: slot1.label },
+          };
+        }
+        if (slot2 && slot2.shortLabel.toLowerCase() === mentionedDay) {
+          return {
+            reply: buildTimePrefMessage(slot2.label),
+            nextStage: "TIME_PREF",
+            extractedData: { selectedSlot: slot2.label },
+          };
+        }
+        // They mentioned a day not in the offered slots — treat as custom date request
+        const capitalizedDay = mentionedDay.charAt(0).toUpperCase() + mentionedDay.slice(1);
         return {
-          reply: buildTimePrefMessage(slot1.label),
+          reply: buildTimePrefMessage(capitalizedDay),
           nextStage: "TIME_PREF",
-          extractedData: { selectedSlot: slot1.label },
+          extractedData: { selectedSlot: capitalizedDay },
         };
       }
 
-      if (slot2 && slot2.shortLabel && replyLower.includes(slot2.shortLabel.toLowerCase())) {
-        return {
-          reply: buildTimePrefMessage(slot2.label),
-          nextStage: "TIME_PREF",
-          extractedData: { selectedSlot: slot2.label },
-        };
-      }
-
-      // No specific day mentioned — use LLM to determine yes/no intent
+      // Step 2: Use LLM for intent — with strict instructions to only return "no" on hard opt-out
       const parsed = await parseLeadReply(stage, leadReply, context);
 
-      if (parsed.intent === "no") {
+      // Step 3: Only send DONE on explicit hard opt-out ("not interested", "remove me", "stop")
+      if (parsed.intent === "no" && parsed.confidence === "high") {
         return {
-          reply: `No problem! Feel free to reach out whenever you're ready. We'd love to help you get your home sparkling clean. 🏠`,
+          reply: `No worries at all! If you ever need a cleaning in the future, we're here. Have a great day! 🏠`,
           nextStage: "DONE",
         };
       }
 
-      // Positive but no specific day mentioned → show slot choice
+      // Step 4: On "specific_day" intent from LLM (backup — string check above should catch most)
+      if (parsed.intent === "specific_day" && parsed.extractedSlot) {
+        const dayLower = parsed.extractedSlot.toLowerCase();
+        const matchedSlot = dynamicSlotsForAvail.find(s => s.shortLabel.toLowerCase() === dayLower);
+        const slotLabel = matchedSlot?.label ?? parsed.extractedSlot;
+        return {
+          reply: buildTimePrefMessage(slotLabel),
+          nextStage: "TIME_PREF",
+          extractedData: { selectedSlot: slotLabel },
+        };
+      }
+
+      // Step 5: Unclear, "not now", soft no, or questions → re-engage with slot options
+      // NEVER give up — always try to move them toward booking
+      if (parsed.intent === "unclear" || parsed.intent === "no") {
+        const slots = getNextAvailableSlots(2);
+        const slot1Label = slots[0]?.shortLabel ?? "Thursday";
+        const slot2Label = slots[1]?.shortLabel ?? "Friday";
+        return {
+          reply: `No worries! We have openings ${slot1Label} or ${slot2Label} — would either of those work for you? We make it super easy to get your home sparkling. ✨`,
+          nextStage: "AVAILABILITY",
+        };
+      }
+
+      // Step 6: Positive reply — show slot choice
       return {
         reply: buildSlotChoiceMessage(),
         nextStage: "SLOT_CHOICE",

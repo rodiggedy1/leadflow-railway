@@ -158,3 +158,12 @@
 ## Critical Regression Fix
 
 - [x] Fix: AVAILABILITY stage jumps to DONE when lead says a day name (e.g. "Friday") — moved day-name check BEFORE LLM parse so "Friday" is never misclassified as "no"; 102/102 tests pass
+
+## Smarter AVAILABILITY Stage — COMPLETED
+
+- [x] AVAILABILITY: never assume "no" on ambiguous replies — defaults to re-engaging with slot options
+- [x] AVAILABILITY: only send DONE on explicit hard opt-out with high confidence ("not interested", "remove me", "stop")
+- [x] AVAILABILITY: detects any day of the week (Mon–Sat) via string check BEFORE LLM — routes to TIME_PREF
+- [x] AVAILABILITY: on unclear/soft-no reply, re-offers the two slots and stays in AVAILABILITY
+- [x] AVAILABILITY: LLM prompt updated with new intents: yes/specific_day/no/unclear with strict opt-out rules
+- [x] 103/103 tests pass
