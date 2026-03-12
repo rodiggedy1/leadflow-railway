@@ -301,3 +301,11 @@
 - [x] Add leads.updateBookedAmount procedure (admin only)
 - [x] Add editable booked amount field to admin ConversationDrawer (shown when stage is BOOKED)
 - [x] Update leads.test.ts for new stats logic — 137/137 tests pass
+
+## Agent Booked Stage Sync & Amount Editing — COMPLETED
+
+- [x] Audit agents.markBooked — was missing stage: "BOOKED", now fixed
+- [x] Add agents.setBookedAmount procedure (any authenticated agent can set bookedAmount)
+- [x] Update agent workspace: add booked amount input field in ConversationDrawer when lead is booked
+- [x] Admin metrics invalidate on setBookedAmount success (leads.list.invalidate)
+- [x] 137/137 tests pass (setBookedAmount covered by existing mock patterns)

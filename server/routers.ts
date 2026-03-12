@@ -374,10 +374,31 @@ export const appRouter = router({
           .update(conversationSessions)
           .set({
             isBooked: 1,
+            stage: "BOOKED",   // sync stage so admin metrics pick it up
             bookedAt: now,
             bookedByAgentId: agentSession.agentId,
             bookedByAgentName: agentSession.agentName,
           })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.setBookedAmount — agent sets the actual invoiced/booked dollar amount.
+     * Any authenticated agent can set this on any session.
+     */
+    setBookedAmount: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        bookedAmount: z.number().int().min(0).nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx); // require agent auth
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ bookedAmount: input.bookedAmount })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),

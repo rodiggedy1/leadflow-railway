@@ -79,6 +79,7 @@ type Session = {
   isBooked: number;
   bookedAt: Date | string | null;
   bookedByAgentName: string | null;
+  bookedAmount: number | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -331,6 +332,23 @@ function ConversationDrawer({
   const isMine = session.assignedAgentId === currentAgentId;
   const isUnassigned = !session.assignedAgentId;
 
+  // Booked amount editing (shown when lead is booked)
+  const [bookedAmountInput, setBookedAmountInput] = useState(
+    session.bookedAmount !== null && session.bookedAmount !== undefined
+      ? String(session.bookedAmount)
+      : ""
+  );
+  const [bookedAmountSaved, setBookedAmountSaved] = useState(false);
+  const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation({
+    onSuccess: (_, vars) => {
+      utils.leads.list.invalidate();
+      setBookedAmountSaved(true);
+      setTimeout(() => setBookedAmountSaved(false), 2000);
+      toast.success(vars.bookedAmount === null ? "Booked amount cleared" : `Booked amount set to $${vars.bookedAmount}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
   const [notes, setNotes] = useState(notesData?.notes ?? "");
@@ -479,6 +497,52 @@ function ConversationDrawer({
             </>
           )}
         </div>
+
+        {/* Booked Amount — shown when lead is booked */}
+        {session.isBooked === 1 && (
+          <div className="px-5 py-3 border-t" style={{ borderColor: "#bbf7d0", backgroundColor: "#f0fdf4" }}>
+            <label className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1.5 block">
+              Booked Amount (actual invoice)
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
+                  value={bookedAmountInput}
+                  onChange={e => setBookedAmountInput(e.target.value)}
+                  className="pl-6 h-8 text-sm bg-white"
+                />
+              </div>
+              {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">Saved ✓</span>}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs shrink-0 bg-white"
+                disabled={setBookedAmountMutation.isPending}
+                onClick={() => {
+                  const val = bookedAmountInput.trim();
+                  const parsed = val === "" ? null : parseInt(val, 10);
+                  if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
+                    toast.error("Enter a valid dollar amount");
+                    return;
+                  }
+                  setBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
+                }}
+              >
+                {setBookedAmountMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+            <p className="text-xs text-green-600 mt-1">
+              {session.bookedAmount !== null && session.bookedAmount !== undefined
+                ? `Override active: $${session.bookedAmount} — reflected in admin revenue metrics`
+                : `Using quote + extras: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
+              }
+            </p>
+          </div>
+        )}
 
         {/* Internal Notes */}
         <div className="px-5 py-3 border-t" style={{ borderColor: "#F0D8D0" }}>
