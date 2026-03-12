@@ -12,6 +12,8 @@ import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, ha
 import bcrypt from "bcryptjs";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
+// SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
+const SECONDARY_ALERT_NUMBER = "+13029816191";
 
 // Zod schema for the quote form submission
 const quoteFormSchema = z.object({
@@ -566,6 +568,9 @@ async function processQuoteInBackground(
 
   sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
     console.error("[submitQuote] CS alert SMS failed:", err)
+  );
+  sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err =>
+    console.error("[submitQuote] Secondary alert SMS failed:", err)
   );
 
   // ── Step 2: Generate AI quote messages (with fallback) ────────────────────

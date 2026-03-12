@@ -232,3 +232,7 @@
 - [x] Generate Madison's photo for exit-intent modal
 - [x] Build exit-intent modal with mouse-leave detection (only fires if form not submitted)
 - [x] Wire exit-intent modal into QuoteForm
+
+## Second Notification Number
+
+- [x] Send lead summary SMS to +13029816191 on new quote submission
