@@ -394,6 +394,7 @@ function getPresetDates(preset: DatePreset): { from: string; to: string } | null
 function AgentManagement() {
   const utils = trpc.useUtils();
   const { data: agentList = [], isLoading } = trpc.agents.list.useQuery();
+  const { data: perf = [] } = trpc.agents.performance.useQuery();
   const [showCreate, setShowCreate] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
   const [newName, setNewName] = useState("");
@@ -427,8 +428,71 @@ function AgentManagement() {
     onError: (e) => toast.error(e.message),
   });
 
+  const leaderboard = [...perf].sort(
+    (a, b) => b.bookingsThisWeek - a.bookingsThisWeek || b.callsThisWeek - a.callsThisWeek
+  );
+  const medalColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
+
   return (
     <div className="py-2">
+
+      {/* Leaderboard */}
+      {leaderboard.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-base font-semibold text-gray-900">This Week's Leaderboard</h2>
+            <span className="text-xs text-gray-400">(Mon – today)</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {leaderboard.map((agent, idx) => {
+              const medal = medalColors[idx];
+              const convColor =
+                agent.conversionRate >= 50 ? "#16a34a" :
+                agent.conversionRate >= 25 ? "#d97706" : "#6b7280";
+              return (
+                <div
+                  key={agent.id}
+                  className="bg-white rounded-2xl border p-4 shadow-sm relative overflow-hidden"
+                  style={{ borderColor: idx === 0 ? "#FFD700" : "#F0D8D0" }}
+                >
+                  <div
+                    className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                    style={{
+                      backgroundColor: medal ? medal + "22" : "#f3f4f6",
+                      color: medal ?? "#9ca3af",
+                      border: `1.5px solid ${medal ?? "#e5e7eb"}`,
+                    }}
+                  >
+                    #{idx + 1}
+                  </div>
+                  <p className="font-semibold text-gray-900 pr-8 truncate">{agent.name}</p>
+                  <p className="text-xs text-gray-400 mb-3 truncate">{agent.email}</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-gray-50 rounded-xl py-2">
+                      <p className="text-lg font-bold text-gray-900">{agent.callsThisWeek}</p>
+                      <p className="text-xs text-gray-500">Calls</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl py-2">
+                      <p className="text-lg font-bold" style={{ color: "#E8603C" }}>{agent.bookingsThisWeek}</p>
+                      <p className="text-xs text-gray-500">Booked</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl py-2">
+                      <p className="text-lg font-bold" style={{ color: convColor }}>{agent.conversionRate}%</p>
+                      <p className="text-xs text-gray-500">Conv.</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                    <span>{agent.totalAssigned} assigned</span>
+                    <span>{agent.bookingsAllTime} booked all-time</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Agent Accounts */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Agent Accounts</h2>

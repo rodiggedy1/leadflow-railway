@@ -363,6 +363,77 @@ export const appRouter = router({
         await db.update(agentsTable).set({ passwordHash }).where(eq(agentsTable.id, input.agentId));
         return { success: true };
       }),
+
+    /**
+     * agents.performance — per-agent leaderboard stats.
+     * Returns for each active agent:
+     *   callsThisWeek, bookingsThisWeek, totalAssigned, bookingsAllTime, conversionRate
+     */
+    performance: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new Error("Admin only");
+      const db = await getDb();
+      if (!db) return [];
+
+      const { agents: agentsTable } = await import("../drizzle/schema");
+
+      const allAgents = await db
+        .select({ id: agentsTable.id, name: agentsTable.name, email: agentsTable.email, isActive: agentsTable.isActive })
+        .from(agentsTable)
+        .where(eq(agentsTable.isActive, 1));
+
+      // Start of this week (Monday 00:00:00 UTC)
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const weekStart = new Date(now);
+      weekStart.setUTCDate(now.getUTCDate() - daysToMonday);
+      weekStart.setUTCHours(0, 0, 0, 0);
+
+      const callsThisWeek = await db
+        .select({ agentId: leadCallLogs.agentId, count: sql<number>`count(*)`.as("count") })
+        .from(leadCallLogs)
+        .where(gte(leadCallLogs.calledAt, weekStart))
+        .groupBy(leadCallLogs.agentId);
+
+      const bookingsThisWeek = await db
+        .select({ agentId: conversationSessions.bookedByAgentId, count: sql<number>`count(*)`.as("count") })
+        .from(conversationSessions)
+        .where(and(eq(conversationSessions.isBooked, 1), gte(conversationSessions.bookedAt, weekStart)))
+        .groupBy(conversationSessions.bookedByAgentId);
+
+      const totalAssigned = await db
+        .select({ agentId: conversationSessions.assignedAgentId, count: sql<number>`count(*)`.as("count") })
+        .from(conversationSessions)
+        .where(sql`${conversationSessions.assignedAgentId} IS NOT NULL`)
+        .groupBy(conversationSessions.assignedAgentId);
+
+      const bookingsAllTime = await db
+        .select({ agentId: conversationSessions.bookedByAgentId, count: sql<number>`count(*)`.as("count") })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.isBooked, 1))
+        .groupBy(conversationSessions.bookedByAgentId);
+
+      const callsMap = new Map(callsThisWeek.map(r => [r.agentId, Number(r.count)]));
+      const bookingsWeekMap = new Map(bookingsThisWeek.map(r => [r.agentId, Number(r.count)]));
+      const assignedMap = new Map(totalAssigned.map(r => [r.agentId, Number(r.count)]));
+      const bookingsAllTimeMap = new Map(bookingsAllTime.map(r => [r.agentId, Number(r.count)]));
+
+      return allAgents.map(agent => {
+        const assigned = assignedMap.get(agent.id) ?? 0;
+        const bookedAllTime = bookingsAllTimeMap.get(agent.id) ?? 0;
+        const conversionRate = assigned > 0 ? Math.round((bookedAllTime / assigned) * 100) : 0;
+        return {
+          id: agent.id,
+          name: agent.name,
+          email: agent.email,
+          callsThisWeek: callsMap.get(agent.id) ?? 0,
+          bookingsThisWeek: bookingsWeekMap.get(agent.id) ?? 0,
+          totalAssigned: assigned,
+          bookingsAllTime: bookedAllTime,
+          conversionRate,
+        };
+      });
+    }),
   }),
 
   /**

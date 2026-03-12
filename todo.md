@@ -116,3 +116,10 @@
 - [x] Update all agent procedures to use agent JWT session instead of Manus user session
 - [x] Admin dashboard: Agents tab (list agents, create new, deactivate/activate, reset password)
 - [x] 97/97 tests pass
+
+## Agent Performance Leaderboard — COMPLETED
+
+- [x] Backend: agents.performance procedure — per-agent stats (callsThisWeek, bookingsThisWeek, totalAssigned, bookingsAllTime, conversionRate)
+- [x] Leaderboard UI in Admin → Agents tab — ranked cards with gold/silver/bronze badges, color-coded conversion rate
+- [x] Conversion rate: bookingsAllTime / totalAssigned (green ≥50%, amber ≥25%, grey <25%)
+- [x] 102/102 tests pass
