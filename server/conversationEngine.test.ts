@@ -160,9 +160,9 @@ describe("processLeadReply — State Machine", () => {
     const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Friday, March 13", "Saturday, March 14"] });
     const result = await processLeadReply("friday works", ctx);
 
-    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.nextStage).toBe("TIME_PREF");
     expect(result.extractedData?.selectedSlot).toBe("Friday, March 13");
-    expect(result.reply.toLowerCase()).toContain("address");
+    expect(result.reply.toLowerCase()).toContain("morning");  // asks morning or afternoon
   });
 
   // Stage: SLOT_CHOICE → slot2 → ADDRESS
@@ -177,7 +177,7 @@ describe("processLeadReply — State Machine", () => {
     const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Friday, March 13", "Saturday, March 14"] });
     const result = await processLeadReply("saturday works", ctx);
 
-    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.nextStage).toBe("TIME_PREF");
     expect(result.extractedData?.selectedSlot).toBe("Saturday, March 14");
   });
 
@@ -193,10 +193,10 @@ describe("processLeadReply — State Machine", () => {
     const ctx = makeContext({ stage: "SLOT_CHOICE" });
     const result = await processLeadReply("Can I do Monday at 10am instead?", ctx);
 
-    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.nextStage).toBe("TIME_PREF");
     expect(result.extractedData?.selectedSlot).toBe("Monday at 10AM");
     expect(result.reply).toContain("Monday at 10AM");
-    expect(result.reply.toLowerCase()).toContain("address");
+    expect(result.reply.toLowerCase()).toContain("morning");  // asks morning or afternoon
   });
 
   // Stage: SLOT_CHOICE → unclear → re-prompt

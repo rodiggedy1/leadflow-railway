@@ -143,3 +143,14 @@
 - [x] Add MMS photo support to OpenPhone send function (mediaUrl parameter)
 - [x] Attach Madison's headshot to the first intro SMS (CDN URL hardcoded in routers.ts)
 - [x] Updated tests for new template — 102/102 tests pass
+
+## MMS Photo Fix
+
+- [ ] Verify correct OpenPhone API field name for media attachments
+- [ ] Verify Madison headshot CDN URL is publicly accessible
+- [ ] Fix the media field and confirm photo sends correctly
+
+## Admin & Conversation Fixes — COMPLETED
+
+- [x] Fix: leads disappearing from admin dashboard — fixed timezone mismatch in buildDateConditions (UTC boundary now covers all local timezones)
+- [x] Add morning/afternoon preference step after day selection — new TIME_PREF stage inserted between SLOT_CHOICE and ADDRESS; 102/102 tests pass

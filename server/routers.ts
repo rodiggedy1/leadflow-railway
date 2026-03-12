@@ -626,13 +626,18 @@ export function normalizePhone(phone: string): string {
 function buildDateConditions(dateFrom?: string, dateTo?: string) {
   const conditions = [];
   if (dateFrom) {
-    const from = new Date(dateFrom);
-    from.setHours(0, 0, 0, 0);
+    // Parse as local midnight by appending T00:00:00 without Z (local time)
+    // Then convert to UTC for the DB query. We use a wide window: from start of
+    // dateFrom in UTC-12 (earliest timezone) to cover all possible local "today"s.
+    const from = new Date(dateFrom + "T00:00:00.000Z");
+    // Subtract 14 hours to cover UTC-14 (furthest behind UTC timezone)
+    from.setUTCHours(from.getUTCHours() - 14);
     conditions.push(gte(conversationSessions.createdAt, from));
   }
   if (dateTo) {
-    const to = new Date(dateTo);
-    to.setHours(23, 59, 59, 999);
+    // End of dateTo: add 1 day + 14 hours to cover UTC+14 (furthest ahead)
+    const to = new Date(dateTo + "T23:59:59.999Z");
+    to.setUTCHours(to.getUTCHours() + 14);
     conditions.push(lte(conversationSessions.createdAt, to));
   }
   return conditions.length > 0 ? and(...conditions) : undefined;

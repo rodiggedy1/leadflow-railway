@@ -85,6 +85,14 @@ export function buildAddressRequestMessage(slot: string): string {
   return `Perfect 👍\n\nWhat's the address for the cleaning?`;
 }
 
+export function buildTimePrefMessage(slot: string): string {
+  return `Great — ${slot} it is! 🗓️\n\nWould morning or afternoon work better for you?`;
+}
+
+export function buildAddressRequestAfterTimePref(slot: string, timePref: string): string {
+  return `${timePref} works! What's the address for the cleaning?`;
+}
+
 export function buildConfirmationMessage(slot: string, address: string): string {
   // slot is now a full label like "Friday, March 13" — use it directly
   return `Perfect — I've reserved ${slot} for you at ${address}.\n\nWe just do a quick 60-second confirmation call to finalize the booking and make sure we have everything correct.\n\nShould we call you now or in a few minutes?`;
@@ -132,6 +140,10 @@ Stage-specific instructions:
   - If they mention the day name of slot 2, "second", "option 2", "2" → "slot2", put the full slot 2 label in extractedSlot
   - ANY other date/time request ("monday", "next tuesday", "friday at 2pm", "next week", etc.) → "custom_date", and put the requested date/time in extractedSlot
   - If they request a custom date, ALWAYS treat it as a valid booking request — we accommodate all schedules
+- TIME_PREF: The lead was asked if morning or afternoon works. Intent = "morning", "afternoon", or "unclear"
+  - "morning", "am", "early", "9", "10", "11" → "morning"
+  - "afternoon", "pm", "after noon", "12", "1", "2", "3", "4", "5" → "afternoon"
+  - Either works, flexible, doesn't matter → "morning" (default to morning)
 - ADDRESS: Extract the full address they provided. Intent = "address_provided" or "unclear"
 - CONFIRMATION: Parse if they want the call now or in a few minutes. Intent = "now" or "few_minutes" or "unclear"
   - "now", "yes", "call me", "ready", "go ahead" → "now"
@@ -224,7 +236,7 @@ export async function processLeadReply(
 
   // ── For all other stages: check for objections first ──────────────────────
   // Only check objections in stages where the lead might push back
-  if (["AVAILABILITY", "SLOT_CHOICE", "ADDRESS", "CONFIRMATION"].includes(stage)) {
+  if (["AVAILABILITY", "SLOT_CHOICE", "TIME_PREF", "ADDRESS", "CONFIRMATION"].includes(stage)) {
     const objectionType = await detectObjection(leadReply);
 
     if (objectionType) {
@@ -266,16 +278,16 @@ export async function processLeadReply(
 
       if (slot1 && slot1.shortLabel && replyLower.includes(slot1.shortLabel.toLowerCase())) {
         return {
-          reply: buildAddressRequestMessage(slot1.label),
-          nextStage: "ADDRESS",
+          reply: buildTimePrefMessage(slot1.label),
+          nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slot1.label },
         };
       }
 
       if (slot2 && slot2.shortLabel && replyLower.includes(slot2.shortLabel.toLowerCase())) {
         return {
-          reply: buildAddressRequestMessage(slot2.label),
-          nextStage: "ADDRESS",
+          reply: buildTimePrefMessage(slot2.label),
+          nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slot2.label },
         };
       }
@@ -298,27 +310,26 @@ export async function processLeadReply(
 
       if (parsed.intent === "slot1") {
         return {
-          reply: buildAddressRequestMessage(slot1Label),
-          nextStage: "ADDRESS",
+          reply: buildTimePrefMessage(slot1Label),
+          nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slot1Label },
         };
       }
 
       if (parsed.intent === "slot2") {
         return {
-          reply: buildAddressRequestMessage(slot2Label),
-          nextStage: "ADDRESS",
+          reply: buildTimePrefMessage(slot2Label),
+          nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slot2Label },
         };
       }
 
-      // Custom date/time request — accept it enthusiastically and advance
+      // Custom date/time request — accept it enthusiastically and advance to TIME_PREF
       if (parsed.intent === "custom_date" || parsed.extractedSlot) {
         const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
-        const reply = `${requestedSlot} works perfectly! 👍\n\nWhat's the address for the cleaning?`;
         return {
-          reply,
-          nextStage: "ADDRESS",
+          reply: buildTimePrefMessage(requestedSlot),
+          nextStage: "TIME_PREF",
           extractedData: { selectedSlot: requestedSlot },
         };
       }
@@ -337,6 +348,27 @@ export async function processLeadReply(
       return {
         reply: offScript.reply,
         nextStage: "SLOT_CHOICE",
+      };
+    }
+
+    // ── Stage 3.5: Time preference (morning or afternoon) ─────────────────────
+    case "TIME_PREF": {
+      const parsed = await parseLeadReply(stage, leadReply, context);
+      const slot = context.selectedSlot ?? "your selected day";
+
+      const timePrefMap: Record<string, string> = {
+        morning: "Morning",
+        afternoon: "Afternoon",
+      };
+      const timePref = timePrefMap[parsed.intent] ?? "Morning";
+
+      // Append time preference to the slot label for the confirmation message
+      const slotWithTime = `${slot} (${timePref})`;
+
+      return {
+        reply: buildAddressRequestAfterTimePref(slot, timePref),
+        nextStage: "ADDRESS",
+        extractedData: { selectedSlot: slotWithTime },
       };
     }
 

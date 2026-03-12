@@ -57,6 +57,7 @@ export const conversationStages = [
   "QUOTE_SENT",
   "AVAILABILITY",
   "SLOT_CHOICE",
+  "TIME_PREF",
   "ADDRESS",
   "CONFIRMATION",
   "CALL_SCHEDULED",
