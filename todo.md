@@ -245,3 +245,9 @@
 
 - [x] Block admin dashboard from unauthenticated/non-admin users — show login screen
 - [x] Enforce auth guard on all admin tRPC procedures
+
+## Admin Account & Password Policy
+
+- [x] Create admin account: rohangilkes@hey.com with isAdmin=true
+- [x] Remove password complexity requirements — 6 chars minimum only (already was 6 chars, no special char rules)
+- [x] Confirm quote form (/) has no auth guard — confirmed, Home.tsx and App.tsx have zero auth logic

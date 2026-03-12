@@ -1,0 +1,18 @@
+{
+  "query": "SELECT id, name, email, isAdmin, isActive, createdAt FROM agents WHERE email = 'rohangilkes@hey.com';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, name, email, isAdmin, isActive, createdAt FROM agents WHERE email = 'rohangilkes@hey.com';",
+  "rows": [
+    {
+      "id": "2",
+      "name": "Rohan Gilkes",
+      "email": "rohangilkes@hey.com",
+      "isAdmin": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-12 15:19:31"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\temail\tisAdmin\tisActive\tcreatedAt\n2\tRohan Gilkes\trohangilkes@hey.com\t1\t1\t2026-03-12 15:19:31\n",
+  "stderr": "",
+  "execution_time_ms": 111
+}
