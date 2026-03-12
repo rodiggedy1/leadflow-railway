@@ -10,6 +10,7 @@ import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes } from "..
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply } from "./aiService";
 import bcrypt from "bcryptjs";
+import { parse as parseCookie } from "cookie";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
@@ -204,8 +205,7 @@ export const appRouter = router({
         (() => {
           const cookieHeader = ctx.req.headers.cookie;
           if (!cookieHeader) return null;
-          const { parse } = require("cookie") as typeof import("cookie");
-          return parse(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
+          return parseCookie(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
         })()
       );
       if (!session) return null;
@@ -755,8 +755,7 @@ function buildDateConditions(dateFrom?: string, dateTo?: string) {
 async function getAgentSessionFromCtx(ctx: { req: { headers: { cookie?: string } } }) {
   const cookieHeader = ctx.req.headers.cookie;
   if (!cookieHeader) throw new Error("Agent not authenticated");
-  const { parse } = require("cookie") as typeof import("cookie");
-  const token = parse(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
+  const token = parseCookie(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
   const session = await verifyAgentSession(token);
   if (!session) throw new Error("Agent not authenticated");
   // Verify agent is still active in DB

@@ -258,6 +258,11 @@
 - [x] Create adminAgentProcedure that validates agent cookie + isAdmin flag
 - [x] Fix agents.performance.test.ts to use agent cookie context instead of Manus OAuth context — 120/120 tests pass
 
+## Fix require() ESM Error — COMPLETED
+
+- [x] Replace require("cookie") with ESM import in routers.ts (agents.me and getAgentSessionFromCtx)
+- [x] Reset admin password to match rohangilkes@hey.com / admin123
+
 ## Admin Lead Management — COMPLETED
 
 - [x] Add admin backend procedure: leads.adminUpdateStage — admin can change any lead's stage

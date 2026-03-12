@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE agents SET passwordHash = '$2b$10$K9bURHK5RDFE3jhnVSJRc./W.Z7haD16ie.69MHeWzwQHqD7Fytn2', email = 'rohangilkes@hey.com', isActive = 1 WHERE isAdmin = 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute UPDATE agents SET passwordHash = '$2b$10$K9bURHK5RDFE3jhnVSJRc./W.Z7haD16ie.69MHeWzwQHqD7Fytn2', email = 'rohangilkes@hey.com', isActive = 1 WHERE isAdmin = 1;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 68
+}
