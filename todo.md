@@ -218,3 +218,7 @@
 - [x] Add tRPC simulator.chat procedure that calls handleOffScriptReply with configurable context
 - [x] Build SMS simulator UI panel in admin dashboard (chat bubble UI, context config, stage selector)
 - [x] Add simulator link/tab to admin dashboard navigation
+
+## Back Link
+
+- [x] Add subtle "← Back to Maidsinblack" link at top of quote form page
