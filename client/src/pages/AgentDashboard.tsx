@@ -384,31 +384,54 @@ function ConversationDrawer({
         </div>
 
         {/* Details */}
-        <div className="px-5 py-3 bg-gray-50 border-b text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-          {session.serviceType && <span>Service: <b>{session.serviceType}</b></span>}
-          {session.quotedPrice && (() => {
-            const total = computeTotalQuote(session.quotedPrice, session.extras);
-            const hasExtras = total !== session.quotedPrice;
-            return (
-              <span>
-                Price: <b>${total}</b>
-                {hasExtras && <span className="text-gray-400 ml-1">(base ${session.quotedPrice} + extras)</span>}
-              </span>
-            );
-          })()}
-          {session.selectedSlot && <span>Slot: <b>{session.selectedSlot}</b></span>}
-          {session.address && <span>Address: <b>{session.address}</b></span>}
+        <div className="px-5 py-4 bg-gray-50 border-b" style={{ borderColor: "#F0D8D0" }}>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs text-gray-600">
+            {session.serviceType && (
+              <div>
+                <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Service</span>
+                <span className="font-semibold text-gray-800">{session.serviceType}</span>
+              </div>
+            )}
+            {session.quotedPrice && (() => {
+              const total = computeTotalQuote(session.quotedPrice, session.extras);
+              const hasExtras = total !== session.quotedPrice;
+              return (
+                <div>
+                  <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Price</span>
+                  <span className="font-semibold text-gray-800">${total}</span>
+                  {hasExtras && <span className="text-gray-400 ml-1.5">(base ${session.quotedPrice} + extras)</span>}
+                </div>
+              );
+            })()}
+            {session.selectedSlot && (
+              <div>
+                <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Slot</span>
+                <span className="font-semibold text-gray-800">{session.selectedSlot}</span>
+              </div>
+            )}
+            {session.address && (
+              <div>
+                <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Address</span>
+                <span className="font-semibold text-gray-800">{session.address}</span>
+              </div>
+            )}
+          </div>
           {session.extras && (() => {
             let extrasArr: string[] = [];
             try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
             return extrasArr.length > 0 ? (
-              <span className="col-span-full">Extras: <b>{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</b></span>
+              <div className="mt-2 pt-2 border-t text-xs" style={{ borderColor: "#F0D8D0" }}>
+                <span className="text-gray-400 uppercase tracking-wide font-medium">Add-ons: </span>
+                <span className="font-semibold text-gray-700">{extrasArr.map(k => k.replace(/_/g, " ")).join(" · ")}</span>
+              </div>
             ) : null;
           })()}
           {session.isBooked === 1 && (
-            <span className="text-green-700 font-semibold">
-              ✓ Booked{session.bookedByAgentName ? ` by ${session.bookedByAgentName}` : ""}
-            </span>
+            <div className="mt-2 pt-2 border-t flex items-center gap-1.5" style={{ borderColor: "#bbf7d0" }}>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                ✓ Booked{session.bookedByAgentName ? ` by ${session.bookedByAgentName}` : ""}
+              </span>
+            </div>
           )}
         </div>
 
