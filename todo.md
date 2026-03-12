@@ -316,3 +316,10 @@
 - [x] Wire dateFrom/dateTo to leads.list query in agent workspace
 - [x] Add date filter chip bar (Today, This Week, This Month, All Time) above the search bar
 - [x] useMemo computes ISO date strings from selected range
+
+## Agent Performance Stats Bar — COMPLETED
+
+- [x] Add agents.myStats procedure: returns leadsAssigned, bookedCount, bookedRevenue, conversionRate filtered by dateFrom/dateTo
+- [x] Add stats bar UI to agent workspace (below header, above date chips): 3 cards — Jobs Booked, Revenue, Conversion Rate
+- [x] Wire stats bar to active dateRange selection
+- [x] Write vitest tests for agents.myStats — 142/142 tests pass

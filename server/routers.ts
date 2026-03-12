@@ -603,6 +603,65 @@ export const appRouter = router({
         };
       });
     }),
+
+    /**
+     * agents.myStats — personal performance stats for the calling agent.
+     * Accepts optional dateFrom / dateTo (ISO date strings) for filtering.
+     * Returns: leadsAssigned, bookedCount, bookedRevenue, conversionRate
+     */
+    myStats: publicProcedure
+      .input(z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) return { leadsAssigned: 0, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
+
+        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+
+        // All leads assigned to this agent in the date range
+        const assignedRows = await db
+          .select({ id: conversationSessions.id })
+          .from(conversationSessions)
+          .where(and(eq(conversationSessions.assignedAgentId, agentSession.agentId), conditions ?? sql`1=1`));
+        const leadsAssigned = assignedRows.length;
+
+        // Booked leads by this agent in the date range
+        const bookedRows = await db
+          .select({
+            bookedAmount: conversationSessions.bookedAmount,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+          })
+          .from(conversationSessions)
+          .where(and(
+            eq(conversationSessions.bookedByAgentId, agentSession.agentId),
+            eq(conversationSessions.isBooked, 1),
+            conditions ?? sql`1=1`
+          ));
+
+        const bookedCount = bookedRows.length;
+        const bookedRevenue = bookedRows.reduce((sum, row) => {
+          if (row.bookedAmount !== null && row.bookedAmount !== undefined) {
+            return sum + Number(row.bookedAmount);
+          }
+          const base = Number(row.quotedPrice ?? 0);
+          let extrasTotal = 0;
+          if (row.extras) {
+            try {
+              const keys: string[] = JSON.parse(row.extras);
+              extrasTotal = calculateExtrasTotal(keys);
+            } catch { /* ignore */ }
+          }
+          return sum + base + extrasTotal;
+        }, 0);
+
+        const conversionRate = leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0;
+
+        return { leadsAssigned, bookedCount, bookedRevenue, conversionRate };
+      }),
   }),
 
   /**

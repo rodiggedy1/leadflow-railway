@@ -794,6 +794,12 @@ export default function AgentDashboard() {
     },
   });
 
+  // Personal stats
+  const { data: myStats } = trpc.agents.myStats.useQuery(
+    { dateFrom, dateTo },
+    { enabled: !!agentMe }
+  );
+
   // Leads
   const { data: allSessions = [], isLoading, refetch, isFetching } = trpc.leads.list.useQuery(
     { dateFrom, dateTo },
@@ -903,6 +909,53 @@ export default function AgentDashboard() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-5">
+        {/* Personal performance stats bar */}
+        {myStats && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {[
+              {
+                label: "Jobs Booked",
+                value: myStats.bookedCount,
+                display: String(myStats.bookedCount),
+                icon: "✓",
+                color: "#16a34a",
+                bg: "#f0fdf4",
+                border: "#bbf7d0",
+              },
+              {
+                label: "Revenue",
+                value: myStats.bookedRevenue,
+                display: `$${myStats.bookedRevenue.toLocaleString()}`,
+                icon: "$",
+                color: "#E8603C",
+                bg: "#fff8f5",
+                border: "#F0D8D0",
+              },
+              {
+                label: "Conversion",
+                value: myStats.conversionRate,
+                display: `${myStats.conversionRate}%`,
+                icon: "↗",
+                color: "#7c3aed",
+                bg: "#faf5ff",
+                border: "#e9d5ff",
+              },
+            ].map(stat => (
+              <div
+                key={stat.label}
+                className="rounded-xl px-4 py-3 border flex flex-col gap-0.5"
+                style={{ backgroundColor: stat.bg, borderColor: stat.border }}
+              >
+                <span className="text-xs font-medium" style={{ color: stat.color }}>
+                  {stat.icon} {stat.label}
+                </span>
+                <span className="text-xl font-bold text-gray-900 leading-tight">{stat.display}</span>
+                <span className="text-xs text-gray-400">{myStats.leadsAssigned} assigned</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Date filter chips */}
         <div className="flex gap-2 mb-3 overflow-x-auto pb-0.5">
           {(["all", "today", "week", "month"] as const).map(range => {
