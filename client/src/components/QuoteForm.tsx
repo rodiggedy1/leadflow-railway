@@ -596,8 +596,17 @@ export default function QuoteForm() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const formatPhoneNumber = (raw: string): string => {
+    // Strip everything except digits, allow leading +1 to be stripped too
+    const digits = raw.replace(/\D/g, "").slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  };
+
   const handleChange = (field: keyof FormData, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    const formatted = field === "phone" ? formatPhoneNumber(value) : value;
+    setForm((prev) => ({ ...prev, [field]: formatted }));
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
@@ -759,7 +768,7 @@ export default function QuoteForm() {
                   <div className="animate-fade-slide-up delay-3">
                     <input
                       type="tel"
-                      placeholder="Phone (e.g. +12025551234)"
+                      placeholder="Phone (e.g. 202-555-1234)"
                       value={form.phone}
                       onChange={(e) => handleChange("phone", e.target.value)}
                       className="quote-input"

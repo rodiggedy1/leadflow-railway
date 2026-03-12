@@ -236,3 +236,7 @@
 ## Second Notification Number
 
 - [x] Send lead summary SMS to +13029816191 on new quote submission
+
+## Phone Number Formatting
+
+- [x] Auto-format phone field as XXX-XXX-XXXX while typing
