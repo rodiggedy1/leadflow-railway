@@ -222,3 +222,7 @@
 ## Back Link
 
 - [x] Add subtle "← Back to Maidsinblack" link at top of quote form page
+
+## Rotating Trust Strip
+
+- [x] Add rotating trust strip above submit button on quote form step 1
