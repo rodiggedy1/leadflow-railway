@@ -49,6 +49,7 @@ import {
   Trophy,
   Medal,
   TrendingUp,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -59,6 +60,17 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
 import SmsSimulator from "@/components/SmsSimulator";
@@ -458,6 +470,17 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  // Delete lead
+  const deleteLeadMutation = trpc.leads.deleteLead.useMutation({
+    onSuccess: () => {
+      toast.success("Lead deleted");
+      utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
   const [notes, setNotes] = useState("");
@@ -718,8 +741,41 @@ function ConversationDrawer({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t text-xs text-gray-400 flex justify-between">
+        <div className="p-4 border-t text-xs text-gray-400 flex justify-between items-center">
           <span>Started {timeAgo(session.createdAt)}</span>
+          {isAdmin && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-red-400 hover:text-red-600 hover:bg-red-50"
+                  disabled={deleteLeadMutation.isPending}
+                >
+                  {deleteLeadMutation.isPending
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <><Trash2 className="w-3.5 h-3.5 mr-1" />Delete Lead</>}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete <strong>{session.leadName ?? "this lead"}</strong> and all their conversation history. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => deleteLeadMutation.mutate({ sessionId: session.id })}
+                  >
+                    Yes, delete permanently
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <span>Updated {timeAgo(session.updatedAt)}</span>
         </div>
       </div>

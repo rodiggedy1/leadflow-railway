@@ -203,6 +203,26 @@ export const appRouter = router({
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
+
+    /**
+     * leads.deleteLead — permanently delete a lead and all associated call logs.
+     * Admin only.
+     */
+    deleteLead: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        // Delete related call logs first (FK constraint)
+        await db
+          .delete(leadCallLogs)
+          .where(eq(leadCallLogs.sessionId, input.sessionId));
+        // Delete the session itself
+        await db
+          .delete(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
   }),
 
   /**

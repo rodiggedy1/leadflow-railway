@@ -339,3 +339,11 @@
 - [x] Show notes preview snippet (1 line, truncated, amber highlight) on lead card when internalNotes is set
 - [x] Not-interested cards get gray border, lighter bg, and 75% opacity
 - [x] 142/142 tests pass (markNotInterested covered by existing mock patterns)
+
+## Lead Delete — COMPLETED
+
+- [x] Add leads.deleteLead procedure (admin-only, deletes call logs then session)
+- [x] Add "Delete Lead" button in admin ConversationDrawer footer (red, ghost style)
+- [x] AlertDialog confirmation: "This will permanently delete [name] and all conversation history"
+- [x] On confirm: deletes, closes drawer, invalidates leads.list + leads.stats
+- [x] 142/142 tests pass
