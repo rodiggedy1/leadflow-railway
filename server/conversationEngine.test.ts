@@ -84,9 +84,8 @@ describe("Message Builders", () => {
   });
 
   it("buildConfirmationMessage includes slot and address", () => {
-    const msg = buildConfirmationMessage("Saturday 9AM", "123 Main St, DC 20001");
-    expect(msg).toContain("Saturday");
-    expect(msg).toContain("9:00 AM");
+    const msg = buildConfirmationMessage("Saturday, March 14", "123 Main St, DC 20001");
+    expect(msg).toContain("Saturday, March 14");
     expect(msg).toContain("123 Main St");
     expect(msg.toLowerCase()).toContain("call");
   });
@@ -149,37 +148,37 @@ describe("processLeadReply — State Machine", () => {
     expect(result.nextStage).toBe("DONE");
   });
 
-  // Stage: SLOT_CHOICE → thursday → ADDRESS
-  it("SLOT_CHOICE: 'thursday' reply captures slot and advances to ADDRESS", async () => {
+  // Stage: SLOT_CHOICE → slot1 → ADDRESS
+  it("SLOT_CHOICE: 'slot1' reply captures first offered slot and advances to ADDRESS", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns thursday
+    // Call 2: parseLeadReply returns slot1
     mockLLM.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ intent: "thursday", extractedSlot: "Thursday 1PM", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+      choices: [{ message: { content: JSON.stringify({ intent: "slot1", extractedSlot: "Friday, March 13", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
-    const ctx = makeContext({ stage: "SLOT_CHOICE" });
-    const result = await processLeadReply("thursday works", ctx);
+    const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Friday, March 13", "Saturday, March 14"] });
+    const result = await processLeadReply("friday works", ctx);
 
     expect(result.nextStage).toBe("ADDRESS");
-    expect(result.extractedData?.selectedSlot).toBe("Thursday 1PM");
+    expect(result.extractedData?.selectedSlot).toBe("Friday, March 13");
     expect(result.reply.toLowerCase()).toContain("address");
   });
 
-  // Stage: SLOT_CHOICE → saturday → ADDRESS
-  it("SLOT_CHOICE: 'saturday' reply captures slot and advances to ADDRESS", async () => {
+  // Stage: SLOT_CHOICE → slot2 → ADDRESS
+  it("SLOT_CHOICE: 'slot2' reply captures second offered slot and advances to ADDRESS", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns saturday
+    // Call 2: parseLeadReply returns slot2
     mockLLM.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ intent: "saturday", extractedSlot: "Saturday 9AM", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+      choices: [{ message: { content: JSON.stringify({ intent: "slot2", extractedSlot: "Saturday, March 14", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
-    const ctx = makeContext({ stage: "SLOT_CHOICE" });
-    const result = await processLeadReply("saturday 9am", ctx);
+    const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Friday, March 13", "Saturday, March 14"] });
+    const result = await processLeadReply("saturday works", ctx);
 
     expect(result.nextStage).toBe("ADDRESS");
-    expect(result.extractedData?.selectedSlot).toBe("Saturday 9AM");
+    expect(result.extractedData?.selectedSlot).toBe("Saturday, March 14");
   });
 
   // Stage: SLOT_CHOICE → custom date → ADDRESS (accept any date)
@@ -220,12 +219,12 @@ describe("processLeadReply — State Machine", () => {
       choices: [{ message: { content: JSON.stringify({ intent: "address_provided", extractedSlot: null, extractedAddress: "456 Oak Ave, Washington DC 20002", extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
-    const ctx = makeContext({ stage: "ADDRESS", selectedSlot: "Saturday 9AM" });
+    const ctx = makeContext({ stage: "ADDRESS", selectedSlot: "Saturday, March 14" });
     const result = await processLeadReply("456 Oak Ave, Washington DC 20002", ctx);
 
     expect(result.nextStage).toBe("CONFIRMATION");
     expect(result.extractedData?.address).toBe("456 Oak Ave, Washington DC 20002");
-    expect(result.reply).toContain("Saturday");
+    expect(result.reply).toContain("Saturday, March 14");
     expect(result.reply.toLowerCase()).toContain("call");
   });
 

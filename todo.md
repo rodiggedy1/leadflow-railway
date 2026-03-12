@@ -123,3 +123,11 @@
 - [x] Leaderboard UI in Admin → Agents tab — ranked cards with gold/silver/bronze badges, color-coded conversion rate
 - [x] Conversion rate: bookingsAllTime / totalAssigned (green ≥50%, amber ≥25%, grey <25%)
 - [x] 102/102 tests pass
+
+## Conversation Flow Bug Fixes — COMPLETED
+
+- [x] Fix: first availability message now uses dynamic rolling slots via formatAvailabilityQuestion(getNextAvailableSlots(2))
+- [x] Fix: SLOT_CHOICE handler now uses slot1/slot2 intents with actual offered slot labels; LLM prompt includes the real slot names
+- [x] Fix: buildConfirmationMessage now uses the full slot label directly (e.g. "Friday, March 13") instead of hardcoded time
+- [x] Fix: all hardcoded Thursday/Saturday references removed from aiService.ts fallbacks and prompts
+- [x] 102/102 tests pass

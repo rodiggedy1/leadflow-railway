@@ -11,6 +11,7 @@
  */
 
 import { invokeLLM } from "./_core/llm";
+import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
 
 // ─── Brand System Prompt ──────────────────────────────────────────────────────
 
@@ -109,12 +110,11 @@ Do NOT ask any question — that comes in the next message. Keep it warm and con
 
 /**
  * Generates the availability follow-up message (sent right after the quote).
- * This asks the lead if Thursday or Saturday works — the key conversion question.
+ * Uses dynamic rolling slots (next 2 available days, skipping Sundays).
  */
 export async function generatePricingFollowUp(params: QuoteMessageParams): Promise<string> {
-  // This is now the availability prompt — no longer about pricing context
-  // (pricing is already covered in the opening quote message)
-  return `We currently have openings Thursday afternoon or Saturday morning. Would one of those work for you?`;
+  const slots = getNextAvailableSlots(2);
+  return formatAvailabilityQuestion(slots);
 }
 
 // ─── Off-Script Handler ───────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ export async function handleObjection(
 
   const objectionPrompts: Record<ObjectionType, string> = {
     price_too_high: `The lead thinks the price of $${ctx.quotedPrice} is too high. Acknowledge their concern, briefly justify the value (professional team, insured, satisfaction guarantee), and offer to discuss options on the confirmation call. End with the availability question.`,
-    not_available: `The lead said Thursday and Saturday don't work. Acknowledge this, tell them we have other openings and our team can find a time that works, and ask them to share what days/times work best for them.`,
+    not_available: `The lead said the offered dates don't work. Acknowledge this, tell them we have other openings and our team can find a time that works, and ask them to share what days/times work best for them.`,
     need_to_think: `The lead said they need to think about it. Acknowledge this warmly, create gentle urgency (slots fill up), and ask if they'd like to tentatively hold a spot.`,
     already_have_cleaner: `The lead mentioned they already have a cleaner. Acknowledge this, briefly differentiate Maids in Black (insured, professional, satisfaction guarantee), and offer a first-clean trial at the quoted price.`,
     other: `The lead sent an unclear or unexpected message. Respond warmly and ask how you can help them get their home cleaned.`,
@@ -240,9 +240,9 @@ export async function handleObjection(
 
   // Fallback responses per objection type
   const fallbacks: Record<ObjectionType, string> = {
-    price_too_high: `We totally understand! Our team is fully insured and we guarantee your satisfaction. We can discuss options on your confirmation call — does Thursday or Saturday still work?`,
+    price_too_high: `We totally understand! Our team is fully insured and we guarantee your satisfaction. We can discuss options on your confirmation call — would one of our upcoming openings work for you?`,
     not_available: `No problem! We have other openings too. What days/times generally work best for you?`,
-    need_to_think: `Of course, take your time! Just a heads up — our slots do fill up quickly. Would you like to tentatively hold Thursday 1PM or Saturday 9AM?`,
+    need_to_think: `Of course, take your time! Just a heads up — our slots do fill up quickly. Would you like to tentatively hold one of our upcoming openings?`,
     already_have_cleaner: `That's great! We'd love to show you what we can do — many of our regulars switched after just one clean. Want to try us for this one?`,
     other: `Thanks for reaching out! How can we help get your home sparkling clean? 🏠`,
   };
@@ -314,9 +314,9 @@ function getNextActionPrompt(stage: string, selectedSlot?: string | null): strin
   switch (stage) {
     case "QUOTE_SENT":
     case "AVAILABILITY":
-      return "Does Thursday afternoon or Saturday morning work for you?";
+      return formatAvailabilityQuestion(getNextAvailableSlots(2));
     case "SLOT_CHOICE":
-      return "Would you prefer Thursday 1PM or Saturday 9AM?";
+      return formatSlotChoiceQuestion(getNextAvailableSlots(2));
     case "ADDRESS":
       return `What's the address for the cleaning${selectedSlot ? ` on ${selectedSlot}` : ""}?`;
     case "CONFIRMATION":

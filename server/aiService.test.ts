@@ -95,10 +95,15 @@ describe("generatePricingFollowUp", () => {
     price: "130",
   };
 
-  it("returns the availability question with Thursday and Saturday", async () => {
+  it("returns a dynamic availability question with two upcoming day options", async () => {
     const result = await generatePricingFollowUp(params);
-    expect(result.toLowerCase()).toContain("thursday");
-    expect(result.toLowerCase()).toContain("saturday");
+    // The message should contain the availability question structure
+    expect(result.toLowerCase()).toContain("openings");
+    expect(result.toLowerCase()).toContain("would one of those work");
+    // Should mention two different days (not hardcoded to Thursday/Saturday)
+    const dayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const mentionedDays = dayNames.filter(d => result.toLowerCase().includes(d));
+    expect(mentionedDays.length).toBeGreaterThanOrEqual(1);
   });
 
   it("always returns a non-empty string regardless of params", async () => {

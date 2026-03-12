@@ -29,6 +29,7 @@ import { processLeadReply } from "./conversationEngine";
 import type { ChatMessage, ConversationContext } from "./conversationEngine";
 import type { ConversationStage } from "../drizzle/schema";
 import { normalizePhone } from "./routers";
+import { getNextAvailableSlots } from "./availability";
 
 export function registerWebhookRoutes(app: Express) {
   app.post("/api/webhooks/openphone", async (req, res) => {
@@ -106,6 +107,14 @@ export function registerWebhookRoutes(app: Express) {
       // Append the lead's inbound message to history
       history.push({ role: "user", content: inboundText });
 
+      // Compute dynamic slots for SLOT_CHOICE stage context
+      // These are the next 2 available days from today — matching what was offered
+      const dynamicSlots = getNextAvailableSlots(2);
+      const offeredSlots: [string, string] | null =
+        dynamicSlots.length >= 2
+          ? [dynamicSlots[0]!.label, dynamicSlots[1]!.label]
+          : null;
+
       // Build context for the conversation engine
       const context: ConversationContext = {
         stage: session.stage as ConversationStage,
@@ -118,6 +127,7 @@ export function registerWebhookRoutes(app: Express) {
         selectedSlot: session.selectedSlot,
         address: session.address,
         messageHistory: history,
+        offeredSlots,
       };
 
       // Process the reply through the AI engine

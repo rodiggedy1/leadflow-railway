@@ -39,6 +39,8 @@ export interface ConversationContext {
   selectedSlot?: string | null;
   address?: string | null;
   messageHistory: ChatMessage[];
+  /** The two slot labels that were offered in the AVAILABILITY/SLOT_CHOICE messages (e.g. ["Friday, March 13", "Saturday, March 14"]) */
+  offeredSlots?: [string, string] | null;
 }
 
 export interface ChatMessage {
@@ -84,8 +86,8 @@ export function buildAddressRequestMessage(slot: string): string {
 }
 
 export function buildConfirmationMessage(slot: string, address: string): string {
-  const [day, time] = slot.includes("Thursday") ? ["Thursday", "1:00 PM"] : ["Saturday", "9:00 AM"];
-  return `Perfect — I've reserved ${day} at ${time} for you at ${address}.\n\nWe just do a quick 60-second confirmation call to finalize the booking and make sure we have everything correct.\n\nShould we call you now or in a few minutes?`;
+  // slot is now a full label like "Friday, March 13" — use it directly
+  return `Perfect — I've reserved ${slot} for you at ${address}.\n\nWe just do a quick 60-second confirmation call to finalize the booking and make sure we have everything correct.\n\nShould we call you now or in a few minutes?`;
 }
 
 export function buildCallScheduledMessage(preference: string): string {
@@ -125,9 +127,9 @@ Stage-specific instructions:
   - "yes", "sure", "sounds good", "ok", "yeah", "works" → "yes"
   - "no", "not interested", "never mind", "cancel" → "no"
   - Anything else (questions, objections) → "yes" (keep them in the funnel)
-- SLOT_CHOICE: Extract which slot they chose. Intent = "thursday", "saturday", "custom_date", or "unclear"
-  - "thursday", "thu", "1pm", "1", "first", "option 1" → "thursday"
-  - "saturday", "sat", "9am", "9", "second", "option 2" → "saturday"
+- SLOT_CHOICE: The two available slots offered were: Slot 1 = "${context.offeredSlots?.[0] ?? "first option"}", Slot 2 = "${context.offeredSlots?.[1] ?? "second option"}". Extract which slot they chose. Intent = "slot1", "slot2", "custom_date", or "unclear"
+  - If they mention the day name of slot 1, "first", "option 1", "1" → "slot1", put the full slot 1 label in extractedSlot
+  - If they mention the day name of slot 2, "second", "option 2", "2" → "slot2", put the full slot 2 label in extractedSlot
   - ANY other date/time request ("monday", "next tuesday", "friday at 2pm", "next week", etc.) → "custom_date", and put the requested date/time in extractedSlot
   - If they request a custom date, ALWAYS treat it as a valid booking request — we accommodate all schedules
 - ADDRESS: Extract the full address they provided. Intent = "address_provided" or "unclear"
@@ -266,28 +268,30 @@ export async function processLeadReply(
     case "SLOT_CHOICE": {
       const parsed = await parseLeadReply(stage, leadReply, context);
 
-      if (parsed.intent === "thursday" || parsed.extractedSlot?.toLowerCase().includes("thursday")) {
-        const slot = "Thursday 1PM";
+      // Get the dynamic slots that were offered (or fall back to computing fresh ones)
+      const dynamicSlots = getNextAvailableSlots(2);
+      const slot1Label = context.offeredSlots?.[0] ?? dynamicSlots[0]?.label ?? "the first date";
+      const slot2Label = context.offeredSlots?.[1] ?? dynamicSlots[1]?.label ?? "the second date";
+
+      if (parsed.intent === "slot1") {
         return {
-          reply: buildAddressRequestMessage(slot),
+          reply: buildAddressRequestMessage(slot1Label),
           nextStage: "ADDRESS",
-          extractedData: { selectedSlot: slot },
+          extractedData: { selectedSlot: slot1Label },
         };
       }
 
-      if (parsed.intent === "saturday" || parsed.extractedSlot?.toLowerCase().includes("saturday")) {
-        const slot = "Saturday 9AM";
+      if (parsed.intent === "slot2") {
         return {
-          reply: buildAddressRequestMessage(slot),
+          reply: buildAddressRequestMessage(slot2Label),
           nextStage: "ADDRESS",
-          extractedData: { selectedSlot: slot },
+          extractedData: { selectedSlot: slot2Label },
         };
       }
 
       // Custom date/time request — accept it enthusiastically and advance
       if (parsed.intent === "custom_date" || parsed.extractedSlot) {
         const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
-        const firstName = context.leadName.split(" ")[0] ?? context.leadName;
         const reply = `${requestedSlot} works perfectly! 👍\n\nWhat's the address for the cleaning?`;
         return {
           reply,
