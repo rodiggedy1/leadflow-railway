@@ -64,11 +64,33 @@ describe("Message Builders", () => {
     expect(msg).toContain("standard cleaning");
   });
 
-  it("buildAvailabilityMessage mentions two upcoming days", () => {
+  it("buildAvailabilityMessage mentions two upcoming days (no extras)", () => {
     const msg = buildAvailabilityMessage();
     // Dynamic slots — verify it's a well-formed availability question
     expect(msg).toContain("openings");
     expect(msg).toContain("Would one of those work");
+    // No upsell line when no extras
+    expect(msg).not.toContain("while we're there");
+  });
+
+  it("buildAvailabilityMessage appends upsell line when extras are provided", () => {
+    const msg = buildAvailabilityMessage(["clean_inside_oven"]);
+    expect(msg).toContain("openings");
+    expect(msg).toContain("oven");
+    expect(msg).toContain("while we're there");
+  });
+
+  it("buildAvailabilityMessage uses fallback phrase for unknown extra key", () => {
+    const msg = buildAvailabilityMessage(["some_unknown_extra"]);
+    expect(msg).toContain("while we're there");
+    expect(msg).toContain("some unknown extra");
+  });
+
+  it("buildAvailabilityMessage uses first extra when multiple are selected", () => {
+    const msg = buildAvailabilityMessage(["load_of_laundry", "wash_dishes"]);
+    expect(msg).toContain("laundry");
+    // Only one upsell line
+    expect(msg.split("while we're there").length).toBe(2);
   });
 
   it("buildSlotChoiceMessage shows two slot options", () => {
@@ -115,6 +137,26 @@ describe("processLeadReply — State Machine", () => {
     expect(result.nextStage).toBe("AVAILABILITY");
     // Dynamic slots — verify it's an availability question
     expect(result.reply).toContain("openings");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  it("QUOTE_SENT: includes extras upsell line when extras are in context", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", extras: ["clean_inside_oven"] });
+    const result = await processLeadReply("sounds good", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).toContain("openings");
+    expect(result.reply).toContain("oven");
+    expect(result.reply).toContain("while we're there");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  it("QUOTE_SENT: no upsell line when no extras selected", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", extras: [] });
+    const result = await processLeadReply("thanks", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).not.toContain("while we're there");
     expect(mockLLM).not.toHaveBeenCalled();
   });
 

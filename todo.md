@@ -192,3 +192,7 @@
 - [x] Pass extras context into AI conversation engine (system prompt + session data)
 - [x] AI acknowledges specific extras when lead asks about them during SMS flow
 - [x] Update tests to cover new pricing breakdown and extras-aware AI responses
+
+## Extras Upsell in Availability Reply
+
+- [x] Mention one selected add-on in the first availability SMS to reinforce value

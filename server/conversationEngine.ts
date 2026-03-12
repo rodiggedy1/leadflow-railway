@@ -73,9 +73,49 @@ export function buildPricingFollowUp(ctx: Pick<ConversationContext, "serviceType
   return `Homes that size are typically $${ctx.quotedPrice} for the first ${ctx.serviceType.toLowerCase()}.`;
 }
 
-export function buildAvailabilityMessage(): string {
+/**
+ * Picks a short, friendly upsell phrase for one extra add-on.
+ * Returns null if no extras are provided.
+ */
+export function buildExtrasUpsellLine(extras: string[] | null | undefined): string | null {
+  if (!extras || extras.length === 0) return null;
+
+  // Pick the first extra and build a natural mention
+  const firstKey = extras[0]!;
+  const label = firstKey.replace(/_/g, " ");
+
+  // Map specific extras to friendly emoji + phrasing
+  const phrases: Record<string, string> = {
+    clean_inside_oven:         "We'll also take care of your oven cleaning while we're there 🍳",
+    clean_inside_cabinets:     "We'll also clean inside your cabinets while we're there 🗄️",
+    clean_inside_empty_fridge: "We'll also clean inside your fridge while we're there ❄️",
+    clean_inside_full_fridge:  "We'll also clean inside your fridge while we're there ❄️",
+    clean_interior_windows:    "We'll also clean your interior windows while we're there 🪟",
+    clean_finished_basement:   "We'll also take care of your finished basement while we're there 🏠",
+    green_cleaning:            "We'll be using eco-friendly green cleaning products as requested 🌿",
+    move_in_move_out:          "We'll do a thorough move-in/move-out deep clean as requested 📦",
+    two_hours_organizing:      "We'll also spend 2 hours organizing while we're there 🗂️",
+    load_of_laundry:           "We'll also take care of a load of laundry while we're there 👕",
+    i_have_pets:               "We'll use pet-safe products and give extra attention to pet areas 🐾",
+    wipe_walls:                "We'll also wipe down your walls while we're there 🧹",
+    sweep_garage:              "We'll also sweep out your garage while we're there 🚗",
+    balcony_sweep:             "We'll also sweep your balcony while we're there 🌅",
+    home_concierge:            "Your home concierge service is all set as requested 🏡",
+    same_day_booking:          "We'll prioritize your same-day booking as requested ⚡",
+    clean_inside_microwave:    "We'll also clean inside your microwave while we're there 📡",
+    shed_pool_house:           "We'll also take care of your shed/pool house while we're there 🏊",
+    wash_dishes:               "We'll also wash your dishes while we're there 🍽️",
+    pool_deck:                 "We'll also clean your pool deck while we're there 🌊",
+  };
+
+  return phrases[firstKey] ?? `We'll also take care of your ${label} while we're there ✨`;
+}
+
+export function buildAvailabilityMessage(extras?: string[] | null): string {
   const slots = getNextAvailableSlots(2);
-  return formatAvailabilityQuestion(slots);
+  const baseMsg = formatAvailabilityQuestion(slots);
+  const upsell = buildExtrasUpsellLine(extras);
+  return upsell ? `${baseMsg}\n\n${upsell}.` : baseMsg;
 }
 
 export function buildSlotChoiceMessage(): string {
@@ -239,7 +279,7 @@ export async function processLeadReply(
   // ── QUOTE_SENT: Any reply → send availability (no objection check needed) ──
   if (stage === "QUOTE_SENT") {
     return {
-      reply: buildAvailabilityMessage(),
+      reply: buildAvailabilityMessage(context.extras),
       nextStage: "AVAILABILITY",
     };
   }
