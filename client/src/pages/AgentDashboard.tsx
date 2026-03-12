@@ -3,6 +3,7 @@
  * Uses email + password auth — no Manus account required.
  */
 import { useState, useMemo, useEffect, useRef } from "react";
+import SmsComposeBox from "@/components/SmsComposeBox";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
@@ -550,7 +551,7 @@ function ConversationDrawer({
         </div>
 
         {/* Reply input */}
-        <div className="px-5 py-3 border-t bg-white" style={{ borderColor: "#F0D8D0" }}>
+        <div className="px-5 pt-3 pb-2 border-t bg-white" style={{ borderColor: "#F0D8D0" }}>
           {/* AI / Manual toggle */}
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs">
@@ -571,26 +572,13 @@ function ConversationDrawer({
               {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
             </button>
           </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Type a message to send via SMS..."
-              value={replyText}
-              onChange={e => setReplyText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              className="flex-1 text-sm h-9"
-            />
-            <Button
-              size="sm"
-              className="h-9 px-3 shrink-0"
-              style={{ backgroundColor: "#E8603C" }}
-              onClick={handleSend}
-              disabled={sendMessageMutation.isPending || !replyText.trim()}
-            >
-              {sendMessageMutation.isPending
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Send className="w-4 h-4" />}
-            </Button>
-          </div>
+          <SmsComposeBox
+            value={replyText}
+            onChange={setReplyText}
+            onSend={handleSend}
+            isSending={sendMessageMutation.isPending}
+            placeholder="Write a message..."
+          />
         </div>
 
         {/* Call logs */}

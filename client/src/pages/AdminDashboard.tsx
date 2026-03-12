@@ -76,6 +76,7 @@ import {
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
 import SmsSimulator from "@/components/SmsSimulator";
+import SmsComposeBox from "@/components/SmsComposeBox";
 
 // ── Admin Login Screen ────────────────────────────────────────────────────────
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
@@ -765,10 +766,10 @@ function ConversationDrawer({
         </div>
 
         {/* Reply input */}
-        <div className="px-4 py-3 border-t bg-white">
+        <div className="px-4 pt-3 pb-2 border-t bg-white">
           {/* AI / Manual toggle */}
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500">
+            <span className="text-xs">
               {session.aiMode === 1
                 ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
                 : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you’re in control</span>
@@ -786,26 +787,13 @@ function ConversationDrawer({
               {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
             </button>
           </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Type a message to send via SMS..."
-              value={replyText}
-              onChange={e => setReplyText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              className="flex-1 text-sm h-9"
-            />
-            <Button
-              size="sm"
-              className="h-9 px-3 shrink-0"
-              style={{ backgroundColor: "#E8603C" }}
-              onClick={handleSend}
-              disabled={sendMessageMutation.isPending || !replyText.trim()}
-            >
-              {sendMessageMutation.isPending
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Send className="w-4 h-4" />}
-            </Button>
-          </div>
+          <SmsComposeBox
+            value={replyText}
+            onChange={setReplyText}
+            onSend={handleSend}
+            isSending={sendMessageMutation.isPending}
+            placeholder="Write a message..."
+          />
         </div>
 
         {/* Internal Notes */}
