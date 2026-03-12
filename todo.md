@@ -196,3 +196,8 @@
 ## Extras Upsell in Availability Reply
 
 - [x] Mention one selected add-on in the first availability SMS to reinforce value
+
+## Admin Dashboard Quote Fix
+
+- [x] Show total quote (base + extras) in admin leads list table
+- [x] Show total quote (base + extras) in admin lead detail drawer

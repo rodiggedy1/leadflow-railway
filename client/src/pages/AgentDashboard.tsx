@@ -5,6 +5,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { calculateExtrasTotal } from "@shared/extras";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +43,21 @@ import {
   Loader2,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────────────────────
+
+function computeTotalQuote(quotedPrice: string | null, extrasJson: string | null): string | null {
+  if (!quotedPrice) return null;
+  const base = parseInt(quotedPrice, 10);
+  if (isNaN(base)) return quotedPrice;
+  if (!extrasJson) return quotedPrice;
+  let keys: string[] = [];
+  try { keys = JSON.parse(extrasJson); } catch { return quotedPrice; }
+  if (!keys.length) return quotedPrice;
+  const total = base + calculateExtrasTotal(keys);
+  return String(total);
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────────────────
 
 type Session = {
   id: number;
@@ -314,7 +329,16 @@ function ConversationDrawer({ session, onClose }: { session: Session; onClose: (
         {/* Details */}
         <div className="px-5 py-3 bg-gray-50 border-b text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
           {session.serviceType && <span>Service: <b>{session.serviceType}</b></span>}
-          {session.quotedPrice && <span>Price: <b>{session.quotedPrice}</b></span>}
+          {session.quotedPrice && (() => {
+            const total = computeTotalQuote(session.quotedPrice, session.extras);
+            const hasExtras = total !== session.quotedPrice;
+            return (
+              <span>
+                Price: <b>${total}</b>
+                {hasExtras && <span className="text-gray-400 ml-1">(base ${session.quotedPrice} + extras)</span>}
+              </span>
+            );
+          })()}
           {session.selectedSlot && <span>Slot: <b>{session.selectedSlot}</b></span>}
           {session.address && <span>Address: <b>{session.address}</b></span>}
           {session.extras && (() => {
@@ -447,7 +471,9 @@ function LeadCard({
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
                 {session.serviceType && <span>{session.serviceType}</span>}
-                {session.quotedPrice && <span className="font-medium text-gray-700">{session.quotedPrice}</span>}
+                {session.quotedPrice && (
+                  <span className="font-medium text-gray-700">${computeTotalQuote(session.quotedPrice, session.extras)}</span>
+                )}
                 {session.selectedSlot && <span>📅 {session.selectedSlot}</span>}
                 {session.lastCalledAt && (
                   <span>📞 Last called {timeAgo(session.lastCalledAt)}

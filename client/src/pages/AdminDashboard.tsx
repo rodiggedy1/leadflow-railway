@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { calculateExtrasTotal } from "@shared/extras";
 
 // ── Stage configuration ────────────────────────────────────────────────────────
 
@@ -164,6 +165,22 @@ function toLocalDateInput(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * Returns the total quote price (base + extras) as a formatted string.
+ * Falls back to the base price if extras can't be parsed.
+ */
+function computeTotalQuote(quotedPrice: string | null, extrasJson: string | null): string | null {
+  if (!quotedPrice) return null;
+  const base = parseInt(quotedPrice, 10);
+  if (isNaN(base)) return quotedPrice;
+  if (!extrasJson) return quotedPrice;
+  let keys: string[] = [];
+  try { keys = JSON.parse(extrasJson); } catch { return quotedPrice; }
+  if (!keys.length) return quotedPrice;
+  const total = base + calculateExtrasTotal(keys);
+  return String(total);
 }
 
 // ── Funnel stats bar ──────────────────────────────────────────────────────────
@@ -298,12 +315,19 @@ function ConversationDrawer({
 
         {/* Details */}
         <div className="px-4 py-3 bg-gray-50 border-b grid grid-cols-2 gap-2 text-sm">
-          {session.quotedPrice && (
-            <div>
-              <span className="text-gray-500">Quote:</span>{" "}
-              <span className="font-semibold" style={{ color: "#E8603C" }}>${session.quotedPrice}</span>
-            </div>
-          )}
+          {session.quotedPrice && (() => {
+            const total = computeTotalQuote(session.quotedPrice, session.extras);
+            const hasExtras = total !== session.quotedPrice;
+            return (
+              <div>
+                <span className="text-gray-500">Quote:</span>{" "}
+                <span className="font-semibold" style={{ color: "#E8603C" }}>${total}</span>
+                {hasExtras && (
+                  <span className="ml-1 text-xs text-gray-400">(base ${session.quotedPrice} + extras)</span>
+                )}
+              </div>
+            );
+          })()}
           {session.serviceType && (
             <div>
               <span className="text-gray-500">Service:</span>{" "}
@@ -1002,12 +1026,15 @@ export default function AdminDashboard() {
 
                       {/* Quote */}
                       <TableCell>
-                        {session.quotedPrice ? (
-                          <span className="font-semibold flex items-center gap-1" style={{ color: "#E8603C" }}>
-                            <DollarSign className="w-3.5 h-3.5" />
-                            {session.quotedPrice}
-                          </span>
-                        ) : (
+                        {session.quotedPrice ? (() => {
+                          const total = computeTotalQuote(session.quotedPrice, session.extras);
+                          return (
+                            <span className="font-semibold flex items-center gap-1" style={{ color: "#E8603C" }}>
+                              <DollarSign className="w-3.5 h-3.5" />
+                              {total}
+                            </span>
+                          );
+                        })() : (
                           <span className="text-gray-400 text-sm">—</span>
                         )}
                       </TableCell>
