@@ -309,3 +309,10 @@
 - [x] Update agent workspace: add booked amount input field in ConversationDrawer when lead is booked
 - [x] Admin metrics invalidate on setBookedAmount success (leads.list.invalidate)
 - [x] 137/137 tests pass (setBookedAmount covered by existing mock patterns)
+
+## Agent Workspace Date Filtering — COMPLETED
+
+- [x] Audit leads.list backend — already supports dateFrom/dateTo params
+- [x] Wire dateFrom/dateTo to leads.list query in agent workspace
+- [x] Add date filter chip bar (Today, This Week, This Month, All Time) above the search bar
+- [x] useMemo computes ISO date strings from selected range

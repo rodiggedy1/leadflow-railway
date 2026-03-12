@@ -759,6 +759,28 @@ export default function AgentDashboard() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [stageFilter, setStageFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "all">("all");
+
+  // Compute dateFrom/dateTo from dateRange
+  const { dateFrom, dateTo } = useMemo(() => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (dateRange === "today") {
+      const today = fmt(now);
+      return { dateFrom: today, dateTo: today };
+    }
+    if (dateRange === "week") {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay()); // Sunday
+      return { dateFrom: fmt(start), dateTo: fmt(now) };
+    }
+    if (dateRange === "month") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { dateFrom: fmt(start), dateTo: fmt(now) };
+    }
+    return { dateFrom: undefined, dateTo: undefined };
+  }, [dateRange]);
 
   // Agent session
   const { data: agentMe, isLoading: agentLoading, refetch: refetchMe } = trpc.agents.me.useQuery(undefined, {
@@ -773,10 +795,13 @@ export default function AgentDashboard() {
   });
 
   // Leads
-  const { data: allSessions = [], isLoading, refetch, isFetching } = trpc.leads.list.useQuery(undefined, {
-    enabled: !!agentMe,
-    refetchInterval: 30_000,
-  });
+  const { data: allSessions = [], isLoading, refetch, isFetching } = trpc.leads.list.useQuery(
+    { dateFrom, dateTo },
+    {
+      enabled: !!agentMe,
+      refetchInterval: 30_000,
+    }
+  );
 
   const filtered = useMemo(() => {
     return (allSessions as Session[]).filter(s => {
@@ -878,6 +903,27 @@ export default function AgentDashboard() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-5">
+        {/* Date filter chips */}
+        <div className="flex gap-2 mb-3 overflow-x-auto pb-0.5">
+          {(["all", "today", "week", "month"] as const).map(range => {
+            const labels: Record<string, string> = { all: "All Time", today: "Today", week: "This Week", month: "This Month" };
+            const active = dateRange === range;
+            return (
+              <button
+                key={range}
+                onClick={() => setDateRange(range)}
+                className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors"
+                style={active
+                  ? { backgroundColor: "#E8603C", color: "#fff", borderColor: "#E8603C" }
+                  : { backgroundColor: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }
+                }
+              >
+                {labels[range]}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Search + stage filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-5">
           <div className="relative flex-1">
