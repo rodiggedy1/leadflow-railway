@@ -206,3 +206,9 @@
 
 - [x] Route DONE/CALL_SCHEDULED replies through AI instead of hardcoded "Thanks again!" fallback
 - [x] Audit and remove other robotic static fallbacks — let AI handle unexpected replies naturally
+
+## AI Knowledge Base from Website
+
+- [x] Scrape maidsinblack.com for services, FAQs, policies, service area
+- [x] Build structured knowledge base from scraped content
+- [x] Embed knowledge base into AI system prompt
