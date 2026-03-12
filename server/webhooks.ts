@@ -110,7 +110,7 @@ export function registerWebhookRoutes(app: Express) {
       }
 
       // Append the lead's inbound message to history first (always stored)
-      history.push({ role: "user", content: inboundText });
+      history.push({ role: "user", content: inboundText, ts: Date.now() });
 
       // Trim history to last 20 messages to stay within varchar(5000)
       if (history.length > 20) {
@@ -164,7 +164,7 @@ export function registerWebhookRoutes(app: Express) {
       console.log(`[Webhook] Stage: ${session.stage} → ${result.nextStage}. Reply: "${result.reply}"`);
 
       // Append the assistant's reply to history
-      history.push({ role: "assistant", content: result.reply });
+      history.push({ role: "assistant", content: result.reply, ts: Date.now() });
 
       // Trim history to last 20 messages to stay within varchar(5000)
       if (history.length > 20) history = history.slice(-20);

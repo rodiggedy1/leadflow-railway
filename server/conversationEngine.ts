@@ -49,6 +49,8 @@ export interface ConversationContext {
 export interface ChatMessage {
   role: "assistant" | "user";
   content: string;
+  /** Unix timestamp (ms) when this message was stored. Optional for backwards compat. */
+  ts?: number;
 }
 
 export interface StageResult {

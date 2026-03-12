@@ -77,6 +77,7 @@ import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
 import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
+import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 
 // ── Admin Login Screen ────────────────────────────────────────────────────────
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
@@ -537,7 +538,7 @@ function ConversationDrawer({
 
   // Reply / send message
   const [replyText, setReplyText] = useState("");
-  const [localMessages, setLocalMessages] = useState<{ role: string; content: string }[]>(messages);
+  const [localMessages, setLocalMessages] = useState<{ role: string; content: string; ts?: number }[]>(messages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-refresh conversation every 5s when drawer is open
@@ -563,7 +564,7 @@ function ConversationDrawer({
 
   const sendMessageMutation = trpc.leads.sendMessage.useMutation({
     onSuccess: (_, vars) => {
-      setLocalMessages(prev => [...prev, { role: "assistant", content: vars.message }]);
+      setLocalMessages(prev => [...prev, { role: "assistant", content: vars.message, ts: Date.now() }]);
       setReplyText("");
     },
     onError: (e) => toast.error(e.message),
@@ -801,7 +802,7 @@ function ConversationDrawer({
         </div>
 
         {/* Messages — flex-1 min-h-0 so it fills all remaining drawer space */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-gray-50">
           {localMessages.length === 0 ? (
             <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
           ) : (
@@ -809,20 +810,28 @@ function ConversationDrawer({
               // role=="user" means the LEAD sent it (inbound) → show on LEFT
               // role=="assistant" means AI/agent sent it (outbound) → show on RIGHT
               const isOutbound = msg.role === "assistant";
+              // Show a date separator when the day changes between messages, or before the first message
+              const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
+              const curTs = msg.ts;
+              const showSeparator = curTs != null && (
+                i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
+              );
               return (
-                <div
-                  key={i}
-                  className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                    style={
-                      isOutbound
-                        ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
-                        : { backgroundColor: "#ffffff", color: "#1f2937", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
-                    }
-                  >
-                    {msg.content}
+                <div key={i}>
+                  {showSeparator && curTs != null && (
+                    <MessageDateSeparator label={formatMsgDate(curTs)} />
+                  )}
+                  <div className={`flex mb-2 ${isOutbound ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                      style={
+                        isOutbound
+                          ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
+                          : { backgroundColor: "#ffffff", color: "#1f2937", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
+                      }
+                    >
+                      {msg.content}
+                    </div>
                   </div>
                 </div>
               );

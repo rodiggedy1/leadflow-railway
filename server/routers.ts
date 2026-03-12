@@ -227,9 +227,9 @@ export const appRouter = router({
         if (!session) throw new Error("Session not found");
 
         // Parse and update history
-        let history: Array<{ role: string; content: string }> = [];
+        let history: Array<{ role: string; content: string; ts?: number }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
-        history.push({ role: "assistant", content: input.message });
+        history.push({ role: "assistant", content: input.message, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
 
         // Save to DB
@@ -1005,9 +1005,10 @@ async function processQuoteInBackground(
   }
 
   // ── Step 5: Create/update conversation session ────────────────────────────
+  const now = Date.now();
   const initialHistory = JSON.stringify([
-    { role: "assistant", content: msg1 },
-    { role: "assistant", content: msg2 },
+    { role: "assistant", content: msg1, ts: now },
+    { role: "assistant", content: msg2, ts: now + 1 },
   ]);
 
   // Always create a new session row — same phone can submit again months later
