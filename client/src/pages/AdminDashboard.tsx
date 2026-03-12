@@ -515,7 +515,7 @@ function ConversationDrawer({
 
         {/* Admin controls: stage + agent assignment */}
         {isAdmin && (
-          <div className="px-4 py-3 border-b bg-orange-50 flex flex-wrap gap-3 items-center">
+          <div className="px-4 py-5 border-b bg-orange-50 flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2 flex-1 min-w-[160px]">
               <span className="text-xs font-medium text-gray-600 shrink-0">Stage:</span>
               <Select
