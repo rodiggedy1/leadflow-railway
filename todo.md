@@ -131,3 +131,8 @@
 - [x] Fix: buildConfirmationMessage now uses the full slot label directly (e.g. "Friday, March 13") instead of hardcoded time
 - [x] Fix: all hardcoded Thursday/Saturday references removed from aiService.ts fallbacks and prompts
 - [x] 102/102 tests pass
+
+## Conversation Flow Bug Fixes (Round 2) — COMPLETED
+
+- [x] Fix AVAILABILITY stage: if lead names a specific day (e.g. "Friday"), skip SLOT_CHOICE and go straight to ADDRESS with that slot confirmed
+- [x] Lock intro quote message to a consistent static template (no AI variation) — 102/102 tests pass

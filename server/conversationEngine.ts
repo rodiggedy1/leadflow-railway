@@ -257,7 +257,30 @@ export async function processLeadReply(
         };
       }
 
-      // Positive or unclear → show slot choice
+      // Check if the lead named a specific slot in their reply
+      // e.g. "Friday works" or "Let's do Saturday" — skip SLOT_CHOICE entirely
+      const dynamicSlotsForAvail = getNextAvailableSlots(2);
+      const slot1 = dynamicSlotsForAvail[0];
+      const slot2 = dynamicSlotsForAvail[1];
+      const replyLower = leadReply.toLowerCase();
+
+      if (slot1 && slot1.shortLabel && replyLower.includes(slot1.shortLabel.toLowerCase())) {
+        return {
+          reply: buildAddressRequestMessage(slot1.label),
+          nextStage: "ADDRESS",
+          extractedData: { selectedSlot: slot1.label },
+        };
+      }
+
+      if (slot2 && slot2.shortLabel && replyLower.includes(slot2.shortLabel.toLowerCase())) {
+        return {
+          reply: buildAddressRequestMessage(slot2.label),
+          nextStage: "ADDRESS",
+          extractedData: { selectedSlot: slot2.label },
+        };
+      }
+
+      // Positive but no specific day mentioned → show slot choice
       return {
         reply: buildSlotChoiceMessage(),
         nextStage: "SLOT_CHOICE",

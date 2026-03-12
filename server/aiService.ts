@@ -60,52 +60,14 @@ export interface QuoteMessageParams {
 }
 
 /**
- * Generates the initial quote SMS using ChatGPT with the brand voice.
- * This is the ONLY opening message — it combines the greeting, home size,
- * price, and a brief value note in one natural SMS.
- * Falls back to a hardcoded template if the AI call fails.
+ * Generates the initial quote SMS.
+ * Uses a consistent static template for reliability — no AI variation.
+ * Format: "Hi [Name]! Thanks for reaching out to Maids in Black. Your [service] quote for [beds]/[baths] is $[price] — our fully insured team handles everything."
  */
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
   const { leadName, bedrooms, bathrooms, serviceType, price } = params;
   const firstName = leadName.split(" ")[0] ?? leadName;
-
-  try {
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Generate a single opening quote SMS. Keep it under 200 characters total.
-
-Lead name: ${firstName}
-Service: ${serviceType}
-Home: ${bedrooms}, ${bathrooms}
-Price: $${price}
-
-The message must:
-1. Greet them by first name and mention Maids in Black
-2. State their price ($${price}) for their home size
-3. Add ONE brief value note (e.g. "includes all rooms" or "fully insured team")
-
-Do NOT ask any question — that comes in the next message. Keep it warm and concise.`,
-        },
-      ],
-    });
-
-    const content = response.choices?.[0]?.message?.content;
-    const text = typeof content === "string" ? content.trim() : "";
-
-    // Safety check: must contain the price
-    if (text && text.includes(price)) {
-      return text;
-    }
-
-    // If AI forgot the price, fall back
-    return buildFallbackQuoteMessage(firstName, bedrooms, bathrooms, price);
-  } catch (err) {
-    console.error("[AI] generateQuoteMessage failed:", err);
-    return buildFallbackQuoteMessage(firstName, bedrooms, bathrooms, price);
-  }
+  return buildFallbackQuoteMessage(firstName, bedrooms, bathrooms, serviceType, price);
 }
 
 /**
@@ -301,9 +263,10 @@ function buildFallbackQuoteMessage(
   firstName: string,
   bedrooms: string,
   bathrooms: string,
+  serviceType: string,
   price: string
 ): string {
-  return `Hi ${firstName}! Thanks for requesting a quote with Maids in Black. Based on your ${bedrooms} / ${bathrooms} home, here's your estimate: $${price}.`;
+  return `Hi ${firstName}! Thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
 }
 
 function buildFallbackOffScript(nextAction: string): string {

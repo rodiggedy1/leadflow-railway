@@ -44,41 +44,33 @@ describe("generateQuoteMessage", () => {
     price: "130",
   };
 
-  it("returns AI-generated message when it contains the price", async () => {
-    mockLLM.mockResolvedValueOnce(
-      makeLLMResponse("Hi Sarah! Maids in Black has your quote ready: $130 for your 2 bed/1 bath home.")
-    );
-
+  it("always returns the static template with first name, service, price, and brand name", async () => {
     const result = await generateQuoteMessage(params);
     expect(result).toContain("$130");
     expect(result).toContain("Sarah");
-  });
-
-  it("falls back to template when AI omits the price", async () => {
-    // AI response doesn't include the price — safety guardrail should trigger
-    mockLLM.mockResolvedValueOnce(
-      makeLLMResponse("Hi Sarah! Thanks for reaching out to Maids in Black!")
-    );
-
-    const result = await generateQuoteMessage(params);
-    // Fallback template always includes the price
-    expect(result).toContain("$130");
     expect(result).toContain("Maids in Black");
+    expect(result).toContain("Standard Cleaning");
+    // Should NOT call the LLM — it's a static template now
+    expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  it("falls back to template when AI call fails", async () => {
-    mockLLM.mockRejectedValueOnce(new Error("API timeout"));
-
+  it("uses first name only (not full name)", async () => {
     const result = await generateQuoteMessage(params);
-    expect(result).toContain("$130");
     expect(result).toContain("Sarah");
+    expect(result).not.toContain("Johnson");
   });
 
-  it("falls back to template when AI returns empty content", async () => {
-    mockLLM.mockResolvedValueOnce(makeLLMResponse(""));
-
+  it("includes home size in the message", async () => {
     const result = await generateQuoteMessage(params);
-    expect(result).toContain("$130");
+    expect(result).toContain("2 Bedrooms");
+    expect(result).toContain("1 Bathroom");
+  });
+
+  it("always returns a consistent format regardless of params", async () => {
+    const result1 = await generateQuoteMessage(params);
+    const result2 = await generateQuoteMessage(params);
+    // Static template — should be identical every time
+    expect(result1).toBe(result2);
   });
 });
 
