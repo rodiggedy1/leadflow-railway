@@ -348,31 +348,72 @@ function StageBadge({ stage }: { stage: string }) {
 
 // ── Conversation history drawer ───────────────────────────────────────────────
 
+type DrawerSession = {
+  id: number;
+  leadName: string | null;
+  leadPhone: string;
+  stage: string;
+  messageHistory: string;
+  selectedSlot: string | null;
+  address: string | null;
+  quotedPrice: string | null;
+  serviceType: string | null;
+  extras: string | null;
+  assignedAgentId: number | null;
+  assignedAgentName: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
 function ConversationDrawer({
   session,
   onClose,
+  isAdmin,
+  agentList,
+  onSessionUpdate,
+  onRefresh,
 }: {
-  session: {
-    leadName: string | null;
-    leadPhone: string;
-    stage: string;
-    messageHistory: string;
-    selectedSlot: string | null;
-    address: string | null;
-    quotedPrice: string | null;
-    serviceType: string | null;
-    extras: string | null;
-    createdAt: Date | string;
-    updatedAt: Date | string;
-  };
+  session: DrawerSession;
   onClose: () => void;
+  isAdmin: boolean;
+  agentList: { id: number; name: string; isActive: number | boolean }[];
+  onSessionUpdate: (updates: Partial<DrawerSession>) => void;
+  onRefresh: () => void;
 }) {
+  const utils = trpc.useUtils();
   let messages: { role: string; content: string }[] = [];
   try {
     messages = JSON.parse(session.messageHistory || "[]");
   } catch {
     messages = [];
   }
+
+  const updateStageMutation = trpc.leads.adminUpdateStage.useMutation({
+    onSuccess: (_, vars) => {
+      onSessionUpdate({ stage: vars.stage });
+      utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
+      onRefresh();
+      toast.success("Stage updated");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const assignAgentMutation = trpc.leads.adminAssignAgent.useMutation({
+    onSuccess: (_, vars) => {
+      const agent = vars.agentId === null ? null : agentList.find(a => a.id === vars.agentId);
+      onSessionUpdate({
+        assignedAgentId: vars.agentId,
+        assignedAgentName: agent?.name ?? null,
+      });
+      utils.leads.list.invalidate();
+      onRefresh();
+      toast.success(vars.agentId === null ? "Lead unassigned" : `Assigned to ${agent?.name}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const activeAgents = agentList.filter(a => a.isActive);
 
   return (
     <div
@@ -395,6 +436,70 @@ function ConversationDrawer({
             </Button>
           </div>
         </div>
+
+        {/* Admin controls: stage + agent assignment */}
+        {isAdmin && (
+          <div className="px-4 py-3 border-b bg-orange-50 flex flex-wrap gap-3 items-center">
+            <div className="flex items-center gap-2 flex-1 min-w-[160px]">
+              <span className="text-xs font-medium text-gray-600 shrink-0">Stage:</span>
+              <Select
+                value={session.stage}
+                onValueChange={(val) => {
+                  if (val === session.stage) return;
+                  updateStageMutation.mutate({ sessionId: session.id, stage: val as "QUOTE_SENT" | "AVAILABILITY" | "SLOT_CHOICE" | "TIME_PREF" | "ADDRESS" | "CONFIRMATION" | "CALL_SCHEDULED" | "DONE" | "UNHANDLED" });
+                }}
+                disabled={updateStageMutation.isPending}
+              >
+                <SelectTrigger className="h-7 text-xs flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {([
+                    "QUOTE_SENT",
+                    "AVAILABILITY",
+                    "SLOT_CHOICE",
+                    "TIME_PREF",
+                    "ADDRESS",
+                    "CONFIRMATION",
+                    "CALL_SCHEDULED",
+                    "DONE",
+                    "UNHANDLED",
+                  ] as const).map(s => (
+                    <SelectItem key={s} value={s} className="text-xs">
+                      {STAGE_CONFIG[s as Stage]?.label ?? s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+            </div>
+            <div className="flex items-center gap-2 flex-1 min-w-[160px]">
+              <span className="text-xs font-medium text-gray-600 shrink-0">Agent:</span>
+              <Select
+                value={session.assignedAgentId?.toString() ?? "unassigned"}
+                onValueChange={(val) => {
+                  const agentId = val === "unassigned" ? null : parseInt(val, 10);
+                  if (agentId === session.assignedAgentId) return;
+                  assignAgentMutation.mutate({ sessionId: session.id, agentId });
+                }}
+                disabled={assignAgentMutation.isPending}
+              >
+                <SelectTrigger className="h-7 text-xs flex-1">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned" className="text-xs">— Unassigned —</SelectItem>
+                  {activeAgents.map(a => (
+                    <SelectItem key={a.id} value={a.id.toString()} className="text-xs">
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assignAgentMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+            </div>
+          </div>
+        )}
 
         {/* Details */}
         <div className="px-4 py-3 bg-gray-50 border-b grid grid-cols-2 gap-2 text-sm">
@@ -439,6 +544,12 @@ function ConversationDrawer({
               </div>
             ) : null;
           })()}
+          {!isAdmin && session.assignedAgentName && (
+            <div className="col-span-2">
+              <span className="text-gray-500">Agent:</span>{" "}
+              <span className="font-medium">{session.assignedAgentName}</span>
+            </div>
+          )}
         </div>
 
         {/* Messages */}
@@ -792,19 +903,7 @@ export default function AdminDashboard() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [agentFilter, setAgentFilter] = useState<string>("all");
-  const [selectedSession, setSelectedSession] = useState<null | {
-    leadName: string | null;
-    leadPhone: string;
-    stage: string;
-    messageHistory: string;
-    selectedSlot: string | null;
-    address: string | null;
-    quotedPrice: string | null;
-    serviceType: string | null;
-    extras: string | null;
-    createdAt: Date | string;
-    updatedAt: Date | string;
-  }>(null);
+  const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
 
   // Compute the active date range to send to the backend
   const dateRange = useMemo(() => {
@@ -826,6 +925,11 @@ export default function AdminDashboard() {
   const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,
     enabled: isAdmin || isAuthenticated,
+  });
+
+  // Agent list for assignment dropdown in the drawer (admin only)
+  const { data: agentListForDrawer = [] } = trpc.agents.list.useQuery(undefined, {
+    enabled: isAdmin,
   });
 
   // Collect unique agent names for the agent filter dropdown (declared unconditionally)
@@ -1267,6 +1371,10 @@ export default function AdminDashboard() {
         <ConversationDrawer
           session={selectedSession}
           onClose={() => setSelectedSession(null)}
+          isAdmin={isAdmin}
+          agentList={agentListForDrawer}
+          onSessionUpdate={(updates) => setSelectedSession(prev => prev ? { ...prev, ...updates } : null)}
+          onRefresh={() => refetch()}
         />
       )}
     </div>

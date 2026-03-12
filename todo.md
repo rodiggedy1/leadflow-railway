@@ -257,3 +257,11 @@
 - [x] Replace protectedProcedure (Manus OAuth) with agent cookie session check on all admin procedures
 - [x] Create adminAgentProcedure that validates agent cookie + isAdmin flag
 - [x] Fix agents.performance.test.ts to use agent cookie context instead of Manus OAuth context — 120/120 tests pass
+
+## Admin Lead Management — COMPLETED
+
+- [x] Add admin backend procedure: leads.adminUpdateStage — admin can change any lead's stage
+- [x] Add admin backend procedure: leads.adminAssignAgent — admin can assign/unassign any lead to any agent
+- [x] Update ConversationDrawer: add stage dropdown to change lead status
+- [x] Update ConversationDrawer: add assign-to-agent dropdown (admin only)
+- [x] Update ConversationDrawer: pass sessionId and agentList into drawer so mutations work

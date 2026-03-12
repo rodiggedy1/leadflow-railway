@@ -90,6 +90,62 @@ export const appRouter = router({
         }
         return { total, byStage };
       }),
+
+    /**
+     * leads.adminUpdateStage — admin overrides the stage of any lead.
+     */
+    adminUpdateStage: adminAgentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        stage: z.enum([
+          "QUOTE_SENT",
+          "AVAILABILITY",
+          "SLOT_CHOICE",
+          "TIME_PREF",
+          "ADDRESS",
+          "CONFIRMATION",
+          "CALL_SCHEDULED",
+          "DONE",
+          "UNHANDLED",
+        ]),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ stage: input.stage })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * leads.adminAssignAgent — admin assigns or unassigns a lead to any agent.
+     * Pass agentId: null to unassign.
+     */
+    adminAssignAgent: adminAgentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        agentId: z.number().int().positive().nullable(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        if (input.agentId === null) {
+          await db
+            .update(conversationSessions)
+            .set({ assignedAgentId: null, assignedAgentName: null })
+            .where(eq(conversationSessions.id, input.sessionId));
+          return { success: true };
+        }
+        const agent = await getAgentById(input.agentId);
+        if (!agent) throw new Error("Agent not found");
+        await db
+          .update(conversationSessions)
+          .set({ assignedAgentId: agent.id, assignedAgentName: agent.name })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
   }),
 
   /**
