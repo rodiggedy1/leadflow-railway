@@ -53,6 +53,7 @@ type Session = {
   serviceType: string | null;
   bedrooms: string | null;
   bathrooms: string | null;
+  extras: string | null;
   selectedSlot: string | null;
   address: string | null;
   messageHistory: string;
@@ -316,6 +317,13 @@ function ConversationDrawer({ session, onClose }: { session: Session; onClose: (
           {session.quotedPrice && <span>Price: <b>{session.quotedPrice}</b></span>}
           {session.selectedSlot && <span>Slot: <b>{session.selectedSlot}</b></span>}
           {session.address && <span>Address: <b>{session.address}</b></span>}
+          {session.extras && (() => {
+            let extrasArr: string[] = [];
+            try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
+            return extrasArr.length > 0 ? (
+              <span className="col-span-full">Extras: <b>{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</b></span>
+            ) : null;
+          })()}
           {session.isBooked === 1 && (
             <span className="text-green-700 font-semibold">
               ✓ Booked{session.bookedByAgentName ? ` by ${session.bookedByAgentName}` : ""}

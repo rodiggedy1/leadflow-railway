@@ -57,6 +57,13 @@
       "when": 1773282651304,
       "tag": "0007_sour_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1773284224295,
+      "tag": "0008_woozy_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

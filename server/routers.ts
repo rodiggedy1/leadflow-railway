@@ -21,6 +21,7 @@ const quoteFormSchema = z.object({
   serviceType: z.string().min(1).max(100),
   bedrooms: z.string().min(1).max(50),
   bathrooms: z.string().min(1).max(50),
+  extras: z.array(z.string().max(64)).max(20).optional().default([]),
 });
 
 export const appRouter = router({
@@ -486,6 +487,7 @@ async function processQuoteInBackground(
     serviceType: string;
     bedrooms: string;
     bathrooms: string;
+    extras?: string[];
   },
   price: string
 ): Promise<void> {
@@ -494,7 +496,10 @@ async function processQuoteInBackground(
   // ── Step 1: Alert support team immediately (simple direct SMS) ───────────
   const isOffice = input.serviceType === "Office Cleaning";
   const sizeInfo = isOffice ? input.bedrooms : `${input.bedrooms} / ${input.bathrooms}`;
-  const alertMsg = `New Quote Request - Maids in Black\n\nName: ${input.name}\nPhone: ${normalizedPhone}\nService: ${input.serviceType}\nSize: ${sizeInfo}\nQuote: $${price}`;
+  const extrasLine = input.extras && input.extras.length > 0
+    ? `\nExtras: ${input.extras.join(", ")}`
+    : "";
+  const alertMsg = `New Quote Request - Maids in Black\n\nName: ${input.name}\nPhone: ${normalizedPhone}\nService: ${input.serviceType}\nSize: ${sizeInfo}\nQuote: $${price}${extrasLine}`;
 
   sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
     console.error("[submitQuote] CS alert SMS failed:", err)
@@ -507,6 +512,7 @@ async function processQuoteInBackground(
     bathrooms: input.bathrooms,
     serviceType: input.serviceType,
     price,
+    extras: input.extras,
   });
   const msg2 = await generatePricingFollowUp({
     leadName: input.name,
@@ -548,6 +554,7 @@ async function processQuoteInBackground(
       serviceType: input.serviceType,
       bedrooms: input.bedrooms,
       bathrooms: input.bathrooms,
+      extras: input.extras && input.extras.length > 0 ? JSON.stringify(input.extras) : null,
       messageHistory: initialHistory,
     });
   } catch (dbErr) {
@@ -563,6 +570,7 @@ async function processQuoteInBackground(
       serviceType: input.serviceType,
       bedrooms: input.bedrooms,
       bathrooms: input.bathrooms,
+      extras: input.extras && input.extras.length > 0 ? JSON.stringify(input.extras) : null,
       smsSent: sms1.success ? 1 : 0,
       smsMessageId: sms1.messageId ?? null,
     });

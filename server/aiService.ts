@@ -57,6 +57,7 @@ export interface QuoteMessageParams {
   bathrooms: string;
   serviceType: string;
   price: string;
+  extras?: string[];
 }
 
 /**
@@ -65,9 +66,9 @@ export interface QuoteMessageParams {
  * Format: "Hi [Name]! Thanks for reaching out to Maids in Black. Your [service] quote for [beds]/[baths] is $[price] — our fully insured team handles everything."
  */
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
-  const { leadName, bedrooms, bathrooms, serviceType, price } = params;
+  const { leadName, bedrooms, bathrooms, serviceType, price, extras } = params;
   const firstName = leadName.split(" ")[0] ?? leadName;
-  return buildFallbackQuoteMessage(firstName, bedrooms, bathrooms, serviceType, price);
+  return buildFallbackQuoteMessage(firstName, bedrooms, bathrooms, serviceType, price, extras);
 }
 
 /**
@@ -264,9 +265,13 @@ function buildFallbackQuoteMessage(
   bedrooms: string,
   bathrooms: string,
   serviceType: string,
-  price: string
+  price: string,
+  extras?: string[]
 ): string {
-  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
+  const extrasNote = extras && extras.length > 0
+    ? ` I also noted your extras: ${extras.map(k => k.replace(/_/g, " ")).join(", ")}.`
+    : "";
+  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.${extrasNote}`;
 }
 
 function buildFallbackOffScript(nextAction: string): string {

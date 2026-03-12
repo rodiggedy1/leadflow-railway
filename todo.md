@@ -176,3 +176,11 @@
 ## Thank You Page — Madison
 
 - [x] Upload Madison headshot to CDN and add to thank you page with "expect a call from Madison shortly" message
+
+## Extras Selection Step
+
+- [x] Generate 20 flat-style icons for extras
+- [x] Add extras step to quote form (tap-to-select grid, no pricing)
+- [x] Store selected extras in DB with lead
+- [x] Show selected extras in admin dashboard and agent workspace
+- [x] Mention extras in intro SMS

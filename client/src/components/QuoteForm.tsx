@@ -5,6 +5,7 @@
  * Features: Staggered entrance, coral focus rings, success state with bounce animation
  * Backend: tRPC quotes.submit → OpenPhone SMS
  * Office Cleaning: swaps bedroom/bathroom for square footage selector
+ * Extras: Optional step 2 with 20 add-on cards (icon + name, no pricing)
  */
 
 import { useState } from "react";
@@ -51,6 +52,33 @@ const SQFT_OPTIONS = [
   "3,000–5,000 sq ft",
   "5,000–10,000 sq ft",
   "10,000+ sq ft",
+];
+
+// CDN base for extras icons
+const CDN = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr";
+
+// 20 extras with their icon URLs (compressed webp)
+export const EXTRAS_LIST = [
+  { key: "clean_inside_cabinets",     label: "Clean Inside Cabinets",        icon: `${CDN}/clean_inside_cabinets-KLhmfCKSGA4Gbyi6FWkCRX.webp` },
+  { key: "clean_inside_empty_fridge", label: "Clean Inside Empty Fridge",    icon: `${CDN}/clean_inside_empty_fridge-Ys3XMTGYBocj3EkpZ6cdVj.webp` },
+  { key: "clean_inside_full_fridge",  label: "Clean Inside Full Fridge",     icon: `${CDN}/clean_inside_full_fridge-iCi966LGee5X8PjvsyxZ4N.webp` },
+  { key: "clean_inside_oven",         label: "Clean Inside Oven",            icon: `${CDN}/clean_inside_oven-XHY5FFWCATwZjCp6JA7RyZ.webp` },
+  { key: "clean_interior_windows",    label: "Clean Interior Windows",       icon: `${CDN}/clean_interior_windows-cG9rJuQ5B7MwxrkFJ8Xwnz.webp` },
+  { key: "clean_finished_basement",   label: "Clean Finished Basement",      icon: `${CDN}/clean_finished_basement-oW6gbFpxKsDSxXgi5dZ6ZZ.webp` },
+  { key: "green_cleaning",            label: "Green Cleaning",               icon: `${CDN}/green_cleaning-YPvPUMXKNkVeYxvVpoVhAq.webp` },
+  { key: "move_in_move_out",          label: "Move-In / Move-Out",           icon: `${CDN}/move_in_move_out-WWV8Y8LuLg8KMWBZxpQJCK.webp` },
+  { key: "two_hours_organizing",      label: "2 Hours of Organizing",        icon: `${CDN}/two_hours_organizing-dnnqXQSPmqVzWDw7WAkpPE.webp` },
+  { key: "load_of_laundry",           label: "Load of Laundry",              icon: `${CDN}/load_of_laundry-cGTwTwEHsR9xR2kzWBqhRv.webp` },
+  { key: "i_have_pets",               label: "I Have Pets",                  icon: `${CDN}/i_have_pets-nk835EzwxMmEH7o76AHs55.webp` },
+  { key: "wipe_walls",                label: "Wipe Walls",                   icon: `${CDN}/wipe_walls-ZioQ2reijbetNDSLjaoHYp.webp` },
+  { key: "sweep_garage",              label: "Sweep Garage",                 icon: `${CDN}/sweep_garage-Dk3NGbdtShjz7gcsi6sfkV.webp` },
+  { key: "balcony_sweep",             label: "Balcony Sweep",                icon: `${CDN}/balcony_sweep-Fqb5R8HGehxKNCeeaFqkDe.webp` },
+  { key: "home_concierge",            label: "Home Concierge",               icon: `${CDN}/home_concierge-LRQFfAbiesivHR22rLPKAU.webp` },
+  { key: "same_day_booking",          label: "Same Day Booking",             icon: `${CDN}/same_day_booking-VnfaQBtmhnPLVfaSugB992.webp` },
+  { key: "clean_inside_microwave",    label: "Clean Inside Microwave",       icon: `${CDN}/clean_inside_microwave-mM8Qjxar8v88XrxYzK7PTj.webp` },
+  { key: "shed_pool_house",           label: "Shed / Pool House",            icon: `${CDN}/shed_pool_house-VyZa4o7j5HGdefFtb5LoRn.webp` },
+  { key: "wash_dishes",               label: "Wash Dishes",                  icon: `${CDN}/wash_dishes-habrMawdSwjip67VuMdZsb.webp` },
+  { key: "pool_deck",                 label: "Pool Deck",                    icon: `${CDN}/pool_deck-8iR5V67jdTcHU8oZPoRkze.webp` },
 ];
 
 interface FormData {
@@ -195,11 +223,189 @@ function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
   );
 }
 
+// ─── Extras Step ──────────────────────────────────────────────────────────────
+
+interface ExtrasStepProps {
+  selectedExtras: string[];
+  onToggle: (key: string) => void;
+  onBack: () => void;
+  onContinue: () => void;
+  isSubmitting: boolean;
+}
+
+function ExtrasStep({ selectedExtras, onToggle, onBack, onContinue, isSubmitting }: ExtrasStepProps) {
+  return (
+    <div className="animate-fade-slide-up delay-0">
+      {/* Header */}
+      <div className="text-center mb-6">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-3"
+          style={{ color: "#E8603C", fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.15em" }}
+        >
+          Optional Add-Ons
+        </p>
+        <h2
+          className="text-2xl sm:text-3xl font-bold leading-tight mb-2"
+          style={{ fontFamily: "'Playfair Display', serif", color: "#1E1E1E" }}
+        >
+          Any Extras?
+        </h2>
+        <p
+          className="text-sm leading-relaxed max-w-md mx-auto"
+          style={{ color: "#7A5A4A", fontFamily: "'DM Sans', sans-serif" }}
+        >
+          Select any additional services you'd like included. These are optional — skip if none apply.
+        </p>
+      </div>
+
+      {/* Divider */}
+      <div
+        className="h-px w-16 mx-auto mb-6"
+        style={{ background: "linear-gradient(90deg, transparent, #E8603C, transparent)" }}
+      />
+
+      {/* Extras grid */}
+      <div
+        className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-6 max-h-80 overflow-y-auto pr-1"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#E8603C #FFF0EC" }}
+      >
+        {EXTRAS_LIST.map((extra) => {
+          const isSelected = selectedExtras.includes(extra.key);
+          return (
+            <button
+              key={extra.key}
+              type="button"
+              onClick={() => onToggle(extra.key)}
+              className="flex flex-col items-center gap-2 rounded-xl p-3 transition-all duration-150 focus:outline-none"
+              style={{
+                background: isSelected
+                  ? "linear-gradient(135deg, #FFF0EC 0%, #FFE4DC 100%)"
+                  : "#FAFAFA",
+                border: isSelected
+                  ? "2px solid #E8603C"
+                  : "2px solid #F0E8E4",
+                boxShadow: isSelected
+                  ? "0 2px 10px rgba(232,96,60,0.18)"
+                  : "0 1px 4px rgba(0,0,0,0.05)",
+                cursor: "pointer",
+              }}
+            >
+              <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center"
+                style={{ background: "#FFF8F5" }}>
+                <img
+                  src={extra.icon}
+                  alt={extra.label}
+                  className="w-10 h-10 object-contain"
+                  loading="lazy"
+                />
+              </div>
+              <span
+                className="text-center leading-tight"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: "0.65rem",
+                  color: isSelected ? "#C04020" : "#5A4A44",
+                  fontWeight: isSelected ? 600 : 400,
+                  lineHeight: "1.2",
+                }}
+              >
+                {extra.label}
+              </span>
+              {isSelected && (
+                <div
+                  className="w-4 h-4 rounded-full flex items-center justify-center"
+                  style={{ background: "#E8603C", marginTop: "-4px" }}
+                >
+                  <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                    <polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected count badge */}
+      {selectedExtras.length > 0 && (
+        <div className="flex items-center justify-center mb-4">
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+            style={{
+              background: "rgba(232,96,60,0.10)",
+              color: "#C04020",
+              fontFamily: "'DM Sans', sans-serif",
+              border: "1px solid rgba(232,96,60,0.20)",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <polyline points="2 6 5 9 10 3" stroke="#C04020" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {selectedExtras.length} extra{selectedExtras.length !== 1 ? "s" : ""} selected
+          </span>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-150"
+          style={{
+            background: "transparent",
+            border: "2px solid #E8D0C8",
+            color: "#7A5A4A",
+            fontFamily: "'DM Sans', sans-serif",
+            cursor: "pointer",
+          }}
+        >
+          ← Back
+        </button>
+        <button
+          type="button"
+          onClick={onContinue}
+          disabled={isSubmitting}
+          className="flex-2 py-3 px-6 rounded-xl text-sm font-semibold transition-all duration-150"
+          style={{
+            background: isSubmitting
+              ? "#E8A090"
+              : "linear-gradient(135deg, #E8603C 0%, #D44E2A 100%)",
+            color: "white",
+            fontFamily: "'DM Sans', sans-serif",
+            cursor: isSubmitting ? "not-allowed" : "pointer",
+            boxShadow: isSubmitting ? "none" : "0 4px 14px rgba(232,96,60,0.35)",
+            flex: 2,
+          }}
+        >
+          {isSubmitting ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+              Sending your request...
+            </span>
+          ) : selectedExtras.length > 0 ? (
+            `Get My Quote with ${selectedExtras.length} Extra${selectedExtras.length !== 1 ? "s" : ""}`
+          ) : (
+            "Get My Instant Quote →"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
 export default function QuoteForm() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [submitted, setSubmitted] = useState(false);
   const [smsSent, setSmsSent] = useState(false);
+  const [step, setStep] = useState<"form" | "extras">("form");
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
 
   const isOffice = form.serviceType === "Office Cleaning";
 
@@ -240,11 +446,21 @@ export default function QuoteForm() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const toggleExtra = (key: string) => {
+    setSelectedExtras((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  // Step 1: validate form → advance to extras step
+  const handleFormNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+    setStep("extras");
+  };
 
-    // Build the payload — for office cleaning pass sqft as bedrooms
+  // Step 2: submit with extras
+  const handleFinalSubmit = () => {
     const payload = {
       name: form.name,
       email: form.email,
@@ -252,8 +468,8 @@ export default function QuoteForm() {
       serviceType: form.serviceType,
       bedrooms: isOffice ? form.squareFootage : form.bedrooms,
       bathrooms: isOffice ? "N/A" : form.bathrooms,
+      extras: selectedExtras,
     };
-
     submitMutation.mutate(payload);
   };
 
@@ -286,6 +502,14 @@ export default function QuoteForm() {
         <div className="px-8 pt-8 pb-10 sm:px-10 sm:pt-10">
           {submitted ? (
             <SuccessState name={form.name} smsSent={smsSent} />
+          ) : step === "extras" ? (
+            <ExtrasStep
+              selectedExtras={selectedExtras}
+              onToggle={toggleExtra}
+              onBack={() => setStep("form")}
+              onContinue={handleFinalSubmit}
+              isSubmitting={isSubmitting}
+            />
           ) : (
             <>
               {/* Header */}
@@ -319,7 +543,7 @@ export default function QuoteForm() {
               />
 
               {/* Form */}
-              <form onSubmit={handleSubmit} noValidate>
+              <form onSubmit={handleFormNext} noValidate>
                 {/* Row 1: Name + Email */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div className="animate-fade-slide-up delay-2">
@@ -431,24 +655,13 @@ export default function QuoteForm() {
                   )}
                 </div>
 
-                {/* CTA Button */}
+                {/* CTA Button — advances to extras step */}
                 <div className="animate-fade-slide-up delay-5 mb-6">
                   <button
                     type="submit"
                     className="quote-cta"
-                    disabled={isSubmitting}
                   >
-                    {isSubmitting ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                          <path d="M12 2a10 10 0 0 1 10 10" />
-                        </svg>
-                        Sending your request...
-                      </span>
-                    ) : (
-                      "Get My Instant Quote"
-                    )}
+                    Next: Add Extras →
                   </button>
                 </div>
 
@@ -463,7 +676,7 @@ export default function QuoteForm() {
                     className="text-xs leading-relaxed"
                     style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
                   >
-                    By clicking "Get My Instant Quote" I agree to the{" "}
+                    By clicking "Next" I agree to the{" "}
                     <a
                       href="#"
                       style={{ color: "#E8603C", textDecoration: "underline" }}

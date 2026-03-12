@@ -34,6 +34,7 @@ export const quoteLeads = mysqlTable("quote_leads", {
   serviceType: varchar("serviceType", { length: 100 }).notNull(),
   bedrooms: varchar("bedrooms", { length: 50 }).notNull(),
   bathrooms: varchar("bathrooms", { length: 50 }).notNull(),
+  extras: text("extras"), // JSON array of selected extra service keys
   smsSent: int("smsSent").default(0).notNull(), // 1 = sent, 0 = failed/pending
   smsMessageId: varchar("smsMessageId", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -78,6 +79,7 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   serviceType: varchar("serviceType", { length: 100 }),
   bedrooms: varchar("bedrooms", { length: 50 }),
   bathrooms: varchar("bathrooms", { length: 50 }),
+  extras: text("extras"), // JSON array of selected extra service keys
   selectedSlot: varchar("selectedSlot", { length: 100 }), // e.g. "Thursday 1PM"
   address: text("address"),
   callPreference: varchar("callPreference", { length: 50 }), // "now" | "few_minutes"

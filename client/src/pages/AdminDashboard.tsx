@@ -261,6 +261,7 @@ function ConversationDrawer({
     address: string | null;
     quotedPrice: string | null;
     serviceType: string | null;
+    extras: string | null;
     createdAt: Date | string;
     updatedAt: Date | string;
   };
@@ -321,6 +322,16 @@ function ConversationDrawer({
               <span className="font-medium">{session.address}</span>
             </div>
           )}
+          {session.extras && (() => {
+            let extrasArr: string[] = [];
+            try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
+            return extrasArr.length > 0 ? (
+              <div className="col-span-2">
+                <span className="text-gray-500">Extras:</span>{" "}
+                <span className="font-medium text-xs">{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</span>
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Messages */}
@@ -675,6 +686,7 @@ export default function AdminDashboard() {
     address: string | null;
     quotedPrice: string | null;
     serviceType: string | null;
+    extras: string | null;
     createdAt: Date | string;
     updatedAt: Date | string;
   }>(null);
