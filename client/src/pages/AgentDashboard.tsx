@@ -481,264 +481,288 @@ function ConversationDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={onClose}
     >
+      {/* Wide two-column modal: left = conversation, right = details */}
       <div
-        className="bg-white rounded-2xl w-full max-w-lg h-[90vh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+        className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-4xl h-[92vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#F0D8D0" }}>
-          <div>
-            <h3 className="font-semibold text-gray-900">{session.leadName ?? formatPhone(session.leadPhone)}</h3>
-            <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+        {/* ── Shared header ── */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0" style={{ borderColor: "#F0D8D0" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: "#E8603C" }}>
+              {(session.leadName ?? "?").charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? formatPhone(session.leadPhone)}</h3>
+              <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+          <div className="flex items-center gap-2">
+            <StageBadge stage={session.stage} />
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-lg leading-none">×</button>
+          </div>
         </div>
 
-        {/* Details */}
-        <div className="px-5 py-4 bg-gray-50 border-b" style={{ borderColor: "#F0D8D0" }}>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs text-gray-600">
-            {session.serviceType && (
-              <div>
-                <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Service</span>
-                <span className="font-semibold text-gray-800">{session.serviceType}</span>
-              </div>
-            )}
-            {session.quotedPrice && (() => {
-              const total = computeTotalQuote(session.quotedPrice, session.extras);
-              const hasExtras = total !== session.quotedPrice;
-              return (
-                <div>
-                  <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Price</span>
-                  <span className="font-semibold text-gray-800">${total}</span>
-                  {hasExtras && <span className="text-gray-400 ml-1.5">(base ${session.quotedPrice} + extras)</span>}
-                </div>
-              );
-            })()}
-            {session.selectedSlot && (
-              <div>
-                <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Slot</span>
-                <span className="font-semibold text-gray-800">{session.selectedSlot}</span>
-              </div>
-            )}
-            {session.address && (
-              <div>
-                <span className="text-gray-400 uppercase tracking-wide font-medium block mb-0.5">Address</span>
-                <span className="font-semibold text-gray-800">{session.address}</span>
-              </div>
-            )}
-          </div>
-          {session.extras && (() => {
-            let extrasArr: string[] = [];
-            try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
-            return extrasArr.length > 0 ? (
-              <div className="mt-2 pt-2 border-t text-xs" style={{ borderColor: "#F0D8D0" }}>
-                <span className="text-gray-400 uppercase tracking-wide font-medium">Add-ons: </span>
-                <span className="font-semibold text-gray-700">{extrasArr.map(k => k.replace(/_/g, " ")).join(" · ")}</span>
-              </div>
-            ) : null;
-          })()}
-          {session.isBooked === 1 && (
-            <div className="mt-2 pt-2 border-t flex items-center gap-1.5" style={{ borderColor: "#bbf7d0" }}>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                ✓ Booked{session.bookedByAgentName ? ` by ${session.bookedByAgentName}` : ""}
-              </span>
-            </div>
-          )}
-        </div>
+        {/* ── Two-column body ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* Claim / Release bar */}
-        {!session.isBooked && (
-          <div className="px-5 py-2.5 border-b flex items-center justify-between gap-2" style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }}>
-            <div className="text-xs text-blue-700">
-              {isMine
-                ? <span className="font-medium">You own this lead</span>
-                : isUnassigned
-                ? <span>This lead is <b>unassigned</b></span>
-                : <span>Assigned to <b>{session.assignedAgentName}</b></span>}
-            </div>
-            <div className="flex gap-1.5">
-              {isMine ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2.5 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50 bg-white"
-                  onClick={() => unclaimLead.mutate({ sessionId: session.id })}
-                  disabled={unclaimLead.isPending}
-                >
-                  <UserX className="w-3 h-3" /> Release
-                </Button>
-              ) : isUnassigned ? (
-                <Button
-                  size="sm"
-                  className="h-7 px-2.5 text-xs gap-1 text-white"
-                  style={{ backgroundColor: "#E8603C" }}
-                  onClick={() => claimLead.mutate({ sessionId: session.id })}
-                  disabled={claimLead.isPending}
-                >
-                  <UserCheck className="w-3 h-3" /> Claim Lead
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        )}
-
-        {/* Messages — flex-1 min-h-0 so it fills all remaining drawer space */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-gray-50">
-          {localMessages.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>
-          ) : (
-            localMessages.map((msg, i) => {
-              // role=="user" means the LEAD sent it (inbound) → show on LEFT
-              // role=="assistant" means AI/agent sent it (outbound) → show on RIGHT
-              const isOutbound = msg.role === "assistant";
-              // Show a date separator when the day changes between messages, or before the first timestamped message
-              const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
-              const curTs = msg.ts;
-              const showSeparator = curTs != null && (
-                i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
-              );
-              return (
-                <div key={i}>
-                  {showSeparator && curTs != null && (
-                    <MessageDateSeparator label={formatMsgDate(curTs)} />
-                  )}
-                  <div className={`flex mb-2 ${isOutbound ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                      style={
-                        isOutbound
-                          ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
-                          : { backgroundColor: "#ffffff", color: "#111827", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
-                      }
-                    >
-                      {msg.content}
+          {/* LEFT: full-height conversation + compose */}
+          <div className="flex flex-col flex-1 min-w-0 border-r" style={{ borderColor: "#F0D8D0" }}>
+            {/* Messages */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-gray-50">
+              {localMessages.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>
+              ) : (
+                localMessages.map((msg, i) => {
+                  const isOutbound = msg.role === "assistant";
+                  const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
+                  const curTs = msg.ts;
+                  const showSeparator = curTs != null && (
+                    i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
+                  );
+                  return (
+                    <div key={i}>
+                      {showSeparator && curTs != null && (
+                        <MessageDateSeparator label={formatMsgDate(curTs)} />
+                      )}
+                      <div className={`flex mb-2 ${isOutbound ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                          style={
+                            isOutbound
+                              ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
+                              : { backgroundColor: "#ffffff", color: "#111827", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
+                          }
+                        >
+                          {msg.content}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
 
-        {/* Reply input */}
-        <div className="px-5 pt-3 pb-2 border-t bg-white" style={{ borderColor: "#F0D8D0" }}>
-          {/* AI / Manual toggle */}
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs">
-              {session.aiMode === 1
-                ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
-                : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you’re in control</span>
-              }
-            </span>
-            <button
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                session.aiMode === 1
-                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                  : "border-green-300 text-green-700 hover:bg-green-50"
-              }`}
-              onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
-              disabled={setAiModeMutation.isPending}
-            >
-              {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
-            </button>
-          </div>
-          <SmsComposeBox
-            value={replyText}
-            onChange={setReplyText}
-            onSend={handleSend}
-            isSending={sendMessageMutation.isPending}
-            placeholder="Write a message..."
-          />
-        </div>
-
-        {/* Call logs */}
-        {callLogs.length > 0 && (
-          <div className="px-5 pb-3 space-y-2" style={{ borderColor: "#F0D8D0" }}>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
-              <PhoneCall className="w-3.5 h-3.5" /> Call History
-            </p>
-            {callLogs.map(log => {
-              const opt = OUTCOME_OPTIONS.find(o => o.value === log.outcome);
-              return (
-                <div key={log.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                  <span style={{ color: opt?.color ?? "#374151", marginTop: 1 }}>{opt?.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between">
-                      <span className="font-semibold" style={{ color: opt?.color }}>{opt?.label ?? log.outcome}</span>
-                      <span className="text-gray-400">{timeAgo(log.calledAt)}</span>
-                    </div>
-                    <p className="text-gray-500">by {log.agentName}</p>
-                    {log.notes && <p className="text-gray-700 mt-0.5">{log.notes}</p>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Booked Amount — shown when lead is booked */}
-        {session.isBooked === 1 && (
-          <div className="px-5 py-3 border-t" style={{ borderColor: "#bbf7d0", backgroundColor: "#f0fdf4" }}>
-            <label className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1.5 block">
-              Booked Amount (actual invoice)
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
-                  value={bookedAmountInput}
-                  onChange={e => setBookedAmountInput(e.target.value)}
-                  className="pl-6 h-8 text-sm bg-white"
-                />
-              </div>
-              {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">Saved ✓</span>}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-3 text-xs shrink-0 bg-white"
-                disabled={setBookedAmountMutation.isPending}
-                onClick={() => {
-                  const val = bookedAmountInput.trim();
-                  const parsed = val === "" ? null : parseInt(val, 10);
-                  if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
-                    toast.error("Enter a valid dollar amount");
-                    return;
+            {/* Compose box */}
+            <div className="px-5 pt-2.5 pb-3 border-t bg-white shrink-0" style={{ borderColor: "#F0D8D0" }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs">
+                  {session.aiMode === 1
+                    ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
+                    : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you're in control</span>
                   }
-                  setBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
-                }}
-              >
-                {setBookedAmountMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
-              </Button>
+                </span>
+                <button
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    session.aiMode === 1
+                      ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                      : "border-green-300 text-green-700 hover:bg-green-50"
+                  }`}
+                  onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
+                  disabled={setAiModeMutation.isPending}
+                >
+                  {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
+                </button>
+              </div>
+              <SmsComposeBox
+                value={replyText}
+                onChange={setReplyText}
+                onSend={handleSend}
+                isSending={sendMessageMutation.isPending}
+                placeholder="Write a message..."
+              />
             </div>
-            <p className="text-xs text-green-600 mt-1">
-              {session.bookedAmount !== null && session.bookedAmount !== undefined
-                ? `Override active: $${session.bookedAmount} — reflected in admin revenue metrics`
-                : `Using quote + extras: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
-              }
-            </p>
           </div>
-        )}
 
-        {/* Internal Notes — collapsible to save space */}
-        <AgentNotesSection
-          session={session}
-          notes={notes}
-          setNotes={setNotes}
-          loadedNotes={loadedNotes}
-          notesSaved={notesSaved}
-          updateNotes={updateNotes}
-        />
+          {/* RIGHT: lead details panel */}
+          <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
 
-        <div className="px-5 py-3 border-t flex justify-end" style={{ borderColor: "#F0D8D0" }}>
-          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+            {/* Lead info */}
+            <div className="px-4 py-4 border-b" style={{ borderColor: "#F0D8D0" }}>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lead Details</p>
+              <div className="space-y-2 text-sm">
+                {session.quotedPrice && (() => {
+                  const total = computeTotalQuote(session.quotedPrice, session.extras);
+                  const hasExtras = total !== session.quotedPrice;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Quote</span>
+                      <span className="font-semibold" style={{ color: "#E8603C" }}>
+                        ${total}{hasExtras && <span className="ml-1 text-xs text-gray-400">(+extras)</span>}
+                      </span>
+                    </div>
+                  );
+                })()}
+                {session.serviceType && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Service</span>
+                    <span className="font-medium text-right max-w-[55%] truncate">{session.serviceType}</span>
+                  </div>
+                )}
+                {session.selectedSlot && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 shrink-0">Slot</span>
+                    <span className="font-medium text-right text-xs">{session.selectedSlot}</span>
+                  </div>
+                )}
+                {session.address && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 shrink-0">Address</span>
+                    <span className="font-medium text-right text-xs leading-snug">{session.address}</span>
+                  </div>
+                )}
+                {session.extras && (() => {
+                  let extrasArr: string[] = [];
+                  try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
+                  return extrasArr.length > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 shrink-0">Add-ons</span>
+                      <span className="font-medium text-right text-xs">{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</span>
+                    </div>
+                  ) : null;
+                })()}
+                {session.isBooked === 1 && (
+                  <div className="pt-1">
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                      ✓ Booked{session.bookedByAgentName ? ` by ${session.bookedByAgentName}` : ""}
+                    </span>
+                  </div>
+                )}
+                {session.assignedAgentName && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Agent</span>
+                    <span className="font-medium">{session.assignedAgentName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Claim / Release */}
+            {!session.isBooked && (
+              <div className="px-4 py-3 border-b" style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }}>
+                <p className="text-xs text-blue-700 mb-2">
+                  {isMine
+                    ? <span className="font-medium">You own this lead</span>
+                    : isUnassigned
+                    ? <span>This lead is <b>unassigned</b></span>
+                    : <span>Assigned to <b>{session.assignedAgentName}</b></span>}
+                </p>
+                <div className="flex gap-1.5">
+                  {isMine ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50 bg-white w-full"
+                      onClick={() => unclaimLead.mutate({ sessionId: session.id })}
+                      disabled={unclaimLead.isPending}
+                    >
+                      <UserX className="w-3 h-3" /> Release Lead
+                    </Button>
+                  ) : isUnassigned ? (
+                    <Button
+                      size="sm"
+                      className="h-7 px-2.5 text-xs gap-1 text-white w-full"
+                      style={{ backgroundColor: "#E8603C" }}
+                      onClick={() => claimLead.mutate({ sessionId: session.id })}
+                      disabled={claimLead.isPending}
+                    >
+                      <UserCheck className="w-3 h-3" /> Claim Lead
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            {/* Booked Amount */}
+            {session.isBooked === 1 && (
+              <div className="px-4 py-3 border-b" style={{ borderColor: "#bbf7d0", backgroundColor: "#f0fdf4" }}>
+                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Booked Amount</p>
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
+                      value={bookedAmountInput}
+                      onChange={e => setBookedAmountInput(e.target.value)}
+                      className="pl-5 h-8 text-xs bg-white"
+                    />
+                  </div>
+                  {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">✓</span>}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs shrink-0 bg-white"
+                    disabled={setBookedAmountMutation.isPending}
+                    onClick={() => {
+                      const val = bookedAmountInput.trim();
+                      const parsed = val === "" ? null : parseInt(val, 10);
+                      if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
+                        toast.error("Enter a valid dollar amount");
+                        return;
+                      }
+                      setBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
+                    }}
+                  >
+                    {setBookedAmountMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+                <p className="text-xs text-green-600 mt-1">
+                  {session.bookedAmount !== null && session.bookedAmount !== undefined
+                    ? `Override: $${session.bookedAmount}`
+                    : `Using quote: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
+                  }
+                </p>
+              </div>
+            )}
+
+            {/* Call History */}
+            {callLogs.length > 0 && (
+              <div className="px-4 py-3 border-b space-y-2" style={{ borderColor: "#F0D8D0" }}>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+                  <PhoneCall className="w-3.5 h-3.5" /> Call History
+                </p>
+                {callLogs.map(log => {
+                  const opt = OUTCOME_OPTIONS.find(o => o.value === log.outcome);
+                  return (
+                    <div key={log.id} className="flex items-start gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100 text-xs">
+                      <span style={{ color: opt?.color ?? "#374151", marginTop: 1 }}>{opt?.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between">
+                          <span className="font-semibold" style={{ color: opt?.color }}>{opt?.label ?? log.outcome}</span>
+                          <span className="text-gray-400">{timeAgo(log.calledAt)}</span>
+                        </div>
+                        <p className="text-gray-500">by {log.agentName}</p>
+                        {log.notes && <p className="text-gray-700 mt-0.5">{log.notes}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Internal Notes */}
+            <div className="px-4 py-3 flex-1">
+              <AgentNotesSection
+                session={session}
+                notes={notes}
+                setNotes={setNotes}
+                loadedNotes={loadedNotes}
+                notesSaved={notesSaved}
+                updateNotes={updateNotes}
+              />
+            </div>
+
+            {/* Close button */}
+            <div className="px-4 pb-4 shrink-0">
+              <Button variant="outline" size="sm" className="w-full" onClick={onClose}>Close</Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

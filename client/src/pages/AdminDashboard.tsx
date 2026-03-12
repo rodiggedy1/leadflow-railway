@@ -611,313 +611,341 @@ function ConversationDrawer({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg h-[90vh] sm:max-h-[90vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div>
-            <h2 className="font-semibold text-gray-900">
-              {session.leadName ?? "Unknown Lead"}
-            </h2>
-            <p className="text-sm text-gray-500">{formatPhone(session.leadPhone)}</p>
+      {/* Wide two-column modal: left = conversation, right = details */}
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-4xl h-[92vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+
+        {/* ── Shared header ── */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Avatar circle */}
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: "#E8603C" }}>
+              {(session.leadName ?? "?").charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? "Unknown Lead"}</h2>
+              <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <StageBadge stage={session.stage} />
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
               <X className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
-        {/* Admin controls: stage + agent assignment */}
-        {isAdmin && (
-          <div className="px-4 py-5 border-b bg-orange-50 flex flex-wrap gap-4 items-center">
-            <div className="flex items-center gap-2 flex-1 min-w-[160px]">
-              <span className="text-xs font-medium text-gray-600 shrink-0">Stage:</span>
-              <Select
-                value={session.stage}
-                onValueChange={(val) => {
-                  if (val === session.stage) return;
-                  updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
-                }}
-                disabled={updateStageMutation.isPending}
-              >
-                <SelectTrigger className="h-7 text-xs flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {([
-                    "QUOTE_SENT",
-                    "AVAILABILITY",
-                    "SLOT_CHOICE",
-                    "TIME_PREF",
-                    "ADDRESS",
-                    "CONFIRMATION",
-                    "CALL_SCHEDULED",
-                    "DONE",
-                    "UNHANDLED",
-                    "BOOKED",
-                    "NOT_INTERESTED",
-                  ] as const).map(s => (
-                    <SelectItem key={s} value={s} className="text-xs">
-                      {STAGE_CONFIG[s as Stage]?.label ?? s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+        {/* ── Two-column body ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+
+          {/* LEFT: full-height conversation + compose */}
+          <div className="flex flex-col flex-1 min-w-0 border-r">
+            {/* Messages */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-gray-50">
+              {localMessages.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
+              ) : (
+                localMessages.map((msg, i) => {
+                  const isOutbound = msg.role === "assistant";
+                  const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
+                  const curTs = msg.ts;
+                  const showSeparator = curTs != null && (
+                    i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
+                  );
+                  return (
+                    <div key={i}>
+                      {showSeparator && curTs != null && (
+                        <MessageDateSeparator label={formatMsgDate(curTs)} />
+                      )}
+                      <div className={`flex mb-2 ${isOutbound ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                          style={
+                            isOutbound
+                              ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
+                              : { backgroundColor: "#ffffff", color: "#1f2937", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
+                          }
+                        >
+                          {msg.content}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
             </div>
-            <div className="flex items-center gap-2 flex-1 min-w-[160px]">
-              <span className="text-xs font-medium text-gray-600 shrink-0">Agent:</span>
-              <Select
-                value={session.assignedAgentId?.toString() ?? "unassigned"}
-                onValueChange={(val) => {
-                  const agentId = val === "unassigned" ? null : parseInt(val, 10);
-                  if (agentId === session.assignedAgentId) return;
-                  assignAgentMutation.mutate({ sessionId: session.id, agentId });
-                }}
-                disabled={assignAgentMutation.isPending}
-              >
-                <SelectTrigger className="h-7 text-xs flex-1">
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned" className="text-xs">— Unassigned —</SelectItem>
-                  {activeAgents.map(a => (
-                    <SelectItem key={a.id} value={a.id.toString()} className="text-xs">
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {assignAgentMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+
+            {/* Compose box */}
+            <div className="px-4 pt-2.5 pb-3 border-t bg-white shrink-0">
+              {/* AI / Manual toggle */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs">
+                  {session.aiMode === 1
+                    ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
+                    : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you're in control</span>
+                  }
+                </span>
+                <button
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    session.aiMode === 1
+                      ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                      : "border-green-300 text-green-700 hover:bg-green-50"
+                  }`}
+                  onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
+                  disabled={setAiModeMutation.isPending}
+                >
+                  {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
+                </button>
+              </div>
+              <SmsComposeBox
+                value={replyText}
+                onChange={setReplyText}
+                onSend={handleSend}
+                isSending={sendMessageMutation.isPending}
+                placeholder="Write a message..."
+              />
             </div>
           </div>
-        )}
 
-        {/* Details */}
-        <div className="px-4 py-3 bg-gray-50 border-b grid grid-cols-2 gap-2 text-sm">
-          {session.quotedPrice && (() => {
-            const total = computeTotalQuote(session.quotedPrice, session.extras);
-            const hasExtras = total !== session.quotedPrice;
-            return (
-              <div>
-                <span className="text-gray-500">Quote:</span>{" "}
-                <span className="font-semibold" style={{ color: "#E8603C" }}>${total}</span>
-                {hasExtras && (
-                  <span className="ml-1 text-xs text-gray-400">(base ${session.quotedPrice} + extras)</span>
-                )}
-              </div>
-            );
-          })()}
-          {session.serviceType && (
-            <div>
-              <span className="text-gray-500">Service:</span>{" "}
-              <span className="font-medium">{session.serviceType}</span>
-            </div>
-          )}
-          {session.selectedSlot && (
-            <div className="col-span-2">
-              <span className="text-gray-500">Slot:</span>{" "}
-              <span className="font-medium">{session.selectedSlot}</span>
-            </div>
-          )}
-          {session.address && (
-            <div className="col-span-2">
-              <span className="text-gray-500">Address:</span>{" "}
-              <span className="font-medium">{session.address}</span>
-            </div>
-          )}
-          {session.extras && (() => {
-            let extrasArr: string[] = [];
-            try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
-            return extrasArr.length > 0 ? (
-              <div className="col-span-2">
-                <span className="text-gray-500">Extras:</span>{" "}
-                <span className="font-medium text-xs">{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</span>
-              </div>
-            ) : null;
-          })()}
-          {!isAdmin && session.assignedAgentName && (
-            <div className="col-span-2">
-              <span className="text-gray-500">Agent:</span>{" "}
-              <span className="font-medium">{session.assignedAgentName}</span>
-            </div>
-          )}
-          {/* Editable booked amount — shown for admin when stage is BOOKED */}
-          {isAdmin && session.stage === "BOOKED" && (
-            <div className="col-span-2 mt-1">
-              <span className="text-gray-500 text-xs font-medium block mb-1">Booked Amount (actual invoice)</span>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
-                    value={bookedAmountInput}
-                    onChange={e => setBookedAmountInput(e.target.value)}
-                    className="pl-6 h-8 text-sm"
-                  />
-                </div>
-                {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">Saved ✓</span>}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-3 text-xs shrink-0"
-                  disabled={updateBookedAmountMutation.isPending}
-                  onClick={() => {
-                    const val = bookedAmountInput.trim();
-                    const parsed = val === "" ? null : parseInt(val, 10);
-                    if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
-                      toast.error("Enter a valid dollar amount");
-                      return;
-                    }
-                    updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
-                  }}
-                >
-                  {updateBookedAmountMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
-                </Button>
-                {session.bookedAmount !== null && session.bookedAmount !== undefined && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 px-2 text-xs text-gray-400 shrink-0"
-                    onClick={() => {
-                      setBookedAmountInput("");
-                      updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: null });
-                    }}
-                  >
-                    Clear
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                {session.bookedAmount !== null && session.bookedAmount !== undefined
-                  ? `Override active: $${session.bookedAmount} (replaces quote + extras in revenue)`
-                  : `Using quote + extras: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
-                }
-              </p>
-            </div>
-          )}
-        </div>
+          {/* RIGHT: lead details panel */}
+          <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
 
-        {/* Messages — flex-1 min-h-0 so it fills all remaining drawer space */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-gray-50">
-          {localMessages.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
-          ) : (
-            localMessages.map((msg, i) => {
-              // role=="user" means the LEAD sent it (inbound) → show on LEFT
-              // role=="assistant" means AI/agent sent it (outbound) → show on RIGHT
-              const isOutbound = msg.role === "assistant";
-              // Show a date separator when the day changes between messages, or before the first message
-              const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
-              const curTs = msg.ts;
-              const showSeparator = curTs != null && (
-                i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
-              );
-              return (
-                <div key={i}>
-                  {showSeparator && curTs != null && (
-                    <MessageDateSeparator label={formatMsgDate(curTs)} />
-                  )}
-                  <div className={`flex mb-2 ${isOutbound ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                      style={
-                        isOutbound
-                          ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
-                          : { backgroundColor: "#ffffff", color: "#1f2937", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
-                      }
-                    >
-                      {msg.content}
+            {/* Lead info */}
+            <div className="px-4 py-4 border-b">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lead Details</p>
+              <div className="space-y-2 text-sm">
+                {session.quotedPrice && (() => {
+                  const total = computeTotalQuote(session.quotedPrice, session.extras);
+                  const hasExtras = total !== session.quotedPrice;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Quote</span>
+                      <span className="font-semibold" style={{ color: "#E8603C" }}>
+                        ${total}{hasExtras && <span className="ml-1 text-xs text-gray-400">(+extras)</span>}
+                      </span>
                     </div>
+                  );
+                })()}
+                {session.serviceType && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Service</span>
+                    <span className="font-medium text-right max-w-[55%] truncate">{session.serviceType}</span>
+                  </div>
+                )}
+                {session.selectedSlot && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 shrink-0">Slot</span>
+                    <span className="font-medium text-right text-xs">{session.selectedSlot}</span>
+                  </div>
+                )}
+                {session.address && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 shrink-0">Address</span>
+                    <span className="font-medium text-right text-xs leading-snug">{session.address}</span>
+                  </div>
+                )}
+                {session.extras && (() => {
+                  let extrasArr: string[] = [];
+                  try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
+                  return extrasArr.length > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 shrink-0">Extras</span>
+                      <span className="font-medium text-right text-xs">{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</span>
+                    </div>
+                  ) : null;
+                })()}
+                {!isAdmin && session.assignedAgentName && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Agent</span>
+                    <span className="font-medium">{session.assignedAgentName}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs text-gray-400 pt-1 border-t">
+                  <span>Started</span><span>{timeAgo(session.createdAt)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Updated</span><span>{timeAgo(session.updatedAt)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Admin controls: stage + agent */}
+            {isAdmin && (
+              <div className="px-4 py-4 border-b bg-orange-50 space-y-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin Controls</p>
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-gray-600">Stage</span>
+                  <div className="flex items-center gap-1.5">
+                    <Select
+                      value={session.stage}
+                      onValueChange={(val) => {
+                        if (val === session.stage) return;
+                        updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
+                      }}
+                      disabled={updateStageMutation.isPending}
+                    >
+                      <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {([
+                          "QUOTE_SENT",
+                          "AVAILABILITY",
+                          "SLOT_CHOICE",
+                          "TIME_PREF",
+                          "ADDRESS",
+                          "CONFIRMATION",
+                          "CALL_SCHEDULED",
+                          "DONE",
+                          "UNHANDLED",
+                          "BOOKED",
+                          "NOT_INTERESTED",
+                        ] as const).map(s => (
+                          <SelectItem key={s} value={s} className="text-xs">
+                            {STAGE_CONFIG[s as Stage]?.label ?? s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
                   </div>
                 </div>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-gray-600">Agent</span>
+                  <div className="flex items-center gap-1.5">
+                    <Select
+                      value={session.assignedAgentId?.toString() ?? "unassigned"}
+                      onValueChange={(val) => {
+                        const agentId = val === "unassigned" ? null : parseInt(val, 10);
+                        if (agentId === session.assignedAgentId) return;
+                        assignAgentMutation.mutate({ sessionId: session.id, agentId });
+                      }}
+                      disabled={assignAgentMutation.isPending}
+                    >
+                      <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned" className="text-xs">— Unassigned —</SelectItem>
+                        {activeAgents.map(a => (
+                          <SelectItem key={a.id} value={a.id.toString()} className="text-xs">
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {assignAgentMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+                  </div>
+                </div>
 
-        {/* Reply input */}
-        <div className="px-4 pt-3 pb-2 border-t bg-white">
-          {/* AI / Manual toggle */}
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs">
-              {session.aiMode === 1
-                ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
-                : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you’re in control</span>
-              }
-            </span>
-            <button
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                session.aiMode === 1
-                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                  : "border-green-300 text-green-700 hover:bg-green-50"
-              }`}
-              onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
-              disabled={setAiModeMutation.isPending}
-            >
-              {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
-            </button>
+                {/* Booked amount — only when stage is BOOKED */}
+                {session.stage === "BOOKED" && (
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-gray-600">Booked Amount</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
+                          value={bookedAmountInput}
+                          onChange={e => setBookedAmountInput(e.target.value)}
+                          className="pl-5 h-8 text-xs"
+                        />
+                      </div>
+                      {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">✓</span>}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2.5 text-xs shrink-0"
+                        disabled={updateBookedAmountMutation.isPending}
+                        onClick={() => {
+                          const val = bookedAmountInput.trim();
+                          const parsed = val === "" ? null : parseInt(val, 10);
+                          if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
+                            toast.error("Enter a valid dollar amount");
+                            return;
+                          }
+                          updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
+                        }}
+                      >
+                        {updateBookedAmountMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                      </Button>
+                      {session.bookedAmount !== null && session.bookedAmount !== undefined && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-2 text-xs text-gray-400 shrink-0"
+                          onClick={() => {
+                            setBookedAmountInput("");
+                            updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: null });
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {session.bookedAmount !== null && session.bookedAmount !== undefined
+                        ? `Override: $${session.bookedAmount}`
+                        : `Using quote: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Internal Notes */}
+            <div className="px-4 py-4 flex-1">
+              <AdminNotesSection
+                session={session}
+                notes={notes}
+                setNotes={setNotes}
+                loadedNotes={loadedNotes}
+                notesSaved={notesSaved}
+                updateNotes={updateNotes}
+              />
+            </div>
+
+            {/* Delete lead */}
+            {isAdmin && (
+              <div className="px-4 pb-4 shrink-0">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full h-8 text-xs text-red-400 hover:text-red-600 hover:bg-red-50"
+                      disabled={deleteLeadMutation.isPending}
+                    >
+                      {deleteLeadMutation.isPending
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <><Trash2 className="w-3.5 h-3.5 mr-1" />Delete Lead</>}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete <strong>{session.leadName ?? "this lead"}</strong> and all their conversation history. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        onClick={() => deleteLeadMutation.mutate({ sessionId: session.id })}
+                      >
+                        Yes, delete permanently
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
           </div>
-          <SmsComposeBox
-            value={replyText}
-            onChange={setReplyText}
-            onSend={handleSend}
-            isSending={sendMessageMutation.isPending}
-            placeholder="Write a message..."
-          />
-        </div>
-
-        {/* Internal Notes — collapsible to save space */}
-        <AdminNotesSection
-          session={session}
-          notes={notes}
-          setNotes={setNotes}
-          loadedNotes={loadedNotes}
-          notesSaved={notesSaved}
-          updateNotes={updateNotes}
-        />
-
-        {/* Footer */}
-        <div className="p-4 border-t text-xs text-gray-400 flex justify-between items-center">
-          <span>Started {timeAgo(session.createdAt)}</span>
-          {isAdmin && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-red-400 hover:text-red-600 hover:bg-red-50"
-                  disabled={deleteLeadMutation.isPending}
-                >
-                  {deleteLeadMutation.isPending
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <><Trash2 className="w-3.5 h-3.5 mr-1" />Delete Lead</>}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete <strong>{session.leadName ?? "this lead"}</strong> and all their conversation history. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                    onClick={() => deleteLeadMutation.mutate({ sessionId: session.id })}
-                  >
-                    Yes, delete permanently
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          <span>Updated {timeAgo(session.updatedAt)}</span>
         </div>
       </div>
     </div>
