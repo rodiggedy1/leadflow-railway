@@ -148,7 +148,9 @@ type Stage =
   | "CONFIRMATION"
   | "CALL_SCHEDULED"
   | "DONE"
-  | "UNHANDLED";
+  | "UNHANDLED"
+  | "BOOKED"
+  | "NOT_INTERESTED";
 
 const STAGE_CONFIG: Record<
   Stage,
@@ -209,6 +211,20 @@ const STAGE_CONFIG: Record<
     bgColor: "#fee2e2",
     borderColor: "#fecaca",
     order: 8,
+  },
+  BOOKED: {
+    label: "Booked ✔",
+    textColor: "#065f46",
+    bgColor: "#d1fae5",
+    borderColor: "#6ee7b7",
+    order: 9,
+  },
+  NOT_INTERESTED: {
+    label: "Not Interested",
+    textColor: "#374151",
+    bgColor: "#f3f4f6",
+    borderColor: "#d1d5db",
+    order: 10,
   },
 };
 
@@ -1115,6 +1131,56 @@ export default function AdminDashboard() {
             onStageClick={stage => setStageFilter(stage)}
             activeStage={stageFilter}
           />
+        )}
+
+        {/* Booking metrics row */}
+        {stats && (
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div
+              className="rounded-xl border p-4 flex flex-col gap-1"
+              style={{ backgroundColor: "#d1fae5", borderColor: "#6ee7b7" }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#065f46" }}>
+                Booked Revenue
+              </span>
+              <span className="text-2xl font-bold" style={{ color: "#065f46" }}>
+                ${(stats.bookedRevenue ?? 0).toLocaleString()}
+              </span>
+              <span className="text-xs" style={{ color: "#065f46", opacity: 0.7 }}>
+                from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <div
+              className="rounded-xl border p-4 flex flex-col gap-1"
+              style={{ backgroundColor: "#dbeafe", borderColor: "#93c5fd" }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#1e40af" }}>
+                Jobs Booked
+              </span>
+              <span className="text-2xl font-bold" style={{ color: "#1e40af" }}>
+                {stats.bookedCount ?? 0}
+              </span>
+              <span className="text-xs" style={{ color: "#1e40af", opacity: 0.7 }}>
+                of {stats.total} total leads
+              </span>
+            </div>
+
+            <div
+              className="rounded-xl border p-4 flex flex-col gap-1"
+              style={{ backgroundColor: "#fef3c7", borderColor: "#fcd34d" }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#92400e" }}>
+                Conversion Rate
+              </span>
+              <span className="text-2xl font-bold" style={{ color: "#92400e" }}>
+                {stats.conversionRate ?? 0}%
+              </span>
+              <span className="text-xs" style={{ color: "#92400e", opacity: 0.7 }}>
+                booked ÷ total leads
+              </span>
+            </div>
+          </div>
         )}
 
         {/* Search + stage filter */}

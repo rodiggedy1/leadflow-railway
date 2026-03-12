@@ -270,3 +270,13 @@
 - [x] Update ConversationDrawer: add stage dropdown to change lead status
 - [x] Update ConversationDrawer: add assign-to-agent dropdown (admin only)
 - [x] Update ConversationDrawer: pass sessionId and agentList into drawer so mutations work
+
+## Booking Stages & Metrics — COMPLETED
+
+- [x] Add BOOKED and NOT_INTERESTED to conversationStages enum in schema.ts
+- [x] Run pnpm db:push to migrate DB
+- [x] Update STAGE_CONFIG and ALL_STAGES in AdminDashboard.tsx (BOOKED=green, NOT_INTERESTED=gray)
+- [x] Update leads.stats backend to return bookedCount, bookedRevenue, conversionRate
+- [x] Update adminUpdateStage procedure to accept new stages
+- [x] Add metrics cards to admin dashboard: Booked Revenue, Jobs Booked, Conversion Rate
+- [x] Update leads.test.ts to match new stats shape and two-query mock — 121/121 tests pass

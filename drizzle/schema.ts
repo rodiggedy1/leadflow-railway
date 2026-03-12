@@ -53,6 +53,8 @@ export type InsertQuoteLead = typeof quoteLeads.$inferInsert;
  * CALL_SCHEDULED → Lead said call now / in a few minutes
  * DONE           → Conversation complete
  * UNHANDLED      → AI couldn't parse the reply, needs human review
+ * BOOKED         → Lead has been booked (admin/agent confirmed)
+ * NOT_INTERESTED → Lead declined or is not a fit
  */
 export const conversationStages = [
   "QUOTE_SENT",
@@ -64,6 +66,8 @@ export const conversationStages = [
   "CALL_SCHEDULED",
   "DONE",
   "UNHANDLED",
+  "BOOKED",
+  "NOT_INTERESTED",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

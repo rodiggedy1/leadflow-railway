@@ -73,8 +73,10 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         const db = await getDb();
-        if (!db) return { total: 0, byStage: {} };
+        if (!db) return { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+
+        // Stage breakdown
         const rows = await db
           .select({
             stage: conversationSessions.stage,
@@ -89,7 +91,24 @@ export const appRouter = router({
           byStage[row.stage] = Number(row.count);
           total += Number(row.count);
         }
-        return { total, byStage };
+
+        // Booked revenue: sum of quotedPrice for BOOKED sessions
+        const bookedRows = await db
+          .select({ quotedPrice: conversationSessions.quotedPrice })
+          .from(conversationSessions)
+          .where(
+            conditions
+              ? and(conditions, eq(conversationSessions.stage, "BOOKED"))
+              : eq(conversationSessions.stage, "BOOKED")
+          );
+        const bookedCount = bookedRows.length;
+        const bookedRevenue = bookedRows.reduce((sum, r) => {
+          const price = parseFloat(r.quotedPrice ?? "0");
+          return sum + (isNaN(price) ? 0 : price);
+        }, 0);
+        const conversionRate = total > 0 ? Math.round((bookedCount / total) * 100) : 0;
+
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate };
       }),
 
     /**
@@ -108,6 +127,8 @@ export const appRouter = router({
           "CALL_SCHEDULED",
           "DONE",
           "UNHANDLED",
+          "BOOKED",
+          "NOT_INTERESTED",
         ]),
       }))
       .mutation(async ({ input }) => {
