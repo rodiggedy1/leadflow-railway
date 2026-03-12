@@ -1,0 +1,14 @@
+{
+  "query": "SELECT stage, COUNT(*) as count FROM conversation_sessions GROUP BY stage;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT stage, COUNT(*) as count FROM conversation_sessions GROUP BY stage;",
+  "rows": [
+    {
+      "stage": "AVAILABILITY",
+      "count": "2"
+    }
+  ],
+  "messages": [],
+  "stdout": "stage\tcount\nAVAILABILITY\t2\n",
+  "stderr": "",
+  "execution_time_ms": 190
+}

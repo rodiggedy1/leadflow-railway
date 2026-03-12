@@ -3,10 +3,10 @@
  *
  * Shows all conversation sessions with stage badges, lead details,
  * quoted prices, selected slots, addresses, and time elapsed.
+ * Supports date range filtering and stage filtering.
  */
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,7 +24,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, Search, Phone, User, Home, DollarSign, Clock, MapPin, Calendar } from "lucide-react";
+import {
+  RefreshCw,
+  Search,
+  Phone,
+  User,
+  DollarSign,
+  Clock,
+  MapPin,
+  Calendar,
+  X,
+} from "lucide-react";
 
 // ── Stage configuration ────────────────────────────────────────────────────────
 
@@ -40,67 +50,69 @@ type Stage =
 
 const STAGE_CONFIG: Record<
   Stage,
-  { label: string; color: string; bg: string; order: number; description: string }
+  { label: string; textColor: string; bgColor: string; borderColor: string; order: number }
 > = {
   QUOTE_SENT: {
     label: "Quote Sent",
-    color: "text-blue-700",
-    bg: "bg-blue-100 border-blue-200",
+    textColor: "#1d4ed8",
+    bgColor: "#dbeafe",
+    borderColor: "#bfdbfe",
     order: 1,
-    description: "Quote delivered, awaiting reply",
   },
   AVAILABILITY: {
     label: "Availability",
-    color: "text-amber-700",
-    bg: "bg-amber-100 border-amber-200",
+    textColor: "#92400e",
+    bgColor: "#fef3c7",
+    borderColor: "#fde68a",
     order: 2,
-    description: "Asked about availability",
   },
   SLOT_CHOICE: {
     label: "Slot Choice",
-    color: "text-orange-700",
-    bg: "bg-orange-100 border-orange-200",
+    textColor: "#9a3412",
+    bgColor: "#ffedd5",
+    borderColor: "#fed7aa",
     order: 3,
-    description: "Offered time slots",
   },
   ADDRESS: {
     label: "Address",
-    color: "text-purple-700",
-    bg: "bg-purple-100 border-purple-200",
+    textColor: "#6b21a8",
+    bgColor: "#f3e8ff",
+    borderColor: "#e9d5ff",
     order: 4,
-    description: "Collecting address",
   },
   CONFIRMATION: {
     label: "Confirmation",
-    color: "text-teal-700",
-    bg: "bg-teal-100 border-teal-200",
+    textColor: "#134e4a",
+    bgColor: "#ccfbf1",
+    borderColor: "#99f6e4",
     order: 5,
-    description: "Booking confirmed",
   },
   CALL_SCHEDULED: {
     label: "Call Scheduled",
-    color: "text-indigo-700",
-    bg: "bg-indigo-100 border-indigo-200",
+    textColor: "#1e3a5f",
+    bgColor: "#e0e7ff",
+    borderColor: "#c7d2fe",
     order: 6,
-    description: "Call requested",
   },
   DONE: {
     label: "Done",
-    color: "text-green-700",
-    bg: "bg-green-100 border-green-200",
+    textColor: "#14532d",
+    bgColor: "#dcfce7",
+    borderColor: "#bbf7d0",
     order: 7,
-    description: "Conversation complete",
   },
   UNHANDLED: {
     label: "Needs Review",
-    color: "text-red-700",
-    bg: "bg-red-100 border-red-200",
+    textColor: "#991b1b",
+    bgColor: "#fee2e2",
+    borderColor: "#fecaca",
     order: 8,
-    description: "AI couldn't parse reply",
   },
 };
 
-const ALL_STAGES = Object.keys(STAGE_CONFIG) as Stage[];
+const ALL_STAGES = (Object.keys(STAGE_CONFIG) as Stage[]).sort(
+  (a, b) => STAGE_CONFIG[a].order - STAGE_CONFIG[b].order
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -129,37 +141,64 @@ function formatPhone(phone: string): string {
   return phone;
 }
 
+function toLocalDateInput(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 // ── Funnel stats bar ──────────────────────────────────────────────────────────
 
-function FunnelStats({ byStage, total }: { byStage: Record<string, number>; total: number }) {
-  const stages: Stage[] = [
-    "QUOTE_SENT",
-    "AVAILABILITY",
-    "SLOT_CHOICE",
-    "ADDRESS",
-    "CONFIRMATION",
-    "CALL_SCHEDULED",
-    "DONE",
-    "UNHANDLED",
-  ];
-
+function FunnelStats({
+  byStage,
+  total,
+  onStageClick,
+  activeStage,
+}: {
+  byStage: Record<string, number>;
+  total: number;
+  onStageClick: (stage: string) => void;
+  activeStage: string;
+}) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
-      {stages.map(stage => {
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-6">
+      {ALL_STAGES.map(stage => {
         const cfg = STAGE_CONFIG[stage];
         const count = byStage[stage] ?? 0;
         const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const isActive = activeStage === stage;
+        const hasLeads = count > 0;
+
         return (
-          <div
+          <button
             key={stage}
-            className={`rounded-xl border p-3 flex flex-col gap-1 ${cfg.bg}`}
+            onClick={() => onStageClick(isActive ? "all" : stage)}
+            className="rounded-xl border p-3 flex flex-col gap-1 text-left transition-all hover:shadow-md focus:outline-none"
+            style={{
+              backgroundColor: hasLeads ? cfg.bgColor : "#f9fafb",
+              borderColor: isActive ? cfg.textColor : hasLeads ? cfg.borderColor : "#e5e7eb",
+              borderWidth: isActive ? "2px" : "1px",
+              opacity: hasLeads ? 1 : 0.55,
+              boxShadow: isActive ? `0 0 0 3px ${cfg.borderColor}` : undefined,
+            }}
           >
-            <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.color}`}>
+            <span
+              className="text-xs font-semibold uppercase tracking-wide leading-tight"
+              style={{ color: hasLeads ? cfg.textColor : "#9ca3af" }}
+            >
               {cfg.label}
             </span>
-            <span className={`text-2xl font-bold ${cfg.color}`}>{count}</span>
-            <span className="text-xs text-gray-500">{pct}% of total</span>
-          </div>
+            <span
+              className="text-2xl font-bold"
+              style={{ color: hasLeads ? cfg.textColor : "#d1d5db" }}
+            >
+              {count}
+            </span>
+            <span className="text-xs" style={{ color: hasLeads ? cfg.textColor : "#9ca3af", opacity: 0.7 }}>
+              {pct}%
+            </span>
+          </button>
         );
       })}
     </div>
@@ -171,12 +210,18 @@ function FunnelStats({ byStage, total }: { byStage: Record<string, number>; tota
 function StageBadge({ stage }: { stage: string }) {
   const cfg = STAGE_CONFIG[stage as Stage] ?? {
     label: stage,
-    color: "text-gray-700",
-    bg: "bg-gray-100 border-gray-200",
+    textColor: "#374151",
+    bgColor: "#f3f4f6",
+    borderColor: "#e5e7eb",
   };
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.bg} ${cfg.color}`}
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+      style={{
+        backgroundColor: cfg.bgColor,
+        borderColor: cfg.borderColor,
+        color: cfg.textColor,
+      }}
     >
       {cfg.label}
     </span>
@@ -211,7 +256,10 @@ function ConversationDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
@@ -224,7 +272,7 @@ function ConversationDrawer({
           <div className="flex items-center gap-2">
             <StageBadge stage={session.stage} />
             <Button variant="ghost" size="sm" onClick={onClose}>
-              ✕
+              <X className="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -234,7 +282,7 @@ function ConversationDrawer({
           {session.quotedPrice && (
             <div>
               <span className="text-gray-500">Quote:</span>{" "}
-              <span className="font-semibold text-coral">${session.quotedPrice}</span>
+              <span className="font-semibold" style={{ color: "#E8603C" }}>${session.quotedPrice}</span>
             </div>
           )}
           {session.serviceType && (
@@ -268,12 +316,12 @@ function ConversationDrawer({
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                  className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
+                  style={
                     msg.role === "user"
-                      ? "bg-coral text-white rounded-br-sm"
-                      : "bg-gray-100 text-gray-800 rounded-bl-sm"
-                  }`}
-                  style={msg.role === "user" ? { backgroundColor: "#E8603C" } : {}}
+                      ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
+                      : { backgroundColor: "#f3f4f6", color: "#1f2937", borderBottomLeftRadius: "4px" }
+                  }
                 >
                   {msg.content}
                 </div>
@@ -292,11 +340,43 @@ function ConversationDrawer({
   );
 }
 
+// ── Date filter bar ───────────────────────────────────────────────────────────
+
+type DatePreset = "today" | "yesterday" | "last7" | "last30" | "custom" | "all";
+
+function getPresetDates(preset: DatePreset): { from: string; to: string } | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (preset === "today") {
+    return { from: toLocalDateInput(today), to: toLocalDateInput(today) };
+  }
+  if (preset === "yesterday") {
+    const y = new Date(today);
+    y.setDate(y.getDate() - 1);
+    return { from: toLocalDateInput(y), to: toLocalDateInput(y) };
+  }
+  if (preset === "last7") {
+    const from = new Date(today);
+    from.setDate(from.getDate() - 6);
+    return { from: toLocalDateInput(from), to: toLocalDateInput(today) };
+  }
+  if (preset === "last30") {
+    const from = new Date(today);
+    from.setDate(from.getDate() - 29);
+    return { from: toLocalDateInput(from), to: toLocalDateInput(today) };
+  }
+  return null;
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [selectedSession, setSelectedSession] = useState<null | {
     leadName: string | null;
     leadPhone: string;
@@ -310,14 +390,24 @@ export default function AdminDashboard() {
     updatedAt: Date | string;
   }>(null);
 
+  // Compute the active date range to send to the backend
+  const dateRange = useMemo(() => {
+    if (datePreset === "all") return { dateFrom: undefined, dateTo: undefined };
+    if (datePreset === "custom") {
+      return { dateFrom: customFrom || undefined, dateTo: customTo || undefined };
+    }
+    const preset = getPresetDates(datePreset);
+    return preset ? { dateFrom: preset.from, dateTo: preset.to } : { dateFrom: undefined, dateTo: undefined };
+  }, [datePreset, customFrom, customTo]);
+
   const {
     data: sessions = [],
     isLoading: sessionsLoading,
     refetch,
     isFetching,
-  } = trpc.leads.list.useQuery(undefined, { refetchInterval: 30000 });
+  } = trpc.leads.list.useQuery(dateRange, { refetchInterval: 30000 });
 
-  const { data: stats } = trpc.leads.stats.useQuery(undefined, {
+  const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,
   });
 
@@ -337,13 +427,25 @@ export default function AdminDashboard() {
 
   const unhandledCount = stats?.byStage?.["UNHANDLED"] ?? 0;
 
+  const DATE_PRESETS: { value: DatePreset; label: string }[] = [
+    { value: "all", label: "All time" },
+    { value: "today", label: "Today" },
+    { value: "yesterday", label: "Yesterday" },
+    { value: "last7", label: "Last 7 days" },
+    { value: "last30", label: "Last 30 days" },
+    { value: "custom", label: "Custom range" },
+  ];
+
   return (
-    <div className="min-h-screen bg-[#FFF8F5]">
+    <div className="min-h-screen" style={{ backgroundColor: "#FFF8F5" }}>
       {/* Top bar */}
-      <header className="bg-white border-b border-[#F0D8D0] sticky top-0 z-40">
+      <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#F0D8D0" }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#E8603C] flex items-center justify-center">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: "#E8603C" }}
+            >
               <span className="text-white text-sm font-bold">M</span>
             </div>
             <div>
@@ -375,16 +477,76 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Summary */}
-        <div className="mb-4 flex items-center gap-2">
-          <span className="text-2xl font-bold text-gray-900">{stats?.total ?? 0}</span>
-          <span className="text-gray-500 text-sm">total leads</span>
+        {/* Summary + date filter row */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-gray-900">{stats?.total ?? 0}</span>
+            <span className="text-gray-500 text-sm">leads</span>
+          </div>
+
+          {/* Date preset selector */}
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            {DATE_PRESETS.map(p => (
+              <button
+                key={p.value}
+                onClick={() => setDatePreset(p.value)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+                style={
+                  datePreset === p.value
+                    ? { backgroundColor: "#E8603C", color: "white", borderColor: "#E8603C" }
+                    : { backgroundColor: "white", color: "#6b7280", borderColor: "#e5e7eb" }
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Funnel stats */}
-        {stats && <FunnelStats byStage={stats.byStage} total={stats.total} />}
+        {/* Custom date range inputs */}
+        {datePreset === "custom" && (
+          <div className="flex items-center gap-3 mb-5 bg-white rounded-xl border p-3" style={{ borderColor: "#F0D8D0" }}>
+            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-sm text-gray-600">From</label>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={e => setCustomFrom(e.target.value)}
+                className="border rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2"
+                style={{ borderColor: "#e5e7eb" }}
+              />
+              <label className="text-sm text-gray-600">To</label>
+              <input
+                type="date"
+                value={customTo}
+                onChange={e => setCustomTo(e.target.value)}
+                className="border rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2"
+                style={{ borderColor: "#e5e7eb" }}
+              />
+              {(customFrom || customTo) && (
+                <button
+                  onClick={() => { setCustomFrom(""); setCustomTo(""); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
-        {/* Filters */}
+        {/* Funnel stats — clicking a card filters the table */}
+        {stats && (
+          <FunnelStats
+            byStage={stats.byStage}
+            total={stats.total}
+            onStageClick={stage => setStageFilter(stage)}
+            activeStage={stageFilter}
+          />
+        )}
+
+        {/* Search + stage filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -408,16 +570,24 @@ export default function AdminDashboard() {
               ))}
             </SelectContent>
           </Select>
+          {stageFilter !== "all" && (
+            <button
+              onClick={() => setStageFilter("all")}
+              className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 self-center"
+            >
+              <X className="w-3 h-3" /> Clear filter
+            </button>
+          )}
           <span className="text-sm text-gray-500 self-center">
             {filtered.length} result{filtered.length !== 1 ? "s" : ""}
           </span>
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-[#F0D8D0] overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: "#F0D8D0" }}>
           {sessionsLoading ? (
             <div className="py-20 text-center text-gray-400">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-[#E8603C]" />
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" style={{ color: "#E8603C" }} />
               Loading leads…
             </div>
           ) : filtered.length === 0 ? (
@@ -435,21 +605,24 @@ export default function AdminDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50 hover:bg-gray-50">
-                    <TableHead className="font-semibold text-gray-700 w-40">Lead</TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-44">Lead</TableHead>
                     <TableHead className="font-semibold text-gray-700">Service</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Quote</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-36">Stage</TableHead>
                     <TableHead className="font-semibold text-gray-700">Slot / Address</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Updated</TableHead>
-                    <TableHead className="w-20"></TableHead>
+                    <TableHead className="w-16"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map(session => (
                     <TableRow
                       key={session.id}
-                      className="hover:bg-[#FFF8F5] cursor-pointer transition-colors"
+                      className="cursor-pointer transition-colors"
+                      style={{ cursor: "pointer" }}
                       onClick={() => setSelectedSession(session)}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#FFF8F5")}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = "")}
                     >
                       {/* Lead */}
                       <TableCell>
@@ -486,7 +659,7 @@ export default function AdminDashboard() {
                       {/* Quote */}
                       <TableCell>
                         {session.quotedPrice ? (
-                          <span className="font-semibold text-[#E8603C] flex items-center gap-1">
+                          <span className="font-semibold flex items-center gap-1" style={{ color: "#E8603C" }}>
                             <DollarSign className="w-3.5 h-3.5" />
                             {session.quotedPrice}
                           </span>
@@ -534,7 +707,8 @@ export default function AdminDashboard() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-[#E8603C] hover:text-[#C94A28] hover:bg-[#FFF0EC] text-xs"
+                          className="text-xs hover:bg-orange-50"
+                          style={{ color: "#E8603C" }}
                           onClick={e => {
                             e.stopPropagation();
                             setSelectedSession(session);
@@ -552,7 +726,7 @@ export default function AdminDashboard() {
         </div>
 
         <p className="text-xs text-gray-400 mt-4 text-center">
-          Auto-refreshes every 30 seconds · Click any row to view conversation history
+          Auto-refreshes every 30 seconds · Click any row or stage card to filter · Click a stage card again to clear
         </p>
       </main>
 

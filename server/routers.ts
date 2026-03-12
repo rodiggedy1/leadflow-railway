@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, between, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { quoteLeads, conversationSessions } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -36,36 +36,55 @@ export const appRouter = router({
   /**
    * leads.list — lists all conversation sessions for the admin dashboard
    * leads.stats — funnel breakdown counts by stage
+   * Both accept optional dateFrom / dateTo (ISO date strings) for filtering.
    */
   leads: router({
-    list: publicProcedure.query(async () => {
-      const db = await getDb();
-      if (!db) return [];
-      const sessions = await db
-        .select()
-        .from(conversationSessions)
-        .orderBy(desc(conversationSessions.updatedAt))
-        .limit(500);
-      return sessions;
-    }),
-    stats: publicProcedure.query(async () => {
-      const db = await getDb();
-      if (!db) return { total: 0, byStage: {} };
-      const rows = await db
-        .select({
-          stage: conversationSessions.stage,
-          count: sql<number>`count(*)`,
-        })
-        .from(conversationSessions)
-        .groupBy(conversationSessions.stage);
-      const byStage: Record<string, number> = {};
-      let total = 0;
-      for (const row of rows) {
-        byStage[row.stage] = Number(row.count);
-        total += Number(row.count);
-      }
-      return { total, byStage };
-    }),
+    list: publicProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(), // ISO date string e.g. "2026-03-01"
+          dateTo: z.string().optional(),   // ISO date string e.g. "2026-03-31"
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(conditions)
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(500);
+        return sessions;
+      }),
+    stats: publicProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { total: 0, byStage: {} };
+        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+        const rows = await db
+          .select({
+            stage: conversationSessions.stage,
+            count: sql<number>`count(*)`,
+          })
+          .from(conversationSessions)
+          .where(conditions)
+          .groupBy(conversationSessions.stage);
+        const byStage: Record<string, number> = {};
+        let total = 0;
+        for (const row of rows) {
+          byStage[row.stage] = Number(row.count);
+          total += Number(row.count);
+        }
+        return { total, byStage };
+      }),
   }),
 
   /**
@@ -247,4 +266,24 @@ export function normalizePhone(phone: string): string {
     return phone.replace(/[^\d+]/g, "");
   }
   return `+${digits}`;
+}
+
+/**
+ * Builds a Drizzle WHERE condition for optional date range filtering.
+ * dateFrom and dateTo are ISO date strings like "2026-03-01".
+ * The dateTo is treated as end-of-day (23:59:59) so the full day is included.
+ */
+function buildDateConditions(dateFrom?: string, dateTo?: string) {
+  const conditions = [];
+  if (dateFrom) {
+    const from = new Date(dateFrom);
+    from.setHours(0, 0, 0, 0);
+    conditions.push(gte(conversationSessions.createdAt, from));
+  }
+  if (dateTo) {
+    const to = new Date(dateTo);
+    to.setHours(23, 59, 59, 999);
+    conditions.push(lte(conversationSessions.createdAt, to));
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
 }

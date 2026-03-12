@@ -90,3 +90,8 @@
 - [x] Stage badge colors: QUOTE_SENT=blue, AVAILABILITY=yellow, SLOT_CHOICE=orange, ADDRESS=purple, CONFIRMATION=teal, DONE=green, UNHANDLED=red
 - [x] Wire /admin route in App.tsx
 - [x] Write tests for the leads query (93/93 tests pass)
+
+## Dashboard Fixes & Improvements
+
+- [x] Fix funnel stats bar: clarified that 0 is correct (leads progressed to AVAILABILITY); improved visual clarity with dimmed zero-count cards
+- [x] Add date range filter to the dashboard (Today / Yesterday / Last 7 / Last 30 / Custom range) — 97/97 tests pass

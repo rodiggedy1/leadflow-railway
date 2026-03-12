@@ -1,8 +1,9 @@
 /**
  * Tests for the leads router (leads.list and leads.stats)
  *
- * These tests verify that the procedures return the correct shape and
- * handle the case where the database is unavailable gracefully.
+ * These tests verify that the procedures return the correct shape,
+ * handle the case where the database is unavailable gracefully,
+ * and pass date range conditions when provided.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
@@ -39,6 +40,13 @@ describe("leads.list", () => {
     mockGetDb.mockResolvedValue(null as never);
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.list();
+    expect(result).toEqual([]);
+  });
+
+  it("returns an empty array when called with date filter and DB is unavailable", async () => {
+    mockGetDb.mockResolvedValue(null as never);
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.leads.list({ dateFrom: "2026-03-01", dateTo: "2026-03-31" });
     expect(result).toEqual([]);
   });
 
@@ -83,7 +91,8 @@ describe("leads.list", () => {
     // Build a chainable mock that returns fakeSessions at the end
     const mockLimit = vi.fn().mockResolvedValue(fakeSessions);
     const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
-    const mockFrom = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
     const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
     mockGetDb.mockResolvedValue({ select: mockSelect } as never);
@@ -94,6 +103,21 @@ describe("leads.list", () => {
     expect(result).toHaveLength(2);
     expect(result[0]?.leadName).toBe("Alice");
     expect(result[1]?.leadName).toBe("Bob");
+  });
+
+  it("accepts dateFrom and dateTo filter parameters", async () => {
+    const mockLimit = vi.fn().mockResolvedValue([]);
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+    mockGetDb.mockResolvedValue({ select: mockSelect } as never);
+
+    const caller = appRouter.createCaller(createPublicContext());
+    // Should not throw even with date filters
+    const result = await caller.leads.list({ dateFrom: "2026-03-01", dateTo: "2026-03-31" });
+    expect(Array.isArray(result)).toBe(true);
   });
 });
 
@@ -111,6 +135,13 @@ describe("leads.stats", () => {
     expect(result).toEqual({ total: 0, byStage: {} });
   });
 
+  it("returns zero totals with date filter when DB is unavailable", async () => {
+    mockGetDb.mockResolvedValue(null as never);
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.leads.stats({ dateFrom: "2026-03-01" });
+    expect(result).toEqual({ total: 0, byStage: {} });
+  });
+
   it("aggregates stage counts correctly", async () => {
     const fakeRows = [
       { stage: "AVAILABILITY", count: 5 },
@@ -119,7 +150,8 @@ describe("leads.stats", () => {
     ];
 
     const mockGroupBy = vi.fn().mockResolvedValue(fakeRows);
-    const mockFrom = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+    const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
     const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
     mockGetDb.mockResolvedValue({ select: mockSelect } as never);
@@ -141,7 +173,8 @@ describe("leads.stats", () => {
     ];
 
     const mockGroupBy = vi.fn().mockResolvedValue(fakeRows);
-    const mockFrom = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+    const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
     const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
     mockGetDb.mockResolvedValue({ select: mockSelect } as never);
@@ -152,5 +185,29 @@ describe("leads.stats", () => {
     expect(result.total).toBe(9);
     expect(result.byStage["SLOT_CHOICE"]).toBe(7);
     expect(result.byStage["CONFIRMATION"]).toBe(2);
+  });
+
+  it("returns correct counts for all 8 conversation stages", async () => {
+    const allStages = [
+      "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "ADDRESS",
+      "CONFIRMATION", "CALL_SCHEDULED", "DONE", "UNHANDLED",
+    ];
+    const fakeRows = allStages.map((stage, i) => ({ stage, count: i + 1 }));
+
+    const mockGroupBy = vi.fn().mockResolvedValue(fakeRows);
+    const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+    mockGetDb.mockResolvedValue({ select: mockSelect } as never);
+
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.leads.stats();
+
+    // 1+2+3+4+5+6+7+8 = 36
+    expect(result.total).toBe(36);
+    expect(result.byStage["QUOTE_SENT"]).toBe(1);
+    expect(result.byStage["DONE"]).toBe(7);
+    expect(result.byStage["UNHANDLED"]).toBe(8);
   });
 });

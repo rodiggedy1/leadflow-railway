@@ -1,0 +1,20 @@
+{
+  "query": "SELECT id, leadName, stage FROM conversation_sessions;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, leadName, stage FROM conversation_sessions;",
+  "rows": [
+    {
+      "id": "2",
+      "leadName": "Elizabeth Rodriguez",
+      "stage": "AVAILABILITY"
+    },
+    {
+      "id": "30001",
+      "leadName": "Debug Test",
+      "stage": "AVAILABILITY"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadName\tstage\n2\tElizabeth Rodriguez\tAVAILABILITY\n30001\tDebug Test\tAVAILABILITY\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}
