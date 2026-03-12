@@ -186,7 +186,7 @@ function StarRating() {
   );
 }
 
-const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-SXFvgjgreL3S3BLfeDXnAb.webp";
+const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-v2-98ddtUzqz4hvpbQSBgKAvt.webp";
 
 function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
   const firstName = name ? name.split(" ")[0] : "";
