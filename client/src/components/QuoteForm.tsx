@@ -8,7 +8,7 @@
  * Extras: Optional step 2 with 20 add-on cards (icon + name, no pricing)
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -186,7 +186,7 @@ function StarRating() {
   );
 }
 
-const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot_f689bc6f.jpg";
+const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-SXFvgjgreL3S3BLfeDXnAb.webp";
 
 function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
   const firstName = name ? name.split(" ")[0] : "";
@@ -455,6 +455,80 @@ function ExtrasStep({ selectedExtras, onToggle, onBack, onContinue, isSubmitting
   );
 }
 
+// ─── Exit-Intent Modal ────────────────────────────────────────────────────────
+
+function ExitIntentModal({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(61,31,20,0.55)", backdropFilter: "blur(4px)" }}
+      onClick={onStay}
+    >
+      <div
+        className="relative w-full max-w-sm rounded-2xl overflow-hidden"
+        style={{
+          background: "#FFFFFF",
+          boxShadow: "0 24px 60px rgba(180,80,40,0.22), 0 4px 16px rgba(0,0,0,0.1)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Coral top bar */}
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, #E8603C 0%, #F0A090 50%, #E8603C 100%)" }} />
+
+        <div className="px-7 pt-6 pb-7">
+          {/* Madison photo + name */}
+          <div className="flex items-center gap-3 mb-4">
+            <img
+              src={MADISON_PHOTO}
+              alt="Madison"
+              className="w-14 h-14 rounded-full object-cover shrink-0"
+              style={{ border: "2.5px solid #F5D5C8" }}
+            />
+            <div>
+              <p className="font-semibold text-sm" style={{ color: "#3D1F14", fontFamily: "'DM Sans', sans-serif" }}>Madison</p>
+              <p className="text-xs" style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}>Cleaning Coordinator · Maids in Black</p>
+            </div>
+          </div>
+
+          {/* Message */}
+          <p
+            className="text-base font-semibold leading-snug mb-1"
+            style={{ color: "#3D1F14", fontFamily: "'Playfair Display', serif" }}
+          >
+            Wait — your quote is almost ready!
+          </p>
+          <p
+            className="text-sm leading-relaxed mb-5"
+            style={{ color: "#6B4033", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            It only takes 30 more seconds. I'll text you a custom price for your home right away — no commitment needed.
+          </p>
+
+          {/* CTAs */}
+          <button
+            onClick={onStay}
+            className="w-full py-3 rounded-xl text-sm font-semibold text-white mb-2.5 transition-opacity hover:opacity-90"
+            style={{
+              background: "linear-gradient(135deg, #E8603C 0%, #D44E2A 100%)",
+              boxShadow: "0 4px 14px rgba(232,96,60,0.35)",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            Get My Price →
+          </button>
+          <button
+            onClick={onLeave}
+            className="w-full py-2 text-xs text-center transition-colors hover:opacity-70"
+            style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            No thanks, I'll pass
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function QuoteForm() {
@@ -464,8 +538,24 @@ export default function QuoteForm() {
   const [smsSent, setSmsSent] = useState(false);
   const [step, setStep] = useState<"form" | "extras">("form");
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const exitShownRef = useRef(false);
 
   const isOffice = form.serviceType === "Office Cleaning";
+
+  // Exit-intent: fire once when mouse leaves the top of the viewport, only if not submitted
+  useEffect(() => {
+    const handleMouseLeave = (e: MouseEvent) => {
+      if (submitted) return;
+      if (exitShownRef.current) return;
+      if (e.clientY <= 10) {
+        exitShownRef.current = true;
+        setShowExitModal(true);
+      }
+    };
+    document.addEventListener("mouseleave", handleMouseLeave);
+    return () => document.removeEventListener("mouseleave", handleMouseLeave);
+  }, [submitted]);
 
   const submitMutation = trpc.quotes.submit.useMutation({
     onSuccess: (data) => {
@@ -544,6 +634,14 @@ export default function QuoteForm() {
         backgroundColor: "#FFF8F5",
       }}
     >
+      {/* Exit-intent modal — only shown if form not submitted */}
+      {showExitModal && (
+        <ExitIntentModal
+          onStay={() => setShowExitModal(false)}
+          onLeave={() => { window.location.href = "https://maidsinblack.com"; }}
+        />
+      )}
+
       {/* Back link */}
       <div className="w-full max-w-2xl mb-3">
         <a

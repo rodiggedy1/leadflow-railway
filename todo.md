@@ -226,3 +226,9 @@
 ## Rotating Trust Strip
 
 - [x] Add rotating trust strip above submit button on quote form step 1
+
+## Exit-Intent Modal
+
+- [x] Generate Madison's photo for exit-intent modal
+- [x] Build exit-intent modal with mouse-leave detection (only fires if form not submitted)
+- [x] Wire exit-intent modal into QuoteForm
