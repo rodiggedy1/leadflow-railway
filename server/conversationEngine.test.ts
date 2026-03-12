@@ -322,13 +322,34 @@ describe("processLeadReply — State Machine", () => {
     expect(result.extractedData?.callPreference).toBe("few_minutes");
   });
 
-  // Stage: DONE → any reply → stays DONE
-  it("DONE: any reply stays at DONE", async () => {
+  // Stage: DONE → any reply → stays DONE, but now routes through AI
+  it("DONE: any reply stays at DONE and uses AI for natural response", async () => {
+    // handlePostBookingReply calls the LLM
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "Your booking is all set! Our team will be in touch shortly." }, index: 0, finish_reason: "stop" }],
+    } as any);
+
     const ctx = makeContext({ stage: "DONE" });
-    const result = await processLeadReply("thanks!", ctx);
+    const result = await processLeadReply("I didn't get a call", ctx);
 
     expect(result.nextStage).toBe("DONE");
-    expect(mockLLM).not.toHaveBeenCalled();
+    expect(result.reply).toBeTruthy();
+    // AI should have been called (no longer a hardcoded dead-end)
+    expect(mockLLM).toHaveBeenCalled();
+  });
+
+  // Stage: CALL_SCHEDULED → any reply → stays CALL_SCHEDULED, routes through AI
+  it("CALL_SCHEDULED: any reply stays at CALL_SCHEDULED and uses AI", async () => {
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "So sorry! Our team will call you very shortly." }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "CALL_SCHEDULED", selectedSlot: "Thursday (Morning)" });
+    const result = await processLeadReply("I didn't get a call yet", ctx);
+
+    expect(result.nextStage).toBe("CALL_SCHEDULED");
+    expect(result.reply).toBeTruthy();
+    expect(mockLLM).toHaveBeenCalled();
   });
 
   // LLM failure fallback

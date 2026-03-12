@@ -262,7 +262,85 @@ Reply with ONLY the classification word, nothing else.`,
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Post-Booking AI Handler ───────────────────────────────────────────────────────────────────
+
+export interface PostBookingContext {
+  stage: "DONE" | "CALL_SCHEDULED";
+  leadName: string;
+  quotedPrice: string;
+  serviceType: string;
+  selectedSlot?: string | null;
+  address?: string | null;
+  messageHistory: Array<{ role: "assistant" | "user"; content: string }>;
+  leadReply: string;
+  extrasContext?: string | null;
+}
+
+/**
+ * Handles replies after the booking is confirmed (DONE / CALL_SCHEDULED stages).
+ * The AI knows the booking is locked in and responds naturally to follow-up questions,
+ * concerns about the call, or anything else the lead sends.
+ */
+export async function handlePostBookingReply(ctx: PostBookingContext): Promise<string> {
+  const { stage, leadName, quotedPrice, serviceType, selectedSlot, address, messageHistory, leadReply, extrasContext } = ctx;
+  const firstName = leadName.split(" ")[0] ?? leadName;
+
+  const bookingContext = [
+    selectedSlot ? `Scheduled slot: ${selectedSlot}` : null,
+    address ? `Address: ${address}` : null,
+    extrasContext ? `Selected add-ons: ${extrasContext}` : null,
+  ].filter(Boolean).join("\n");
+
+  const stageNote = stage === "CALL_SCHEDULED"
+    ? "The booking is confirmed and a confirmation call was requested. The team is aware and will call shortly."
+    : "The booking process is complete. The team is aware of this appointment.";
+
+  const recentHistory = messageHistory.slice(-6).map(m => ({
+    role: m.role as "assistant" | "user",
+    content: m.content,
+  }));
+
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: BRAND_SYSTEM_PROMPT },
+        ...recentHistory,
+        {
+          role: "user",
+          content: `The lead has replied after their booking was confirmed. Respond naturally and helpfully.
+
+Lead name: ${firstName}
+Service: ${serviceType} — $${quotedPrice}
+${bookingContext}
+Status: ${stageNote}
+Lead's message: "${leadReply}"
+
+Instructions:
+1. Respond warmly and naturally in 1-2 sentences — you know their booking is confirmed
+2. If they say they didn't get a call, apologize briefly and reassure them the team will be in touch very shortly
+3. If they ask about timing/arrival, give a warm reassurance that the team will confirm details on the call
+4. If they have a question about their add-ons, confirm we have them noted
+5. Keep reply under 200 characters
+6. Do NOT ask them to re-book or repeat the booking flow`,
+        },
+      ],
+    });
+
+    const content = response.choices?.[0]?.message?.content;
+    const text = typeof content === "string" ? content.trim() : "";
+    if (text) return text;
+  } catch (err) {
+    console.error("[AI] handlePostBookingReply failed:", err);
+  }
+
+  // Fallback — still much better than the old static message
+  if (leadReply.toLowerCase().includes("call") || leadReply.toLowerCase().includes("didn't") || leadReply.toLowerCase().includes("waiting")) {
+    return `So sorry about that, ${firstName}! Our team will be in touch with you very shortly. 📞`;
+  }
+  return `Hi ${firstName}! Your booking is all set — our team will be in touch shortly to confirm the details. 🏠✨`;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
 function buildFallbackQuoteMessage(
   firstName: string,

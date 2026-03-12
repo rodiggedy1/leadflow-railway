@@ -24,6 +24,7 @@ import {
   handleOffScriptReply,
   handleObjection,
   detectObjection,
+  handlePostBookingReply,
 } from "./aiService";
 import { notifyAgentOfLead } from "./agentNotification";
 import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
@@ -268,14 +269,24 @@ export async function processLeadReply(
     ? context.extras.map(k => k.replace(/_/g, " ")).join(", ")
     : null;
 
-  // ── Terminal stages — no further processing ────────────────────────────────
+  // ── Post-booking stages — route through AI instead of a static dead-end ───────────────────────
   if (stage === "DONE" || stage === "CALL_SCHEDULED") {
+    const reply = await handlePostBookingReply({
+      stage,
+      leadName: context.leadName,
+      quotedPrice: context.quotedPrice,
+      serviceType: context.serviceType,
+      selectedSlot: context.selectedSlot,
+      address: context.address,
+      messageHistory: context.messageHistory,
+      leadReply,
+      extrasContext,
+    });
     return {
-      reply: `Thanks again! We look forward to serving you. 🏠✨`,
-      nextStage: "DONE",
+      reply,
+      nextStage: stage, // stay in the same stage
     };
   }
-
   // ── QUOTE_SENT: Any reply → send availability (no objection check needed) ──
   if (stage === "QUOTE_SENT") {
     return {

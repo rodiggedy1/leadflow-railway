@@ -201,3 +201,8 @@
 
 - [x] Show total quote (base + extras) in admin leads list table
 - [x] Show total quote (base + extras) in admin lead detail drawer
+
+## AI Conversation Intelligence Fix
+
+- [x] Route DONE/CALL_SCHEDULED replies through AI instead of hardcoded "Thanks again!" fallback
+- [x] Audit and remove other robotic static fallbacks — let AI handle unexpected replies naturally
