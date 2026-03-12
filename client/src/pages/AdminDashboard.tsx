@@ -67,7 +67,7 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const loginMutation = trpc.agents.login.useMutation({
     onSuccess: (data) => {
       if (!data.agent.isAdmin) {
-        toast.error("Access denied. Admin credentials required.");
+        toast.error("This is the admin panel. Go to /agent for the agent workspace.", { duration: 6000 });
         return;
       }
       toast.success(`Welcome back, ${data.agent.name}!`);
@@ -133,6 +133,10 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
         </form>
         <p className="text-center text-xs text-gray-400 mt-4">
           This area is restricted to admin users only.
+        </p>
+        <p className="text-center text-xs text-gray-500 mt-2">
+          Are you an agent?{" "}
+          <a href="/agent" className="underline font-medium" style={{ color: "#E8603C" }}>Go to Agent Workspace →</a>
         </p>
       </div>
     </div>
