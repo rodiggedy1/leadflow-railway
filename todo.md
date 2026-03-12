@@ -136,3 +136,10 @@
 
 - [x] Fix AVAILABILITY stage: if lead names a specific day (e.g. "Friday"), skip SLOT_CHOICE and go straight to ADDRESS with that slot confirmed
 - [x] Lock intro quote message to a consistent static template (no AI variation) — 102/102 tests pass
+
+## Madison Intro SMS
+
+- [x] Update quote message template: "Hi [Name]! Madison here, thanks for reaching out to Maids in Black..."
+- [x] Add MMS photo support to OpenPhone send function (mediaUrl parameter)
+- [x] Attach Madison's headshot to the first intro SMS (CDN URL hardcoded in routers.ts)
+- [x] Updated tests for new template — 102/102 tests pass

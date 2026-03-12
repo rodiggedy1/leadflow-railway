@@ -517,7 +517,8 @@ async function processQuoteInBackground(
   });
 
   // ── Step 3: Send SMS #1: Quote + price + value note to lead ───────────────
-  const sms1 = await sendSms({ to: input.phone, content: msg1 });
+  const MADISON_PHOTO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-SPXr6KHGViveW2LxjwfyqN.png";
+  const sms1 = await sendSms({ to: input.phone, content: msg1, mediaUrl: MADISON_PHOTO_URL });
   console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
 
   // ── Step 4: Send SMS #2: Availability question (natural delay) ────────────

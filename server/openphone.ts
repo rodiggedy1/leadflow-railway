@@ -11,6 +11,7 @@ const OPENPHONE_API_URL = "https://api.openphone.com/v1/messages";
 export interface SendSmsParams {
   to: string;       // Recipient phone number in E.164 format, e.g. "+12025551234"
   content: string;  // Text content of the message (1–1600 chars)
+  mediaUrl?: string; // Optional MMS media URL (image/photo to attach)
 }
 
 export interface SendSmsResult {
@@ -22,7 +23,7 @@ export interface SendSmsResult {
 /**
  * Sends an SMS via the OpenPhone API from the configured sender number.
  */
-export async function sendSms({ to, content }: SendSmsParams): Promise<SendSmsResult> {
+export async function sendSms({ to, content, mediaUrl }: SendSmsParams): Promise<SendSmsResult> {
   const apiKey = ENV.openPhoneApiKey;
   const fromNumberId = ENV.openPhoneNumberId;
 
@@ -43,6 +44,7 @@ export async function sendSms({ to, content }: SendSmsParams): Promise<SendSmsRe
         from: fromNumberId,
         to: [to],
         setInboxStatus: "done",
+        ...(mediaUrl ? { media: [mediaUrl] } : {}),
       }),
     });
 

@@ -266,7 +266,7 @@ function buildFallbackQuoteMessage(
   serviceType: string,
   price: string
 ): string {
-  return `Hi ${firstName}! Thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
+  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
 }
 
 function buildFallbackOffScript(nextAction: string): string {

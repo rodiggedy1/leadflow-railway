@@ -50,6 +50,7 @@ describe("generateQuoteMessage", () => {
     expect(result).toContain("Sarah");
     expect(result).toContain("Maids in Black");
     expect(result).toContain("Standard Cleaning");
+    expect(result).toContain("Madison here");
     // Should NOT call the LLM — it's a static template now
     expect(mockLLM).not.toHaveBeenCalled();
   });
