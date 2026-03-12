@@ -172,3 +172,7 @@
 
 - [x] Diagnose: conversation_sessions has unique constraint on leadPhone — repeat submissions from same phone update instead of insert
 - [x] Fix: removed unique constraint on leadPhone, submit always inserts new row, webhook finds most recent active session by phone — 103/103 tests pass
+
+## Thank You Page — Madison
+
+- [x] Upload Madison headshot to CDN and add to thank you page with "expect a call from Madison shortly" message

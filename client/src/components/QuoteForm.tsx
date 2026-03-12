@@ -100,35 +100,97 @@ function StarRating() {
   );
 }
 
+const MADISON_PHOTO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot_f689bc6f.jpg";
+
 function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
+  const firstName = name ? name.split(" ")[0] : "";
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-6 text-center animate-fade-slide-up delay-0">
+    <div className="flex flex-col items-center justify-center py-10 px-6 text-center animate-fade-slide-up delay-0">
+      {/* Checkmark badge */}
       <div
-        className="animate-success w-20 h-20 rounded-full flex items-center justify-center mb-6"
-        style={{ background: "linear-gradient(135deg, #E8603C 0%, #D44E2A 100%)" }}
+        className="animate-success w-14 h-14 rounded-full flex items-center justify-center mb-6"
+        style={{ background: "linear-gradient(135deg, #E8603C 0%, #D44E2A 100%)", boxShadow: "0 4px 16px rgba(232,96,60,0.35)" }}
       >
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       </div>
+
       <h2
-        className="text-2xl font-bold mb-3"
+        className="text-2xl font-bold mb-2"
         style={{ fontFamily: "'Playfair Display', serif", color: "#2D2D2D" }}
       >
-        Quote Request Sent!
+        {firstName ? `You're all set, ${firstName}!` : "You're all set!"}
       </h2>
-      <p className="text-base mb-2" style={{ color: "#6B4A3A", fontFamily: "'DM Sans', sans-serif" }}>
-        Thanks{name ? `, ${name.split(" ")[0]}` : ""}! We've received your request.
-      </p>
-      {smsSent ? (
-        <p className="text-sm" style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}>
-          Check your phone — your custom quote was just texted to you from Maids in Black!
-        </p>
-      ) : (
-        <p className="text-sm" style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}>
-          Our team will be in touch with your custom quote shortly.
+      {smsSent && (
+        <p className="text-sm mb-6" style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}>
+          Check your phone — your custom quote was just texted to you.
         </p>
       )}
+
+      {/* Divider */}
+      <div className="h-px w-12 mx-auto mb-6" style={{ background: "linear-gradient(90deg, transparent, #E8603C, transparent)" }} />
+
+      {/* Madison card */}
+      <div
+        className="flex items-center gap-4 rounded-2xl px-5 py-4 mb-5 w-full max-w-sm text-left"
+        style={{
+          background: "linear-gradient(135deg, #FFF5F2 0%, #FDE8E0 100%)",
+          border: "1px solid rgba(232,96,60,0.18)",
+          boxShadow: "0 2px 12px rgba(232,96,60,0.10)",
+        }}
+      >
+        {/* Photo */}
+        <div className="shrink-0">
+          <img
+            src={MADISON_PHOTO}
+            alt="Madison from Maids in Black"
+            className="w-16 h-16 rounded-full object-cover object-top"
+            style={{ border: "2.5px solid #E8603C", boxShadow: "0 2px 8px rgba(232,96,60,0.25)" }}
+          />
+        </div>
+        {/* Text */}
+        <div>
+          <p
+            className="text-xs font-semibold tracking-widest uppercase mb-0.5"
+            style={{ color: "#E8603C", fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.12em" }}
+          >
+            Your Specialist
+          </p>
+          <p
+            className="text-base font-bold leading-tight"
+            style={{ fontFamily: "'Playfair Display', serif", color: "#2D2D2D" }}
+          >
+            Madison
+          </p>
+          <p
+            className="text-xs mt-0.5"
+            style={{ color: "#7A5A4A", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            Maids in Black · Washington DC
+          </p>
+        </div>
+      </div>
+
+      {/* Call expectation message */}
+      <div
+        className="rounded-xl px-5 py-4 w-full max-w-sm"
+        style={{
+          background: "rgba(232,96,60,0.07)",
+          border: "1px solid rgba(232,96,60,0.15)",
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <span className="text-lg mt-0.5">📞</span>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: "#5A3A2A", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            <span className="font-semibold" style={{ color: "#2D2D2D" }}>Expect a call from Madison shortly.</span>
+            {" "}She'll confirm your booking details and answer any questions you have.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
