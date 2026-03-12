@@ -1,0 +1,106 @@
+{
+  "query": "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'conversation_sessions' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'conversation_sessions' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "leadPhone",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "leadName",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "stage",
+      "DATA_TYPE": "enum"
+    },
+    {
+      "COLUMN_NAME": "quotedPrice",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "serviceType",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "bedrooms",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "bathrooms",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "selectedSlot",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "address",
+      "DATA_TYPE": "text"
+    },
+    {
+      "COLUMN_NAME": "callPreference",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "messageHistory",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "quoteLeadId",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "createdAt",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "updatedAt",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "assignedAgentId",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "assignedAgentName",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "lastCalledAt",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "lastCalledByAgentId",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "lastCalledByAgentName",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "isBooked",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "bookedAt",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "bookedByAgentId",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "bookedByAgentName",
+      "DATA_TYPE": "varchar"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\nid\tint\nleadPhone\tvarchar\nleadName\tvarchar\nstage\tenum\nquotedPrice\tvarchar\nserviceType\tvarchar\nbedrooms\tvarchar\nbathrooms\tvarchar\nselectedSlot\tvarchar\naddress\ttext\ncallPreference\tvarchar\nmessageHistory\tvarchar\nquoteLeadId\tint\ncreatedAt\ttimestamp\nupdatedAt\ttimestamp\nassignedAgentId\tint\nassignedAgentName\tvarchar\nlastCalledAt\ttimestamp\nlastCalledByAgentId\tint\nlastCalledByAgentName\tvarchar\nisBooked\tint\nbookedAt\ttimestamp\nbookedByAgentId\tint\nbookedByAgentName\tvarchar\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}

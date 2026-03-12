@@ -67,10 +67,10 @@ export const conversationStages = [
 
 export type ConversationStage = (typeof conversationStages)[number];
 
-// Conversation sessions — one row per lead phone number, tracks the AI flow state
+// Conversation sessions — one row per form submission; multiple rows allowed per phone number
 export const conversationSessions = mysqlTable("conversation_sessions", {
   id: int("id").autoincrement().primaryKey(),
-  leadPhone: varchar("leadPhone", { length: 30 }).notNull().unique(), // E.164 format
+  leadPhone: varchar("leadPhone", { length: 30 }).notNull(), // E.164 format (no unique — same phone can submit again later)
   leadName: varchar("leadName", { length: 255 }),
   stage: mysqlEnum("stage", conversationStages as unknown as [string, ...string[]]).default("QUOTE_SENT").notNull(),
   // Collected data across the conversation

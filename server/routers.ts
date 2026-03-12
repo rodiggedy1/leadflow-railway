@@ -538,41 +538,18 @@ async function processQuoteInBackground(
     { role: "assistant", content: msg2 },
   ]);
 
+  // Always create a new session row — same phone can submit again months later
   try {
-    const existing = await db
-      .select()
-      .from(conversationSessions)
-      .where(eq(conversationSessions.leadPhone, normalizedPhone))
-      .limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(conversationSessions)
-        .set({
-          stage: "AVAILABILITY",
-          leadName: input.name,
-          quotedPrice: price,
-          serviceType: input.serviceType,
-          bedrooms: input.bedrooms,
-          bathrooms: input.bathrooms,
-          selectedSlot: null,
-          address: null,
-          callPreference: null,
-          messageHistory: initialHistory,
-        })
-        .where(eq(conversationSessions.leadPhone, normalizedPhone));
-    } else {
-      await db.insert(conversationSessions).values({
-        leadPhone: normalizedPhone,
-        leadName: input.name,
-        stage: "AVAILABILITY",
-        quotedPrice: price,
-        serviceType: input.serviceType,
-        bedrooms: input.bedrooms,
-        bathrooms: input.bathrooms,
-        messageHistory: initialHistory,
-      });
-    }
+    await db.insert(conversationSessions).values({
+      leadPhone: normalizedPhone,
+      leadName: input.name,
+      stage: "AVAILABILITY",
+      quotedPrice: price,
+      serviceType: input.serviceType,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      messageHistory: initialHistory,
+    });
   } catch (dbErr) {
     console.error("[submitQuote] Failed to create conversation session:", dbErr);
   }

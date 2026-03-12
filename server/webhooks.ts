@@ -73,26 +73,31 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // Look up the conversation session for this phone number
+      // Look up the most recent ACTIVE (non-DONE) session for this phone number.
+      // Multiple sessions can exist per phone (e.g. same customer 6 months later).
       const sessions = await db
         .select()
         .from(conversationSessions)
         .where(eq(conversationSessions.leadPhone, fromPhone))
-        .limit(1);
+        .orderBy(conversationSessions.createdAt)
+        .limit(50);
 
-      const session = sessions[0];
+      // Find the most recently created session that is not yet DONE
+      const activeSession = sessions
+        .slice() // copy to avoid mutating
+        .reverse()
+        .find(s => s.stage !== "DONE");
+
+      const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent
 
       if (!session) {
-        console.warn(`[Webhook] No conversation session found for ${fromPhone}. Stored sessions may use different format.`);
-        // Log all sessions for debugging
-        const allSessions = await db.select().from(conversationSessions).limit(10);
-        console.warn(`[Webhook] All sessions: ${JSON.stringify(allSessions.map(s => ({id: s.id, phone: s.leadPhone, stage: s.stage})))}`);
+        console.warn(`[Webhook] No conversation session found for ${fromPhone}.`);
         return;
       }
 
-      // Don't respond to completed conversations
+      // Don't respond to completed conversations (only if no active session exists)
       if (session.stage === "DONE") {
-        console.log(`[Webhook] Conversation for ${fromPhone} is DONE. Skipping.`);
+        console.log(`[Webhook] All conversations for ${fromPhone} are DONE. Skipping.`);
         return;
       }
 

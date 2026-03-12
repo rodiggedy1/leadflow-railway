@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` DROP INDEX `conversation_sessions_leadPhone_unique`;

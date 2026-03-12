@@ -167,3 +167,8 @@
 - [x] AVAILABILITY: on unclear/soft-no reply, re-offers the two slots and stays in AVAILABILITY
 - [x] AVAILABILITY: LLM prompt updated with new intents: yes/specific_day/no/unclear with strict opt-out rules
 - [x] 103/103 tests pass
+
+## Missing Leads Bug (Critical)
+
+- [x] Diagnose: conversation_sessions has unique constraint on leadPhone — repeat submissions from same phone update instead of insert
+- [x] Fix: removed unique constraint on leadPhone, submit always inserts new row, webhook finds most recent active session by phone — 103/103 tests pass

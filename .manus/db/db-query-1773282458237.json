@@ -1,0 +1,26 @@
+{
+  "query": "SELECT id, leadName, leadPhone, stage, createdAt, updatedAt FROM conversation_sessions ORDER BY createdAt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, leadName, leadPhone, stage, createdAt, updatedAt FROM conversation_sessions ORDER BY createdAt DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "30001",
+      "leadName": "Debug Test",
+      "leadPhone": "+12028885362",
+      "stage": "AVAILABILITY",
+      "createdAt": "2026-03-11 23:32:44",
+      "updatedAt": "2026-03-11 23:32:56"
+    },
+    {
+      "id": "2",
+      "leadName": "Elizabeth Rodriguez",
+      "leadPhone": "+13029816191",
+      "stage": "AVAILABILITY",
+      "createdAt": "2026-03-11 21:31:50",
+      "updatedAt": "2026-03-12 02:16:52"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadName\tleadPhone\tstage\tcreatedAt\tupdatedAt\n30001\tDebug Test\t+12028885362\tAVAILABILITY\t2026-03-11 23:32:44\t2026-03-11 23:32:56\n2\tElizabeth Rodriguez\t+13029816191\tAVAILABILITY\t2026-03-11 21:31:50\t2026-03-12 02:16:52\n",
+  "stderr": "",
+  "execution_time_ms": 53
+}

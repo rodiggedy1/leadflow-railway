@@ -50,6 +50,13 @@
       "when": 1773281502577,
       "tag": "0006_optimal_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1773282651304,
+      "tag": "0007_sour_spacker_dave",
+      "breakpoints": true
     }
   ]
 }
