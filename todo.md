@@ -212,3 +212,9 @@
 - [x] Scrape maidsinblack.com for services, FAQs, policies, service area
 - [x] Build structured knowledge base from scraped content
 - [x] Embed knowledge base into AI system prompt
+
+## SMS Simulator
+
+- [x] Add tRPC simulator.chat procedure that calls handleOffScriptReply with configurable context
+- [x] Build SMS simulator UI panel in admin dashboard (chat bubble UI, context config, stage selector)
+- [x] Add simulator link/tab to admin dashboard navigation

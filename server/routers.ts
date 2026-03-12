@@ -8,7 +8,7 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
-import { generateQuoteMessage, generatePricingFollowUp } from "./aiService";
+import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply } from "./aiService";
 import bcrypt from "bcryptjs";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -467,6 +467,69 @@ export const appRouter = router({
           smsSent: true, // optimistic — background will handle actual sending
           message: "Quote sent! Check your phone for your personalized quote.",
         };
+      }),
+  }),
+
+  /**
+   * simulator.chat — live SMS simulator for admin/agent testing
+   * Calls the real AI engine with configurable lead context.
+   * No SMS is sent; responses come back immediately over tRPC.
+   */
+  simulator: router({
+    chat: publicProcedure
+      .input(
+        z.object({
+          message: z.string().min(1).max(500),
+          history: z.array(
+            z.object({
+              role: z.enum(["assistant", "user"]),
+              content: z.string(),
+            })
+          ).max(20).default([]),
+          // Lead context
+          leadName: z.string().default("Test Lead"),
+          serviceType: z.string().default("Standard Cleaning"),
+          quotedPrice: z.string().default("209"),
+          bedrooms: z.string().default("2"),
+          bathrooms: z.string().default("1"),
+          extras: z.array(z.string()).default([]),
+          stage: z.enum(["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "CONFIRMATION", "ADDRESS", "DONE", "CALL_SCHEDULED"]).default("AVAILABILITY"),
+          selectedSlot: z.string().nullable().default(null),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { message, history, leadName, serviceType, quotedPrice, extras, stage, selectedSlot } = input;
+        const extrasContext = extras.length > 0 ? extras.join(", ") : null;
+
+        let reply: string;
+
+        if (stage === "DONE" || stage === "CALL_SCHEDULED") {
+          reply = await handlePostBookingReply({
+            stage,
+            leadName,
+            quotedPrice,
+            serviceType,
+            selectedSlot,
+            address: null,
+            messageHistory: history,
+            leadReply: message,
+            extrasContext,
+          });
+        } else {
+          const result = await handleOffScriptReply({
+            stage,
+            leadName,
+            quotedPrice,
+            serviceType,
+            selectedSlot,
+            messageHistory: history,
+            leadReply: message,
+            extrasContext,
+          });
+          reply = result.reply;
+        }
+
+        return { reply, stage };
       }),
   }),
 });

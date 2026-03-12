@@ -43,6 +43,7 @@ import {
   ShieldOff,
   ShieldCheck,
   Loader2,
+  Bot,
 } from "lucide-react";
 import {
   Dialog,
@@ -54,6 +55,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
+import SmsSimulator from "@/components/SmsSimulator";
 
 // ── Stage configuration ────────────────────────────────────────────────────────
 
@@ -694,7 +696,7 @@ function AgentManagement() {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<"leads" | "agents">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "agents" | "simulator">("leads");
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -811,7 +813,7 @@ export default function AdminDashboard() {
         </div>
         {/* Tab navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#F0D8D0" }}>
-          {(["leads", "agents"] as const).map(tab => (
+          {(["leads", "agents", "simulator"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -820,8 +822,8 @@ export default function AdminDashboard() {
                 ? { borderColor: "#E8603C", color: "#E8603C" }
                 : { borderColor: "transparent", color: "#6b7280" }}
             >
-              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-              {tab === "leads" ? "Leads" : "Agents"}
+              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+              {tab === "leads" ? "Leads" : tab === "agents" ? "Agents" : "AI Simulator"}
             </button>
           ))}
         </div>
@@ -829,6 +831,15 @@ export default function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === "agents" && <AgentManagement />}
+        {activeTab === "simulator" && (
+          <div className="py-4">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">AI Simulator</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Test Madison's responses in real time. Configure the lead context on the left, then type as if you were the lead.</p>
+            </div>
+            <SmsSimulator />
+          </div>
+        )}
         {activeTab === "leads" && <>
         {/* Summary + date filter row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
