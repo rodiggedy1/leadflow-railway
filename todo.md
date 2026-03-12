@@ -323,3 +323,11 @@
 - [x] Add stats bar UI to agent workspace (below header, above date chips): 3 cards — Jobs Booked, Revenue, Conversion Rate
 - [x] Wire stats bar to active dateRange selection
 - [x] Write vitest tests for agents.myStats — 142/142 tests pass
+
+## Agent Leaderboard — COMPLETED
+
+- [x] Add agents.leaderboard backend procedure: returns per-agent stats (leadsAssigned, bookedCount, bookedRevenue, conversionRate) for all agents, filtered by dateFrom/dateTo
+- [x] Add Leaderboard tab to admin dashboard navigation (between Agents and AI Simulator)
+- [x] Ranked cards with 1st/2nd/3rd colored badges, Top Earner pill, Revenue, Jobs Booked, Conv. Rate, Assigned
+- [x] Wire leaderboard to the existing admin date range selector
+- [x] 142/142 tests pass

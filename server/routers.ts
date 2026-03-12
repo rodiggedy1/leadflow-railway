@@ -662,6 +662,76 @@ export const appRouter = router({
 
         return { leadsAssigned, bookedCount, bookedRevenue, conversionRate };
       }),
+
+    /**
+     * agents.leaderboard — admin-only ranked leaderboard for all active agents.
+     * Accepts optional dateFrom / dateTo (ISO date strings) for filtering.
+     * Returns per-agent: leadsAssigned, bookedCount, bookedRevenue, conversionRate
+     * sorted by bookedRevenue descending.
+     */
+    leaderboard: adminAgentProcedure
+      .input(z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const { agents: agentsTable } = await import("../drizzle/schema");
+        const allAgents = await db
+          .select({ id: agentsTable.id, name: agentsTable.name, email: agentsTable.email })
+          .from(agentsTable)
+          .where(eq(agentsTable.isActive, 1));
+        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+        // Assigned leads per agent in date range
+        const assignedRows = await db
+          .select({ agentId: conversationSessions.assignedAgentId, count: sql<number>`count(*)`.as("count") })
+          .from(conversationSessions)
+          .where(and(sql`${conversationSessions.assignedAgentId} IS NOT NULL`, conditions ?? sql`1=1`))
+          .groupBy(conversationSessions.assignedAgentId);
+        // Booked rows per agent in date range (for revenue + count)
+        const bookedRows = await db
+          .select({
+            agentId: conversationSessions.bookedByAgentId,
+            bookedAmount: conversationSessions.bookedAmount,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+          })
+          .from(conversationSessions)
+          .where(and(eq(conversationSessions.isBooked, 1), conditions ?? sql`1=1`));
+        const assignedMap = new Map(assignedRows.map(r => [r.agentId, Number(r.count)]));
+        // Group booked rows by agent
+        const bookedByAgent = new Map<number, typeof bookedRows>();
+        for (const row of bookedRows) {
+          if (row.agentId === null || row.agentId === undefined) continue;
+          if (!bookedByAgent.has(row.agentId)) bookedByAgent.set(row.agentId, []);
+          bookedByAgent.get(row.agentId)!.push(row);
+        }
+        const result = allAgents.map(agent => {
+          const leadsAssigned = assignedMap.get(agent.id) ?? 0;
+          const agentBookedRows = bookedByAgent.get(agent.id) ?? [];
+          const bookedCount = agentBookedRows.length;
+          const bookedRevenue = agentBookedRows.reduce((sum, row) => {
+            if (row.bookedAmount !== null && row.bookedAmount !== undefined) {
+              return sum + Number(row.bookedAmount);
+            }
+            const base = Number(row.quotedPrice ?? 0);
+            let extrasTotal = 0;
+            if (row.extras) {
+              try {
+                const keys: string[] = JSON.parse(row.extras);
+                extrasTotal = calculateExtrasTotal(keys);
+              } catch { /* ignore */ }
+            }
+            return sum + base + extrasTotal;
+          }, 0);
+          const conversionRate = leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0;
+          return { id: agent.id, name: agent.name, email: agent.email, leadsAssigned, bookedCount, bookedRevenue, conversionRate };
+        });
+        // Sort by bookedRevenue descending, then bookedCount
+        result.sort((a, b) => b.bookedRevenue - a.bookedRevenue || b.bookedCount - a.bookedCount);
+        return result;
+      }),
   }),
 
   /**

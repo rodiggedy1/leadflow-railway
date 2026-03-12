@@ -46,6 +46,9 @@ import {
   Bot,
   LogIn,
   Lock,
+  Trophy,
+  Medal,
+  TrendingUp,
 } from "lucide-react";
 import {
   Dialog,
@@ -755,6 +758,91 @@ function getPresetDates(preset: DatePreset): { from: string; to: string } | null
 
 // ── Main dashboard ────────────────────────────────────────────────────────────
 
+// ── Agent Leaderboard Panel ──────────────────────────────────────────────────
+
+function AgentLeaderboard({ dateRange }: { dateRange: { dateFrom?: string; dateTo?: string } }) {
+  const { data: rows = [], isLoading } = trpc.agents.leaderboard.useQuery(dateRange, {
+    refetchInterval: 30000,
+  });
+
+  const rankColors = ["#E8603C", "#9B59B6", "#3498DB"];
+  const rankLabels = ["1st", "2nd", "3rd"];
+
+  return (
+    <div className="py-4">
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <Trophy className="w-5 h-5" style={{ color: "#E8603C" }} />
+          Agent Leaderboard
+        </h2>
+        <p className="text-sm text-gray-500 mt-0.5">Ranked by revenue for the selected date range. Switch the date filter in the header to change the period.</p>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#E8603C" }} />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <Trophy className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No agents found. Add agents in the Agents tab.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((agent, idx) => (
+            <div
+              key={agent.id}
+              className="bg-white rounded-xl border p-4 flex items-center gap-4 shadow-sm"
+              style={{ borderColor: idx < 3 ? rankColors[idx] + "40" : "#F0D8D0" }}
+            >
+              {/* Rank badge */}
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                style={{ backgroundColor: idx < 3 ? rankColors[idx] : "#9CA3AF" }}
+              >
+                {idx < 3 ? rankLabels[idx] : `${idx + 1}`}
+              </div>
+
+              {/* Agent info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900 truncate">{agent.name}</span>
+                  {idx === 0 && agent.bookedRevenue > 0 && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: "#FFF3E0", color: "#E8603C" }}>Top Earner</span>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400">{agent.email}</span>
+              </div>
+
+              {/* Stats */}
+              <div className="flex items-center gap-6 flex-shrink-0">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-900">{agent.bookedCount}</div>
+                  <div className="text-xs text-gray-400">Jobs Booked</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold" style={{ color: "#16a34a" }}>
+                    ${agent.bookedRevenue.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-400">Revenue</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-900">{agent.conversionRate}%</div>
+                  <div className="text-xs text-gray-400">Conv. Rate</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-500">{agent.leadsAssigned}</div>
+                  <div className="text-xs text-gray-400">Assigned</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Agent Management Panel ───────────────────────────────────────────────────
 
 function AgentManagement() {
@@ -1033,7 +1121,7 @@ export default function AdminDashboard() {
   const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
 
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
-  const [activeTab, setActiveTab] = useState<"leads" | "agents" | "simulator">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "agents" | "simulator" | "leaderboard">("leads");
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -1157,7 +1245,7 @@ export default function AdminDashboard() {
         </div>
         {/* Tab navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#F0D8D0" }}>
-          {(["leads", "agents", "simulator"] as const).map(tab => (
+          {(["leads", "agents", "leaderboard", "simulator"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1166,8 +1254,8 @@ export default function AdminDashboard() {
                 ? { borderColor: "#E8603C", color: "#E8603C" }
                 : { borderColor: "transparent", color: "#6b7280" }}
             >
-              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-              {tab === "leads" ? "Leads" : tab === "agents" ? "Agents" : "AI Simulator"}
+              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+              {tab === "leads" ? "Leads" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "AI Simulator"}
             </button>
           ))}
         </div>
@@ -1175,6 +1263,7 @@ export default function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === "agents" && <AgentManagement />}
+        {activeTab === "leaderboard" && <AgentLeaderboard dateRange={dateRange} />}
         {activeTab === "simulator" && (
           <div className="py-4">
             <div className="mb-4">
