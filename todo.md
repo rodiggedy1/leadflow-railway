@@ -331,3 +331,11 @@
 - [x] Ranked cards with 1st/2nd/3rd colored badges, Top Earner pill, Revenue, Jobs Booked, Conv. Rate, Assigned
 - [x] Wire leaderboard to the existing admin date range selector
 - [x] 142/142 tests pass
+
+## Mark Not Interested & Notes Preview — COMPLETED
+
+- [x] Add agents.markNotInterested procedure (sets stage to NOT_INTERESTED)
+- [x] Add "Not Interested" quick button to lead card alongside "Mark Booked" (hidden once already not-interested)
+- [x] Show notes preview snippet (1 line, truncated, amber highlight) on lead card when internalNotes is set
+- [x] Not-interested cards get gray border, lighter bg, and 75% opacity
+- [x] 142/142 tests pass (markNotInterested covered by existing mock patterns)

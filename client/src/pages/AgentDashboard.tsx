@@ -41,6 +41,7 @@ import {
   MessageSquare,
   LogIn,
   Loader2,
+  XCircle,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ type Session = {
   bookedAt: Date | string | null;
   bookedByAgentName: string | null;
   bookedAmount: number | null;
+  internalNotes: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -631,17 +633,23 @@ function LeadCard({
     onSuccess: () => { utils.leads.list.invalidate(); toast.success("Marked as booked!"); },
     onError: (err) => toast.error(err.message),
   });
+  const markNotInterested = trpc.agents.markNotInterested.useMutation({
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Marked as not interested"); },
+    onError: (err) => toast.error(err.message),
+  });
 
   const isMine = session.assignedAgentId === currentAgentId;
   const isBooked = session.isBooked === 1;
+  const isNotInterested = session.stage === "NOT_INTERESTED";
 
   return (
     <>
       <Card
         className="transition-all hover:shadow-md"
         style={{
-          borderColor: isBooked ? "#bbf7d0" : isMine ? "#bfdbfe" : "#F0D8D0",
-          backgroundColor: isBooked ? "#f0fdf4" : isMine ? "#eff6ff" : "white",
+          borderColor: isBooked ? "#bbf7d0" : isNotInterested ? "#e5e7eb" : isMine ? "#bfdbfe" : "#F0D8D0",
+          backgroundColor: isBooked ? "#f0fdf4" : isNotInterested ? "#f9fafb" : isMine ? "#eff6ff" : "white",
+          opacity: isNotInterested ? 0.75 : 1,
         }}
       >
         <CardContent className="p-4">
@@ -678,6 +686,13 @@ function LeadCard({
                   <span className="text-green-700">✓ Booked by {session.bookedByAgentName}</span>
                 )}
               </div>
+              {/* Notes preview */}
+              {session.internalNotes && (
+                <div className="mt-1.5 flex items-start gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                  <span className="shrink-0">📝</span>
+                  <span className="truncate italic">{session.internalNotes}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -734,6 +749,18 @@ function LeadCard({
                 >
                   <CheckCircle2 className="w-3 h-3" /> Mark Booked
                 </Button>
+
+                {!isNotInterested && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2.5 text-xs gap-1 text-gray-500 border-gray-200 hover:bg-gray-50"
+                    onClick={() => markNotInterested.mutate({ sessionId: session.id })}
+                    disabled={markNotInterested.isPending}
+                  >
+                    <XCircle className="w-3 h-3" /> Not Interested
+                  </Button>
+                )}
               </>
             )}
           </div>

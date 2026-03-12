@@ -404,6 +404,23 @@ export const appRouter = router({
       }),
 
     /**
+     * agents.markNotInterested — mark a lead as not interested (sets stage to NOT_INTERESTED).
+     * Any authenticated agent can call this.
+     */
+    markNotInterested: publicProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx); // require agent auth
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ stage: "NOT_INTERESTED" })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
      * agents.getCallLogs — get all call log entries for a specific session.
      */
     getCallLogs: publicProcedure
