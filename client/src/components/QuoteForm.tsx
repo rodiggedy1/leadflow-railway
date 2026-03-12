@@ -186,7 +186,7 @@ function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
             className="text-sm leading-relaxed"
             style={{ color: "#5A3A2A", fontFamily: "'DM Sans', sans-serif" }}
           >
-            <span className="font-semibold" style={{ color: "#2D2D2D" }}>Expect a call from Madison shortly.</span>
+            <span className="font-semibold" style={{ color: "#2D2D2D" }}>Expect a text/call from Madison shortly.</span>
             {" "}She'll confirm your booking details and answer any questions you have.
           </p>
         </div>
