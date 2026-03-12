@@ -292,3 +292,12 @@
 - [x] Add internal notes textarea to agent workspace ConversationDrawer
 - [x] Add internal notes textarea to admin ConversationDrawer
 - [x] Write vitest tests for claimLead, updateNotes, and getNotes — 136/136 tests pass
+
+## Booked Revenue — Extras & Editable Amount — COMPLETED
+
+- [x] Add bookedAmount column (nullable int) to conversation_sessions schema
+- [x] Run pnpm db:push to migrate DB
+- [x] Update leads.stats to use bookedAmount if set, else fall back to quotedPrice + extras total
+- [x] Add leads.updateBookedAmount procedure (admin only)
+- [x] Add editable booked amount field to admin ConversationDrawer (shown when stage is BOOKED)
+- [x] Update leads.test.ts for new stats logic — 137/137 tests pass

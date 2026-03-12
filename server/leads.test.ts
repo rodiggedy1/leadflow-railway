@@ -128,7 +128,7 @@ describe("leads.list", () => {
  */
 function buildStatsMockDb(
   stageRows: { stage: string; count: number | string }[],
-  bookedRows: { quotedPrice: string | null }[] = []
+  bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null }[] = []
 ) {
   // Second query: booked rows
   const mockBookedWhere = vi.fn().mockResolvedValue(bookedRows);
@@ -232,15 +232,15 @@ describe("leads.stats", () => {
     expect(result.conversionRate).toBe(16);
   });
 
-  it("calculates bookedRevenue correctly from quoted prices", async () => {
+  it("calculates bookedRevenue correctly from quoted prices (no extras, no override)", async () => {
     const fakeRows = [
       { stage: "BOOKED", count: 3 },
       { stage: "AVAILABILITY", count: 7 },
     ];
     const bookedRows = [
-      { quotedPrice: "179" },
-      { quotedPrice: "234" },
-      { quotedPrice: "299" },
+      { quotedPrice: "179", extras: null, bookedAmount: null },
+      { quotedPrice: "234", extras: null, bookedAmount: null },
+      { quotedPrice: "299", extras: null, bookedAmount: null },
     ];
 
     mockGetDb.mockResolvedValue(buildStatsMockDb(fakeRows, bookedRows));
@@ -253,5 +253,28 @@ describe("leads.stats", () => {
     expect(result.total).toBe(10);
     // conversionRate = round(3/10 * 100) = 30
     expect(result.conversionRate).toBe(30);
+  });
+
+  it("uses bookedAmount override when set, falls back to quotedPrice + extras otherwise", async () => {
+    const fakeRows = [
+      { stage: "BOOKED", count: 3 },
+    ];
+    const bookedRows = [
+      // Has bookedAmount override — should use 500 instead of 179
+      { quotedPrice: "179", extras: null, bookedAmount: 500 },
+      // Has extras but no override — should use 234 + 30 (clean_inside_cabinets) = 264
+      { quotedPrice: "234", extras: JSON.stringify(["clean_inside_cabinets"]), bookedAmount: null },
+      // No extras, no override — should use 299
+      { quotedPrice: "299", extras: null, bookedAmount: null },
+    ];
+
+    mockGetDb.mockResolvedValue(buildStatsMockDb(fakeRows, bookedRows));
+
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.leads.stats();
+
+    expect(result.bookedCount).toBe(3);
+    // 500 (override) + 264 (234 + 30 extras) + 299 = 1063
+    expect(result.bookedRevenue).toBe(1063);
   });
 });

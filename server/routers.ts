@@ -11,6 +11,7 @@ import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply } from "./aiService";
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
+import { calculateExtrasTotal } from "../shared/extras";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
@@ -92,9 +93,13 @@ export const appRouter = router({
           total += Number(row.count);
         }
 
-        // Booked revenue: sum of quotedPrice for BOOKED sessions
+        // Booked revenue: use bookedAmount if set, else quotedPrice + extras total
         const bookedRows = await db
-          .select({ quotedPrice: conversationSessions.quotedPrice })
+          .select({
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+            bookedAmount: conversationSessions.bookedAmount,
+          })
           .from(conversationSessions)
           .where(
             conditions
@@ -103,8 +108,19 @@ export const appRouter = router({
           );
         const bookedCount = bookedRows.length;
         const bookedRevenue = bookedRows.reduce((sum, r) => {
-          const price = parseFloat(r.quotedPrice ?? "0");
-          return sum + (isNaN(price) ? 0 : price);
+          // If admin has set a manual bookedAmount, use that
+          if (r.bookedAmount !== null && r.bookedAmount !== undefined) {
+            return sum + r.bookedAmount;
+          }
+          // Otherwise fall back to quotedPrice + extras
+          const base = parseFloat(r.quotedPrice ?? "0");
+          let extrasTotal = 0;
+          try {
+            const keys: string[] = JSON.parse(r.extras ?? "[]");
+            extrasTotal = calculateExtrasTotal(keys);
+          } catch { /* ignore */ }
+          const price = (isNaN(base) ? 0 : base) + extrasTotal;
+          return sum + price;
         }, 0);
         const conversionRate = total > 0 ? Math.round((bookedCount / total) * 100) : 0;
 
@@ -165,6 +181,25 @@ export const appRouter = router({
         await db
           .update(conversationSessions)
           .set({ assignedAgentId: agent.id, assignedAgentName: agent.name })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * leads.updateBookedAmount — admin sets the actual invoiced/booked dollar amount.
+     * Pass null to clear the override and revert to quotedPrice + extras.
+     */
+    updateBookedAmount: adminAgentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        bookedAmount: z.number().int().min(0).nullable(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ bookedAmount: input.bookedAmount })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),

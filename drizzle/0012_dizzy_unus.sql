@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` ADD `bookedAmount` int;

@@ -110,6 +110,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
 
   /** Internal notes visible only to admins and agents — not shown to leads */
   internalNotes: text("internalNotes"),
+  /**
+   * Actual booked/invoiced amount in dollars (integer cents-free).
+   * If set, this overrides quotedPrice + extras for revenue calculations.
+   * Admin can edit this after marking a lead as BOOKED.
+   */
+  bookedAmount: int("bookedAmount"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

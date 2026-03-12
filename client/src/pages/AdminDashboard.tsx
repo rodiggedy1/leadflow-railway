@@ -378,6 +378,7 @@ type DrawerSession = {
   extras: string | null;
   assignedAgentId: number | null;
   assignedAgentName: string | null;
+  bookedAmount: number | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -431,6 +432,24 @@ function ConversationDrawer({
   });
 
   const activeAgents = agentList.filter(a => a.isActive);
+
+  // Booked amount editing
+  const [bookedAmountInput, setBookedAmountInput] = useState(
+    session.bookedAmount !== null && session.bookedAmount !== undefined
+      ? String(session.bookedAmount)
+      : ""
+  );
+  const [bookedAmountSaved, setBookedAmountSaved] = useState(false);
+  const updateBookedAmountMutation = trpc.leads.updateBookedAmount.useMutation({
+    onSuccess: (_, vars) => {
+      onSessionUpdate({ bookedAmount: vars.bookedAmount });
+      utils.leads.stats.invalidate();
+      setBookedAmountSaved(true);
+      setTimeout(() => setBookedAmountSaved(false), 2000);
+      toast.success(vars.bookedAmount === null ? "Booked amount cleared" : `Booked amount set to $${vars.bookedAmount}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
@@ -577,6 +596,62 @@ function ConversationDrawer({
             <div className="col-span-2">
               <span className="text-gray-500">Agent:</span>{" "}
               <span className="font-medium">{session.assignedAgentName}</span>
+            </div>
+          )}
+          {/* Editable booked amount — shown for admin when stage is BOOKED */}
+          {isAdmin && session.stage === "BOOKED" && (
+            <div className="col-span-2 mt-1">
+              <span className="text-gray-500 text-xs font-medium block mb-1">Booked Amount (actual invoice)</span>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
+                    value={bookedAmountInput}
+                    onChange={e => setBookedAmountInput(e.target.value)}
+                    className="pl-6 h-8 text-sm"
+                  />
+                </div>
+                {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">Saved ✓</span>}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs shrink-0"
+                  disabled={updateBookedAmountMutation.isPending}
+                  onClick={() => {
+                    const val = bookedAmountInput.trim();
+                    const parsed = val === "" ? null : parseInt(val, 10);
+                    if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
+                      toast.error("Enter a valid dollar amount");
+                      return;
+                    }
+                    updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
+                  }}
+                >
+                  {updateBookedAmountMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                </Button>
+                {session.bookedAmount !== null && session.bookedAmount !== undefined && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs text-gray-400 shrink-0"
+                    onClick={() => {
+                      setBookedAmountInput("");
+                      updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: null });
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {session.bookedAmount !== null && session.bookedAmount !== undefined
+                  ? `Override active: $${session.bookedAmount} (replaces quote + extras in revenue)`
+                  : `Using quote + extras: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
+                }
+              </p>
             </div>
           )}
         </div>
