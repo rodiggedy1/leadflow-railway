@@ -536,9 +536,28 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  // Assign fallback timestamps to messages that don't have one.
+  // Spread them evenly between createdAt and updatedAt so separators always fire.
+  function withFallbackTs(
+    msgs: { role: string; content: string; ts?: number }[],
+    createdAt: Date | string,
+    updatedAt: Date | string
+  ) {
+    if (msgs.length === 0) return msgs;
+    const start = new Date(createdAt).getTime();
+    const end = new Date(updatedAt).getTime();
+    const span = Math.max(end - start, 0);
+    return msgs.map((m, i) => ({
+      ...m,
+      ts: m.ts ?? Math.round(start + (span * i) / Math.max(msgs.length - 1, 1)),
+    }));
+  }
+
   // Reply / send message
   const [replyText, setReplyText] = useState("");
-  const [localMessages, setLocalMessages] = useState<{ role: string; content: string; ts?: number }[]>(messages);
+  const [localMessages, setLocalMessages] = useState<{ role: string; content: string; ts?: number }[]>(
+    withFallbackTs(messages, session.createdAt, session.updatedAt)
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-refresh conversation every 5s when drawer is open
@@ -552,7 +571,7 @@ function ConversationDrawer({
     if (freshSession?.messageHistory) {
       try {
         const fresh = JSON.parse(freshSession.messageHistory);
-        setLocalMessages(fresh);
+        setLocalMessages(withFallbackTs(fresh, session.createdAt, freshSession.updatedAt ?? session.updatedAt));
       } catch { /* ignore */ }
     }
   }, [freshSession?.messageHistory]);
@@ -648,15 +667,20 @@ function ConversationDrawer({
                   const isOutbound = msg.role === "assistant";
                   const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
                   const curTs = msg.ts;
+                  // Show a day separator whenever the calendar day changes (ts is always set now via fallback)
                   const showSeparator = curTs != null && (
                     i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
                   );
+                  // Small time label shown below each bubble (e.g. "2:34 PM")
+                  const timeLabel = curTs != null
+                    ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                    : null;
                   return (
                     <div key={i}>
                       {showSeparator && curTs != null && (
                         <MessageDateSeparator label={formatMsgDate(curTs)} />
                       )}
-                      <div className={`flex mb-2 ${isOutbound ? "justify-end" : "justify-start"}`}>
+                      <div className={`flex flex-col mb-3 ${isOutbound ? "items-end" : "items-start"}`}>
                         <div
                           className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
                           style={
@@ -667,6 +691,9 @@ function ConversationDrawer({
                         >
                           {msg.content}
                         </div>
+                        {timeLabel && (
+                          <span className="text-[10px] text-gray-400 mt-0.5 px-1">{timeLabel}</span>
+                        )}
                       </div>
                     </div>
                   );
