@@ -84,9 +84,66 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   messageHistory: varchar("messageHistory", { length: 5000 }).default("[]").notNull(),
   // Link back to the original quote lead
   quoteLeadId: int("quoteLeadId"),
+
+  // ── Agent activity fields ──────────────────────────────────────────────────
+  /** ID of the agent (user.id) who has claimed this lead */
+  assignedAgentId: int("assignedAgentId"),
+  /** Denormalized name for fast display without joins */
+  assignedAgentName: varchar("assignedAgentName", { length: 255 }),
+  /** When an agent last called this lead */
+  lastCalledAt: timestamp("lastCalledAt"),
+  /** Agent who made the last call */
+  lastCalledByAgentId: int("lastCalledByAgentId"),
+  lastCalledByAgentName: varchar("lastCalledByAgentName", { length: 255 }),
+  /** Booking status */
+  isBooked: int("isBooked").default(0).notNull(), // 0 = not booked, 1 = booked
+  bookedAt: timestamp("bookedAt"),
+  bookedByAgentId: int("bookedByAgentId"),
+  bookedByAgentName: varchar("bookedByAgentName", { length: 255 }),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ConversationSession = typeof conversationSessions.$inferSelect;
 export type InsertConversationSession = typeof conversationSessions.$inferInsert;
+
+/**
+ * Call log outcomes:
+ * ANSWERED   → Lead picked up, conversation happened
+ * NO_ANSWER  → Rang but no answer
+ * VOICEMAIL  → Left a voicemail
+ * BUSY       → Line was busy
+ * BOOKED     → Call resulted in a booking
+ * CALLBACK   → Lead asked to call back later
+ */
+export const callOutcomes = [
+  "ANSWERED",
+  "NO_ANSWER",
+  "VOICEMAIL",
+  "BUSY",
+  "BOOKED",
+  "CALLBACK",
+] as const;
+
+export type CallOutcome = (typeof callOutcomes)[number];
+
+/**
+ * leadCallLogs — one row per call attempt by an agent
+ */
+export const leadCallLogs = mysqlTable("lead_call_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The conversation session this call is associated with */
+  sessionId: int("sessionId").notNull(),
+  /** Agent who made the call */
+  agentId: int("agentId").notNull(),
+  agentName: varchar("agentName", { length: 255 }).notNull(),
+  /** Call outcome */
+  outcome: mysqlEnum("outcome", callOutcomes as unknown as [string, ...string[]]).notNull(),
+  /** Optional notes from the agent */
+  notes: text("notes"),
+  calledAt: timestamp("calledAt").defaultNow().notNull(),
+});
+
+export type LeadCallLog = typeof leadCallLogs.$inferSelect;
+export type InsertLeadCallLog = typeof leadCallLogs.$inferInsert;

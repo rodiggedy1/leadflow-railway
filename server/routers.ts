@@ -5,7 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { and, between, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { quoteLeads, conversationSessions } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp } from "./aiService";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
@@ -84,6 +84,205 @@ export const appRouter = router({
           total += Number(row.count);
         }
         return { total, byStage };
+      }),
+  }),
+
+  /**
+   * agents — protected procedures for agent actions on leads
+   *
+   * All procedures require the agent to be logged in via Manus OAuth.
+   * The agent's user.id and user.name are taken from ctx.user.
+   */
+  agents: router({
+    /**
+     * agents.claimLead — assign a lead to the calling agent
+     * If the lead is already claimed by another agent, throws FORBIDDEN.
+     * Admins can always reassign.
+     */
+    claimLead: protectedProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const [session] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) throw new Error("Lead not found");
+        // Only admins can steal a lead already claimed by someone else
+        if (
+          session.assignedAgentId &&
+          session.assignedAgentId !== ctx.user.id &&
+          ctx.user.role !== "admin"
+        ) {
+          throw new Error("This lead is already claimed by another agent");
+        }
+        await db
+          .update(conversationSessions)
+          .set({
+            assignedAgentId: ctx.user.id,
+            assignedAgentName: ctx.user.name ?? "Unknown Agent",
+          })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.unclaimLead — release a lead back to unassigned
+     * Only the owning agent or an admin can unclaim.
+     */
+    unclaimLead: protectedProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const [session] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) throw new Error("Lead not found");
+        if (
+          session.assignedAgentId !== ctx.user.id &&
+          ctx.user.role !== "admin"
+        ) {
+          throw new Error("You can only unclaim leads assigned to you");
+        }
+        await db
+          .update(conversationSessions)
+          .set({ assignedAgentId: null, assignedAgentName: null })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.logCall — record a call attempt with outcome and optional notes.
+     * Also updates lastCalledAt / lastCalledByAgent on the session.
+     */
+    logCall: protectedProcedure
+      .input(
+        z.object({
+          sessionId: z.number().int().positive(),
+          outcome: z.enum(callOutcomes as unknown as [string, ...string[]]),
+          notes: z.string().max(1000).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const now = new Date();
+        // Insert call log row
+        await db.insert(leadCallLogs).values({
+          sessionId: input.sessionId,
+          agentId: ctx.user.id,
+          agentName: ctx.user.name ?? "Unknown Agent",
+          outcome: input.outcome,
+          notes: input.notes ?? null,
+          calledAt: now,
+        });
+        // Update the session's last-called fields
+        const updates: Record<string, unknown> = {
+          lastCalledAt: now,
+          lastCalledByAgentId: ctx.user.id,
+          lastCalledByAgentName: ctx.user.name ?? "Unknown Agent",
+        };
+        // If outcome is BOOKED, also mark as booked
+        if (input.outcome === "BOOKED") {
+          updates.isBooked = 1;
+          updates.bookedAt = now;
+          updates.bookedByAgentId = ctx.user.id;
+          updates.bookedByAgentName = ctx.user.name ?? "Unknown Agent";
+        }
+        await db
+          .update(conversationSessions)
+          .set(updates)
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.markBooked — explicitly mark a lead as booked (without logging a call).
+     */
+    markBooked: protectedProcedure
+      .input(
+        z.object({
+          sessionId: z.number().int().positive(),
+          notes: z.string().max(1000).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const now = new Date();
+        await db
+          .update(conversationSessions)
+          .set({
+            isBooked: 1,
+            bookedAt: now,
+            bookedByAgentId: ctx.user.id,
+            bookedByAgentName: ctx.user.name ?? "Unknown Agent",
+          })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.unmarkBooked — undo a booking (admin only).
+     */
+    unmarkBooked: protectedProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new Error("Admin only");
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ isBooked: 0, bookedAt: null, bookedByAgentId: null, bookedByAgentName: null })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.getCallLogs — get all call log entries for a specific session.
+     */
+    getCallLogs: protectedProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        return db
+          .select()
+          .from(leadCallLogs)
+          .where(eq(leadCallLogs.sessionId, input.sessionId))
+          .orderBy(desc(leadCallLogs.calledAt));
+      }),
+
+    /**
+     * agents.myLeads — get all leads assigned to the current agent.
+     */
+    myLeads: protectedProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const conditions = [
+          eq(conversationSessions.assignedAgentId, ctx.user.id),
+          ...(buildDateConditions(input?.dateFrom, input?.dateTo)
+            ? [buildDateConditions(input?.dateFrom, input?.dateTo)!]
+            : []),
+        ];
+        return db
+          .select()
+          .from(conversationSessions)
+          .where(and(...conditions))
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(500);
       }),
   }),
 

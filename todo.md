@@ -95,3 +95,13 @@
 
 - [x] Fix funnel stats bar: clarified that 0 is correct (leads progressed to AVAILABILITY); improved visual clarity with dimmed zero-count cards
 - [x] Add date range filter to the dashboard (Today / Yesterday / Last 7 / Last 30 / Custom range) — 97/97 tests pass
+
+## Agent System
+
+- [x] Extend DB schema: added assignedAgentId, assignedAgentName, lastCalledAt, lastCalledByAgentName, isBooked, bookedAt, bookedByAgentName to conversation_sessions; added leadCallLogs table
+- [x] Backend: agents.claimLead, unclaimLead, logCall, markBooked, getCallLogs, myLeads procedures
+- [x] Backend: leads.list updated to include agent fields
+- [x] Agent workspace page (/agent) — claim/release leads, log calls, mark booked, view SMS + call history
+- [x] Agent login gate — Manus OAuth required, redirects to login if unauthenticated
+- [x] Admin dashboard — added Agent, Last Called, Booking columns + agent filter dropdown
+- [x] 97/97 tests pass

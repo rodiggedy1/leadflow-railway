@@ -29,6 +29,13 @@
       "when": 1773260461188,
       "tag": "0003_majestic_bug",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1773276142768,
+      "tag": "0004_funny_pyro",
+      "breakpoints": true
     }
   ]
 }

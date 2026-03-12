@@ -34,6 +34,9 @@ import {
   MapPin,
   Calendar,
   X,
+  UserCheck,
+  CheckCircle2,
+  PhoneCall,
 } from "lucide-react";
 
 // ── Stage configuration ────────────────────────────────────────────────────────
@@ -377,6 +380,7 @@ export default function AdminDashboard() {
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<null | {
     leadName: string | null;
     leadPhone: string;
@@ -411,19 +415,33 @@ export default function AdminDashboard() {
     refetchInterval: 30000,
   });
 
+  // Collect unique agent names for the agent filter dropdown
+  const agentNames = useMemo(() => {
+    const names = new Set<string>();
+    sessions.forEach(s => {
+      if (s.assignedAgentName) names.add(s.assignedAgentName);
+    });
+    return Array.from(names).sort();
+  }, [sessions]);
+
   const filtered = useMemo(() => {
     return sessions.filter(s => {
       const matchesStage = stageFilter === "all" || s.stage === stageFilter;
+      const matchesAgent =
+        agentFilter === "all" ||
+        (agentFilter === "unassigned" && !s.assignedAgentId) ||
+        s.assignedAgentName === agentFilter;
       const q = search.toLowerCase();
       const matchesSearch =
         !q ||
         (s.leadName ?? "").toLowerCase().includes(q) ||
         s.leadPhone.includes(q) ||
         (s.serviceType ?? "").toLowerCase().includes(q) ||
-        (s.address ?? "").toLowerCase().includes(q);
-      return matchesStage && matchesSearch;
+        (s.address ?? "").toLowerCase().includes(q) ||
+        (s.assignedAgentName ?? "").toLowerCase().includes(q);
+      return matchesStage && matchesAgent && matchesSearch;
     });
-  }, [sessions, stageFilter, search]);
+  }, [sessions, stageFilter, agentFilter, search]);
 
   const unhandledCount = stats?.byStage?.["UNHANDLED"] ?? 0;
 
@@ -558,7 +576,7 @@ export default function AdminDashboard() {
             />
           </div>
           <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-48 bg-white">
+            <SelectTrigger className="w-44 bg-white">
               <SelectValue placeholder="All stages" />
             </SelectTrigger>
             <SelectContent>
@@ -570,12 +588,24 @@ export default function AdminDashboard() {
               ))}
             </SelectContent>
           </Select>
-          {stageFilter !== "all" && (
+          <Select value={agentFilter} onValueChange={setAgentFilter}>
+            <SelectTrigger className="w-44 bg-white">
+              <SelectValue placeholder="All agents" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All agents</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {agentNames.map(name => (
+                <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(stageFilter !== "all" || agentFilter !== "all") && (
             <button
-              onClick={() => setStageFilter("all")}
+              onClick={() => { setStageFilter("all"); setAgentFilter("all"); }}
               className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 self-center"
             >
-              <X className="w-3 h-3" /> Clear filter
+              <X className="w-3 h-3" /> Clear filters
             </button>
           )}
           <span className="text-sm text-gray-500 self-center">
@@ -609,6 +639,9 @@ export default function AdminDashboard() {
                     <TableHead className="font-semibold text-gray-700">Service</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Quote</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-36">Stage</TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-36">Agent</TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-32">Last Called</TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-32">Booking</TableHead>
                     <TableHead className="font-semibold text-gray-700">Slot / Address</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Updated</TableHead>
                     <TableHead className="w-16"></TableHead>
@@ -671,6 +704,52 @@ export default function AdminDashboard() {
                       {/* Stage */}
                       <TableCell>
                         <StageBadge stage={session.stage} />
+                      </TableCell>
+
+                      {/* Agent */}
+                      <TableCell>
+                        {session.assignedAgentName ? (
+                          <span className="text-xs flex items-center gap-1 text-orange-700">
+                            <UserCheck className="w-3 h-3 shrink-0" />
+                            {session.assignedAgentName}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">Unassigned</span>
+                        )}
+                      </TableCell>
+
+                      {/* Last Called */}
+                      <TableCell>
+                        {session.lastCalledAt ? (
+                          <span className="text-xs flex items-center gap-1 text-gray-600">
+                            <PhoneCall className="w-3 h-3 text-gray-400 shrink-0" />
+                            <span>
+                              {timeAgo(session.lastCalledAt)}
+                              {session.lastCalledByAgentName && (
+                                <span className="block text-gray-400">{session.lastCalledByAgentName}</span>
+                              )}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Booking */}
+                      <TableCell>
+                        {session.isBooked === 1 ? (
+                          <span className="text-xs flex items-center gap-1 text-green-700 font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              Booked
+                              {session.bookedByAgentName && (
+                                <span className="block font-normal text-green-600">{session.bookedByAgentName}</span>
+                              )}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
                       </TableCell>
 
                       {/* Slot / Address */}
