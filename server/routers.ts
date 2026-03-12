@@ -1,7 +1,7 @@
 import { COOKIE_NAME, AGENT_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminAgentProcedure, router } from "./_core/trpc";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
@@ -305,16 +305,15 @@ export const appRouter = router({
 
     /**
      * agents.create — admin creates a new agent account.
-     * Requires Manus admin session (ctx.user.role === 'admin').
+     * Requires admin agent session (isAdmin=true in agent cookie).
      */
-    create: protectedProcedure
+    create: adminAgentProcedure
       .input(z.object({
         name: z.string().min(1).max(255),
         email: z.string().email().max(320),
         password: z.string().min(6).max(128),
       }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "admin") throw new Error("Admin only");
+      .mutation(async ({ input }) => {
         const existing = await getAgentByEmail(input.email.toLowerCase().trim());
         if (existing) throw new Error("An agent with this email already exists");
         const passwordHash = await bcrypt.hash(input.password, 12);
@@ -329,8 +328,7 @@ export const appRouter = router({
     /**
      * agents.list — admin lists all agent accounts.
      */
-    list: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") throw new Error("Admin only");
+    list: adminAgentProcedure.query(async () => {
       const all = await getAllAgents();
       // Never return passwordHash to the client
       return all.map(a => ({
@@ -345,10 +343,9 @@ export const appRouter = router({
     /**
      * agents.setActive — admin activates or deactivates an agent.
      */
-    setActive: protectedProcedure
+    setActive: adminAgentProcedure
       .input(z.object({ agentId: z.number().int().positive(), isActive: z.boolean() }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "admin") throw new Error("Admin only");
+      .mutation(async ({ input }) => {
         await setAgentActive(input.agentId, input.isActive ? 1 : 0);
         return { success: true };
       }),
@@ -356,10 +353,9 @@ export const appRouter = router({
     /**
      * agents.resetPassword — admin resets an agent's password.
      */
-    resetPassword: protectedProcedure
+    resetPassword: adminAgentProcedure
       .input(z.object({ agentId: z.number().int().positive(), newPassword: z.string().min(6) }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "admin") throw new Error("Admin only");
+      .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const { agents: agentsTable } = await import("../drizzle/schema");
@@ -373,8 +369,7 @@ export const appRouter = router({
      * Returns for each active agent:
      *   callsThisWeek, bookingsThisWeek, totalAssigned, bookingsAllTime, conversionRate
      */
-    performance: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") throw new Error("Admin only");
+    performance: adminAgentProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
 

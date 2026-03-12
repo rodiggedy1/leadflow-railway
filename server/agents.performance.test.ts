@@ -11,15 +11,46 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { signAgentSession } from "./_core/agentAuth";
+import { AGENT_COOKIE_NAME } from "@shared/const";
 
-function createAdminContext(): TrpcContext {
+/**
+ * Build a TrpcContext with a valid admin agent session cookie.
+ * Must be awaited before passing to appRouter.createCaller().
+ */
+async function createAdminContext(): Promise<TrpcContext> {
+  const token = await signAgentSession({
+    agentId: 1,
+    agentName: "Admin",
+    agentEmail: "admin@test.com",
+    isAdmin: true,
+  });
   return {
-    user: {
-      id: 1, openId: "admin-open-id", name: "Admin", email: "admin@test.com",
-      role: "admin", loginMethod: "oauth",
-      createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
-    },
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    user: null,
+    req: {
+      protocol: "https",
+      headers: { cookie: `${AGENT_COOKIE_NAME}=${token}` },
+    } as TrpcContext["req"],
+    res: { clearCookie: vi.fn(), cookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+}
+
+/**
+ * Build a TrpcContext with a non-admin agent session cookie.
+ */
+async function createNonAdminAgentContext(): Promise<TrpcContext> {
+  const token = await signAgentSession({
+    agentId: 2,
+    agentName: "Agent",
+    agentEmail: "agent@test.com",
+    isAdmin: false,
+  });
+  return {
+    user: null,
+    req: {
+      protocol: "https",
+      headers: { cookie: `${AGENT_COOKIE_NAME}=${token}` },
+    } as TrpcContext["req"],
     res: { clearCookie: vi.fn(), cookie: vi.fn() } as unknown as TrpcContext["res"],
   };
 }
@@ -72,7 +103,8 @@ describe("agents.performance", () => {
 
   it("returns empty array when DB is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
-    const caller = appRouter.createCaller(createAdminContext());
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
     const result = await caller.agents.performance();
     expect(result).toEqual([]);
   });
@@ -91,7 +123,8 @@ describe("agents.performance", () => {
     ]);
     mockGetDb.mockResolvedValue(mockDb as never);
 
-    const caller = appRouter.createCaller(createAdminContext());
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
     const result = await caller.agents.performance();
 
     expect(result).toHaveLength(2);
@@ -116,7 +149,8 @@ describe("agents.performance", () => {
     const mockDb = buildSequentialMockDb([fakeAgents, [], [], [], []]);
     mockGetDb.mockResolvedValue(mockDb as never);
 
-    const caller = appRouter.createCaller(createAdminContext());
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
     const result = await caller.agents.performance();
 
     expect(result).toHaveLength(1);
@@ -137,7 +171,8 @@ describe("agents.performance", () => {
     ]);
     mockGetDb.mockResolvedValue(mockDb as never);
 
-    const caller = appRouter.createCaller(createAdminContext());
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
     const result = await caller.agents.performance();
 
     expect(result[0]?.callsThisWeek).toBe(5);
@@ -147,18 +182,10 @@ describe("agents.performance", () => {
     expect(result[0]?.conversionRate).toBe(60);
   });
 
-  it("throws when called by a non-admin user", async () => {
-    const nonAdminCtx: TrpcContext = {
-      user: {
-        id: 2, openId: "user-open-id", name: "User", email: "user@test.com",
-        role: "user", loginMethod: "oauth",
-        createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
-      },
-      req: { protocol: "https", headers: {} } as TrpcContext["req"],
-      res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-    };
+  it("throws when called by a non-admin agent", async () => {
     mockGetDb.mockResolvedValue(null as never);
-    const caller = appRouter.createCaller(nonAdminCtx);
-    await expect(caller.agents.performance()).rejects.toThrow("Admin only");
+    const ctx = await createNonAdminAgentContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.agents.performance()).rejects.toThrow("Admin access required");
   });
 });

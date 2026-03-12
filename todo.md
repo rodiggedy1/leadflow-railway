@@ -251,3 +251,9 @@
 - [x] Create admin account: rohangilkes@hey.com with isAdmin=true
 - [x] Remove password complexity requirements — 6 chars minimum only (already was 6 chars, no special char rules)
 - [x] Confirm quote form (/) has no auth guard — confirmed, Home.tsx and App.tsx have zero auth logic
+
+## Admin Procedure Auth Fix — COMPLETED
+
+- [x] Replace protectedProcedure (Manus OAuth) with agent cookie session check on all admin procedures
+- [x] Create adminAgentProcedure that validates agent cookie + isAdmin flag
+- [x] Fix agents.performance.test.ts to use agent cookie context instead of Manus OAuth context — 120/120 tests pass
