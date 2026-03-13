@@ -1,0 +1,40 @@
+{
+  "query": "SELECT id, leadName, leadPhone, utmSource, utmMedium, utmCampaign, gclid, createdAt FROM conversation_sessions ORDER BY createdAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, leadName, leadPhone, utmSource, utmMedium, utmCampaign, gclid, createdAt FROM conversation_sessions ORDER BY createdAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "300001",
+      "leadName": "Elizabeth RoRo",
+      "leadPhone": "+13029816191",
+      "utmSource": "NULL",
+      "utmMedium": "NULL",
+      "utmCampaign": "NULL",
+      "gclid": "NULL",
+      "createdAt": "2026-03-13 03:58:05"
+    },
+    {
+      "id": "270003",
+      "leadName": "James",
+      "leadPhone": "+19111111111",
+      "utmSource": "NULL",
+      "utmMedium": "NULL",
+      "utmCampaign": "NULL",
+      "gclid": "NULL",
+      "createdAt": "2026-03-12 23:59:58"
+    },
+    {
+      "id": "270002",
+      "leadName": "rohan Gilkes",
+      "leadPhone": "+13029816191",
+      "utmSource": "NULL",
+      "utmMedium": "NULL",
+      "utmCampaign": "NULL",
+      "gclid": "NULL",
+      "createdAt": "2026-03-12 21:38:27"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadName\tleadPhone\tutmSource\tutmMedium\tutmCampaign\tgclid\tcreatedAt\n300001\tElizabeth RoRo\t+13029816191\tNULL\tNULL\tNULL\tNULL\t2026-03-13 03:58:05\n270003\tJames\t+19111111111\tNULL\tNULL\tNULL\tNULL\t2026-03-12 23:59:58\n270002\trohan Gilkes\t+13029816191\tNULL\tNULL\tNULL\tNULL\t2026-03-12 21:38:27\n",
+  "stderr": "",
+  "execution_time_ms": 93
+}

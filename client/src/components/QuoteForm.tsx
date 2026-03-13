@@ -490,14 +490,56 @@ function ExitIntentModal({ onStay, onLeave }: { onStay: () => void; onLeave: () 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 // ── UTM capture helper ───────────────────────────────────────────────────────
+/** Map a referrer hostname to { source, medium } */
+function inferFromReferrer(): { utmSource?: string; utmMedium?: string } {
+  try {
+    if (!document.referrer) return {};
+    const host = new URL(document.referrer).hostname.replace(/^www\./, "");
+    if (host.includes("google"))   return { utmSource: "google",    utmMedium: "organic" };
+    if (host.includes("bing"))     return { utmSource: "bing",      utmMedium: "organic" };
+    if (host.includes("yahoo"))    return { utmSource: "yahoo",     utmMedium: "organic" };
+    if (host.includes("facebook") || host.includes("fb.com"))
+                                   return { utmSource: "facebook",  utmMedium: "social" };
+    if (host.includes("instagram")) return { utmSource: "instagram", utmMedium: "social" };
+    if (host.includes("twitter") || host.includes("t.co") || host.includes("x.com"))
+                                   return { utmSource: "twitter",   utmMedium: "social" };
+    if (host.includes("tiktok"))   return { utmSource: "tiktok",    utmMedium: "social" };
+    if (host.includes("linkedin")) return { utmSource: "linkedin",  utmMedium: "social" };
+    if (host.includes("youtube"))  return { utmSource: "youtube",   utmMedium: "social" };
+    if (host.includes("yelp"))     return { utmSource: "yelp",      utmMedium: "referral" };
+    if (host.includes("nextdoor")) return { utmSource: "nextdoor",  utmMedium: "referral" };
+    // Any other known referrer — mark as referral with the domain as source
+    if (host) return { utmSource: host, utmMedium: "referral" };
+  } catch (_) {}
+  return {};
+}
+
 function captureUtms() {
   const p = new URLSearchParams(window.location.search);
+  const utmSource  = p.get("utm_source")   ?? undefined;
+  const utmMedium  = p.get("utm_medium")   ?? undefined;
+  const utmCampaign = p.get("utm_campaign") ?? undefined;
+  const utmContent = p.get("utm_content")  ?? undefined;
+  const gclid      = p.get("gclid")        ?? undefined;
+
+  // If explicit UTMs are present, use them as-is
+  if (utmSource) {
+    return { utmSource, utmMedium, utmCampaign, utmContent, gclid };
+  }
+
+  // gclid without utm_source → Google Ads with auto-tagging
+  if (gclid) {
+    return { utmSource: "google", utmMedium: "cpc", utmCampaign, utmContent, gclid };
+  }
+
+  // Fall back to referrer inference
+  const inferred = inferFromReferrer();
   return {
-    utmSource: p.get("utm_source") ?? undefined,
-    utmMedium: p.get("utm_medium") ?? undefined,
-    utmCampaign: p.get("utm_campaign") ?? undefined,
-    utmContent: p.get("utm_content") ?? undefined,
-    gclid: p.get("gclid") ?? undefined,
+    utmSource:  inferred.utmSource,
+    utmMedium:  inferred.utmMedium,
+    utmCampaign,
+    utmContent,
+    gclid,
   };
 }
 
