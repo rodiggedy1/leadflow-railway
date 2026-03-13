@@ -580,13 +580,49 @@ export default function QuoteForm() {
       sessionKey = Math.random().toString(36).slice(2) + Date.now().toString(36);
       sessionStorage.setItem(SK_KEY, sessionKey);
     }
+    const sk = sessionKey;
     const utms = utmsRef.current;
-    trackPageView.mutate({
-      sessionKey,
-      utmSource: utms.utmSource,
-      utmMedium: utms.utmMedium,
-      utmCampaign: utms.utmCampaign,
-    });
+
+    // Bot-filtering: only count a visit after BOTH conditions are met:
+    // 1. At least 2 seconds have passed (bots load and leave instantly)
+    // 2. The user has moved their mouse or touched the screen (bots never interact)
+    let timerFired = false;
+    let interacted = false;
+    let fired = false;
+
+    function maybeTrack() {
+      if (fired || !timerFired || !interacted) return;
+      fired = true;
+      trackPageView.mutate({
+        sessionKey: sk,
+        utmSource: utms.utmSource,
+        utmMedium: utms.utmMedium,
+        utmCampaign: utms.utmCampaign,
+      });
+    }
+
+    const timer = setTimeout(() => {
+      timerFired = true;
+      maybeTrack();
+    }, 2000);
+
+    function onInteract() {
+      interacted = true;
+      maybeTrack();
+    }
+
+    window.addEventListener("mousemove", onInteract, { once: true, passive: true });
+    window.addEventListener("touchstart", onInteract, { once: true, passive: true });
+    window.addEventListener("keydown",    onInteract, { once: true, passive: true });
+    window.addEventListener("scroll",     onInteract, { once: true, passive: true });
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mousemove", onInteract);
+      window.removeEventListener("touchstart", onInteract);
+      window.removeEventListener("keydown",    onInteract);
+      window.removeEventListener("scroll",     onInteract);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
