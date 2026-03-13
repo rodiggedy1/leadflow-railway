@@ -23,19 +23,19 @@ function TrustStrip() {
         border: "1px solid #F5D5C8",
       }}
     >
-      <span className="text-lg shrink-0 mt-0.5">⭐</span>
+      <span className="text-lg shrink-0 mt-0.5">🏆</span>
       <div className="min-w-0">
         <p
           className="text-sm font-medium leading-snug"
           style={{ color: "#3D1F14", fontFamily: "'DM Sans', sans-serif" }}
         >
-          &ldquo;They transformed my home — I couldn&rsquo;t believe the difference!&rdquo; — Sarah M., Bethesda
+          200% Happy Clean Guarantee
         </p>
         <p
           className="text-xs mt-0.5"
           style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
         >
-          5-star Google review
+          Not happy? We re-clean free — or refund you
         </p>
       </div>
     </div>
