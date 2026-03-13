@@ -529,6 +529,25 @@ export default function QuoteForm() {
     return () => document.removeEventListener("mouseleave", handleMouseLeave);
   }, [submitted]);
 
+  // Track this page visit once per browser session
+  const trackPageView = trpc.leads.trackPageView.useMutation();
+  useEffect(() => {
+    const SK_KEY = "_lf_sk";
+    let sessionKey = sessionStorage.getItem(SK_KEY);
+    if (!sessionKey) {
+      sessionKey = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      sessionStorage.setItem(SK_KEY, sessionKey);
+    }
+    const utms = utmsRef.current;
+    trackPageView.mutate({
+      sessionKey,
+      utmSource: utms.utmSource,
+      utmMedium: utms.utmMedium,
+      utmCampaign: utms.utmCampaign,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const submitMutation = trpc.quotes.submit.useMutation({
     onSuccess: (data) => {
       setSmsSent(data.smsSent);

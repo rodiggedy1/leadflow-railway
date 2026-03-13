@@ -377,3 +377,10 @@
 - [x] Build donut/bar chart component using recharts
 - [x] Add chart to admin dashboard analytics section
 - [x] Write vitest tests for sourceBreakdown query logic — 178/178 tests pass
+
+## Visitors-to-Leads Conversion Metric
+
+- [ ] Research Manus Analytics API for page view / unique visitor counts
+- [ ] Add backend tRPC query to fetch visitor stats from analytics API
+- [ ] Build funnel metric card: Visitors → Leads → Booked with conversion rates
+- [ ] Add to admin dashboard alongside source breakdown chart

@@ -6,7 +6,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -162,6 +162,82 @@ export const appRouter = router({
           source: r.utmSource ?? "direct",
           count: Number(r.count),
         }));
+      }),
+
+    /**
+     * leads.trackPageView — called once per quote form page load.
+     * Uses a sessionKey (random ID from browser sessionStorage) to deduplicate
+     * refreshes so each browser session counts as one visitor.
+     */
+    trackPageView: publicProcedure
+      .input(z.object({
+        sessionKey: z.string().max(64),
+        utmSource: z.string().max(100).optional(),
+        utmMedium: z.string().max(100).optional(),
+        utmCampaign: z.string().max(255).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { ok: false };
+        // Upsert — ignore if this sessionKey already exists
+        try {
+          await db.insert(pageViews).ignore().values({
+            sessionKey: input.sessionKey,
+            utmSource: input.utmSource ?? null,
+            utmMedium: input.utmMedium ?? null,
+            utmCampaign: input.utmCampaign ?? null,
+          });
+        } catch {
+          // Silently ignore duplicate key errors
+        }
+        return { ok: true };
+      }),
+
+    /**
+     * leads.visitorStats — returns visitor count, lead count, and booked count
+     * for the given date range, used to build the conversion funnel in the admin dashboard.
+     */
+    visitorStats: adminAgentProcedure
+      .input(z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { visitors: 0, leads: 0, booked: 0 };
+
+        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+
+        // Visitor count from page_views table
+        const [visitorRow] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(pageViews)
+          .where(
+            input?.dateFrom || input?.dateTo
+              ? and(
+                  input?.dateFrom ? gte(pageViews.createdAt, new Date(input.dateFrom)) : undefined,
+                  input?.dateTo ? lte(pageViews.createdAt, new Date(input.dateTo)) : undefined,
+                )
+              : undefined
+          );
+
+        // Lead count from conversation_sessions
+        const [leadRow] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(conversationSessions)
+          .where(conditions);
+
+        // Booked count
+        const [bookedRow] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(conversationSessions)
+          .where(and(conditions, eq(conversationSessions.isBooked, 1)));
+
+        return {
+          visitors: Number(visitorRow?.count ?? 0),
+          leads: Number(leadRow?.count ?? 0),
+          booked: Number(bookedRow?.count ?? 0),
+        };
       }),
 
     /**

@@ -79,6 +79,7 @@ import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
+import ConversionFunnelCard from "@/components/ConversionFunnelCard";
 
 // ── Admin Login Screen ────────────────────────────────────────────────────────
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
@@ -1686,6 +1687,11 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Conversion Funnel */}
+        <div className="mb-6">
+          <ConversionFunnelCard dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo} />
+        </div>
 
         {/* Traffic Source Breakdown */}
         <div className="rounded-xl border bg-card p-5 mb-6">

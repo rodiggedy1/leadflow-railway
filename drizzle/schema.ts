@@ -198,3 +198,23 @@ export const agents = mysqlTable("agents", {
 
 export type Agent = typeof agents.$inferSelect;
 export type InsertAgent = typeof agents.$inferInsert;
+
+/**
+ * pageViews — lightweight visit tracking for the quote form.
+ * One row per page load. Used to calculate visitor-to-lead conversion rate.
+ * We deduplicate by sessionKey (random ID stored in sessionStorage) so
+ * refreshes don't inflate the count.
+ */
+export const pageViews = mysqlTable("page_views", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Random session key from the browser (sessionStorage) — prevents refresh inflation */
+  sessionKey: varchar("sessionKey", { length: 64 }).notNull(),
+  /** UTM source at time of visit */
+  utmSource: varchar("utmSource", { length: 100 }),
+  utmMedium: varchar("utmMedium", { length: 100 }),
+  utmCampaign: varchar("utmCampaign", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PageView = typeof pageViews.$inferSelect;
+export type InsertPageView = typeof pageViews.$inferInsert;
