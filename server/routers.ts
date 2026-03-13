@@ -134,6 +134,37 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.sourceBreakdown — returns lead count grouped by utmSource.
+     * "direct" is used for leads with no utmSource.
+     */
+    sourceBreakdown: adminAgentProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+
+        const rows = await db
+          .select({
+            utmSource: conversationSessions.utmSource,
+            count: sql<number>`count(*)`,
+          })
+          .from(conversationSessions)
+          .where(conditions)
+          .groupBy(conversationSessions.utmSource);
+
+        return rows.map((r) => ({
+          source: r.utmSource ?? "direct",
+          count: Number(r.count),
+        }));
+      }),
+
+    /**
      * leads.adminUpdateStage — admin overrides the stage of any lead.
      */
     adminUpdateStage: adminAgentProcedure

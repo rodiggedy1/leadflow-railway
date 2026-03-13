@@ -78,6 +78,7 @@ import { calculateExtrasTotal } from "@shared/extras";
 import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
+import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 
 // ── Admin Login Screen ────────────────────────────────────────────────────────
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
@@ -1440,6 +1441,11 @@ export default function AdminDashboard() {
     enabled: isAdmin || isAuthenticated,
   });
 
+  const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
+    refetchInterval: 60000,
+    enabled: isAdmin || isAuthenticated,
+  });
+
   // Agent list for assignment dropdown in the drawer (admin only)
   const { data: agentListForDrawer = [] } = trpc.agents.list.useQuery(undefined, {
     enabled: isAdmin,
@@ -1680,6 +1686,17 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Traffic Source Breakdown */}
+        <div className="rounded-xl border bg-card p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Traffic Source</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Where your leads are coming from</p>
+            </div>
+          </div>
+          <SourceBreakdownChart data={sourceBreakdown} isLoading={sourceBreakdownLoading} />
+        </div>
 
         {/* Search + stage filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">

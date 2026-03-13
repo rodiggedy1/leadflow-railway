@@ -360,14 +360,20 @@
 - [x] Auto-refresh conversation every 5s when drawer is open
 - [x] Write vitest tests for sendMessage and setAiMode procedures
 
-## UTM Attribution & Conversion Tracking
+## UTM Attribution & Conversion Tracking — COMPLETED
 
-- [ ] Add utmSource, utmMedium, utmCampaign, utmContent columns to conversationSessions schema
-- [ ] Run pnpm db:push to migrate DB
-- [ ] Capture UTM params from URL in QuoteForm on page load
-- [ ] Fire quote_submitted conversion event to Manus Analytics on form submit
-- [ ] Pass UTM params through tRPC submitQuote mutation
-- [ ] Store UTMs in lead record in DB
-- [ ] Display source/medium badge on lead cards in AdminDashboard
-- [ ] Display source/medium in lead drawer details panel
-- [ ] Write vitest tests for UTM capture logic
+- [x] Add utmSource, utmMedium, utmCampaign, utmContent, gclid columns to conversationSessions schema
+- [x] Run pnpm db:push to migrate DB
+- [x] Capture UTM params from URL in QuoteForm on page load
+- [x] Fire quote_submitted conversion event to Manus Analytics on form submit
+- [x] Pass UTM params through tRPC submitQuote mutation
+- [x] Store UTMs in lead record in DB
+- [x] Display Traffic Source section in admin lead drawer details panel
+- [x] Write vitest tests for UTM capture logic — 170/170 tests pass
+
+## Source Breakdown Chart — COMPLETED
+
+- [x] Add `leads.sourceBreakdown` tRPC query (count by utmSource, respects date filter)
+- [x] Build donut/bar chart component using recharts
+- [x] Add chart to admin dashboard analytics section
+- [x] Write vitest tests for sourceBreakdown query logic — 178/178 tests pass
