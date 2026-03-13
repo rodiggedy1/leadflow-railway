@@ -403,6 +403,12 @@ type DrawerSession = {
   assignedAgentName: string | null;
   bookedAmount: number | null;
   aiMode: number;
+  // UTM attribution
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  gclid: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -785,6 +791,36 @@ function ConversationDrawer({
                   <div className="flex justify-between">
                     <span className="text-gray-500">Agent</span>
                     <span className="font-medium">{session.assignedAgentName}</span>
+                  </div>
+                )}
+                {/* UTM Attribution */}
+                {(session.utmSource || session.utmMedium || session.utmCampaign || session.gclid) && (
+                  <div className="pt-1 border-t space-y-1">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Traffic Source</p>
+                    {session.utmSource && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Source</span>
+                        <span className="font-medium text-xs capitalize">{session.utmSource}</span>
+                      </div>
+                    )}
+                    {session.utmMedium && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Medium</span>
+                        <span className="font-medium text-xs">{session.utmMedium}</span>
+                      </div>
+                    )}
+                    {session.utmCampaign && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Campaign</span>
+                        <span className="font-medium text-xs truncate max-w-[55%] text-right">{session.utmCampaign}</span>
+                      </div>
+                    )}
+                    {session.gclid && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Google Ad</span>
+                        <span className="font-medium text-xs text-green-600">✓ tracked</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="flex justify-between text-xs text-gray-400 pt-1 border-t">

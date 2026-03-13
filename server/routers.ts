@@ -26,6 +26,12 @@ const quoteFormSchema = z.object({
   bedrooms: z.string().min(1).max(50),
   bathrooms: z.string().min(1).max(50),
   extras: z.array(z.string().max(64)).max(20).optional().default([]),
+  // UTM attribution (optional, passed from frontend URL params)
+  utmSource: z.string().max(100).optional(),
+  utmMedium: z.string().max(100).optional(),
+  utmCampaign: z.string().max(255).optional(),
+  utmContent: z.string().max(255).optional(),
+  gclid: z.string().max(255).optional(),
 });
 
 export const appRouter = router({
@@ -951,6 +957,11 @@ async function processQuoteInBackground(
     bedrooms: string;
     bathrooms: string;
     extras?: string[];
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+    utmContent?: string;
+    gclid?: string;
   },
   price: string
 ): Promise<void> {
@@ -1023,6 +1034,12 @@ async function processQuoteInBackground(
       bathrooms: input.bathrooms,
       extras: input.extras && input.extras.length > 0 ? JSON.stringify(input.extras) : null,
       messageHistory: initialHistory,
+      // UTM attribution
+      utmSource: input.utmSource ?? null,
+      utmMedium: input.utmMedium ?? null,
+      utmCampaign: input.utmCampaign ?? null,
+      utmContent: input.utmContent ?? null,
+      gclid: input.gclid ?? null,
     });
   } catch (dbErr) {
     console.error("[submitQuote] Failed to create conversation session:", dbErr);

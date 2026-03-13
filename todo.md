@@ -359,3 +359,15 @@
 - [x] Add AI/Manual toggle switch in ConversationDrawer
 - [x] Auto-refresh conversation every 5s when drawer is open
 - [x] Write vitest tests for sendMessage and setAiMode procedures
+
+## UTM Attribution & Conversion Tracking
+
+- [ ] Add utmSource, utmMedium, utmCampaign, utmContent columns to conversationSessions schema
+- [ ] Run pnpm db:push to migrate DB
+- [ ] Capture UTM params from URL in QuoteForm on page load
+- [ ] Fire quote_submitted conversion event to Manus Analytics on form submit
+- [ ] Pass UTM params through tRPC submitQuote mutation
+- [ ] Store UTMs in lead record in DB
+- [ ] Display source/medium badge on lead cards in AdminDashboard
+- [ ] Display source/medium in lead drawer details panel
+- [ ] Write vitest tests for UTM capture logic

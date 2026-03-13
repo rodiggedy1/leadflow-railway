@@ -122,6 +122,18 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
   bookedAmount: int("bookedAmount"),
 
+  // ── UTM Attribution fields ──────────────────────────────────────────────────
+  /** Traffic source (e.g. "google", "facebook", "instagram") */
+  utmSource: varchar("utmSource", { length: 100 }),
+  /** Medium (e.g. "cpc", "organic", "social") */
+  utmMedium: varchar("utmMedium", { length: 100 }),
+  /** Campaign name (e.g. "dc-deep-clean-spring") */
+  utmCampaign: varchar("utmCampaign", { length: 255 }),
+  /** Ad content variant */
+  utmContent: varchar("utmContent", { length: 255 }),
+  /** Google Ads click ID for exact ad attribution */
+  gclid: varchar("gclid", { length: 255 }),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

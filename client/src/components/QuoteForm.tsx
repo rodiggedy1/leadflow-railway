@@ -489,6 +489,18 @@ function ExitIntentModal({ onStay, onLeave }: { onStay: () => void; onLeave: () 
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
+// ── UTM capture helper ───────────────────────────────────────────────────────
+function captureUtms() {
+  const p = new URLSearchParams(window.location.search);
+  return {
+    utmSource: p.get("utm_source") ?? undefined,
+    utmMedium: p.get("utm_medium") ?? undefined,
+    utmCampaign: p.get("utm_campaign") ?? undefined,
+    utmContent: p.get("utm_content") ?? undefined,
+    gclid: p.get("gclid") ?? undefined,
+  };
+}
+
 export default function QuoteForm() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -498,6 +510,8 @@ export default function QuoteForm() {
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
   const [showExitModal, setShowExitModal] = useState(false);
   const exitShownRef = useRef(false);
+  // Capture UTMs once on mount
+  const utmsRef = useRef(captureUtms());
 
   const isOffice = form.serviceType === "Office Cleaning";
 
@@ -519,6 +533,15 @@ export default function QuoteForm() {
     onSuccess: (data) => {
       setSmsSent(data.smsSent);
       setSubmitted(true);
+      // Fire conversion event to Manus Analytics
+      try {
+        const utms = utmsRef.current;
+        (window as any).umami?.track("quote_submitted", {
+          source: utms.utmSource ?? "direct",
+          medium: utms.utmMedium ?? "(none)",
+          campaign: utms.utmCampaign ?? "(none)",
+        });
+      } catch (_) {}
       if (!data.smsSent) {
         toast.warning("Quote received! We'll follow up shortly.");
       }
@@ -584,6 +607,8 @@ export default function QuoteForm() {
       bedrooms: isOffice ? form.squareFootage : form.bedrooms,
       bathrooms: isOffice ? "N/A" : form.bathrooms,
       extras: selectedExtras,
+      // UTM attribution
+      ...utmsRef.current,
     };
     submitMutation.mutate(payload);
   };
