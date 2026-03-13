@@ -149,7 +149,8 @@ export const appRouter = router({
         if (!db) return [];
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        const rows = await db
+        // Lead counts per source (from form submissions)
+        const leadRows = await db
           .select({
             utmSource: conversationSessions.utmSource,
             count: sql<number>`count(*)`,
@@ -158,9 +159,40 @@ export const appRouter = router({
           .where(conditions)
           .groupBy(conversationSessions.utmSource);
 
-        return rows.map((r) => ({
-          source: r.utmSource ?? "direct",
-          count: Number(r.count),
+        // Visitor counts per source (from page_views table)
+        const visitorRows = await db
+          .select({
+            utmSource: pageViews.utmSource,
+            count: sql<number>`count(*)`,
+          })
+          .from(pageViews)
+          .where(
+            and(
+              input?.dateFrom ? gte(pageViews.createdAt, new Date(input.dateFrom)) : undefined,
+              input?.dateTo   ? lte(pageViews.createdAt, new Date(input.dateTo))   : undefined,
+            )
+          )
+          .groupBy(pageViews.utmSource);
+
+        // Merge both into a single map keyed by source
+        const map = new Map<string, { visitors: number; leads: number }>();
+
+        for (const r of visitorRows) {
+          const src = r.utmSource ?? "direct";
+          map.set(src, { visitors: Number(r.count), leads: 0 });
+        }
+        for (const r of leadRows) {
+          const src = r.utmSource ?? "direct";
+          const existing = map.get(src) ?? { visitors: 0, leads: 0 };
+          map.set(src, { ...existing, leads: Number(r.count) });
+        }
+
+        return Array.from(map.entries()).map(([source, { visitors, leads }]) => ({
+          source,
+          visitors,
+          leads,
+          // keep count for backwards compat with any existing consumers
+          count: leads,
         }));
       }),
 

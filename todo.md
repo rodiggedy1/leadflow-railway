@@ -384,3 +384,12 @@
 - [ ] Add backend tRPC query to fetch visitor stats from analytics API
 - [ ] Build funnel metric card: Visitors → Leads → Booked with conversion rates
 - [ ] Add to admin dashboard alongside source breakdown chart
+
+## Traffic Source Chart: Visitors + Leads per Source — COMPLETED
+
+- [x] Update `leads.sourceBreakdown` to also query `page_views` table for visitor counts per source
+- [x] Merge visitor and lead rows into a unified map keyed by source
+- [x] Return `{ source, visitors, leads, count }` shape (count kept for backwards compat)
+- [x] Replace donut chart with grouped bar chart (light bar = visitors, solid bar = leads)
+- [x] Update summary table: Visitors column, Leads column, Conversion % column, Totals row
+- [x] Update vitest tests for new merged aggregation logic — 195/195 tests pass
