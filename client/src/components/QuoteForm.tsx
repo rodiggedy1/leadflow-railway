@@ -12,81 +12,30 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
-// ── Rotating Trust Strip ─────────────────────────────────────────────────────
-
-const TRUST_ITEMS = [
-  {
-    icon: "⭐",
-    text: "\"They transformed my home — I couldn't believe the difference!\" — Sarah M., Bethesda",
-    sub: "5-star Google review",
-  },
-  {
-    icon: "🛡️",
-    text: "Licensed, bonded & insured",
-    sub: "Every cleaner is background-checked",
-  },
-  {
-    icon: "🏆",
-    text: "200% Happy Clean Guarantee",
-    sub: "Not happy? We re-clean free — or refund you",
-  },
-  {
-    icon: "⭐",
-    text: "\"Punctual, thorough, and so professional. Highly recommend!\" — James T., DC",
-    sub: "5-star Google review",
-  },
-  {
-    icon: "✅",
-    text: "200+ five-star reviews on Google",
-    sub: "Trusted by DC Metro homeowners since 2015",
-  },
-  {
-    icon: "⭐",
-    text: "\"Best cleaning service in the DMV — worth every penny.\" — Priya K., Arlington",
-    sub: "5-star Google review",
-  },
-];
+// ── Static Testimonial ───────────────────────────────────────────────────────
 
 function TrustStrip() {
-  const [index, setIndex] = useState(0);
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setIndex(i => (i + 1) % TRUST_ITEMS.length);
-        setVisible(true);
-      }, 350);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const item = TRUST_ITEMS[index];
-
   return (
     <div
-      className="rounded-xl px-4 py-3 mb-4 flex items-start gap-3 transition-all duration-300"
+      className="rounded-xl px-4 py-3 mb-4 flex items-start gap-3"
       style={{
         background: "linear-gradient(135deg, #FFF8F5 0%, #FFF0EC 100%)",
         border: "1px solid #F5D5C8",
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(4px)",
       }}
     >
-      <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+      <span className="text-lg shrink-0 mt-0.5">⭐</span>
       <div className="min-w-0">
         <p
           className="text-sm font-medium leading-snug"
           style={{ color: "#3D1F14", fontFamily: "'DM Sans', sans-serif" }}
         >
-          {item.text}
+          &ldquo;They transformed my home — I couldn&rsquo;t believe the difference!&rdquo; — Sarah M., Bethesda
         </p>
         <p
           className="text-xs mt-0.5"
           style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
         >
-          {item.sub}
+          5-star Google review
         </p>
       </div>
     </div>
