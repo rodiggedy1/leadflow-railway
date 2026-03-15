@@ -424,3 +424,7 @@
 ## Widget Exit-Intent & Service Info Writeback
 - [x] Add exit-intent trigger: open widget when mouse moves toward top of browser
 - [x] Update conversation engine: write serviceType, bedrooms, bathrooms, quotedPrice back to session when AI collects them from widget lead
+
+## Widget leadSource Bug Fix
+- [x] Fix: widget leads showing "Form" badge — leadSource not being saved as 'widget' in DB
+- [x] Backfill existing widget leads (rohan x2) to leadSource='widget'
