@@ -13,26 +13,21 @@
 
 import type { Express } from "express";
 
-const WIDGET_VERSION = "3.0.0";
-
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
     const API_BASE = "https://quote.maidinblack.com";
-    const script = buildWidgetScript(API_BASE, WIDGET_VERSION);
+    const script = buildWidgetScript(API_BASE);
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
+    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(script);
   });
 }
 
-function buildWidgetScript(apiBase: string, version: string): string {
+function buildWidgetScript(apiBase: string): string {
   return `
 (function () {
   'use strict';
-  window.__MIB_WIDGET_VERSION__ = '${version}';
 
   if (window.__MIB_WIDGET_LOADED__) return;
   window.__MIB_WIDGET_LOADED__ = true;
@@ -44,11 +39,9 @@ function buildWidgetScript(apiBase: string, version: string): string {
   var Z_PANEL = 2147483646;
 
   // Inject keyframe animation for pulse ring
-  // Also force position:fixed to work even when WordPress sets overflow:hidden on body
   var kf = document.createElement('style');
   kf.textContent = '@keyframes mib-ping{0%{transform:scale(1);opacity:0.5}100%{transform:scale(2.2);opacity:0}}' +
-    '@keyframes mib-spin{to{transform:rotate(360deg)}}' +
-    '#mib-widget-btn,#mib-widget-panel{position:fixed!important;z-index:2147483646!important;}';
+    '@keyframes mib-spin{to{transform:rotate(360deg)}}';
   document.head.appendChild(kf);
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -59,11 +52,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     error: null,
     name: '',
     phone: '',
-    // dismissed: true once the visitor explicitly clicks the close button.
-    // Prevents auto-open and exit-intent from re-opening the widget.
-    dismissed: false,
-    // consent is implicit — by submitting the form the visitor agrees to the
-    // fine-print text shown below the button. No checkbox needed.
+    consent: true,
   };
 
   var btn, panel;
@@ -116,8 +105,8 @@ function buildWidgetScript(apiBase: string, version: string): string {
   function buildButton() {
     btn = el('button', {
       position: 'fixed',
-      bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-      right: '16px',
+      bottom: '24px',
+      right: '24px',
       zIndex: String(Z_BTN),
       width: '60px',
       height: '60px',
@@ -173,14 +162,12 @@ function buildWidgetScript(apiBase: string, version: string): string {
 
   // ── Build panel ──────────────────────────────────────────────────────────────
   function buildPanel() {
-    var isMobile = window.innerWidth < 480;
     panel = el('div', {
       position: 'fixed',
-      bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
-      right: '16px',
-      left: isMobile ? '16px' : 'auto',
+      bottom: '96px',
+      right: '24px',
       zIndex: String(Z_PANEL),
-      width: isMobile ? 'auto' : '340px',
+      width: '340px',
       maxHeight: 'calc(100vh - 120px)',
       borderRadius: '16px',
       overflow: 'hidden',
@@ -267,7 +254,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     closeBtn.textContent = '\u00D7'; // ×
     closeBtn.addEventListener('mouseover', function() { closeBtn.style.background = 'rgba(255,255,255,0.2)'; });
     closeBtn.addEventListener('mouseout', function() { closeBtn.style.background = 'none'; });
-    closeBtn.addEventListener('click', function() { state.dismissed = true; setOpen(false); });
+    closeBtn.addEventListener('click', function() { setOpen(false); sessionStorage.setItem('mib_closed', '1'); });
 
     header.appendChild(avatar);
     header.appendChild(headerText);
@@ -401,6 +388,18 @@ function buildWidgetScript(apiBase: string, version: string): string {
       phoneInput.value = formatted;
     });
 
+    var consentLabel = el('label', { display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' });
+    // NOTE: 'checked' is a DOM property, not an HTML attribute — must set it directly
+    // after element creation; setAttribute('checked', ...) does NOT work for this.
+    var consentCheck = el('input', { marginTop: '2px', flexShrink: '0', accentColor: CORAL }, { type: 'checkbox', id: 'mib-consent' });
+    consentCheck.checked = true;   // always pre-checked; user can uncheck
+    state.consent = true;
+    consentCheck.addEventListener('change', function() { state.consent = consentCheck.checked; });
+    var consentText = el('span', { fontSize: '11px', color: '#6B7280', lineHeight: '1.5' });
+    consentText.textContent = 'I consent to receive SMS messages from Maids in Black at the number provided about cleaning services, estimates, scheduling, and follow-ups. Msg & data rates may apply. Reply STOP to opt out.';
+    consentLabel.appendChild(consentCheck);
+    consentLabel.appendChild(consentText);
+
     if (state.error) {
       var errEl = el('p', { fontSize: '12px', color: '#EF4444', textAlign: 'center', margin: '0' });
       errEl.textContent = state.error;
@@ -424,20 +423,10 @@ function buildWidgetScript(apiBase: string, version: string): string {
     submitBtn.textContent = state.loading ? 'Sending...' : 'Text Me Now \u2192';
     if (state.loading) submitBtn.setAttribute('disabled', '');
 
-    // Static consent fine-print — consent is implicit on submit, no checkbox needed
-    var consentNote = el('p', {
-      fontSize: '10px',
-      color: '#9CA3AF',
-      textAlign: 'center',
-      margin: '0',
-      lineHeight: '1.5',
-    });
-    consentNote.textContent = 'By tapping \u201cText Me Now\u201d you consent to receive SMS messages from Maids in Black about cleaning services, estimates & scheduling. Msg & data rates may apply. Reply STOP to opt out.';
-
     form.appendChild(nameInput);
     form.appendChild(phoneInput);
+    form.appendChild(consentLabel);
     form.appendChild(submitBtn);
-    form.appendChild(consentNote);
 
     form.addEventListener('submit', handleSubmit);
 
@@ -452,8 +441,11 @@ function buildWidgetScript(apiBase: string, version: string): string {
     e.preventDefault();
     state.error = null;
 
-    // Consent is implicit — by submitting the form the visitor agrees to the
-    // fine-print text shown below the button. No checkbox guard needed.
+    if (!state.consent) {
+      state.error = 'Please check the consent box to continue.';
+      renderBody();
+      return;
+    }
 
     var phoneDigits = state.phone.replace(/\\D/g, '');
     if (phoneDigits.length < 10) {
@@ -502,34 +494,57 @@ function buildWidgetScript(apiBase: string, version: string): string {
   }
 
   // ── Auto-open after 15 seconds ───────────────────────────────────────────────
-  // Simple approach: fire once per page load after 15 s unless the visitor
-  // already dismissed the widget during this page session.
+  // Uses localStorage (not sessionStorage) so the flag persists across tabs and
+  // page reloads on the same origin. The flag is scoped to today's date so the
+  // widget can auto-open again on a new calendar day.
+  function getAutoOpenKey() {
+    var today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    return 'mib_auto_' + today;
+  }
+
   function scheduleAutoOpen() {
+    // Skip if user explicitly closed the widget this session
+    if (sessionStorage.getItem('mib_closed')) return;
+    // Skip if already auto-opened today
+    if (localStorage.getItem(getAutoOpenKey())) return;
     setTimeout(function() {
-      // Only open if: widget is closed AND visitor has not dismissed it
-      if (!state.open && !state.dismissed) {
+      if (!state.open && !sessionStorage.getItem('mib_closed')) {
+        localStorage.setItem(getAutoOpenKey(), '1');
         setOpen(true);
       }
     }, 15000);
   }
 
   // ── Exit-intent trigger ───────────────────────────────────────────────────────
-  // Fires when the mouse leaves the browser viewport through the top edge
-  // (heading toward the address bar / tabs). Uses document mouseleave which
-  // is the standard cross-browser exit-intent signal.
+  // Fires when the mouse leaves the document viewport (user moving cursor toward
+  // the browser chrome / address bar to navigate away). This is the standard
+  // exit-intent signal used by Hotjar, OptinMonster, etc.
+  // Only triggers once per session. Uses sessionStorage (intentionally) so the
+  // widget can re-trigger on a new tab/session even if it fired before.
   function setupExitIntent() {
-    var exitTriggered = false;
+    if (sessionStorage.getItem('mib_closed')) return;
+    if (sessionStorage.getItem('mib_exit_shown')) return;
 
-    document.addEventListener('mouseleave', function(e) {
-      if (exitTriggered) return;
-      if (state.dismissed) return;
-      // Only react to top-edge exits (clientY at or near 0)
-      if (e.clientY > 5) return;
-      exitTriggered = true;
-      if (!state.open) {
+    var triggered = false;
+
+    function onMouseLeave(e) {
+      // e.clientY <= 0 means the cursor has left through the top of the viewport
+      // (heading toward the address bar / tabs). Ignore side/bottom exits.
+      if (triggered) return;
+      if (e.clientY > 10) return; // only top-edge exits
+      triggered = true;
+      sessionStorage.setItem('mib_exit_shown', '1');
+      document.removeEventListener('mouseleave', onMouseLeave);
+      if (!state.open && !sessionStorage.getItem('mib_closed')) {
         setOpen(true);
       }
-    });
+    }
+
+    // Attach after 3 s grace period so the trigger does not fire on initial
+    // page load when the browser positions the cursor near the top.
+    setTimeout(function() {
+      document.addEventListener('mouseleave', onMouseLeave);
+    }, 3000);
   }
 
   // ── Init ─────────────────────────────────────────────────────────────────────

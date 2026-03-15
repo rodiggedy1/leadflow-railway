@@ -443,8 +443,3 @@
 - [x] Fix: consent checkbox not pre-checked in widget embed script
 - [x] Fix: 15-second auto-open timer not firing in widget embed script
 - [x] Fix: exit-intent mouse-leave trigger not working in widget embed script
-
-## Widget Consent + Popup Fix (Round 2)
-- [x] Remove consent checkbox; replace with static fine-print text below submit button
-- [x] Fix auto-open: use a simple flag approach that actually works on the embed domain
-- [x] Fix exit-intent: use mouseleave on document with no grace-period dependency issues
