@@ -13,35 +13,21 @@
 
 import type { Express } from "express";
 
-// Increment this version string whenever the widget script changes.
-// Embedding sites should reference the script as:
-//   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
-// The version is also embedded in the script itself so you can verify
-// which build is running via the browser console.
-const WIDGET_VERSION = "2.5.0";
-
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
     const API_BASE = "https://quote.maidinblack.com";
-    const script = buildWidgetScript(API_BASE, WIDGET_VERSION);
+    const script = buildWidgetScript(API_BASE);
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    // Never cache — always serve the latest version.
-    // Embedding sites can optionally append ?v=X.Y.Z to bust CDN caches.
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
+    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(script);
   });
 }
 
-function buildWidgetScript(apiBase: string, version: string): string {
+function buildWidgetScript(apiBase: string): string {
   return `
 (function () {
   'use strict';
-  // Maids in Black Widget v${version} — built ${new Date().toISOString().slice(0, 10)}
-  // To verify this version in the browser console: window.__MIB_WIDGET_VERSION__
-  window.__MIB_WIDGET_VERSION__ = '${version}';
 
   if (window.__MIB_WIDGET_LOADED__) return;
   window.__MIB_WIDGET_LOADED__ = true;
@@ -52,12 +38,10 @@ function buildWidgetScript(apiBase: string, version: string): string {
   var Z_BTN = 2147483647;
   var Z_PANEL = 2147483646;
 
-  // Inject keyframe animation for pulse ring + mobile safe-area support
+  // Inject keyframe animation for pulse ring
   var kf = document.createElement('style');
   kf.textContent = '@keyframes mib-ping{0%{transform:scale(1);opacity:0.5}100%{transform:scale(2.2);opacity:0}}' +
-    '@keyframes mib-spin{to{transform:rotate(360deg)}}' +
-    // Ensure fixed positioning works even when the host page sets overflow:hidden on body (common in WordPress)
-    '#mib-widget-btn,#mib-widget-panel{position:fixed!important;}';
+    '@keyframes mib-spin{to{transform:rotate(360deg)}}';
   document.head.appendChild(kf);
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -125,9 +109,8 @@ function buildWidgetScript(apiBase: string, version: string): string {
   function buildButton() {
     btn = el('button', {
       position: 'fixed',
-      // iOS safe-area: keep button above the home indicator bar
-      bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-      right: '16px',
+      bottom: '24px',
+      right: '24px',
       zIndex: String(Z_BTN),
       width: '60px',
       height: '60px',
@@ -146,7 +129,6 @@ function buildWidgetScript(apiBase: string, version: string): string {
       lineHeight: '1',
       overflow: 'visible',
       transition: 'transform 0.2s',
-      touchAction: 'manipulation',
     }, { 'aria-label': 'Chat with Maids in Black', 'id': 'mib-widget-btn' });
 
     // Pulse ring
@@ -179,26 +161,18 @@ function buildWidgetScript(apiBase: string, version: string): string {
       setOpen(!state.open);
     });
 
-    // Append to <html> not <body> — many WordPress themes set overflow:hidden on
-    // body which clips position:fixed children on iOS Safari.
-    (document.body || document.documentElement).appendChild(btn);
+    document.body.appendChild(btn);
   }
 
   // ── Build panel ──────────────────────────────────────────────────────────────
   function buildPanel() {
-    // On mobile the panel takes full width minus margins; on desktop it's 340px
-    var isMobile = window.innerWidth < 480;
     panel = el('div', {
       position: 'fixed',
-      // Sit just above the floating button (button height 60px + gap 12px + safe area)
-      bottom: 'calc(' + (isMobile ? '88px' : '96px') + ' + env(safe-area-inset-bottom, 0px))',
-      right: '16px',
-      // On mobile: stretch to fill the screen width minus margins
-      // On desktop: fixed 340px
-      left: isMobile ? '16px' : 'auto',
-      width: isMobile ? 'auto' : '340px',
-      maxHeight: 'calc(100vh - 120px)',
+      bottom: '96px',
+      right: '24px',
       zIndex: String(Z_PANEL),
+      width: '340px',
+      maxHeight: 'calc(100vh - 120px)',
       borderRadius: '16px',
       overflow: 'hidden',
       boxShadow: '0 8px 40px rgba(0,0,0,0.2)',
@@ -316,7 +290,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     panel.appendChild(header);
     panel.appendChild(body);
     panel.appendChild(footer);
-    (document.body || document.documentElement).appendChild(panel);
+    document.body.appendChild(panel);
   }
 
   // ── Render body content ──────────────────────────────────────────────────────
