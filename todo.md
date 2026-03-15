@@ -438,3 +438,8 @@
 - [x] Backend: leads.visitorTrend procedure — unique visitors + new leads per day for last 14 days
 - [x] Frontend: bar/line chart in admin dashboard using Recharts
 - [x] Write vitest tests for the trend data logic
+
+## Widget Embed Bug Fixes
+- [x] Fix: consent checkbox not pre-checked in widget embed script
+- [x] Fix: 15-second auto-open timer not firing in widget embed script
+- [x] Fix: exit-intent mouse-leave trigger not working in widget embed script

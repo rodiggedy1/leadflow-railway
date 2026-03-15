@@ -389,8 +389,11 @@ function buildWidgetScript(apiBase: string): string {
     });
 
     var consentLabel = el('label', { display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' });
+    // NOTE: 'checked' is a DOM property, not an HTML attribute — must set it directly
+    // after element creation; setAttribute('checked', ...) does NOT work for this.
     var consentCheck = el('input', { marginTop: '2px', flexShrink: '0', accentColor: CORAL }, { type: 'checkbox', id: 'mib-consent' });
-    consentCheck.checked = state.consent;
+    consentCheck.checked = true;   // always pre-checked; user can uncheck
+    state.consent = true;
     consentCheck.addEventListener('change', function() { state.consent = consentCheck.checked; });
     var consentText = el('span', { fontSize: '11px', color: '#6B7280', lineHeight: '1.5' });
     consentText.textContent = 'I consent to receive SMS messages from Maids in Black at the number provided about cleaning services, estimates, scheduling, and follow-ups. Msg & data rates may apply. Reply STOP to opt out.';
@@ -491,43 +494,56 @@ function buildWidgetScript(apiBase: string): string {
   }
 
   // ── Auto-open after 15 seconds ───────────────────────────────────────────────
+  // Uses localStorage (not sessionStorage) so the flag persists across tabs and
+  // page reloads on the same origin. The flag is scoped to today's date so the
+  // widget can auto-open again on a new calendar day.
+  function getAutoOpenKey() {
+    var today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    return 'mib_auto_' + today;
+  }
+
   function scheduleAutoOpen() {
-    // Only skip auto-open if user explicitly closed the widget this session
+    // Skip if user explicitly closed the widget this session
     if (sessionStorage.getItem('mib_closed')) return;
+    // Skip if already auto-opened today
+    if (localStorage.getItem(getAutoOpenKey())) return;
     setTimeout(function() {
-      if (!state.open) {
+      if (!state.open && !sessionStorage.getItem('mib_closed')) {
+        localStorage.setItem(getAutoOpenKey(), '1');
         setOpen(true);
       }
     }, 15000);
   }
 
   // ── Exit-intent trigger ───────────────────────────────────────────────────────
-  // Fires when the mouse moves toward the top of the viewport (user about to leave).
-  // Only triggers once per session, and only if the user has not already closed
-  // the widget or if the widget is not already open.
+  // Fires when the mouse leaves the document viewport (user moving cursor toward
+  // the browser chrome / address bar to navigate away). This is the standard
+  // exit-intent signal used by Hotjar, OptinMonster, etc.
+  // Only triggers once per session. Uses sessionStorage (intentionally) so the
+  // widget can re-trigger on a new tab/session even if it fired before.
   function setupExitIntent() {
     if (sessionStorage.getItem('mib_closed')) return;
     if (sessionStorage.getItem('mib_exit_shown')) return;
 
     var triggered = false;
 
-    function onMouseMove(e) {
-      // Trigger when cursor is within the top 10% of the viewport and moving upward
+    function onMouseLeave(e) {
+      // e.clientY <= 0 means the cursor has left through the top of the viewport
+      // (heading toward the address bar / tabs). Ignore side/bottom exits.
       if (triggered) return;
-      if (e.clientY < window.innerHeight * 0.1 && e.movementY < 0) {
-        triggered = true;
-        sessionStorage.setItem('mib_exit_shown', '1');
-        document.removeEventListener('mousemove', onMouseMove);
-        if (!state.open && !sessionStorage.getItem('mib_closed')) {
-          setOpen(true);
-        }
+      if (e.clientY > 10) return; // only top-edge exits
+      triggered = true;
+      sessionStorage.setItem('mib_exit_shown', '1');
+      document.removeEventListener('mouseleave', onMouseLeave);
+      if (!state.open && !sessionStorage.getItem('mib_closed')) {
+        setOpen(true);
       }
     }
 
-    // Only attach after a short delay so the trigger does not fire immediately
-    // on page load when the browser positions the cursor at the top
+    // Attach after 3 s grace period so the trigger does not fire on initial
+    // page load when the browser positions the cursor near the top.
     setTimeout(function() {
-      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseleave', onMouseLeave);
     }, 3000);
   }
 
