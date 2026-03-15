@@ -158,3 +158,104 @@ describe("unique visitor deduplication (localStorage date-scoped key)", () => {
     expect(cleaned["_lf_vid_2026-03-14"]).toBeUndefined();
   });
 });
+
+// ── visitorTrend zero-fill and date-range logic ───────────────────────────────
+describe("visitorTrend date range generation", () => {
+  // Mirror the server-side logic that builds the date array
+  function buildDateRange(numDays: number, referenceDate: string): string[] {
+    const today = new Date(referenceDate + "T00:00:00Z");
+    const startDate = new Date(today);
+    startDate.setUTCDate(startDate.getUTCDate() - (numDays - 1));
+    const result: string[] = [];
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(startDate);
+      d.setUTCDate(d.getUTCDate() + i);
+      result.push(d.toISOString().slice(0, 10));
+    }
+    return result;
+  }
+
+  function buildTrend(
+    numDays: number,
+    referenceDate: string,
+    visitorMap: Map<string, number>,
+    leadMap: Map<string, number>
+  ): { date: string; visitors: number; leads: number }[] {
+    return buildDateRange(numDays, referenceDate).map(dateStr => ({
+      date: dateStr,
+      visitors: visitorMap.get(dateStr) ?? 0,
+      leads: leadMap.get(dateStr) ?? 0,
+    }));
+  }
+
+  it("returns exactly numDays rows", () => {
+    const result = buildDateRange(14, "2026-03-15");
+    expect(result).toHaveLength(14);
+  });
+
+  it("returns exactly 7 rows for 7-day range", () => {
+    const result = buildDateRange(7, "2026-03-15");
+    expect(result).toHaveLength(7);
+  });
+
+  it("returns exactly 30 rows for 30-day range", () => {
+    const result = buildDateRange(30, "2026-03-15");
+    expect(result).toHaveLength(30);
+  });
+
+  it("last date in range is today", () => {
+    const result = buildDateRange(14, "2026-03-15");
+    expect(result[result.length - 1]).toBe("2026-03-15");
+  });
+
+  it("first date in range is numDays-1 days ago", () => {
+    const result = buildDateRange(14, "2026-03-15");
+    expect(result[0]).toBe("2026-03-02");
+  });
+
+  it("dates are consecutive with no gaps", () => {
+    const result = buildDateRange(14, "2026-03-15");
+    for (let i = 1; i < result.length; i++) {
+      const prev = new Date(result[i - 1] + "T00:00:00Z");
+      const curr = new Date(result[i] + "T00:00:00Z");
+      expect(curr.getTime() - prev.getTime()).toBe(86400000); // 1 day in ms
+    }
+  });
+
+  it("zero-fills days with no data", () => {
+    const result = buildTrend(
+      7,
+      "2026-03-15",
+      new Map([["2026-03-15", 10]]),
+      new Map()
+    );
+    // Only the last day has data; all others should be 0
+    const zeros = result.filter(r => r.date !== "2026-03-15");
+    expect(zeros.every(r => r.visitors === 0 && r.leads === 0)).toBe(true);
+    expect(result.find(r => r.date === "2026-03-15")?.visitors).toBe(10);
+  });
+
+  it("maps visitor and lead counts correctly", () => {
+    const visitorMap = new Map([
+      ["2026-03-14", 5],
+      ["2026-03-15", 12],
+    ]);
+    const leadMap = new Map([
+      ["2026-03-14", 2],
+      ["2026-03-15", 4],
+    ]);
+    const result = buildTrend(7, "2026-03-15", visitorMap, leadMap);
+    const mar14 = result.find(r => r.date === "2026-03-14");
+    const mar15 = result.find(r => r.date === "2026-03-15");
+    expect(mar14?.visitors).toBe(5);
+    expect(mar14?.leads).toBe(2);
+    expect(mar15?.visitors).toBe(12);
+    expect(mar15?.leads).toBe(4);
+  });
+
+  it("does not include dates outside the range", () => {
+    const result = buildDateRange(7, "2026-03-15");
+    expect(result.includes("2026-03-01")).toBe(false);
+    expect(result.includes("2026-03-16")).toBe(false);
+  });
+});

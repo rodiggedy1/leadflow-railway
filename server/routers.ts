@@ -278,6 +278,70 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.visitorTrend — returns unique visitors + new leads per calendar day
+     * for the last N days (default 14). Used to render the trend chart in the
+     * admin dashboard. Days with zero activity are filled in so the chart
+     * always shows a complete continuous range.
+     */
+    visitorTrend: adminAgentProcedure
+      .input(z.object({
+        days: z.number().int().min(7).max(90).default(14),
+      }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        const numDays = input?.days ?? 14;
+
+        // Build the date range: today back to numDays-1 days ago (all in UTC)
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        const startDate = new Date(today);
+        startDate.setUTCDate(startDate.getUTCDate() - (numDays - 1));
+
+        // Unique visitors per day from page_views
+        const visitorRows = await db
+          .select({
+            day: sql<string>`DATE(createdAt)`,
+            visitors: sql<number>`count(distinct \`sessionKey\`)`,
+          })
+          .from(pageViews)
+          .where(gte(pageViews.createdAt, startDate))
+          .groupBy(sql`DATE(createdAt)`);
+
+        // New leads per day from conversation_sessions
+        const leadRows = await db
+          .select({
+            day: sql<string>`DATE(createdAt)`,
+            leads: sql<number>`count(*)`,
+          })
+          .from(conversationSessions)
+          .where(gte(conversationSessions.createdAt, startDate))
+          .groupBy(sql`DATE(createdAt)`);
+
+        // Build lookup maps
+        const visitorMap = new Map<string, number>();
+        for (const r of visitorRows) visitorMap.set(r.day, Number(r.visitors));
+        const leadMap = new Map<string, number>();
+        for (const r of leadRows) leadMap.set(r.day, Number(r.leads));
+
+        // Fill every day in the range (zero-fill missing days)
+        const result: { date: string; visitors: number; leads: number }[] = [];
+        for (let i = 0; i < numDays; i++) {
+          const d = new Date(startDate);
+          d.setUTCDate(d.getUTCDate() + i);
+          const dateStr = d.toISOString().slice(0, 10); // YYYY-MM-DD
+          result.push({
+            date: dateStr,
+            visitors: visitorMap.get(dateStr) ?? 0,
+            leads: leadMap.get(dateStr) ?? 0,
+          });
+        }
+
+        return result;
+      }),
+
+    /**
      * leads.adminUpdateStage — admin overrides the stage of any lead.
      */
     adminUpdateStage: adminAgentProcedure

@@ -433,3 +433,8 @@
 - [x] Audit visitor tracking — find why visitor counts are inflated
 - [x] Fix deduplication: use persistent localStorage visitor ID (not sessionStorage) so each real browser is counted once per day
 - [x] Clean up inflated page_views rows in DB
+
+## Daily Visitor Trend Chart
+- [x] Backend: leads.visitorTrend procedure — unique visitors + new leads per day for last 14 days
+- [x] Frontend: bar/line chart in admin dashboard using Recharts
+- [x] Write vitest tests for the trend data logic
