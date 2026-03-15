@@ -142,7 +142,7 @@ function buildWidgetScript(apiBase: string): string {
         '<div class="mib-avatar">M<span class="mib-online-dot"></span></div>',
         '<div class="mib-header-text">',
           '<p class="mib-header-title">Maids in Black</p>',
-          '<p class="mib-header-sub">We\'ll text you immediately!</p>',
+          '<p class="mib-header-sub">We will text you immediately!</p>',
         '</div>',
         '<button class="mib-close-btn" id="mib-close-btn" aria-label="Close">',
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
@@ -168,18 +168,18 @@ function buildWidgetScript(apiBase: string): string {
         '<div>',
           '<div class="mib-success-bubble">',
             '<span class="mib-check">' + ICON_CHECK + '</span>',
-            '<span>Thank you, <strong>' + escHtml(firstName) + '</strong>! \uD83C\uDF89 Check your phone \u2014 we just texted you. We\'ll be in touch shortly!</span>',
+            '<span>Thank you, <strong>' + escHtml(firstName) + '</strong>! \uD83C\uDF89 Check your phone \u2014 we just texted you. We will be in touch shortly!</span>',
           '</div>',
           '<div class="mib-time">' + timeLabel() + '</div>',
         '</div>',
-        '<p style="font-size:12px;color:#9CA3AF;text-align:center;">Didn\'t get a text? Make sure your number is correct or call us directly.</p>',
+        '<p style="font-size:12px;color:#9CA3AF;text-align:center;">Did not get a text? Make sure your number is correct or call us directly.</p>',
       ].join('');
       return;
     }
 
     body.innerHTML = [
       '<div>',
-        '<div class="mib-bubble">\uD83D\uDC4B Hi! Drop your name and number below and we\'ll text you right away with availability and pricing.</div>',
+        '<div class="mib-bubble">\uD83D\uDC4B Hi! Drop your name and number below and we will text you right away with availability and pricing.</div>',
         '<div class="mib-time">' + state.sentTime + '</div>',
       '</div>',
       '<div class="mib-resp-badge">\u23F1 Average response time: <span class="fast">&lt;1 min</span></div>',
