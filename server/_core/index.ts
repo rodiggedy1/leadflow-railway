@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerWebhookRoutes } from "../webhooks";
+import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -38,6 +39,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // OpenPhone webhook for inbound SMS replies
   registerWebhookRoutes(app);
+  // Embeddable widget script for external websites
+  registerWidgetEmbedRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",

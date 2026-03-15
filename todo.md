@@ -409,3 +409,10 @@
 - [x] Fix QUOTE_SENT stage handler: detect pricing questions, extract bedrooms/bathrooms from message, reply with actual price before moving to availability
 - [x] Update AI service to handle widget leads with no prior service details
 - [x] Write vitest tests for pricing extraction logic — 250/250 tests pass
+
+## SMS Widget Embed (for maidsinblack.com)
+
+- [x] Remove SmsWidget import and usage from Home.tsx (quote form page)
+- [x] Create GET /widget.js endpoint on the server that serves a self-contained JS snippet
+- [x] The snippet renders the full widget UI, auto-opens after 10s, posts to /api/trpc submitWidgetLead
+- [x] Deliver one-line embed code to user
