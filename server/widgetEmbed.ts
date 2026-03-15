@@ -18,7 +18,7 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.4.0";
+const WIDGET_VERSION = "2.5.0";
 
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
@@ -136,9 +136,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
       cursor: 'pointer',
       background: 'linear-gradient(135deg,' + CORAL + ' 0%,' + CORAL_DARK + ' 100%)',
       boxShadow: '0 4px 24px rgba(232,115,90,0.55)',
-      display: '-webkit-flex',
-      WebkitAlignItems: 'center',
-      WebkitJustifyContent: 'center',
+      display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '0',
@@ -148,8 +146,6 @@ function buildWidgetScript(apiBase: string, version: string): string {
       lineHeight: '1',
       overflow: 'visible',
       transition: 'transform 0.2s',
-      // Prevent tap highlight flash on iOS
-      WebkitTapHighlightColor: 'transparent',
       touchAction: 'manipulation',
     }, { 'aria-label': 'Chat with Maids in Black', 'id': 'mib-widget-btn' });
 
