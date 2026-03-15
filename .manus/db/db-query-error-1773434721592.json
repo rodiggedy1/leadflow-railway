@@ -1,0 +1,8 @@
+{
+  "query": "SELECT id, name, email, is_active, created_at FROM agents WHERE email = 'rohangilkes@hey.com';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, name, email, is_active, created_at FROM agents WHERE email = 'rohangilkes@hey.com';",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'is_active' in 'field list'"
+  ]
+}

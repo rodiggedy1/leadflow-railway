@@ -993,25 +993,51 @@ export const appRouter = router({
     submit: publicProcedure
       .input(quoteFormSchema)
       .mutation(async ({ input }) => {
-        // ── 1. Calculate price synchronously (instant, no network call) ────────
+        // ── 1. Calculate price synchronously (instant, no network call) ────
         const price = estimatePrice({
           bedrooms: input.bedrooms,
           bathrooms: input.bathrooms,
           serviceType: input.serviceType,
         });
 
-        // ── 2. Fire-and-forget: AI generation + SMS + DB in background ─────────
+        // ── 2. Fire-and-forget: AI generation + SMS + DB in background ─────
         // We do NOT await this — the form gets an instant response
         processQuoteInBackground(input, price).catch(err => {
           console.error("[submitQuote] Background processing error:", err);
         });
 
-        // ── 3. Return immediately ──────────────────────────────────────────────
+        // ── 3. Return immediately ─────────────────────────────────────────────────────────
         return {
           success: true,
           smsSent: true, // optimistic — background will handle actual sending
           message: "Quote sent! Check your phone for your personalized quote.",
         };
+      }),
+
+    /**
+     * quotes.submitWidgetLead — floating SMS chat widget entry point.
+     * Only requires name + phone. Creates a lead in QUOTE_SENT stage,
+     * texts the admin alert and sends the lead a friendly welcome SMS.
+     * The existing AI engine handles all follow-up replies via webhook.
+     */
+    submitWidgetLead: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1, "Name is required").max(255),
+          phone: z.string().min(7, "Phone is required").max(30),
+          utmSource: z.string().max(100).optional(),
+          utmMedium: z.string().max(100).optional(),
+          utmCampaign: z.string().max(255).optional(),
+          utmContent: z.string().max(255).optional(),
+          gclid: z.string().max(255).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        // Fire-and-forget — return immediately so the widget feels instant
+        processWidgetLeadInBackground(input).catch(err => {
+          console.error("[widgetLead] Background processing error:", err);
+        });
+        return { success: true };
       }),
   }),
 
@@ -1082,6 +1108,68 @@ export const appRouter = router({
 export type AppRouter = typeof appRouter;
 
 // ─── Background processor ─────────────────────────────────────────────────────
+
+/**
+ * Handles the widget lead: sends admin alert + friendly welcome SMS to the lead,
+ * then creates a conversation session in QUOTE_SENT stage so the AI webhook
+ * can take over from the first reply.
+ */
+async function processWidgetLeadInBackground(input: {
+  name: string;
+  phone: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  gclid?: string;
+}): Promise<void> {
+  const normalizedPhone = normalizePhone(input.phone);
+  const firstName = input.name.split(" ")[0];
+
+  // ── Step 1: Alert admin ───────────────────────────────────────────────────
+  const alertMsg = `New Widget Lead - Maids in Black\n\nName: ${input.name}\nPhone: ${normalizedPhone}\nSource: ${input.utmSource ?? "direct"}`;
+  sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err =>
+    console.error("[widgetLead] Admin alert SMS failed:", err)
+  );
+
+  // ── Step 2: Send welcome SMS to lead ─────────────────────────────────────
+  const welcomeMsg = `Hey ${firstName}! 👋 Thank you for checking out Maids in Black. How can we help you with your home today?`;
+  const sms = await sendSms({ to: normalizedPhone, content: welcomeMsg });
+  console.log(`[widgetLead] Welcome SMS sent: ${sms.success}`);
+
+  const db = await getDb();
+  if (!db) {
+    console.warn("[widgetLead] No DB — skipping session save");
+    return;
+  }
+
+  // ── Step 3: Create conversation session ──────────────────────────────────
+  const now = Date.now();
+  const initialHistory = JSON.stringify([
+    { role: "assistant", content: welcomeMsg, ts: now },
+  ]);
+
+  try {
+    await db.insert(conversationSessions).values({
+      leadPhone: normalizedPhone,
+      leadName: input.name,
+      stage: "QUOTE_SENT",
+      quotedPrice: null,
+      serviceType: null,
+      bedrooms: null,
+      bathrooms: null,
+      extras: null,
+      messageHistory: initialHistory,
+      utmSource: input.utmSource ?? null,
+      utmMedium: input.utmMedium ?? null,
+      utmCampaign: input.utmCampaign ?? null,
+      utmContent: input.utmContent ?? null,
+      gclid: input.gclid ?? null,
+    });
+  } catch (dbErr) {
+    console.error("[widgetLead] Failed to create conversation session:", dbErr);
+  }
+}
 
 /**
  * Runs all the slow work (AI calls, SMS, DB writes) after the form has

@@ -393,3 +393,13 @@
 - [x] Replace donut chart with grouped bar chart (light bar = visitors, solid bar = leads)
 - [x] Update summary table: Visitors column, Leads column, Conversion % column, Totals row
 - [x] Update vitest tests for new merged aggregation logic — 195/195 tests pass
+
+## SMS Chat Widget (LeadTruffle-style) — IN PROGRESS
+
+- [x] Add `quotes.submitWidgetLead` tRPC procedure (name + phone only, creates conversation_sessions row, sends admin SMS + lead welcome SMS)
+- [x] Build floating `SmsWidget` component: coral header, name/phone fields, SMS consent checkbox, Send button
+- [x] Auto-open after 10 seconds on page; floating button in bottom-right corner to open/close manually
+- [x] Success state: confirmation bubble "Thank you [First Name]! Check your phone..."
+- [x] Widget hands off to existing AI conversation engine (same flow as quote form leads)
+- [x] Add widget to Home.tsx (quote form page) and make it embeddable
+- [x] Write vitest tests for submitWidgetLead procedure — 213/213 tests pass
