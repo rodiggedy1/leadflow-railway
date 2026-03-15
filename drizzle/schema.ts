@@ -122,6 +122,14 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
   bookedAmount: int("bookedAmount"),
 
+  // ── Lead source ────────────────────────────────────────────────────────────
+  /**
+   * How this lead was created:
+   * "form"   → submitted via the quote form on quote.maidinblack.com
+   * "widget" → submitted via the SMS chat widget on maidsinblack.com
+   */
+  leadSource: mysqlEnum("leadSource", ["form", "widget"]).default("form"),
+
   // ── UTM Attribution fields ──────────────────────────────────────────────────
   /** Traffic source (e.g. "google", "facebook", "instagram") */
   utmSource: varchar("utmSource", { length: 100 }),

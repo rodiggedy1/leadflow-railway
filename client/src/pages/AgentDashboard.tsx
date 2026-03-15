@@ -88,6 +88,7 @@ type Session = {
   bookedAmount: number | null;
   internalNotes: string | null;
   aiMode: number;
+  leadSource: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -859,7 +860,27 @@ function LeadCard({
                 )}
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-                {session.serviceType && <span>{session.serviceType}</span>}
+                {/* Source badge */}
+                {session.leadSource === "widget" ? (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "#FFF0EB", color: "#E8603C", border: "1px solid #FECDBC" }}
+                  >
+                    💬 Widget
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "#F0F4FF", color: "#4F6EF7", border: "1px solid #C7D4FD" }}
+                  >
+                    📋 Form
+                  </span>
+                )}
+                {session.serviceType ? (
+                  <span>{session.serviceType}{session.bedrooms ? ` · ${session.bedrooms}bd/${session.bathrooms}ba` : ""}</span>
+                ) : session.leadSource === "widget" ? (
+                  <span className="italic text-gray-400">Service via SMS</span>
+                ) : null}
                 {session.quotedPrice && (
                   <span className="font-medium text-gray-700">${computeTotalQuote(session.quotedPrice, session.extras)}</span>
                 )}

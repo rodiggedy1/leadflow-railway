@@ -405,6 +405,9 @@ type DrawerSession = {
   assignedAgentName: string | null;
   bookedAmount: number | null;
   aiMode: number;
+  bedrooms: string | null;
+  bathrooms: string | null;
+  leadSource: string | null;
   // UTM attribution
   utmSource: string | null;
   utmMedium: string | null;
@@ -749,6 +752,25 @@ function ConversationDrawer({
             <div className="px-4 py-4 border-b">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lead Details</p>
               <div className="space-y-2 text-sm">
+                {/* Source badge */}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Source</span>
+                  {session.leadSource === "widget" ? (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                      style={{ background: "#FFF0EB", color: "#E8603C", border: "1px solid #FECDBC" }}
+                    >
+                      💬 Widget
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                      style={{ background: "#F0F4FF", color: "#4F6EF7", border: "1px solid #C7D4FD" }}
+                    >
+                      📋 Form
+                    </span>
+                  )}
+                </div>
                 {session.quotedPrice && (() => {
                   const total = computeTotalQuote(session.quotedPrice, session.extras);
                   const hasExtras = total !== session.quotedPrice;
@@ -761,12 +783,31 @@ function ConversationDrawer({
                     </div>
                   );
                 })()}
-                {session.serviceType && (
+                {session.serviceType ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Service</span>
+                      <span className="font-medium text-right max-w-[55%] truncate">{session.serviceType}</span>
+                    </div>
+                    {session.serviceType !== "Office Cleaning" && session.bedrooms && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Size</span>
+                        <span className="font-medium text-right">{session.bedrooms} bd / {session.bathrooms} ba</span>
+                      </div>
+                    )}
+                    {session.serviceType === "Office Cleaning" && session.bedrooms && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Size</span>
+                        <span className="font-medium text-right">{session.bedrooms} sqft</span>
+                      </div>
+                    )}
+                  </>
+                ) : session.leadSource === "widget" ? (
                   <div className="flex justify-between">
                     <span className="text-gray-500">Service</span>
-                    <span className="font-medium text-right max-w-[55%] truncate">{session.serviceType}</span>
+                    <span className="text-xs text-gray-400 italic">Collecting via SMS</span>
                   </div>
-                )}
+                ) : null}
                 {session.selectedSlot && (
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 shrink-0">Slot</span>
@@ -1803,6 +1844,24 @@ export default function AdminDashboard() {
                           <span className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
                             <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                             {session.leadName ?? "—"}
+                            {/* Source icon: widget vs form */}
+                            {session.leadSource === "widget" ? (
+                              <span
+                                title="Widget lead (maidsinblack.com)"
+                                className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                style={{ background: "#FFF0EB", color: "#E8603C", border: "1px solid #FECDBC" }}
+                              >
+                                💬 Widget
+                              </span>
+                            ) : (
+                              <span
+                                title="Quote form lead (quote.maidinblack.com)"
+                                className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                style={{ background: "#F0F4FF", color: "#4F6EF7", border: "1px solid #C7D4FD" }}
+                              >
+                                📋 Form
+                              </span>
+                            )}
                           </span>
                           <span className="text-xs text-gray-500 flex items-center gap-1.5">
                             <Phone className="w-3 h-3 text-gray-300 shrink-0" />
@@ -1814,17 +1873,24 @@ export default function AdminDashboard() {
                       {/* Service */}
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-sm text-gray-800">
-                            {session.serviceType ?? "—"}
-                          </span>
-                          {session.serviceType !== "Office Cleaning" ? (
-                            <span className="text-xs text-gray-400">
-                              {session.bedrooms} bd / {session.bathrooms} ba
-                            </span>
+                          {session.leadSource === "widget" && !session.serviceType ? (
+                            // Widget lead — no service info yet (will be collected via SMS)
+                            <span className="text-xs text-gray-400 italic">Via SMS chat</span>
                           ) : (
-                            <span className="text-xs text-gray-400">
-                              {session.bedrooms} sqft
-                            </span>
+                            <>
+                              <span className="text-sm text-gray-800">
+                                {session.serviceType ?? "—"}
+                              </span>
+                              {session.serviceType !== "Office Cleaning" ? (
+                                <span className="text-xs text-gray-400">
+                                  {session.bedrooms ? `${session.bedrooms} bd / ${session.bathrooms} ba` : "—"}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">
+                                  {session.bedrooms} sqft
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>

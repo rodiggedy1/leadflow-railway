@@ -1160,6 +1160,7 @@ async function processWidgetLeadInBackground(input: {
       bathrooms: null,
       extras: null,
       messageHistory: initialHistory,
+      leadSource: "widget",
       utmSource: input.utmSource ?? null,
       utmMedium: input.utmMedium ?? null,
       utmCampaign: input.utmCampaign ?? null,
@@ -1261,6 +1262,7 @@ async function processQuoteInBackground(
       bathrooms: input.bathrooms,
       extras: input.extras && input.extras.length > 0 ? JSON.stringify(input.extras) : null,
       messageHistory: initialHistory,
+      leadSource: "form",
       // UTM attribution
       utmSource: input.utmSource ?? null,
       utmMedium: input.utmMedium ?? null,
