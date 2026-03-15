@@ -501,11 +501,42 @@ function buildWidgetScript(apiBase: string): string {
     }, 15000);
   }
 
+  // ── Exit-intent trigger ───────────────────────────────────────────────────────
+  // Fires when the mouse moves toward the top of the viewport (user about to leave).
+  // Only triggers once per session, and only if the user has not already closed
+  // the widget or if the widget is not already open.
+  function setupExitIntent() {
+    if (sessionStorage.getItem('mib_closed')) return;
+    if (sessionStorage.getItem('mib_exit_shown')) return;
+
+    var triggered = false;
+
+    function onMouseMove(e) {
+      // Trigger when cursor is within the top 10% of the viewport and moving upward
+      if (triggered) return;
+      if (e.clientY < window.innerHeight * 0.1 && e.movementY < 0) {
+        triggered = true;
+        sessionStorage.setItem('mib_exit_shown', '1');
+        document.removeEventListener('mousemove', onMouseMove);
+        if (!state.open && !sessionStorage.getItem('mib_closed')) {
+          setOpen(true);
+        }
+      }
+    }
+
+    // Only attach after a short delay so the trigger does not fire immediately
+    // on page load when the browser positions the cursor at the top
+    setTimeout(function() {
+      document.addEventListener('mousemove', onMouseMove);
+    }, 3000);
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────────
   function init() {
     buildButton();
     buildPanel();
     scheduleAutoOpen();
+    setupExitIntent();
   }
 
   if (document.readyState === 'loading') {

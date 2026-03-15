@@ -364,3 +364,76 @@ describe("processLeadReply — State Machine", () => {
     expect(result.reply).toBeTruthy();
   });
 });
+
+// ─── Widget lead service info writeback tests ─────────────────────────────────
+describe("QUOTE_SENT — widget lead service info writeback", () => {
+  beforeEach(() => {
+    mockLLM.mockReset();
+  });
+
+  it("returns extractedData with service info when lead provides room counts in a pricing question", async () => {
+    // Widget lead: no bedrooms/bathrooms pre-set (empty strings)
+    const ctx = makeContext({
+      stage: "QUOTE_SENT",
+      bedrooms: "",
+      bathrooms: "",
+      serviceType: "Standard Cleaning",
+    });
+
+    const result = await processLeadReply("how much for a 2 bedroom 1 bathroom?", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).toContain("$");
+    // Service info should be written back
+    expect(result.extractedData?.bedrooms).toBe("2 Bedrooms");
+    expect(result.extractedData?.bathrooms).toBe("1 Bathroom");
+    expect(result.extractedData?.serviceType).toBe("Standard Cleaning");
+    expect(result.extractedData?.quotedPrice).toBeDefined();
+    // No LLM call needed for this path
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  it("returns extractedData with service info when context already has bedrooms/bathrooms and lead asks about price", async () => {
+    // Quote form lead who asks about price in QUOTE_SENT
+    const ctx = makeContext({
+      stage: "QUOTE_SENT",
+      bedrooms: "3 Bedrooms",
+      bathrooms: "2 Bathrooms",
+      serviceType: "Standard Cleaning",
+    });
+
+    const result = await processLeadReply("how much does it cost?", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.extractedData?.bedrooms).toBe("3 Bedrooms");
+    expect(result.extractedData?.bathrooms).toBe("2 Bathrooms");
+    expect(result.extractedData?.quotedPrice).toBeDefined();
+  });
+
+  it("stays in QUOTE_SENT and asks for room counts when pricing question has no room info", async () => {
+    const ctx = makeContext({
+      stage: "QUOTE_SENT",
+      bedrooms: "",
+      bathrooms: "",
+    });
+
+    const result = await processLeadReply("how much do you charge?", ctx);
+
+    expect(result.nextStage).toBe("QUOTE_SENT");
+    expect(result.reply.toLowerCase()).toContain("bedroom");
+    // No service info extracted yet
+    expect(result.extractedData?.bedrooms).toBeUndefined();
+    expect(result.extractedData?.quotedPrice).toBeUndefined();
+  });
+
+  it("does not include service info in extractedData for non-pricing replies", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT" });
+
+    const result = await processLeadReply("ok thanks!", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    // No service info should be written back for a simple acknowledgement
+    expect(result.extractedData?.bedrooms).toBeUndefined();
+    expect(result.extractedData?.quotedPrice).toBeUndefined();
+  });
+});

@@ -420,3 +420,7 @@
 ## Widget Auto-open & Consent Fix
 - [x] Pre-check consent checkbox by default
 - [x] Fix auto-open timer to 15 seconds — now only skips if user explicitly closed the widget this session (mib_closed flag)
+
+## Widget Exit-Intent & Service Info Writeback
+- [x] Add exit-intent trigger: open widget when mouse moves toward top of browser
+- [x] Update conversation engine: write serviceType, bedrooms, bathrooms, quotedPrice back to session when AI collects them from widget lead

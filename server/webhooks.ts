@@ -169,16 +169,36 @@ export function registerWebhookRoutes(app: Express) {
       // Trim history to last 20 messages to stay within varchar(5000)
       if (history.length > 20) history = history.slice(-20);
 
+      // Build the update payload — always update stage + history.
+      // If the AI collected service info (widget leads), write it back too.
+      const dbUpdate: Record<string, unknown> = {
+        stage: result.nextStage,
+        selectedSlot: result.extractedData?.selectedSlot ?? session.selectedSlot ?? undefined,
+        address: result.extractedData?.address ?? session.address ?? undefined,
+        callPreference: result.extractedData?.callPreference ?? session.callPreference ?? undefined,
+        messageHistory: JSON.stringify(history),
+      };
+
+      // Only overwrite service fields when the AI actually extracted them this turn
+      // (avoids accidentally clearing data that was already set from the quote form)
+      if (result.extractedData?.serviceType) {
+        dbUpdate.serviceType = result.extractedData.serviceType;
+      }
+      if (result.extractedData?.bedrooms) {
+        dbUpdate.bedrooms = result.extractedData.bedrooms;
+      }
+      if (result.extractedData?.bathrooms) {
+        dbUpdate.bathrooms = result.extractedData.bathrooms;
+      }
+      if (result.extractedData?.quotedPrice) {
+        dbUpdate.quotedPrice = result.extractedData.quotedPrice;
+      }
+
       // Update the session in DB
       await db
         .update(conversationSessions)
-        .set({
-          stage: result.nextStage,
-          selectedSlot: result.extractedData?.selectedSlot ?? session.selectedSlot ?? undefined,
-          address: result.extractedData?.address ?? session.address ?? undefined,
-          callPreference: result.extractedData?.callPreference ?? session.callPreference ?? undefined,
-          messageHistory: JSON.stringify(history),
-        })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set(dbUpdate as any)
         .where(eq(conversationSessions.id, session.id));
 
       // Send the reply via OpenPhone

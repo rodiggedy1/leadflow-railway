@@ -61,6 +61,11 @@ export interface StageResult {
     selectedSlot?: string;
     address?: string;
     callPreference?: string;
+    /** Service info collected from widget lead via SMS — write back to the session row */
+    serviceType?: string;
+    bedrooms?: string;
+    bathrooms?: string;
+    quotedPrice?: string;
   };
 }
 
@@ -342,7 +347,13 @@ async function handleQuoteSentReply(
       return {
         reply,
         nextStage: "AVAILABILITY",
-        extractedData: {},
+        // Write the collected service info back to the session so the admin view stays current
+        extractedData: {
+          serviceType,
+          bedrooms: effectiveBedrooms,
+          bathrooms: effectiveBathrooms,
+          quotedPrice: String(price),
+        },
       };
     }
 
