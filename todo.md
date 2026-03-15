@@ -452,3 +452,6 @@
 ## Widget Cache Fix
 - [x] Set Cache-Control: no-cache on /api/widget.js so browsers always fetch the latest version
 - [x] Add a build-time version string to the script URL so CDNs treat it as a new resource
+
+## Widget Mobile Fix
+- [x] Fix widget not visible on mobile — floating button and panel not rendering on mobile browsers

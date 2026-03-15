@@ -52,10 +52,12 @@ function buildWidgetScript(apiBase: string, version: string): string {
   var Z_BTN = 2147483647;
   var Z_PANEL = 2147483646;
 
-  // Inject keyframe animation for pulse ring
+  // Inject keyframe animation for pulse ring + mobile safe-area support
   var kf = document.createElement('style');
   kf.textContent = '@keyframes mib-ping{0%{transform:scale(1);opacity:0.5}100%{transform:scale(2.2);opacity:0}}' +
-    '@keyframes mib-spin{to{transform:rotate(360deg)}}';
+    '@keyframes mib-spin{to{transform:rotate(360deg)}}' +
+    // Ensure fixed positioning works even when the host page sets overflow:hidden on body (common in WordPress)
+    '#mib-widget-btn,#mib-widget-panel{position:fixed!important;}';
   document.head.appendChild(kf);
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -123,8 +125,9 @@ function buildWidgetScript(apiBase: string, version: string): string {
   function buildButton() {
     btn = el('button', {
       position: 'fixed',
-      bottom: '24px',
-      right: '24px',
+      // iOS safe-area: keep button above the home indicator bar
+      bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+      right: '16px',
       zIndex: String(Z_BTN),
       width: '60px',
       height: '60px',
@@ -133,7 +136,9 @@ function buildWidgetScript(apiBase: string, version: string): string {
       cursor: 'pointer',
       background: 'linear-gradient(135deg,' + CORAL + ' 0%,' + CORAL_DARK + ' 100%)',
       boxShadow: '0 4px 24px rgba(232,115,90,0.55)',
-      display: 'flex',
+      display: '-webkit-flex',
+      WebkitAlignItems: 'center',
+      WebkitJustifyContent: 'center',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '0',
@@ -143,6 +148,9 @@ function buildWidgetScript(apiBase: string, version: string): string {
       lineHeight: '1',
       overflow: 'visible',
       transition: 'transform 0.2s',
+      // Prevent tap highlight flash on iOS
+      WebkitTapHighlightColor: 'transparent',
+      touchAction: 'manipulation',
     }, { 'aria-label': 'Chat with Maids in Black', 'id': 'mib-widget-btn' });
 
     // Pulse ring
@@ -175,18 +183,26 @@ function buildWidgetScript(apiBase: string, version: string): string {
       setOpen(!state.open);
     });
 
-    document.body.appendChild(btn);
+    // Append to <html> not <body> — many WordPress themes set overflow:hidden on
+    // body which clips position:fixed children on iOS Safari.
+    (document.body || document.documentElement).appendChild(btn);
   }
 
   // ── Build panel ──────────────────────────────────────────────────────────────
   function buildPanel() {
+    // On mobile the panel takes full width minus margins; on desktop it's 340px
+    var isMobile = window.innerWidth < 480;
     panel = el('div', {
       position: 'fixed',
-      bottom: '96px',
-      right: '24px',
-      zIndex: String(Z_PANEL),
-      width: '340px',
+      // Sit just above the floating button (button height 60px + gap 12px + safe area)
+      bottom: 'calc(' + (isMobile ? '88px' : '96px') + ' + env(safe-area-inset-bottom, 0px))',
+      right: '16px',
+      // On mobile: stretch to fill the screen width minus margins
+      // On desktop: fixed 340px
+      left: isMobile ? '16px' : 'auto',
+      width: isMobile ? 'auto' : '340px',
       maxHeight: 'calc(100vh - 120px)',
+      zIndex: String(Z_PANEL),
       borderRadius: '16px',
       overflow: 'hidden',
       boxShadow: '0 8px 40px rgba(0,0,0,0.2)',
@@ -304,7 +320,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     panel.appendChild(header);
     panel.appendChild(body);
     panel.appendChild(footer);
-    document.body.appendChild(panel);
+    (document.body || document.documentElement).appendChild(panel);
   }
 
   // ── Render body content ──────────────────────────────────────────────────────
