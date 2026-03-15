@@ -416,3 +416,7 @@
 - [x] Create GET /widget.js endpoint on the server that serves a self-contained JS snippet
 - [x] The snippet renders the full widget UI, auto-opens after 10s, posts to /api/trpc submitWidgetLead
 - [x] Deliver one-line embed code to user
+
+## Widget Auto-open & Consent Fix
+- [x] Pre-check consent checkbox by default
+- [x] Fix auto-open timer to 15 seconds — now only skips if user explicitly closed the widget this session (mib_closed flag)

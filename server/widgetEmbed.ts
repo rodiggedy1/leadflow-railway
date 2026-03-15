@@ -52,7 +52,7 @@ function buildWidgetScript(apiBase: string): string {
     error: null,
     name: '',
     phone: '',
-    consent: false,
+    consent: true,
   };
 
   var btn, panel;
@@ -155,7 +155,6 @@ function buildWidgetScript(apiBase: string): string {
     btn.addEventListener('mouseout', function() { btn.style.transform = 'scale(1)'; });
     btn.addEventListener('click', function() {
       setOpen(!state.open);
-      sessionStorage.setItem('mib_opened', '1');
     });
 
     document.body.appendChild(btn);
@@ -255,7 +254,7 @@ function buildWidgetScript(apiBase: string): string {
     closeBtn.textContent = '\u00D7'; // ×
     closeBtn.addEventListener('mouseover', function() { closeBtn.style.background = 'rgba(255,255,255,0.2)'; });
     closeBtn.addEventListener('mouseout', function() { closeBtn.style.background = 'none'; });
-    closeBtn.addEventListener('click', function() { setOpen(false); });
+    closeBtn.addEventListener('click', function() { setOpen(false); sessionStorage.setItem('mib_closed', '1'); });
 
     header.appendChild(avatar);
     header.appendChild(headerText);
@@ -391,7 +390,7 @@ function buildWidgetScript(apiBase: string): string {
 
     var consentLabel = el('label', { display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' });
     var consentCheck = el('input', { marginTop: '2px', flexShrink: '0', accentColor: CORAL }, { type: 'checkbox', id: 'mib-consent' });
-    if (state.consent) consentCheck.setAttribute('checked', '');
+    consentCheck.checked = state.consent;
     consentCheck.addEventListener('change', function() { state.consent = consentCheck.checked; });
     var consentText = el('span', { fontSize: '11px', color: '#6B7280', lineHeight: '1.5' });
     consentText.textContent = 'I consent to receive SMS messages from Maids in Black at the number provided about cleaning services, estimates, scheduling, and follow-ups. Msg & data rates may apply. Reply STOP to opt out.';
@@ -491,15 +490,15 @@ function buildWidgetScript(apiBase: string): string {
     if (val) renderBody();
   }
 
-  // ── Auto-open after 10 seconds ───────────────────────────────────────────────
+  // ── Auto-open after 15 seconds ───────────────────────────────────────────────
   function scheduleAutoOpen() {
-    if (sessionStorage.getItem('mib_opened')) return;
+    // Only skip auto-open if user explicitly closed the widget this session
+    if (sessionStorage.getItem('mib_closed')) return;
     setTimeout(function() {
       if (!state.open) {
         setOpen(true);
-        sessionStorage.setItem('mib_opened', '1');
       }
-    }, 10000);
+    }, 15000);
   }
 
   // ── Init ─────────────────────────────────────────────────────────────────────
