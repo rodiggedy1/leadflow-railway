@@ -428,3 +428,8 @@
 ## Widget leadSource Bug Fix
 - [x] Fix: widget leads showing "Form" badge — leadSource not being saved as 'widget' in DB
 - [x] Backfill existing widget leads (rohan x2) to leadSource='widget'
+
+## Visitor Tracking Fix
+- [x] Audit visitor tracking — find why visitor counts are inflated
+- [x] Fix deduplication: use persistent localStorage visitor ID (not sessionStorage) so each real browser is counted once per day
+- [x] Clean up inflated page_views rows in DB

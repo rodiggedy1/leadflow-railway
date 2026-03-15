@@ -1,0 +1,37 @@
+{
+  "query": "SELECT COUNT(*) as total FROM page_views; SELECT sessionKey, COUNT(*) as cnt FROM page_views GROUP BY sessionKey HAVING cnt > 1 LIMIT 10; SELECT DATE(createdAt) as day, COUNT(*) as visits, COUNT(DISTINCT sessionKey) as unique_sessions FROM page_views GROUP BY day ORDER BY day DESC LIMIT 14;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COUNT(*) as total FROM page_views; SELECT sessionKey, COUNT(*) as cnt FROM page_views GROUP BY sessionKey HAVING cnt > 1 LIMIT 10; SELECT DATE(createdAt) as day, COUNT(*) as visits, COUNT(DISTINCT sessionKey) as unique_sessions FROM page_views GROUP BY day ORDER BY day DESC LIMIT 14;",
+  "rows": [
+    {
+      "total": "67"
+    },
+    {
+      "total": "sessionKey\tcnt"
+    },
+    {
+      "total": "acwlgsw6715mms6n195\t4"
+    },
+    {
+      "total": "hu3bbjhsdhvmmodflhh\t2"
+    },
+    {
+      "total": "7x9tdsdmqwommocqg9c\t27"
+    },
+    {
+      "total": "day\tvisits\tunique_sessions"
+    },
+    {
+      "total": "2026-03-15\t30\t17"
+    },
+    {
+      "total": "2026-03-14\t4\t4"
+    },
+    {
+      "total": "2026-03-13\t33\t17"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\n67\nsessionKey\tcnt\nacwlgsw6715mms6n195\t4\nhu3bbjhsdhvmmodflhh\t2\n7x9tdsdmqwommocqg9c\t27\nday\tvisits\tunique_sessions\n2026-03-15\t30\t17\n2026-03-14\t4\t4\n2026-03-13\t33\t17\n",
+  "stderr": "",
+  "execution_time_ms": 79
+}

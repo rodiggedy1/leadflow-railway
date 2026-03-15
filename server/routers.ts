@@ -159,11 +159,13 @@ export const appRouter = router({
           .where(conditions)
           .groupBy(conversationSessions.utmSource);
 
-        // Visitor counts per source (from page_views table)
+        // Visitor counts per source (from page_views table).
+        // Uses COUNT(DISTINCT sessionKey) so duplicate rows from old
+        // sessionStorage-based keys are collapsed into unique visitor counts.
         const visitorRows = await db
           .select({
             utmSource: pageViews.utmSource,
-            count: sql<number>`count(*)`,
+            count: sql<number>`count(distinct \`sessionKey\`)`,
           })
           .from(pageViews)
           .where(
@@ -240,9 +242,12 @@ export const appRouter = router({
 
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        // Visitor count from page_views table
+        // Visitor count from page_views table.
+        // Uses COUNT(DISTINCT sessionKey) as a server-side safety net so that
+        // any duplicate rows (e.g. from old sessionStorage-based keys) are
+        // automatically collapsed into unique visitor counts.
         const [visitorRow] = await db
-          .select({ count: sql<number>`count(*)` })
+          .select({ count: sql<number>`count(distinct \`sessionKey\`)` })
           .from(pageViews)
           .where(
             input?.dateFrom || input?.dateTo
