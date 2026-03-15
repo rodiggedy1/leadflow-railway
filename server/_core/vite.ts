@@ -61,7 +61,12 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  // Exclude API and dynamic server routes so they are handled by their own Express handlers
+  app.use("*", (req, res, next) => {
+    // Let server-side routes handle themselves
+    if (req.originalUrl.startsWith("/api/") || req.originalUrl === "/widget.js") {
+      return next();
+    }
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
