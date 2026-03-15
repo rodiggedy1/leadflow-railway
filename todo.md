@@ -403,3 +403,9 @@
 - [x] Widget hands off to existing AI conversation engine (same flow as quote form leads)
 - [x] Add widget to Home.tsx (quote form page) and make it embeddable
 - [x] Write vitest tests for submitWidgetLead procedure — 213/213 tests pass
+
+## Widget Lead Pricing Fix
+
+- [x] Fix QUOTE_SENT stage handler: detect pricing questions, extract bedrooms/bathrooms from message, reply with actual price before moving to availability
+- [x] Update AI service to handle widget leads with no prior service details
+- [x] Write vitest tests for pricing extraction logic — 250/250 tests pass

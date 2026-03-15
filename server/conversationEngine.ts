@@ -28,6 +28,7 @@ import {
 } from "./aiService";
 import { notifyAgentOfLead } from "./agentNotification";
 import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
+import { estimatePrice } from "./openphone";
 
 export interface ConversationContext {
   stage: ConversationStage;
@@ -249,6 +250,117 @@ Respond with this exact JSON structure:
   }
 }
 
+// ─── Room info extractor (for widget leads asking about pricing) ─────────────
+
+/**
+ * Maps common spoken bedroom/bathroom counts to the keys used by estimatePrice.
+ */
+export function extractRoomInfo(message: string): { bedrooms: string | null; bathrooms: string | null } {
+  const lower = message.toLowerCase();
+
+  // Bedroom extraction — look for number + bedroom(s) or bedroom + number
+  const bedroomPatterns: [RegExp, string][] = [
+    [/\bstudio\b/, "Studio"],
+    [/\b0\s*bed|zero\s*bed/, "Studio"],
+    [/\b1\s*bed|one\s*bed|1\s*br\b|1br\b/, "1 Bedroom"],
+    [/\b2\s*bed|two\s*bed|2\s*br\b|2br\b/, "2 Bedrooms"],
+    [/\b3\s*bed|three\s*bed|3\s*br\b|3br\b/, "3 Bedrooms"],
+    [/\b4\s*bed|four\s*bed|4\s*br\b|4br\b/, "4 Bedrooms"],
+    [/\b5\s*bed|five\s*bed|5\s*br\b|5br\b/, "5 Bedrooms"],
+    [/\b6\s*bed|six\s*bed|6\s*br\b|6br\b/, "6 Bedrooms"],
+    [/\b7\s*bed|seven\s*bed|7\s*br\b|7br\b/, "7 Bedrooms"],
+  ];
+
+  // Bathroom extraction
+  const bathroomPatterns: [RegExp, string][] = [
+    [/\b1\.5\s*bath|one\s*and\s*a\s*half\s*bath|1\s*half\s*bath/, "1.5 Bathrooms"],
+    [/\b2\.5\s*bath|two\s*and\s*a\s*half\s*bath/, "2.5 Bathrooms"],
+    [/\b3\.5\s*bath|three\s*and\s*a\s*half\s*bath/, "3.5 Bathrooms"],
+    [/\b1\s*bath|one\s*bath|1\s*ba\b|1ba\b/, "1 Bathroom"],
+    [/\b2\s*bath|two\s*bath|2\s*ba\b|2ba\b/, "2 Bathrooms"],
+    [/\b3\s*bath|three\s*bath|3\s*ba\b|3ba\b/, "3 Bathrooms"],
+    [/\b4\s*bath|four\s*bath|4\s*ba\b|4ba\b/, "4 Bathrooms"],
+  ];
+
+  let bedrooms: string | null = null;
+  for (const [pattern, label] of bedroomPatterns) {
+    if (pattern.test(lower)) { bedrooms = label; break; }
+  }
+
+  let bathrooms: string | null = null;
+  for (const [pattern, label] of bathroomPatterns) {
+    if (pattern.test(lower)) { bathrooms = label; break; }
+  }
+
+  return { bedrooms, bathrooms };
+}
+
+/**
+ * Returns true if the message is asking about price/cost.
+ */
+export function isPricingQuestion(message: string): boolean {
+  const lower = message.toLowerCase();
+  const pricingKeywords = [
+    "how much", "price", "cost", "pricing", "rate", "rates", "charge",
+    "quote", "estimate", "fee", "fees", "what do you", "how do you charge",
+    "what's the", "what is the", "affordable", "expensive", "cheap",
+    "$", "dollar", "money",
+  ];
+  return pricingKeywords.some(kw => lower.includes(kw));
+}
+
+/**
+ * Handles the QUOTE_SENT stage intelligently:
+ * - If the lead asks about pricing AND mentions room counts → quote them immediately.
+ * - If they ask about pricing but don't mention rooms → ask for room count.
+ * - If they just say hi/thanks/anything else → move to availability as before.
+ */
+async function handleQuoteSentReply(
+  leadReply: string,
+  context: ConversationContext
+): Promise<StageResult> {
+  const firstName = context.leadName.split(" ")[0];
+  const hasPricingQuestion = isPricingQuestion(leadReply);
+
+  // Case 1: Lead asks about pricing
+  if (hasPricingQuestion) {
+    const { bedrooms, bathrooms } = extractRoomInfo(leadReply);
+
+    // Case 1a: We have room info from context (quote form lead) or from their message
+    const effectiveBedrooms = bedrooms ?? context.bedrooms;
+    const effectiveBathrooms = bathrooms ?? context.bathrooms;
+
+    if (effectiveBedrooms && effectiveBathrooms) {
+      // We have enough info to quote — calculate and send price
+      const serviceType = context.serviceType ?? "Standard Cleaning";
+      const price = estimatePrice({
+        bedrooms: effectiveBedrooms,
+        bathrooms: effectiveBathrooms,
+        serviceType,
+      });
+      const reply = `Great question! For a ${effectiveBedrooms.toLowerCase()} / ${effectiveBathrooms.toLowerCase()} ${serviceType.toLowerCase()}, our price is $${price}. 🏠\n\nWould you like to get on the schedule? We have openings this week!`;
+      return {
+        reply,
+        nextStage: "AVAILABILITY",
+        extractedData: {},
+      };
+    }
+
+    // Case 1b: They asked about price but didn't mention room counts → ask for them
+    const reply = `Great question, ${firstName}! Our pricing depends on the size of your home. How many bedrooms and bathrooms do you have? 🏠`;
+    return {
+      reply,
+      nextStage: "QUOTE_SENT", // stay here until we have room info
+    };
+  }
+
+  // Case 2: Non-pricing reply ("ok", "thanks", general question) → move to availability
+  return {
+    reply: buildAvailabilityMessage(context.extras),
+    nextStage: "AVAILABILITY",
+  };
+}
+
 // ─── Main Stage Processor ─────────────────────────────────────────────────────
 
 /**
@@ -289,12 +401,12 @@ export async function processLeadReply(
       nextStage: stage, // stay in the same stage
     };
   }
-  // ── QUOTE_SENT: Any reply → send availability (no objection check needed) ──
+  // ── QUOTE_SENT: Smart handler — detect pricing questions and quote before moving to availability ──
   if (stage === "QUOTE_SENT") {
-    return {
-      reply: buildAvailabilityMessage(context.extras),
-      nextStage: "AVAILABILITY",
-    };
+    // Widget leads arrive here with no bedrooms/bathrooms set.
+    // If the lead is asking about price/cost, extract room info and quote them first.
+    const pricingResult = await handleQuoteSentReply(leadReply, context);
+    return pricingResult;
   }
 
   // ── For all other stages: check for objections first ──────────────────────
