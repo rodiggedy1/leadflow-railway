@@ -5,7 +5,7 @@
  * the Maids in Black SMS chat widget on any external website.
  *
  * Usage on maidsinblack.com:
- *   <script src="https://quote.maidinblack.com/widget.js" async></script>
+ *   <script src="https://quote.maidinblack.com/api/widget.js" async></script>
  *
  * The script:
  * - Injects its own CSS (no external dependencies)
@@ -18,7 +18,7 @@
 import type { Express } from "express";
 
 export function registerWidgetEmbedRoute(app: Express) {
-  app.get("/widget.js", (_req, res) => {
+  app.get("/api/widget.js", (_req, res) => {
     // The API base URL — always points to the LeadFlow backend
     const API_BASE = "https://quote.maidinblack.com";
 
