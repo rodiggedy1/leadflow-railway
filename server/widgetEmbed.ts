@@ -13,21 +13,35 @@
 
 import type { Express } from "express";
 
+// Increment this version string whenever the widget script changes.
+// Embedding sites should reference the script as:
+//   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
+// The version is also embedded in the script itself so you can verify
+// which build is running via the browser console.
+const WIDGET_VERSION = "2.3.0";
+
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
     const API_BASE = "https://quote.maidinblack.com";
-    const script = buildWidgetScript(API_BASE);
+    const script = buildWidgetScript(API_BASE, WIDGET_VERSION);
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "public, max-age=300");
+    // Never cache — always serve the latest version.
+    // Embedding sites can optionally append ?v=X.Y.Z to bust CDN caches.
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.send(script);
   });
 }
 
-function buildWidgetScript(apiBase: string): string {
+function buildWidgetScript(apiBase: string, version: string): string {
   return `
 (function () {
   'use strict';
+  // Maids in Black Widget v${version} — built ${new Date().toISOString().slice(0, 10)}
+  // To verify this version in the browser console: window.__MIB_WIDGET_VERSION__
+  window.__MIB_WIDGET_VERSION__ = '${version}';
 
   if (window.__MIB_WIDGET_LOADED__) return;
   window.__MIB_WIDGET_LOADED__ = true;

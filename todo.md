@@ -448,3 +448,7 @@
 - [x] Remove consent checkbox; replace with static fine-print text below submit button
 - [x] Fix auto-open: use a simple flag approach that actually works on the embed domain
 - [x] Fix exit-intent: use mouseleave on document with no grace-period dependency issues
+
+## Widget Cache Fix
+- [x] Set Cache-Control: no-cache on /api/widget.js so browsers always fetch the latest version
+- [x] Add a build-time version string to the script URL so CDNs treat it as a new resource
