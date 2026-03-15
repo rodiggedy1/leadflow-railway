@@ -13,21 +13,26 @@
 
 import type { Express } from "express";
 
+const WIDGET_VERSION = "3.0.0";
+
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
     const API_BASE = "https://quote.maidinblack.com";
-    const script = buildWidgetScript(API_BASE);
+    const script = buildWidgetScript(API_BASE, WIDGET_VERSION);
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.send(script);
   });
 }
 
-function buildWidgetScript(apiBase: string): string {
+function buildWidgetScript(apiBase: string, version: string): string {
   return `
 (function () {
   'use strict';
+  window.__MIB_WIDGET_VERSION__ = '${version}';
 
   if (window.__MIB_WIDGET_LOADED__) return;
   window.__MIB_WIDGET_LOADED__ = true;
@@ -39,9 +44,11 @@ function buildWidgetScript(apiBase: string): string {
   var Z_PANEL = 2147483646;
 
   // Inject keyframe animation for pulse ring
+  // Also force position:fixed to work even when WordPress sets overflow:hidden on body
   var kf = document.createElement('style');
   kf.textContent = '@keyframes mib-ping{0%{transform:scale(1);opacity:0.5}100%{transform:scale(2.2);opacity:0}}' +
-    '@keyframes mib-spin{to{transform:rotate(360deg)}}';
+    '@keyframes mib-spin{to{transform:rotate(360deg)}}' +
+    '#mib-widget-btn,#mib-widget-panel{position:fixed!important;z-index:2147483646!important;}';
   document.head.appendChild(kf);
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -109,8 +116,8 @@ function buildWidgetScript(apiBase: string): string {
   function buildButton() {
     btn = el('button', {
       position: 'fixed',
-      bottom: '24px',
-      right: '24px',
+      bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+      right: '16px',
       zIndex: String(Z_BTN),
       width: '60px',
       height: '60px',
@@ -166,12 +173,14 @@ function buildWidgetScript(apiBase: string): string {
 
   // ── Build panel ──────────────────────────────────────────────────────────────
   function buildPanel() {
+    var isMobile = window.innerWidth < 480;
     panel = el('div', {
       position: 'fixed',
-      bottom: '96px',
-      right: '24px',
+      bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+      right: '16px',
+      left: isMobile ? '16px' : 'auto',
       zIndex: String(Z_PANEL),
-      width: '340px',
+      width: isMobile ? 'auto' : '340px',
       maxHeight: 'calc(100vh - 120px)',
       borderRadius: '16px',
       overflow: 'hidden',
