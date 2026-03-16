@@ -507,3 +507,11 @@
 - [x] Update leads.stats backend to return revenueBySource breakdown by leadSource
 - [x] Added reactivationLastPrice + reactivationDiscountPct to DrawerSession type
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Widget Missing Bug Fix — COMPLETED
+
+- [x] Root cause: server/widgetEmbed.ts was missing from codebase (lost in a previous rollback/merge) and registerWidgetEmbedRoute() was removed from server/_core/index.ts
+- [x] Restored widgetEmbed.ts from git history (cb613df — v2.4.0 with mobile/iOS/WordPress fixes)
+- [x] Re-added import and registerWidgetEmbedRoute(app) call to server/_core/index.ts
+- [x] Verified /api/widget.js returns correct JS (v2.3.0) on dev server
+- [x] 275/275 tests pass, 0 TypeScript errors
