@@ -568,3 +568,12 @@
 - [x] Widget: add scale-in animation to phone checkmark (mibCheckPop)
 - [x] Add @keyframes checkmarkPop to index.css + @keyframes mibCheckPop to widget injected style
 - [x] 327/327 tests pass, 0 TypeScript errors
+
+## QuoteForm Validation Visual Fixes — COMPLETED
+
+- [x] Override browser autofill blue background on name/email/phone inputs (use -webkit-box-shadow hack)
+- [x] Select dropdowns (service type, bedrooms, bathrooms) already had no green — confirmed no change needed
+- [x] Add isFormReady computed value: true when name non-empty + email valid + phone 10 digits
+- [x] When isFormReady: button turns green (#22C55E gradient) with 2s pulse animation
+- [x] When not ready: submit button stays coral as before
+- [x] 327/327 tests pass, 0 TypeScript errors

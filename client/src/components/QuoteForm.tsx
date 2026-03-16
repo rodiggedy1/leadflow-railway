@@ -557,6 +557,12 @@ export default function QuoteForm() {
 
   const isOffice = form.serviceType === "Office Cleaning";
 
+  // True when all three required text fields pass their validation rules
+  const isFormReady =
+    form.name.trim().length > 0 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) &&
+    form.phone.replace(/\D/g, "").length === 10;
+
   // Exit-intent: fire once when mouse leaves the top of the viewport, only if not submitted
   useEffect(() => {
     const handleMouseLeave = (e: MouseEvent) => {
@@ -994,7 +1000,7 @@ export default function QuoteForm() {
                 <div className="animate-fade-slide-up delay-5 mb-6">
                   <button
                     type="submit"
-                    className="quote-cta"
+                    className={isFormReady ? "quote-cta quote-cta-ready" : "quote-cta"}
                   >
                     Get My Instant Quote →
                   </button>
