@@ -11,7 +11,7 @@ import { z } from "zod";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { router, protectedProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { reactivationCampaigns, reactivationContacts } from "../drizzle/schema";
+import { reactivationCampaigns, reactivationContacts, conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 
@@ -28,7 +28,7 @@ const RECURRING_FREQUENCIES = new Set([
 
 /** Default reactivation message template */
 export const DEFAULT_REACTIVATION_TEMPLATE =
-  "Hi [Name]! 👋 It's been a while since your last clean with Maids in Black. We'd love to have you back — reply YES to get a special returning customer rate or ask us anything!";
+  "Hi [Name]! 👋 It's been a while since your last home cleaning with Maids in Black. We miss you! As a returning customer, we'd love to offer you 10% off your next clean. Reply YES to book and we'll take care of everything on our end.";
 
 // ─── Phone normalization ──────────────────────────────────────────────────────
 
@@ -62,6 +62,7 @@ interface EligibleContact {
   lastBookingDate: string; // YYYY-MM-DD
   daysSince: number;
   bookingCount: number;
+  lastPrice: number | null; // Final Amount from CSV (dollars)
   segment: "6-12mo" | "1-2yr";
 }
 
@@ -83,7 +84,7 @@ export function parseAndFilterCsv(
   const headerLine = lines[0].replace(/^\uFEFF/, ""); // strip BOM
   const headers = parseCsvLine(headerLine);
 
-  const customers = new Map<
+    const customers = new Map<
     string,
     {
       name: string;
@@ -93,6 +94,7 @@ export function parseAndFilterCsv(
       lastDate: Date;
       lastFrequency: string;
       bookingCount: number;
+      lastPrice: number | null;
     }
   >();
 
@@ -123,6 +125,9 @@ export function parseAndFilterCsv(
     const frequency = row["Frequency"] ?? "";
     const existing = customers.get(phone);
 
+    const finalAmountRaw = row["Final Amount"] ?? row["Amount Paid by the Customer"] ?? "";
+    const lastPrice = parseFloat(finalAmountRaw.replace(/[^0-9.]/g, "")) || null;
+
     if (!existing) {
       customers.set(phone, {
         name: (row["Full Name"] ?? `${row["First Name"]} ${row["Last Name"]}`).trim(),
@@ -132,12 +137,14 @@ export function parseAndFilterCsv(
         lastDate: date,
         lastFrequency: frequency,
         bookingCount: 1,
+        lastPrice: lastPrice,
       });
     } else {
       existing.bookingCount++;
       if (date > existing.lastDate) {
         existing.lastDate = date;
         existing.lastFrequency = frequency;
+        existing.lastPrice = lastPrice;
       }
     }
   }
@@ -184,6 +191,7 @@ export function parseAndFilterCsv(
       lastBookingDate: c.lastDate.toISOString().split("T")[0],
       daysSince,
       bookingCount: c.bookingCount,
+      lastPrice: c.lastPrice,
       segment,
     });
 
@@ -315,6 +323,8 @@ export const campaignRouter = router({
             lastBookingDate: c.lastBookingDate,
             daysSince: c.daysSince,
             bookingCount: c.bookingCount,
+            lastPrice: c.lastPrice ? Math.round(c.lastPrice) : null,
+            discountPct: 10,
             segment: c.segment,
             status: "PENDING" as const,
           }))
@@ -505,10 +515,24 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
 
       await sendSms({ to: contact.phone, content: message });
 
-      // Mark as SENT
+      // Create a conversation session for this contact so inbound replies are routed correctly
+      const [sessionResult] = await db.insert(conversationSessions).values({
+        leadPhone: contact.phone,
+        leadName: contact.name ?? "",
+        stage: "REACTIVATION",
+        leadSource: "reactivation",
+        reactivationLastPrice: contact.lastPrice ?? null,
+        reactivationDiscountPct: contact.discountPct ?? 10,
+        messageHistory: "[]",
+        aiMode: 1,
+        isBooked: 0,
+      });
+      const sessionId = (sessionResult as any).insertId as number;
+
+      // Mark as SENT and link session
       await db
         .update(reactivationContacts)
-        .set({ status: "SENT", sentAt: new Date() })
+        .set({ status: "SENT", sentAt: new Date(), sessionId })
         .where(eq(reactivationContacts.id, contact.id));
 
       sentThisBatch++;

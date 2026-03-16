@@ -364,3 +364,85 @@ describe("processLeadReply — State Machine", () => {
     expect(result.reply).toBeTruthy();
   });
 });
+
+// ─── Reactivation stage tests ─────────────────────────────────────────────────
+describe("REACTIVATION stage", () => {
+  beforeEach(() => {
+    mockLLM.mockReset();
+  });
+
+  it("YES reply moves to AVAILABILITY and asks for scheduling", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION",
+      leadName: "Sarah Johnson",
+      lastPrice: 150,
+      discountPct: 10,
+    });
+    const result = await processLeadReply("yes", ctx);
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).toBeTruthy();
+    expect(result.reply.toLowerCase()).toMatch(/schedule|available|when|book|opening/);
+  });
+
+  it("STOP reply marks as DONE and unsubscribes", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION",
+      leadName: "Bob Smith",
+    });
+    const result = await processLeadReply("STOP", ctx);
+    expect(result.nextStage).toBe("DONE");
+    expect(result.reply.toLowerCase()).toMatch(/unsubscribe|won't receive|opt/);
+  });
+
+  it("price question with lastPrice gives discounted price", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION",
+      leadName: "Alice Brown",
+      lastPrice: 200,
+      discountPct: 10,
+    });
+    const result = await processLeadReply("how much does it cost?", ctx);
+    expect(result.nextStage).toBe("AVAILABILITY");
+    // $200 with 10% off = $180
+    expect(result.reply).toContain("$180");
+    expect(result.reply).toContain("$200");
+  });
+
+  it("price question without lastPrice routes to availability", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION",
+      leadName: "Tom Davis",
+      lastPrice: null,
+      discountPct: 10,
+    });
+    const result = await processLeadReply("what's the price?", ctx);
+    expect(result.nextStage).toBe("AVAILABILITY");
+  });
+
+  it("unsubscribe variants all mark DONE", async () => {
+    const variants = ["unsubscribe", "cancel", "quit", "opt out", "opt-out", "remove me"];
+    for (const variant of variants) {
+      const ctx = makeContext({ stage: "REACTIVATION", leadName: "Test User" });
+      const result = await processLeadReply(variant, ctx);
+      expect(result.nextStage).toBe("DONE");
+    }
+  });
+
+  it("positive variants all move to AVAILABILITY", async () => {
+    const variants = ["yeah", "yep", "sure", "ok", "sounds good", "absolutely", "book"];
+    for (const variant of variants) {
+      const ctx = makeContext({ stage: "REACTIVATION", leadName: "Test User", lastPrice: 150, discountPct: 10 });
+      const result = await processLeadReply(variant, ctx);
+      expect(result.nextStage).toBe("AVAILABILITY");
+    }
+  });
+
+  it("other replies move to AVAILABILITY", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION",
+      leadName: "Mike Wilson",
+    });
+    const result = await processLeadReply("I'm interested but need more info", ctx);
+    expect(result.nextStage).toBe("AVAILABILITY");
+  });
+});

@@ -436,3 +436,17 @@
 - [x] UI: Campaigns nav link added to AdminDashboard header
 - [x] Route /admin/campaigns added to App.tsx
 - [x] 252/252 tests pass
+
+## Reactivation Campaign AI Flow — COMPLETED
+
+- [x] Add lastPrice (int, nullable) and discountPct (int, default 10) columns to reactivationContacts table
+- [x] Add REACTIVATION stage to conversationStages enum in schema.ts
+- [x] Add handleReactivationReply() to conversationEngine.ts (YES → availability, price question → discounted price + availability, STOP → opt out)
+- [x] Update campaign send engine to use confirmed message template with [Name] and 10% off
+- [x] Store lastPrice from CSV on each contact record
+- [x] Update campaign builder UI: show default message template, allow discount % customization
+- [x] Add REACTIVATION to all stage dropdowns (AdminDashboard, AgentDashboard, SmsSimulator, routers.ts)
+- [x] sendNextBatch creates conversation_sessions record after each SMS (stage=REACTIVATION, lastPrice, discountPct, links sessionId)
+- [x] Webhook routes reactivation replies to REACTIVATION stage handler via lastPrice/discountPct context
+- [x] markReactivationContactReplied increments campaign repliedCount
+- [x] 275/275 tests pass (7 new reactivation conversation tests + 16 new campaign router tests)

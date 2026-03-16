@@ -162,6 +162,9 @@ export function registerWebhookRoutes(app: Express) {
         messageHistory: history,
         offeredSlots,
         extras: sessionExtras,
+        // Reactivation-specific context (map DB column names to context field names)
+        lastPrice: session.reactivationLastPrice ?? undefined,
+        discountPct: session.reactivationDiscountPct ?? undefined,
       };
 
       // Process the reply through the AI engine

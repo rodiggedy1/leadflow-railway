@@ -58,6 +58,7 @@ export type InsertQuoteLead = typeof quoteLeads.$inferInsert;
  */
 export const conversationStages = [
   "WIDGET_SIZING",
+  "REACTIVATION",
   "QUOTE_SENT",
   "AVAILABILITY",
   "SLOT_CHOICE",
@@ -134,8 +135,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   utmContent: varchar("utmContent", { length: 255 }),
   /** Google Ads click ID for exact ad attribution */
   gclid: varchar("gclid", { length: 255 }),
-  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com */
+  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com, "reactivation" = reactivation campaign */
   leadSource: varchar("leadSource", { length: 20 }).$default(() => "form"),
+  /** For reactivation leads: the last price they paid (dollars) */
+  reactivationLastPrice: int("reactivationLastPrice"),
+  /** For reactivation leads: discount percentage offered (e.g. 10 = 10%) */
+  reactivationDiscountPct: int("reactivationDiscountPct"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -300,6 +305,10 @@ export const reactivationContacts = mysqlTable("reactivation_contacts", {
   lastBookingDate: varchar("lastBookingDate", { length: 20 }), // YYYY-MM-DD
   daysSince: int("daysSince"),
   bookingCount: int("bookingCount").default(0).notNull(),
+  /** Last service price from CSV (dollars) */
+  lastPrice: int("lastPrice"),
+  /** Discount percentage for this campaign (default 10) */
+  discountPct: int("discountPct").default(10).notNull(),
   segment: varchar("segment", { length: 20 }), // "6-12mo" | "1-2yr"
   status: mysqlEnum("status", contactStatuses as unknown as [string, ...string[]]).default("PENDING").notNull(),
   /** When the SMS was sent */

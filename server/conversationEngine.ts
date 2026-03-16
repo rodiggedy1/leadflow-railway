@@ -44,6 +44,10 @@ export interface ConversationContext {
   offeredSlots?: [string, string] | null;
   /** JSON-encoded array of extra keys selected on the quote form */
   extras?: string[] | null;
+  /** Last service price from reactivation CSV (dollars, integer) */
+  lastPrice?: number | null;
+  /** Discount percentage for reactivation offer (default 10) */
+  discountPct?: number | null;
 }
 
 export interface ChatMessage {
@@ -252,6 +256,61 @@ function lookupPrice(bedrooms: string, bathrooms: string): string {
 }
 
 /**
+ * Handles replies in the REACTIVATION stage.
+ * Covers three cases:
+ *   1. YES / positive → ask for availability
+ *   2. Price question → give discounted price + ask for availability
+ *   3. STOP / opt-out → mark done, no further messages
+ *   4. Anything else → route through availability flow
+ */
+function handleReactivationReply(
+  leadReply: string,
+  context: ConversationContext
+): StageResult {
+  const lower = leadReply.trim().toLowerCase();
+  const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+  const discountPct = context.discountPct ?? 10;
+
+  // STOP / opt-out
+  if (/^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(lower)) {
+    return {
+      reply: `You've been unsubscribed and won't receive further messages from us. Have a great day! 🏠`,
+      nextStage: "DONE",
+    };
+  }
+
+  // Price question
+  if (isPricingQuestion(lower)) {
+    if (context.lastPrice && context.lastPrice > 0) {
+      const discounted = Math.round(context.lastPrice * (1 - discountPct / 100));
+      return {
+        reply: `Hi ${firstName}! Your last clean with us was $${context.lastPrice}. With your ${discountPct}% returning customer discount, your next clean would be just $${discounted}. Ready to get your home sparkling again? ${buildAvailabilityMessage(context.extras)}`,
+        nextStage: "AVAILABILITY",
+      };
+    }
+    // No price on file — route to availability
+    return {
+      reply: `Hi ${firstName}! We'd love to get you a quote — ${buildAvailabilityMessage(context.extras)}`,
+      nextStage: "AVAILABILITY",
+    };
+  }
+
+  // YES / positive intent
+  if (/^\s*(yes|yeah|yep|sure|ok|okay|sounds good|let's do it|book|i'm in|im in|absolutely|definitely|great|perfect|yes please)\s*[!.]*\s*$/i.test(lower)) {
+    return {
+      reply: `Amazing, ${firstName}! Let's get you scheduled. ${buildAvailabilityMessage(context.extras)}`,
+      nextStage: "AVAILABILITY",
+    };
+  }
+
+  // Any other reply — treat as engagement and move to availability
+  return {
+    reply: buildAvailabilityMessage(context.extras),
+    nextStage: "AVAILABILITY",
+  };
+}
+
+/**
  * Handles replies in the WIDGET_SIZING stage.
  * Extracts bedroom/bathroom counts and either:
  *   - Sends a quote + advances to AVAILABILITY (if both counts found)
@@ -438,6 +497,11 @@ export async function processLeadReply(
       nextStage: stage, // stay in the same stage
     };
   }
+  // ── REACTIVATION: Handle YES/price/STOP replies from reactivation campaign contacts ──
+  if (stage === "REACTIVATION") {
+    return handleReactivationReply(leadReply, context);
+  }
+
   // ── WIDGET_SIZING: Extract room counts and send quote, or ask for missing info ──
   if (stage === "WIDGET_SIZING") {
     return handleWidgetSizingReply(leadReply, context);
