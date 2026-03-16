@@ -545,3 +545,9 @@
 - [x] Fix phone input in widget: browser autofill with "+1 401-688-8007" produces "140-168-8800" instead of "4016888007"
 - [x] Fix phone normalization to strip country code prefix (+1 or 1) before stripping non-digits
 - [x] Also fix in QuoteForm.tsx (same pattern was present there too)
+
+## Phone Format Autofill Test Coverage — COMPLETED
+
+- [x] Write phoneFormat.test.ts covering 12 autofill formats for both normalizePhone (E.164) and formatPhoneWidget (display)
+- [x] Verify: E.164 with space, E.164 compact, 11-digit with leading 1, raw 10 digits, parentheses, dot-separated, dash-separated, space-separated, E.164+parentheses, country code+dashes, country code+parentheses, leading/trailing whitespace
+- [x] All 28 new tests pass (327/327 total)
