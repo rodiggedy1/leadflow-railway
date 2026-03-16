@@ -43,6 +43,8 @@ import {
   MessageSquare,
   CloudDownload,
   Calendar,
+  Repeat,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -155,27 +157,44 @@ function BatchDetail({ batchId, onBack }: { batchId: number; onBack: () => void 
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Job Date</TableHead>
-                  <TableHead>Service</TableHead>
+                  <TableHead>Frequency</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Reactivation</TableHead>
                   <TableHead>SMS Sent</TableHead>
-                  <TableHead>Replied</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {contacts.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name ?? "—"}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>{c.name ?? "—"}</div>
+                      {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
+                    </TableCell>
                     <TableCell className="font-mono text-sm">{c.phone}</TableCell>
                     <TableCell>{c.jobDate ?? "—"}</TableCell>
-                    <TableCell>{c.serviceType ?? "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      {c.frequency ? (
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          <Repeat className="w-3 h-3 text-gray-400" />
+                          {c.frequency}
+                        </span>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={c.status} />
                     </TableCell>
-                    <TableCell className="text-sm text-gray-500">
-                      {c.smsSentAt ? new Date(c.smsSentAt).toLocaleString() : "—"}
+                    <TableCell>
+                      {c.reactivationEligible ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                          <Users className="w-3 h-3" />
+                          Eligible
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">30d wait</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-gray-500">
-                      {c.repliedAt ? new Date(c.repliedAt).toLocaleString() : "—"}
+                      {c.smsSentAt ? new Date(c.smsSentAt).toLocaleString() : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -349,12 +368,17 @@ export default function CompletedJobs() {
                 </CardTitle>
                 <CardDescription className="text-xs mt-0">
                   {lastSync
-                    ? `Last sync: ${lastSync.filename.replace("launch27-sync-", "")} · ${lastSync.totalCount} jobs imported`
-                    : "Never synced — click Sync to pull yesterday's completed bookings"}
+                    ? `Last sync: ${lastSync.filename.replace("launch27-sync-", "").replace("launch27-auto-", "")} · ${lastSync.totalCount} jobs imported`
+                    : "Never synced — click Sync to pull completed bookings"}
                 </CardDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* Nightly cron badge */}
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-full border border-green-200">
+                <Repeat className="w-3 h-3" />
+                Runs nightly at 10 PM
+              </span>
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 <input
@@ -377,7 +401,29 @@ export default function CompletedJobs() {
                 ) : (
                   <CloudDownload className="w-3.5 h-3.5" />
                 )}
-                {syncMutation.isPending ? "Syncing…" : "Sync from Launch27"}
+                {syncMutation.isPending ? "Syncing…" : "Sync Date"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  // Sync last 7 days sequentially
+                  const dates = Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - 1 - i);
+                    return d.toISOString().slice(0, 10);
+                  });
+                  // Trigger sync for each date (first one, then chain via toast)
+                  toast.info(`Starting backfill for ${dates[0]} through ${dates[6]}. This may take a moment.`);
+                  dates.forEach((date, idx) => {
+                    setTimeout(() => syncMutation.mutate({ date }), idx * 1500);
+                  });
+                }}
+                disabled={syncMutation.isPending}
+                className="gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Sync Last 7 Days
               </Button>
             </div>
           </div>
@@ -399,10 +445,10 @@ export default function CompletedJobs() {
         className="rounded-lg border p-4 mb-6 text-sm"
         style={{ background: "#FFF8F6", borderColor: "#F0D8D0", color: "#7c3a2a" }}
       >
-        <strong>How it works:</strong> Upload a CSV with completed jobs (Phone, Date, First Name, Last Name, Full Name, Frequency columns).
-        The system waits 24 hours after the job date, then sends a friendly feedback SMS. Positive replies receive a Google review link
-        with a 10% discount offer. Negative replies are flagged for manual follow-up. When a customer confirms they left a review,
-        they're automatically added as a reactivation contact with 10% off their next booking.
+        <strong>How it works:</strong> Completed jobs are synced nightly from Launch27 (or uploaded via CSV). The system waits 24 hours
+        after the job date, then sends a friendly feedback SMS. Positive replies receive a Google review link with a 10% discount offer.
+        Negative replies are flagged for manual follow-up. Customers are automatically marked <strong>Reactivation Eligible</strong> 30 days
+        after their job (one-time bookings are eligible immediately), making them available for future reactivation campaigns.
       </div>
 
       {/* Optional job date override */}

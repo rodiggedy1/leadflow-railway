@@ -380,8 +380,18 @@ export const completedJobs = mysqlTable("completed_jobs", {
   phone: varchar("phone", { length: 20 }).notNull(),
   name: varchar("name", { length: 255 }),
   firstName: varchar("firstName", { length: 100 }),
-  /** Service type from CSV */
+  /** Customer email — captured from Launch27 or CSV */
+  email: varchar("email", { length: 320 }),
+  /** Full service address */
+  address: varchar("address", { length: 500 }),
+  /** Service type from CSV or Launch27 */
   serviceType: varchar("serviceType", { length: 100 }),
+  /** Booking frequency (e.g. Monthly, Weekly, One-time) */
+  frequency: varchar("frequency", { length: 100 }),
+  /** Launch27 booking ID for deep-linking back to the original booking */
+  launch27BookingId: varchar("launch27BookingId", { length: 64 }),
+  /** Total price of the booking (for reactivation discount calculation) */
+  lastBookingPrice: int("lastBookingPrice"),
   /** Date of the completed job (YYYY-MM-DD) */
   jobDate: varchar("jobDate", { length: 20 }),
   status: mysqlEnum("status", completedJobStatuses as unknown as [string, ...string[]]).default("PENDING").notNull(),
@@ -391,6 +401,14 @@ export const completedJobs = mysqlTable("completed_jobs", {
   repliedAt: timestamp("repliedAt"),
   /** Link to the conversation session created for the review flow */
   sessionId: int("sessionId"),
+  /**
+   * Whether this customer is eligible for a reactivation campaign.
+   * Set to 1 automatically 30 days after jobDate if no new booking is detected.
+   * Campaigns query this field to build their contact lists.
+   */
+  reactivationEligible: int("reactivationEligible").default(0).notNull(),
+  /** When reactivation eligibility was set */
+  reactivationEligibleAt: timestamp("reactivationEligibleAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

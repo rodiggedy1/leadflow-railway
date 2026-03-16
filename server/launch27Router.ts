@@ -119,13 +119,30 @@ export const launch27Router = router({
           continue;
         }
 
+        // Determine reactivation eligibility:
+        // One-time bookings are eligible immediately (no recurring schedule).
+        // Recurring bookings become eligible 30 days after the job date.
+        const isOneTime = !b.frequency || /one.?time|once/i.test(b.frequency);
+        const jobDateObj = new Date(jobDate);
+        const reactivationDate = new Date(jobDateObj);
+        reactivationDate.setDate(reactivationDate.getDate() + 30);
+        const isAlreadyEligible = isOneTime || reactivationDate <= new Date();
+
         await db.insert(completedJobs).values({
           batchId,
           phone: normalizedPhone,
           name: b.fullName,
           firstName: b.firstName,
+          email: b.email || null,
+          address: b.address || null,
+          serviceType: null, // Launch27 doesn't expose service type in list view
+          frequency: b.frequency || null,
+          launch27BookingId: String(b.id),
+          lastBookingPrice: b.totalRevenue ? Math.round(b.totalRevenue) : null,
           jobDate,
           status: "PENDING",
+          reactivationEligible: isAlreadyEligible ? 1 : 0,
+          reactivationEligibleAt: isAlreadyEligible ? new Date() : null,
         });
 
         inserted++;
@@ -153,9 +170,9 @@ export const launch27Router = router({
       .orderBy(completedJobBatches.uploadedAt)
       .limit(5);
 
-    // Find the most recent Launch27 sync batch
+    // Find the most recent Launch27 sync batch (manual or auto)
     const syncBatches = batches
-      .filter((b) => b.filename.startsWith("launch27-sync-"))
+      .filter((b) => b.filename.startsWith("launch27-sync-") || b.filename.startsWith("launch27-auto-"))
       .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
     return syncBatches[0] ?? null;

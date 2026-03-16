@@ -6,6 +6,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerWebhookRoutes } from "../webhooks";
+import { registerCronRoutes } from "../cronSync";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -69,6 +70,8 @@ async function startServer() {
   registerWebhookRoutes(app);
   // Embeddable widget script for external websites
   registerWidgetEmbedRoute(app);
+  // Nightly cron endpoint for Launch27 auto-sync
+  registerCronRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",

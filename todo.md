@@ -621,3 +621,20 @@
 - [x] Added Launch27 Sync card to Completed Jobs page: date picker, Sync Now button, last sync result (new/skipped/errors)
 - [x] 3 new tests in launch27.test.ts (371/371 total pass, 0 TS errors)
 - [x] Credentials validated: API returns real bookings for 2026-03-15 (Shirletta Miller etc.)
+
+## Nightly Launch27 Sync + Customer History Database — COMPLETED
+
+- [x] Enrich completedJobs schema: add email, address, frequency, launch27BookingId, lastBookingPrice, reactivationEligible (int), reactivationEligibleAt
+- [x] Run pnpm db:push to sync schema (migration 0022 applied)
+- [x] Update launch27Router.ts syncCompletedJobs to store all enrichment fields (email, address, frequency, bookingId, price)
+- [x] Auto-compute reactivationEligible: one-time bookings eligible immediately; recurring eligible 30 days after job date
+- [x] Add POST /api/cron/nightly-sync endpoint in server/cronSync.ts — protected by X-Cron-Secret header
+- [x] Store CRON_SECRET as encrypted secret
+- [x] Schedule nightly cron: every night at 10 PM, calls POST /api/cron/nightly-sync for yesterday's date
+- [x] Show reactivation eligibility badge (green "Eligible" / grey "30d wait") in Completed Jobs contact detail view
+- [x] Show frequency column in contact detail table
+- [x] Show email under customer name in contact detail table
+- [x] Add "Sync Last 7 Days" backfill button to Launch27 sync card
+- [x] Add "Runs nightly at 10 PM" badge to Launch27 sync card
+- [x] Update getLastSync to find both launch27-sync- and launch27-auto- batches
+- [x] Write 7 tests for cronSync.ts (378/378 total pass, 0 TS errors)
