@@ -58,6 +58,8 @@ import {
   Clock,
   BarChart3,
   ChevronRight,
+  DollarSign,
+  TrendingUp,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -75,6 +77,7 @@ interface Campaign {
   sentCount: number;
   repliedCount: number;
   bookedCount: number;
+  bookedRevenue: number; // live-computed from joined conversation_sessions
   lastSentAt: Date | null;
   createdAt: Date;
 }
@@ -142,6 +145,12 @@ export default function ReactivationCampaigns() {
     trpc.campaigns.get.useQuery(
       { id: selectedCampaignId! },
       { enabled: !!selectedCampaignId, refetchInterval: 5_000 }
+    );
+
+  const { data: campaignStats } =
+    trpc.campaigns.stats.useQuery(
+      { id: selectedCampaignId! },
+      { enabled: !!selectedCampaignId && view === "detail", refetchInterval: 10_000 }
     );
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -272,11 +281,19 @@ export default function ReactivationCampaigns() {
                       </div>
                       <div className="text-center hidden sm:block">
                         <div className="font-semibold text-blue-600">{c.repliedCount}</div>
-                        <div className="text-muted-foreground text-xs">Replied</div>
+                        <div className="text-muted-foreground text-xs">
+                          {c.sentCount > 0 ? `${Math.round((c.repliedCount / c.sentCount) * 100)}%` : "0%"} reply
+                        </div>
                       </div>
                       <div className="text-center hidden sm:block">
                         <div className="font-semibold text-green-600">{c.bookedCount}</div>
                         <div className="text-muted-foreground text-xs">Booked</div>
+                      </div>
+                      <div className="text-center hidden md:block">
+                        <div className="font-semibold text-purple-600">
+                          {c.bookedRevenue > 0 ? `$${c.bookedRevenue.toLocaleString()}` : "—"}
+                        </div>
+                        <div className="text-muted-foreground text-xs">Revenue</div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
@@ -602,7 +619,7 @@ export default function ReactivationCampaigns() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center gap-2 mb-1">
@@ -640,7 +657,31 @@ export default function ReactivationCampaigns() {
                 <span className="text-xs text-muted-foreground">Booked</span>
               </div>
               <div className="text-2xl font-bold text-green-600">{campaign.bookedCount}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{bookRate}% book rate</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{bookRate}% of replies</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-purple-500" />
+                <span className="text-xs text-muted-foreground">Revenue</span>
+              </div>
+              <div className="text-2xl font-bold text-purple-600">
+                {campaignStats?.bookedRevenue ? `$${campaignStats.bookedRevenue.toLocaleString()}` : "$0"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">from booked leads</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-orange-500" />
+                <span className="text-xs text-muted-foreground">Conv. Rate</span>
+              </div>
+              <div className="text-2xl font-bold text-orange-600">
+                {campaignStats?.conversionRate ?? bookRate}%
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">replies → booked</div>
             </CardContent>
           </Card>
         </div>

@@ -334,15 +334,70 @@ export const campaignRouter = router({
       return { campaignId, contactCount: contacts.length };
     }),
 
-  /** List all campaigns with aggregate stats */
+  /** List all campaigns with aggregate stats including live bookedRevenue */
   list: protectedProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return db
+    const campaigns = await db
       .select()
       .from(reactivationCampaigns)
       .orderBy(desc(reactivationCampaigns.createdAt));
+    // Compute bookedRevenue per campaign by joining contacts → sessions
+    const revenueRows = await db
+      .select({
+        campaignId: reactivationContacts.campaignId,
+        bookedRevenue: sql<number>`COALESCE(SUM(
+          CASE WHEN ${conversationSessions.isBooked} = 1
+          THEN COALESCE(${conversationSessions.bookedAmount}, CAST(${conversationSessions.quotedPrice} AS UNSIGNED), 0)
+          ELSE 0 END
+        ), 0)`,
+      })
+      .from(reactivationContacts)
+      .innerJoin(conversationSessions, eq(reactivationContacts.sessionId, conversationSessions.id))
+      .groupBy(reactivationContacts.campaignId);
+    const revenueMap = new Map(revenueRows.map(r => [r.campaignId, Number(r.bookedRevenue)]));
+    return campaigns.map(c => ({
+      ...c,
+      bookedRevenue: revenueMap.get(c.id) ?? 0,
+    }));
   }),
+
+  /** Get live stats for a single campaign (bookedRevenue + rates) */
+  stats: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [campaign] = await db
+        .select()
+        .from(reactivationCampaigns)
+        .where(eq(reactivationCampaigns.id, input.id));
+      if (!campaign) return null;
+      const [revenueRow] = await db
+        .select({
+          bookedRevenue: sql<number>`COALESCE(SUM(
+            CASE WHEN ${conversationSessions.isBooked} = 1
+            THEN COALESCE(${conversationSessions.bookedAmount}, CAST(${conversationSessions.quotedPrice} AS UNSIGNED), 0)
+            ELSE 0 END
+          ), 0)`,
+        })
+        .from(reactivationContacts)
+        .innerJoin(conversationSessions, eq(reactivationContacts.sessionId, conversationSessions.id))
+        .where(eq(reactivationContacts.campaignId, input.id));
+      const bookedRevenue = Number(revenueRow?.bookedRevenue ?? 0);
+      const replyRate = campaign.sentCount > 0
+        ? Math.round((campaign.repliedCount / campaign.sentCount) * 100)
+        : 0;
+      const conversionRate = campaign.repliedCount > 0
+        ? Math.round((campaign.bookedCount / campaign.repliedCount) * 100)
+        : 0;
+      return {
+        ...campaign,
+        bookedRevenue,
+        replyRate,
+        conversionRate,
+      };
+    }),
 
   /** Get a single campaign with its contacts */
   get: protectedProcedure
@@ -611,4 +666,35 @@ export async function markReactivationContactReplied(
     .where(eq(reactivationCampaigns.id, contact.campaignId));
 
   return { campaignId: contact.campaignId, contactId: contact.id };
+}
+
+/**
+ * Called when a reactivation session is marked as BOOKED.
+ * Finds the linked reactivation contact and increments the campaign bookedCount.
+ * Also updates the contact status to BOOKED.
+ */
+export async function markReactivationContactBooked(
+  sessionId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Find the reactivation contact linked to this session
+  const [contact] = await db
+    .select()
+    .from(reactivationContacts)
+    .where(eq(reactivationContacts.sessionId, sessionId))
+    .limit(1);
+  if (!contact) return; // not a reactivation lead
+  // Only increment once (avoid double-counting if called multiple times)
+  if (contact.status === "BOOKED") return;
+  await db
+    .update(reactivationContacts)
+    .set({ status: "BOOKED" })
+    .where(eq(reactivationContacts.id, contact.id));
+  await db
+    .update(reactivationCampaigns)
+    .set({
+      bookedCount: sql`${reactivationCampaigns.bookedCount} + 1`,
+    })
+    .where(eq(reactivationCampaigns.id, contact.campaignId));
 }

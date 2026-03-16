@@ -461,3 +461,14 @@
 - [x] Show "Reactivation" badge in conversation drawer header
 - [x] Clear filters button now resets sourceFilter too
 - [x] 275/275 tests pass
+
+## Campaign Reply Stats on Campaigns Page — COMPLETED
+
+- [x] Add bookedRevenue live-computed to campaigns.list (join reactivation_contacts → conversation_sessions, sum bookedAmount/quotedPrice where isBooked=1)
+- [x] Add campaigns.stats procedure (bookedRevenue, replyRate, conversionRate) for detail view
+- [x] Add markReactivationContactBooked helper (idempotent, only increments once per contact)
+- [x] Wire markReactivationContactBooked into leads.adminUpdateStage (when stage = BOOKED)
+- [x] Wire markReactivationContactBooked into agents.markBooked
+- [x] Campaign list cards: show reply rate % under replied count, Revenue column (purple)
+- [x] Campaign detail stats: expanded to 6-card grid (Total, Sent, Replied, Booked, Revenue, Conv. Rate)
+- [x] 275/275 tests pass, 0 TypeScript errors

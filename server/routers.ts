@@ -12,7 +12,7 @@ import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, ha
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
-import { campaignRouter } from "./campaignRouter";
+import { campaignRouter, markReactivationContactBooked } from "./campaignRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
@@ -301,6 +301,10 @@ export const appRouter = router({
           .update(conversationSessions)
           .set({ stage: input.stage })
           .where(eq(conversationSessions.id, input.sessionId));
+        // If marking as BOOKED, increment campaign bookedCount for reactivation leads
+        if (input.stage === "BOOKED") {
+          await markReactivationContactBooked(input.sessionId).catch(console.error);
+        }
         return { success: true };
       }),
 
@@ -613,6 +617,8 @@ export const appRouter = router({
             bookedByAgentName: agentSession.agentName,
           })
           .where(eq(conversationSessions.id, input.sessionId));
+        // Increment campaign bookedCount if this is a reactivation lead
+        await markReactivationContactBooked(input.sessionId).catch(console.error);
         return { success: true };
       }),
 
