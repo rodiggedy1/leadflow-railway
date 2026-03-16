@@ -411,6 +411,7 @@ type DrawerSession = {
   utmCampaign: string | null;
   utmContent: string | null;
   gclid: string | null;
+  leadSource: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -654,6 +655,11 @@ function ConversationDrawer({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {session.leadSource === "widget" ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Form</span>
+            )}
             <StageBadge stage={session.stage} />
             <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
               <X className="w-4 h-4" />
@@ -1777,6 +1783,7 @@ export default function AdminDashboard() {
                 <TableHeader>
                   <TableRow className="bg-gray-50 hover:bg-gray-50">
                     <TableHead className="font-semibold text-gray-700 w-44">Lead</TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-20">Source</TableHead>
                     <TableHead className="font-semibold text-gray-700">Service</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Quote</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-36">Stage</TableHead>
@@ -1810,6 +1817,15 @@ export default function AdminDashboard() {
                             {formatPhone(session.leadPhone)}
                           </span>
                         </div>
+                      </TableCell>
+
+                      {/* Source */}
+                      <TableCell>
+                        {session.leadSource === "widget" ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Form</span>
+                        )}
                       </TableCell>
 
                       {/* Service */}

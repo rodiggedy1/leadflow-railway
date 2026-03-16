@@ -1166,6 +1166,7 @@ async function processWidgetLeadInBackground(input: {
       utmCampaign: input.utmCampaign ?? null,
       utmContent: input.utmContent ?? null,
       gclid: input.gclid ?? null,
+      leadSource: "widget",
     });
   } catch (dbErr) {
     console.error("[submitWidgetLead] Failed to create conversation session:", dbErr);
@@ -1268,6 +1269,7 @@ async function processQuoteInBackground(
       utmCampaign: input.utmCampaign ?? null,
       utmContent: input.utmContent ?? null,
       gclid: input.gclid ?? null,
+      leadSource: "form",
     });
   } catch (dbErr) {
     console.error("[submitQuote] Failed to create conversation session:", dbErr);

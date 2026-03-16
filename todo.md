@@ -413,3 +413,12 @@
 ## Widget CORS Fix
 
 - [x] Fix "failed to fetch" error when widget on maidsinblack.com calls quotes.submitWidgetLead — added cors middleware allowing maidsinblack.com origin
+
+## Widget Lead Source Tagging
+
+- [x] Add leadSource column to conversationSessions schema ("form" | "widget")
+- [x] DB already had the column from a previous session — schema updated to match
+- [x] Set leadSource = "widget" in processWidgetLeadInBackground
+- [x] Set leadSource = "form" in processQuoteInBackground
+- [x] Display leadSource badge in admin dashboard lead table (Source column) and drawer header
+- [x] 252/252 tests pass

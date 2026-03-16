@@ -134,6 +134,8 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   utmContent: varchar("utmContent", { length: 255 }),
   /** Google Ads click ID for exact ad attribution */
   gclid: varchar("gclid", { length: 255 }),
+  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com */
+  leadSource: varchar("leadSource", { length: 20 }).$default(() => "form"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
