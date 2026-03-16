@@ -515,3 +515,10 @@
 - [x] Re-added import and registerWidgetEmbedRoute(app) call to server/_core/index.ts
 - [x] Verified /api/widget.js returns correct JS (v2.3.0) on dev server
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Widget Health Check on Admin Dashboard — COMPLETED
+
+- [x] Add system.widgetHealth tRPC procedure — fetches /api/widget.js, validates JS content, extracts version
+- [x] WidgetHealthBadge component in admin dashboard top bar: green pill (Wifi icon + version) when OK, red pill (WifiOff + "Widget DOWN") on failure
+- [x] Auto-refreshes every 5 minutes; click to manually re-check; tooltip shows full error message
+- [x] 275/275 tests pass, 0 TypeScript errors

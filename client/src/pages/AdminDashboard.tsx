@@ -52,6 +52,9 @@ import {
   Trash2,
   Send,
   BotOff,
+  Wifi,
+  WifiOff,
+  RotateCcw,
 } from "lucide-react";
 import {
   Dialog,
@@ -80,6 +83,49 @@ import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import ConversionFunnelCard from "@/components/ConversionFunnelCard";
+
+// ── Widget Health Badge ─────────────────────────────────────────────────────
+function WidgetHealthBadge() {
+  const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
+    refetchInterval: 5 * 60 * 1000, // auto-refresh every 5 minutes
+    staleTime: 4 * 60 * 1000,
+  });
+
+  if (!data && isFetching) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 border border-gray-200 rounded-full px-2.5 py-1">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Widget…
+      </span>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <button
+      onClick={() => refetch()}
+      title={data.ok
+        ? `Widget v${data.version ?? '?'} is live. Click to re-check.`
+        : `Widget ERROR: ${data.error}. Click to re-check.`
+      }
+      className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-opacity hover:opacity-80 ${
+        data.ok
+          ? 'bg-green-50 text-green-700 border-green-200'
+          : 'bg-red-50 text-red-700 border-red-200'
+      }`}
+    >
+      {isFetching ? (
+        <RotateCcw className="w-3 h-3 animate-spin" />
+      ) : data.ok ? (
+        <Wifi className="w-3 h-3" />
+      ) : (
+        <WifiOff className="w-3 h-3" />
+      )}
+      {data.ok ? `Widget v${data.version ?? '?'}` : 'Widget DOWN'}
+    </button>
+  );
+}
 
 // ── Admin Login Screen ────────────────────────────────────────────────────────
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
@@ -1557,6 +1603,8 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Widget health indicator */}
+            <WidgetHealthBadge />
             {unhandledCount > 0 && activeTab === "leads" && (
               <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-xs font-semibold px-3 py-1.5 rounded-full">
                 ⚠ {unhandledCount} need{unhandledCount === 1 ? "s" : ""} review
