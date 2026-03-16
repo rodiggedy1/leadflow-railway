@@ -499,3 +499,11 @@
 - [x] Added calcBookedRevenue() helper: bookedAmount override > quotedPrice+extras (form/widget) > lastPrice*(1-discount%) (reactivation)
 - [x] Updated leads.stats, agents.myStats, agents.leaderboard to fetch reactivation fields and use calcBookedRevenue
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Reactivation Drawer Price + Revenue Source Breakdown — COMPLETED
+
+- [x] Show "Last booking: $150 → $135 (10% off)" in reactivation conversation drawer detail panel (strikethrough original, green discount badge)
+- [x] Add source breakdown stacked bar + legend to Booked Revenue card (Form / Widget / Reactivation sub-totals)
+- [x] Update leads.stats backend to return revenueBySource breakdown by leadSource
+- [x] Added reactivationLastPrice + reactivationDiscountPct to DrawerSession type
+- [x] 275/275 tests pass, 0 TypeScript errors

@@ -412,6 +412,8 @@ type DrawerSession = {
   utmContent: string | null;
   gclid: string | null;
   leadSource: string | null;
+  reactivationLastPrice: number | null;
+  reactivationDiscountPct: number | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -765,6 +767,21 @@ function ConversationDrawer({
                       <span className="text-gray-500">Quote</span>
                       <span className="font-semibold" style={{ color: "#E8603C" }}>
                         ${total}{hasExtras && <span className="ml-1 text-xs text-gray-400">(+extras)</span>}
+                      </span>
+                    </div>
+                  );
+                })()}
+                {/* Reactivation: last booking price with discount */}
+                {session.leadSource === "reactivation" && session.reactivationLastPrice != null && (() => {
+                  const discountPct = session.reactivationDiscountPct ?? 10;
+                  const discounted = Math.round(session.reactivationLastPrice * (1 - discountPct / 100));
+                  return (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Last Booking</span>
+                      <span className="font-semibold text-right" style={{ color: "#E8603C" }}>
+                        <span className="line-through text-gray-400 mr-1">${session.reactivationLastPrice}</span>
+                        ${discounted}
+                        <span className="ml-1 text-xs font-normal text-green-600">({discountPct}% off)</span>
                       </span>
                     </div>
                   );
@@ -1677,6 +1694,38 @@ export default function AdminDashboard() {
               <span className="text-xs" style={{ color: "#065f46", opacity: 0.7 }}>
                 from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? "s" : ""}
               </span>
+              {/* Source breakdown bar */}
+              {stats.revenueBySource && stats.bookedRevenue > 0 && (() => {
+                const rbs = stats.revenueBySource as Record<string, number>;
+                const total = stats.bookedRevenue;
+                const sources = [
+                  { key: 'form', label: 'Form', color: '#059669' },
+                  { key: 'widget', label: 'Widget', color: '#0d9488' },
+                  { key: 'reactivation', label: 'Reactivation', color: '#7c3aed' },
+                ];
+                return (
+                  <div className="mt-2 space-y-1">
+                    {/* Stacked bar */}
+                    <div className="flex h-2 rounded-full overflow-hidden gap-px">
+                      {sources.map(s => {
+                        const pct = total > 0 ? ((rbs[s.key] ?? 0) / total) * 100 : 0;
+                        return pct > 0 ? (
+                          <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} />
+                        ) : null;
+                      })}
+                    </div>
+                    {/* Legend */}
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                      {sources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
+                        <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#065f46', opacity: 0.85 }}>
+                          <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
+                          {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div

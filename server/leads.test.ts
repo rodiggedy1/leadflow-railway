@@ -157,14 +157,14 @@ describe("leads.stats", () => {
     mockGetDb.mockResolvedValue(null as never);
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
-    expect(result).toEqual({ total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 });
+    expect(result).toEqual({ total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } });
   });
 
   it("returns zero totals with date filter when DB is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats({ dateFrom: "2026-03-01" });
-    expect(result).toEqual({ total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 });
+    expect(result).toEqual({ total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } });
   });
 
   it("aggregates stage counts correctly", async () => {

@@ -81,7 +81,7 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         const db = await getDb();
-        if (!db) return { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
+        if (!db) return { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
         // Stage breakdown
@@ -103,6 +103,7 @@ export const appRouter = router({
         // Booked revenue: use bookedAmount if set, else quotedPrice + extras total
         const bookedRows = await db
           .select({
+            leadSource: conversationSessions.leadSource,
             quotedPrice: conversationSessions.quotedPrice,
             extras: conversationSessions.extras,
             bookedAmount: conversationSessions.bookedAmount,
@@ -117,9 +118,15 @@ export const appRouter = router({
           );
         const bookedCount = bookedRows.length;
         const bookedRevenue = bookedRows.reduce((sum, r) => sum + calcBookedRevenue(r), 0);
+        // Revenue broken down by lead source
+        const revenueBySource = { form: 0, widget: 0, reactivation: 0 } as Record<string, number>;
+        for (const r of bookedRows) {
+          const src = r.leadSource ?? 'form';
+          revenueBySource[src] = (revenueBySource[src] ?? 0) + calcBookedRevenue(r);
+        }
         const conversionRate = total > 0 ? Math.round((bookedCount / total) * 100) : 0;
 
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate };
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource };
       }),
 
     /**
