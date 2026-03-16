@@ -558,3 +558,13 @@
 - [x] Add live green checkmark + green border when phone reaches exactly 10 digits in widget
 - [x] Add live green checkmark + green border when phone reaches exactly 10 digits in QuoteForm.tsx
 - [x] 327/327 tests pass, 0 TypeScript errors
+
+## Live Validation UX — Name, Email, Phone Fields — COMPLETED
+
+- [x] QuoteForm: extend green-valid/red-error border + animated checkmark to name field (non-empty)
+- [x] QuoteForm: extend green-valid/red-error border + animated checkmark to email field (valid format)
+- [x] QuoteForm: add scale-in animation to phone checkmark (animate-checkmark-pop)
+- [x] Widget: extend green-valid/red-error border + animated checkmark to name field
+- [x] Widget: add scale-in animation to phone checkmark (mibCheckPop)
+- [x] Add @keyframes checkmarkPop to index.css + @keyframes mibCheckPop to widget injected style
+- [x] 327/327 tests pass, 0 TypeScript errors

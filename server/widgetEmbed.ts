@@ -56,6 +56,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
   var kf = document.createElement('style');
   kf.textContent = '@keyframes mib-ping{0%{transform:scale(1);opacity:0.5}100%{transform:scale(2.2);opacity:0}}' +
     '@keyframes mib-spin{to{transform:rotate(360deg)}}' +
+    '@keyframes mibCheckPop{0%{transform:translateY(-50%) scale(0);opacity:0}65%{transform:translateY(-50%) scale(1.2);opacity:1}100%{transform:translateY(-50%) scale(1);opacity:1}}' +
     // Ensure fixed positioning works even when the host page sets overflow:hidden on body (common in WordPress)
     '#mib-widget-btn,#mib-widget-panel{position:fixed!important;}';
   document.head.appendChild(kf);
@@ -391,11 +392,13 @@ function buildWidgetScript(apiBase: string, version: string): string {
     // Form
     var form = el('form', { display: 'flex', flexDirection: 'column', gap: '10px' });
 
+    // Name input wrapper (relative positioning for checkmark overlay)
+    var nameWrap = el('div', { position: 'relative', width: '100%' });
     var nameInput = el('input', {
       width: '100%',
       border: '1.5px solid #E5E7EB',
       borderRadius: '10px',
-      padding: '11px 14px',
+      padding: '11px 40px 11px 14px',
       fontSize: '13px',
       outline: 'none',
       color: '#111827',
@@ -403,9 +406,37 @@ function buildWidgetScript(apiBase: string, version: string): string {
       boxSizing: 'border-box',
       fontFamily: 'inherit',
     }, { type: 'text', placeholder: 'Your name', required: '', autocomplete: 'given-name', id: 'mib-name', value: escHtml(state.name) });
+    // Green checkmark for name field
+    var nameCheck = el('span', {
+      position: 'absolute',
+      right: '12px',
+      top: '50%',
+      pointerEvents: 'none',
+      display: 'none',
+      lineHeight: '1',
+    });
+    nameCheck.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8" fill="#22C55E"/><polyline points="4.5,8.5 7,11 11.5,5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+    function updateNameValid() {
+      var valid = state.name.trim().length > 0;
+      if (valid && nameCheck.style.display === 'none') {
+        nameCheck.style.display = 'block';
+        nameCheck.style.animation = 'none';
+        // Force reflow to restart animation
+        void nameCheck.offsetWidth;
+        nameCheck.style.animation = 'mibCheckPop 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards';
+      } else if (!valid) {
+        nameCheck.style.display = 'none';
+      }
+      if (document.activeElement !== nameInput) {
+        nameInput.style.borderColor = valid ? '#22C55E' : '#E5E7EB';
+        nameInput.style.boxShadow = valid ? '0 0 0 3px rgba(34,197,94,0.12)' : 'none';
+      }
+    }
     nameInput.addEventListener('focus', function() { nameInput.style.borderColor = CORAL; nameInput.style.boxShadow = '0 0 0 3px rgba(232,115,90,0.15)'; });
-    nameInput.addEventListener('blur', function() { nameInput.style.borderColor = '#E5E7EB'; nameInput.style.boxShadow = 'none'; });
-    nameInput.addEventListener('input', function() { state.name = nameInput.value; });
+    nameInput.addEventListener('blur', function() { updateNameValid(); });
+    nameInput.addEventListener('input', function() { state.name = nameInput.value; updateNameValid(); });
+    nameWrap.appendChild(nameInput);
+    nameWrap.appendChild(nameCheck);
 
     // Phone input wrapper (relative positioning for checkmark overlay)
     var phoneWrap = el('div', { position: 'relative', width: '100%' });
@@ -435,7 +466,14 @@ function buildWidgetScript(apiBase: string, version: string): string {
     function updatePhoneValid() {
       var digits = state.phone.replace(/\\D/g, '');
       var valid = digits.length === 10;
-      phoneCheck.style.display = valid ? 'block' : 'none';
+      if (valid && phoneCheck.style.display === 'none') {
+        phoneCheck.style.display = 'block';
+        phoneCheck.style.animation = 'none';
+        void phoneCheck.offsetWidth;
+        phoneCheck.style.animation = 'mibCheckPop 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards';
+      } else if (!valid) {
+        phoneCheck.style.display = 'none';
+      }
       if (document.activeElement !== phoneInput) {
         phoneInput.style.borderColor = valid ? '#22C55E' : '#E5E7EB';
         phoneInput.style.boxShadow = valid ? '0 0 0 3px rgba(34,197,94,0.12)' : 'none';
@@ -485,7 +523,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     });
     consentNote.textContent = 'By tapping \u201cText Me Now\u201d you consent to receive SMS messages from Maids in Black about cleaning services, estimates & scheduling. Msg & data rates may apply. Reply STOP to opt out.';
 
-    form.appendChild(nameInput);
+    form.appendChild(nameWrap);
     form.appendChild(phoneWrap);
     form.appendChild(submitBtn);
     form.appendChild(consentNote);

@@ -807,30 +807,76 @@ export default function QuoteForm() {
               <form onSubmit={handleFormNext} noValidate>
                 {/* Row 1: Name + Email */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  {/* Name field with live validation */}
                   <div className="animate-fade-slide-up delay-2">
-                    <input
-                      type="text"
-                      placeholder="Name"
-                      value={form.name}
-                      onChange={(e) => handleChange("name", e.target.value)}
-                      className="quote-input"
-                      style={errors.name ? { borderColor: "#E8603C", boxShadow: "0 0 0 3px rgba(232,96,60,0.15)" } : {}}
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Name"
+                        value={form.name}
+                        onChange={(e) => handleChange("name", e.target.value)}
+                        autoComplete="given-name"
+                        className="quote-input"
+                        style={{
+                          paddingRight: "36px",
+                          ...(errors.name
+                            ? { borderColor: "#E8603C", boxShadow: "0 0 0 3px rgba(232,96,60,0.15)" }
+                            : form.name.trim().length > 0
+                            ? { borderColor: "#22C55E", boxShadow: "0 0 0 3px rgba(34,197,94,0.12)" }
+                            : {}),
+                        }}
+                      />
+                      {!errors.name && form.name.trim().length > 0 && (
+                        <span
+                          key={form.name.trim()}
+                          className="pointer-events-none absolute right-3 top-1/2 animate-checkmark-pop"
+                          aria-label="Name entered"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="8" cy="8" r="8" fill="#22C55E" />
+                            <polyline points="4.5,8.5 7,11 11.5,5.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
                     {errors.name && (
                       <p className="mt-1 text-xs" style={{ color: "#E8603C", fontFamily: "'DM Sans', sans-serif" }}>
                         {errors.name}
                       </p>
                     )}
                   </div>
+                  {/* Email field with live validation */}
                   <div className="animate-fade-slide-up delay-2">
-                    <input
-                      type="email"
-                      placeholder="Email"
-                      value={form.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
-                      className="quote-input"
-                      style={errors.email ? { borderColor: "#E8603C", boxShadow: "0 0 0 3px rgba(232,96,60,0.15)" } : {}}
-                    />
+                    <div className="relative">
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={form.email}
+                        onChange={(e) => handleChange("email", e.target.value)}
+                        autoComplete="email"
+                        className="quote-input"
+                        style={{
+                          paddingRight: "36px",
+                          ...(errors.email
+                            ? { borderColor: "#E8603C", boxShadow: "0 0 0 3px rgba(232,96,60,0.15)" }
+                            : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
+                            ? { borderColor: "#22C55E", boxShadow: "0 0 0 3px rgba(34,197,94,0.12)" }
+                            : {}),
+                        }}
+                      />
+                      {!errors.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && (
+                        <span
+                          key={form.email}
+                          className="pointer-events-none absolute right-3 top-1/2 animate-checkmark-pop"
+                          aria-label="Valid email"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="8" cy="8" r="8" fill="#22C55E" />
+                            <polyline points="4.5,8.5 7,11 11.5,5.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
                     {errors.email && (
                       <p className="mt-1 text-xs" style={{ color: "#E8603C", fontFamily: "'DM Sans', sans-serif" }}>
                         {errors.email}
@@ -862,7 +908,8 @@ export default function QuoteForm() {
                       {/* Green checkmark — appears once exactly 10 digits are entered */}
                       {!errors.phone && form.phone.replace(/\D/g, "").length === 10 && (
                         <span
-                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+                          key={form.phone}
+                          className="pointer-events-none absolute right-3 top-1/2 animate-checkmark-pop"
                           aria-label="Valid phone number"
                         >
                           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
