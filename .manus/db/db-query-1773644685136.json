@@ -1,0 +1,20 @@
+{
+  "query": "SELECT id, leadSource, stage, isBooked, quotedPrice, bookedAmount, reactivationLastPrice, reactivationDiscountPct FROM conversation_sessions WHERE leadSource = 'reactivation' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, leadSource, stage, isBooked, quotedPrice, bookedAmount, reactivationLastPrice, reactivationDiscountPct FROM conversation_sessions WHERE leadSource = 'reactivation' LIMIT 5;",
+  "rows": [
+    {
+      "id": "570002",
+      "leadSource": "reactivation",
+      "stage": "BOOKED",
+      "isBooked": "0",
+      "quotedPrice": "NULL",
+      "bookedAmount": "NULL",
+      "reactivationLastPrice": "150",
+      "reactivationDiscountPct": "10"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadSource\tstage\tisBooked\tquotedPrice\tbookedAmount\treactivationLastPrice\treactivationDiscountPct\n570002\treactivation\tBOOKED\t0\tNULL\tNULL\t150\t10\n",
+  "stderr": "",
+  "execution_time_ms": 67
+}

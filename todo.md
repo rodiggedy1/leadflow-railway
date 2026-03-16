@@ -492,3 +492,10 @@
 ## Navigation Fix — COMPLETED
 
 - [x] Add back-to-admin link on Campaigns page header (ArrowLeft icon, top of list view)
+
+## Dashboard Metrics Bug — FIXED
+
+- [x] Root cause: reactivation sessions have no quotedPrice, so revenue showed as $0
+- [x] Added calcBookedRevenue() helper: bookedAmount override > quotedPrice+extras (form/widget) > lastPrice*(1-discount%) (reactivation)
+- [x] Updated leads.stats, agents.myStats, agents.leaderboard to fetch reactivation fields and use calcBookedRevenue
+- [x] 275/275 tests pass, 0 TypeScript errors

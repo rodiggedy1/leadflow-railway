@@ -106,6 +106,8 @@ export const appRouter = router({
             quotedPrice: conversationSessions.quotedPrice,
             extras: conversationSessions.extras,
             bookedAmount: conversationSessions.bookedAmount,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
           })
           .from(conversationSessions)
           .where(
@@ -114,21 +116,7 @@ export const appRouter = router({
               : eq(conversationSessions.stage, "BOOKED")
           );
         const bookedCount = bookedRows.length;
-        const bookedRevenue = bookedRows.reduce((sum, r) => {
-          // If admin has set a manual bookedAmount, use that
-          if (r.bookedAmount !== null && r.bookedAmount !== undefined) {
-            return sum + r.bookedAmount;
-          }
-          // Otherwise fall back to quotedPrice + extras
-          const base = parseFloat(r.quotedPrice ?? "0");
-          let extrasTotal = 0;
-          try {
-            const keys: string[] = JSON.parse(r.extras ?? "[]");
-            extrasTotal = calculateExtrasTotal(keys);
-          } catch { /* ignore */ }
-          const price = (isNaN(base) ? 0 : base) + extrasTotal;
-          return sum + price;
-        }, 0);
+        const bookedRevenue = bookedRows.reduce((sum, r) => sum + calcBookedRevenue(r), 0);
         const conversionRate = total > 0 ? Math.round((bookedCount / total) * 100) : 0;
 
         return { total, byStage, bookedCount, bookedRevenue, conversionRate };
@@ -890,6 +878,8 @@ export const appRouter = router({
             bookedAmount: conversationSessions.bookedAmount,
             quotedPrice: conversationSessions.quotedPrice,
             extras: conversationSessions.extras,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
           })
           .from(conversationSessions)
           .where(and(
@@ -899,20 +889,7 @@ export const appRouter = router({
           ));
 
         const bookedCount = bookedRows.length;
-        const bookedRevenue = bookedRows.reduce((sum, row) => {
-          if (row.bookedAmount !== null && row.bookedAmount !== undefined) {
-            return sum + Number(row.bookedAmount);
-          }
-          const base = Number(row.quotedPrice ?? 0);
-          let extrasTotal = 0;
-          if (row.extras) {
-            try {
-              const keys: string[] = JSON.parse(row.extras);
-              extrasTotal = calculateExtrasTotal(keys);
-            } catch { /* ignore */ }
-          }
-          return sum + base + extrasTotal;
-        }, 0);
+        const bookedRevenue = bookedRows.reduce((sum, row) => sum + calcBookedRevenue(row), 0);
 
         const conversionRate = leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0;
 
@@ -952,6 +929,8 @@ export const appRouter = router({
             bookedAmount: conversationSessions.bookedAmount,
             quotedPrice: conversationSessions.quotedPrice,
             extras: conversationSessions.extras,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
           })
           .from(conversationSessions)
           .where(and(eq(conversationSessions.isBooked, 1), conditions ?? sql`1=1`));
@@ -967,20 +946,7 @@ export const appRouter = router({
           const leadsAssigned = assignedMap.get(agent.id) ?? 0;
           const agentBookedRows = bookedByAgent.get(agent.id) ?? [];
           const bookedCount = agentBookedRows.length;
-          const bookedRevenue = agentBookedRows.reduce((sum, row) => {
-            if (row.bookedAmount !== null && row.bookedAmount !== undefined) {
-              return sum + Number(row.bookedAmount);
-            }
-            const base = Number(row.quotedPrice ?? 0);
-            let extrasTotal = 0;
-            if (row.extras) {
-              try {
-                const keys: string[] = JSON.parse(row.extras);
-                extrasTotal = calculateExtrasTotal(keys);
-              } catch { /* ignore */ }
-            }
-            return sum + base + extrasTotal;
-          }, 0);
+          const bookedRevenue = agentBookedRows.reduce((sum, row) => sum + calcBookedRevenue(row), 0);
           const conversionRate = leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0;
           return { id: agent.id, name: agent.name, email: agent.email, leadsAssigned, bookedCount, bookedRevenue, conversionRate };
         });
@@ -1331,6 +1297,39 @@ export function normalizePhone(phone: string): string {
  * dateFrom and dateTo are ISO date strings like "2026-03-01".
  * The dateTo is treated as end-of-day (23:59:59) so the full day is included.
  */
+/**
+ * Calculates the effective booked revenue for a single session row.
+ * Priority: bookedAmount (manual override) > quotedPrice + extras (form/widget) > reactivationLastPrice * discount (reactivation)
+ */
+function calcBookedRevenue(row: {
+  bookedAmount?: number | null;
+  quotedPrice?: string | null;
+  extras?: string | null;
+  reactivationLastPrice?: number | null;
+  reactivationDiscountPct?: number | null;
+}): number {
+  // 1. Admin-set manual override always wins
+  if (row.bookedAmount !== null && row.bookedAmount !== undefined) {
+    return Number(row.bookedAmount);
+  }
+  // 2. Form/widget leads: quotedPrice + extras
+  if (row.quotedPrice !== null && row.quotedPrice !== undefined && row.quotedPrice !== '') {
+    const base = parseFloat(row.quotedPrice);
+    let extrasTotal = 0;
+    try {
+      const keys: string[] = JSON.parse(row.extras ?? '[]');
+      extrasTotal = calculateExtrasTotal(keys);
+    } catch { /* ignore */ }
+    return (isNaN(base) ? 0 : base) + extrasTotal;
+  }
+  // 3. Reactivation leads: last price with discount applied
+  if (row.reactivationLastPrice !== null && row.reactivationLastPrice !== undefined) {
+    const discountPct = row.reactivationDiscountPct ?? 10;
+    return Math.round(row.reactivationLastPrice * (1 - discountPct / 100));
+  }
+  return 0;
+}
+
 function buildDateConditions(dateFrom?: string, dateTo?: string) {
   const conditions = [];
   if (dateFrom) {
