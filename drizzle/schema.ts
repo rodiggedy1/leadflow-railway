@@ -221,3 +221,95 @@ export const pageViews = mysqlTable("page_views", {
 
 export type PageView = typeof pageViews.$inferSelect;
 export type InsertPageView = typeof pageViews.$inferInsert;
+
+/**
+ * Reactivation campaign statuses:
+ * DRAFT     → Created but not yet launched
+ * ACTIVE    → Currently sending (throttled)
+ * PAUSED    → Manually paused mid-send
+ * COMPLETED → All contacts have been messaged
+ */
+export const campaignStatuses = [
+  "DRAFT",
+  "ACTIVE",
+  "PAUSED",
+  "COMPLETED",
+] as const;
+
+export type CampaignStatus = (typeof campaignStatuses)[number];
+
+/**
+ * reactivationCampaigns — one row per campaign run.
+ * Tracks the message template, target segment, and aggregate stats.
+ */
+export const reactivationCampaigns = mysqlTable("reactivation_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  messageTemplate: text("messageTemplate").notNull(), // supports [Name] merge tag
+  /** Target segment: "6-12mo" | "1-2yr" | "all" */
+  segment: varchar("segment", { length: 20 }).notNull(),
+  status: mysqlEnum("status", campaignStatuses as unknown as [string, ...string[]]).default("DRAFT").notNull(),
+  /** Max SMS per hour (throttle rate) */
+  batchSize: int("batchSize").default(50).notNull(),
+  /** Aggregate counters — updated as campaign progresses */
+  totalContacts: int("totalContacts").default(0).notNull(),
+  sentCount: int("sentCount").default(0).notNull(),
+  repliedCount: int("repliedCount").default(0).notNull(),
+  bookedCount: int("bookedCount").default(0).notNull(),
+  /** When the campaign was last sent/advanced */
+  lastSentAt: timestamp("lastSentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ReactivationCampaign = typeof reactivationCampaigns.$inferSelect;
+export type InsertReactivationCampaign = typeof reactivationCampaigns.$inferInsert;
+
+/**
+ * Reactivation contact statuses:
+ * PENDING  → Not yet messaged
+ * SENT     → SMS sent, awaiting reply
+ * REPLIED  → Lead replied (conversation engine took over)
+ * BOOKED   → Lead booked a clean
+ * OPTED_OUT → Lead replied STOP or similar
+ */
+export const contactStatuses = [
+  "PENDING",
+  "SENT",
+  "REPLIED",
+  "BOOKED",
+  "OPTED_OUT",
+] as const;
+
+export type ContactStatus = (typeof contactStatuses)[number];
+
+/**
+ * reactivationContacts — one row per customer per campaign.
+ * Populated when a campaign is created from the imported CSV.
+ */
+export const reactivationContacts = mysqlTable("reactivation_contacts", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+  /** E.164 normalized phone number */
+  phone: varchar("phone", { length: 20 }).notNull(),
+  /** Raw phone as it appeared in the CSV */
+  phoneRaw: varchar("phoneRaw", { length: 30 }),
+  name: varchar("name", { length: 255 }),
+  firstName: varchar("firstName", { length: 100 }),
+  email: varchar("email", { length: 320 }),
+  lastBookingDate: varchar("lastBookingDate", { length: 20 }), // YYYY-MM-DD
+  daysSince: int("daysSince"),
+  bookingCount: int("bookingCount").default(0).notNull(),
+  segment: varchar("segment", { length: 20 }), // "6-12mo" | "1-2yr"
+  status: mysqlEnum("status", contactStatuses as unknown as [string, ...string[]]).default("PENDING").notNull(),
+  /** When the SMS was sent */
+  sentAt: timestamp("sentAt"),
+  /** When the lead first replied */
+  repliedAt: timestamp("repliedAt"),
+  /** Link to the conversation session created when they reply */
+  sessionId: int("sessionId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ReactivationContact = typeof reactivationContacts.$inferSelect;
+export type InsertReactivationContact = typeof reactivationContacts.$inferInsert;

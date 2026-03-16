@@ -12,6 +12,7 @@ import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, ha
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
+import { campaignRouter } from "./campaignRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
@@ -1046,6 +1047,8 @@ export const appRouter = router({
    * Calls the real AI engine with configurable lead context.
    * No SMS is sent; responses come back immediately over tRPC.
    */
+  campaigns: campaignRouter,
+
   simulator: router({
     chat: publicProcedure
       .input(

@@ -1560,6 +1560,14 @@ export default function AdminDashboard() {
               {tab === "leads" ? "Leads" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "AI Simulator"}
             </button>
           ))}
+          <a
+            href="/admin/campaigns"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+            style={{ borderColor: "transparent", color: "#6b7280" }}
+          >
+            <Send className="w-3.5 h-3.5" />
+            Campaigns
+          </a>
         </div>
       </header>
 

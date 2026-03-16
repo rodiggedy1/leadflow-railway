@@ -30,6 +30,7 @@ import type { ChatMessage, ConversationContext } from "./conversationEngine";
 import type { ConversationStage } from "../drizzle/schema";
 import { normalizePhone } from "./routers";
 import { getNextAvailableSlots } from "./availability";
+import { markReactivationContactReplied } from "./campaignRouter";
 
 export function registerWebhookRoutes(app: Express) {
   app.post("/api/webhooks/openphone", async (req, res) => {
@@ -100,6 +101,11 @@ export function registerWebhookRoutes(app: Express) {
         console.log(`[Webhook] All conversations for ${fromPhone} are DONE. Skipping.`);
         return;
       }
+
+      // If this phone belongs to a reactivation campaign contact, mark them as REPLIED
+      markReactivationContactReplied(fromPhone).catch(err =>
+        console.error("[Webhook] Failed to mark reactivation contact replied:", err)
+      );
 
       // Parse message history
       let history: ChatMessage[] = [];

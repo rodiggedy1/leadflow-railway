@@ -127,6 +127,13 @@
       "when": 1773627591304,
       "tag": "0017_stormy_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1773631925233,
+      "tag": "0018_silent_madrox",
+      "breakpoints": true
     }
   ]
 }

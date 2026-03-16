@@ -422,3 +422,17 @@
 - [x] Set leadSource = "form" in processQuoteInBackground
 - [x] Display leadSource badge in admin dashboard lead table (Source column) and drawer header
 - [x] 252/252 tests pass
+
+## Reactivation Campaign Feature
+
+- [x] Add reactivationCampaigns and reactivationContacts tables to DB (created via direct SQL)
+- [x] Server: campaigns.previewCsv (parse CSV, normalize phones, apply eligibility rules, return segments)
+- [x] Server: campaigns.createFromCsv (create campaign + load contacts into DB)
+- [x] Server: campaigns.list, campaigns.get, campaigns.updateStatus, campaigns.delete
+- [x] Server: throttled send engine (50/hr batching, PENDING → SENT state machine)
+- [x] Server: inbound SMS from reactivation contacts routed through conversation engine; contacts marked REPLIED
+- [x] Server: campaignRouter wired into appRouter
+- [x] UI: /admin/campaigns page (CSV upload, segment preview, campaign builder, contact list, stats dashboard)
+- [x] UI: Campaigns nav link added to AdminDashboard header
+- [x] Route /admin/campaigns added to App.tsx
+- [x] 252/252 tests pass

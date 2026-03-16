@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE conversation_sessions SET leadSource = 'widget' WHERE leadName IN ('rohan test', 'Test User') AND leadSource = 'form';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute UPDATE conversation_sessions SET leadSource = 'widget' WHERE leadName IN ('rohan test', 'Test User') AND leadSource = 'form';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 71
+}
