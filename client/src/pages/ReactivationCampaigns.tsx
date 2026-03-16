@@ -60,6 +60,7 @@ import {
   ChevronRight,
   DollarSign,
   TrendingUp,
+  FlaskConical,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -177,6 +178,16 @@ export default function ReactivationCampaigns() {
     onError: (err) => toast.error(err.message),
   });
 
+  const createTestCampaign = trpc.campaigns.createTest.useMutation({
+    onSuccess: (data) => {
+      toast.success("Test campaign created — Rohan (302-981-6191) loaded. Ready to launch.");
+      refetchCampaigns();
+      setSelectedCampaignId(data.campaignId);
+      setView("detail");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const deleteCampaign= trpc.campaigns.delete.useMutation({
     onSuccess: () => {
       toast.success("Campaign deleted");
@@ -230,10 +241,31 @@ export default function ReactivationCampaigns() {
               Re-engage past customers who haven't booked in 6–24 months.
             </p>
           </div>
-          <Button onClick={() => setView("new")} className="gap-2">
-            <Upload className="w-4 h-4" />
-            New Campaign
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 border-dashed text-muted-foreground hover:text-foreground"
+              onClick={() => createTestCampaign.mutate({})}
+              disabled={createTestCampaign.isPending}
+              title="Creates a test campaign with Rohan (302-981-6191, $150 last booking) as the only contact"
+            >
+              <FlaskConical className="w-4 h-4" />
+              {createTestCampaign.isPending ? "Creating…" : "Test Campaign"}
+            </Button>
+            <Button onClick={() => setView("new")} className="gap-2">
+              <Upload className="w-4 h-4" />
+              New Campaign
+            </Button>
+          </div>
+        </div>
+
+        {/* Test campaign info banner */}
+        <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 border border-dashed rounded-lg px-3 py-2">
+          <FlaskConical className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>
+            <strong>Test Campaign</strong> — creates a single-contact campaign with Rohan (302-981-6191, last booking $150, 10% off) so you can test the full SMS flow end-to-end before launching a real campaign.
+          </span>
         </div>
 
         {campaigns.length === 0 ? (

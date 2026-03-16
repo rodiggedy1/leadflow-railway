@@ -472,3 +472,11 @@
 - [x] Campaign list cards: show reply rate % under replied count, Revenue column (purple)
 - [x] Campaign detail stats: expanded to 6-card grid (Total, Sent, Replied, Booked, Revenue, Conv. Rate)
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Test Campaign Feature — COMPLETED
+
+- [x] Add campaigns.createTest backend procedure (seeds Rohan, 302-981-6191, $150 last booking, discountPct=10, 270 days since last booking)
+- [x] Add "Test Campaign" button (dashed outline) to Campaigns page header
+- [x] Add info banner explaining what the test campaign does
+- [x] Test campaign uses the same send flow as real campaigns (sendNextBatch, conversation engine, webhook)
+- [x] 275/275 tests pass, 0 TypeScript errors

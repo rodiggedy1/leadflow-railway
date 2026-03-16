@@ -334,6 +334,57 @@ export const campaignRouter = router({
       return { campaignId, contactCount: contacts.length };
     }),
 
+  /**
+   * Create a pre-seeded test campaign with a single contact (Rohan, 302-981-6191, $150 last booking).
+   * Useful for end-to-end testing of the reactivation SMS flow without uploading a real CSV.
+   */
+  createTest: protectedProcedure
+    .input(z.object({
+      messageTemplate: z.string().min(10).max(1000).optional(),
+    }).optional())
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const template = input?.messageTemplate ?? DEFAULT_REACTIVATION_TEMPLATE;
+      const now = new Date();
+      const campaignName = `Test Campaign — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+
+      const [result] = await db.insert(reactivationCampaigns).values({
+        name: campaignName,
+        messageTemplate: template,
+        segment: "6-12mo",
+        status: "DRAFT",
+        batchSize: 1,
+        totalContacts: 1,
+        sentCount: 0,
+        repliedCount: 0,
+        bookedCount: 0,
+      });
+      const campaignId = (result as any).insertId as number;
+
+      // Seed test contact: Rohan, 302-981-6191, last booking $150
+      await db.insert(reactivationContacts).values({
+        campaignId,
+        phone: "+13029816191",
+        phoneRaw: "302-981-6191",
+        name: "Rohan",
+        firstName: "Rohan",
+        email: "rohangilkes@hey.com",
+        lastBookingDate: new Date(Date.now() - 270 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10), // ~9 months ago (within 6-12mo segment)
+        daysSince: 270,
+        bookingCount: 3,
+        lastPrice: 150,
+        discountPct: 10,
+        segment: "6-12mo",
+        status: "PENDING",
+      });
+
+      return { campaignId, contactCount: 1 };
+    }),
+
   /** List all campaigns with aggregate stats including live bookedRevenue */
   list: protectedProcedure.query(async () => {
     const db = await getDb();
