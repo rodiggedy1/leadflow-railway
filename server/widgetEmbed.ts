@@ -83,7 +83,12 @@ function buildWidgetScript(apiBase: string, version: string): string {
   }
 
   function formatPhone(raw) {
-    var digits = raw.replace(/\\D/g, '').slice(0, 10);
+    var digits = raw.replace(/\\D/g, '');
+    // Strip leading country code: autofill "+1 401-688-8007" becomes "14016888007" (11 digits starting with 1)
+    if (digits.length === 11 && digits.charAt(0) === '1') {
+      digits = digits.slice(1);
+    }
+    digits = digits.slice(0, 10);
     if (digits.length <= 3) return digits;
     if (digits.length <= 6) return digits.slice(0, 3) + '-' + digits.slice(3);
     return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);

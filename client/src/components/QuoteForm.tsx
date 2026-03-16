@@ -666,8 +666,13 @@ export default function QuoteForm() {
   };
 
   const formatPhoneNumber = (raw: string): string => {
-    // Strip everything except digits, allow leading +1 to be stripped too
-    const digits = raw.replace(/\D/g, "").slice(0, 10);
+    // Strip all non-digits first
+    let digits = raw.replace(/\D/g, "");
+    // Strip leading country code: if 11 digits starting with 1 (e.g. autofill "+1 401-688-8007" → "14016888007"), remove the leading 1
+    if (digits.length === 11 && digits.startsWith("1")) {
+      digits = digits.slice(1);
+    }
+    digits = digits.slice(0, 10);
     if (digits.length <= 3) return digits;
     if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
     return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;

@@ -539,3 +539,9 @@
 - [x] Add Completed Jobs nav link to Admin Dashboard header
 - [x] Wire /admin/completed-jobs route in App.tsx
 - [x] Write vitest tests for classifyReviewReply and parseCompletedJobsCsv (299/299 tests pass)
+
+## Widget Phone Autofill Bug Fix — COMPLETED
+
+- [x] Fix phone input in widget: browser autofill with "+1 401-688-8007" produces "140-168-8800" instead of "4016888007"
+- [x] Fix phone normalization to strip country code prefix (+1 or 1) before stripping non-digits
+- [x] Also fix in QuoteForm.tsx (same pattern was present there too)
