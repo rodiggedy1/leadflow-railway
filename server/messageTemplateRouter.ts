@@ -5,7 +5,11 @@
  * Procedures:
  *   messageTemplates.list(flowType)   — all templates for a flow, ordered by id
  *   messageTemplates.update(id, body) — admin-only, update the body of an editable template
+ *   messageTemplates.reset(id)        — admin-only, restore template to its DEFAULT_TEMPLATES value
  *   messageTemplates.seed             — idempotent seed of default templates (admin only)
+ *
+ * Server helper (not a tRPC procedure):
+ *   getTemplate(stepKey, vars?)       — fetch body from DB, fall back to DEFAULT_TEMPLATES, substitute vars
  */
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
@@ -103,6 +107,46 @@ export const DEFAULT_TEMPLATES = [
   },
 ];
 
+// ─── Server helper ────────────────────────────────────────────────────────────
+
+/**
+ * Fetch a template body from the DB by stepKey.
+ * Falls back to the DEFAULT_TEMPLATES value if the DB row doesn't exist yet.
+ * Optionally substitutes variables: pass { "[Name]": "Sarah", "[Discount]": "10" }.
+ */
+export async function getTemplate(
+  stepKey: string,
+  vars?: Record<string, string>
+): Promise<string> {
+  // Find the default as fallback
+  const defaultEntry = DEFAULT_TEMPLATES.find(t => t.stepKey === stepKey);
+  let body = defaultEntry?.body ?? "";
+
+  // Try DB lookup
+  try {
+    const db = await getDb();
+    if (db) {
+      const [row] = await db
+        .select({ body: messageTemplates.body })
+        .from(messageTemplates)
+        .where(eq(messageTemplates.stepKey, stepKey))
+        .limit(1);
+      if (row) body = row.body;
+    }
+  } catch {
+    // DB unavailable — use default
+  }
+
+  // Substitute variables
+  if (vars) {
+    for (const [key, val] of Object.entries(vars)) {
+      body = body.replaceAll(key, val);
+    }
+  }
+
+  return body;
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const messageTemplateRouter = router({
@@ -122,6 +166,8 @@ export const messageTemplateRouter = router({
       return rows.map(r => ({
         ...r,
         variables: r.variables ? (JSON.parse(r.variables) as string[]) : [],
+        // Attach the default body so the UI can show a "Reset to default" diff
+        defaultBody: DEFAULT_TEMPLATES.find(d => d.stepKey === r.stepKey)?.body ?? r.body,
       }));
     }),
 
@@ -139,7 +185,6 @@ export const messageTemplateRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      // Check the template exists and is editable
       const [existing] = await db
         .select({ id: messageTemplates.id, isEditable: messageTemplates.isEditable })
         .from(messageTemplates)
@@ -157,6 +202,33 @@ export const messageTemplateRouter = router({
         .set({ body: input.body })
         .where(eq(messageTemplates.id, input.id));
       return { success: true };
+    }),
+
+  /**
+   * Reset a template's body back to the DEFAULT_TEMPLATES value.
+   * Locked templates cannot be reset (they never change anyway).
+   */
+  reset: adminAgentProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [existing] = await db
+        .select({ id: messageTemplates.id, stepKey: messageTemplates.stepKey, isEditable: messageTemplates.isEditable })
+        .from(messageTemplates)
+        .where(eq(messageTemplates.id, input.id))
+        .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
+      if (!existing.isEditable) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "This template is locked." });
+      }
+      const defaultEntry = DEFAULT_TEMPLATES.find(d => d.stepKey === existing.stepKey);
+      if (!defaultEntry) throw new TRPCError({ code: "NOT_FOUND", message: "No default found for this template." });
+      await db
+        .update(messageTemplates)
+        .set({ body: defaultEntry.body })
+        .where(eq(messageTemplates.id, input.id));
+      return { success: true, restoredBody: defaultEntry.body };
     }),
 
   /**

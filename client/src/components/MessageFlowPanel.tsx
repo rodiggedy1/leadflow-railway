@@ -23,6 +23,7 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  RotateCcw,
 } from "lucide-react";
 
 type FlowType = "reactivation" | "review";
@@ -55,6 +56,7 @@ interface TemplateRow {
   label: string;
   triggerLabel: string;
   body: string;
+  defaultBody?: string;
   variables: string[];
   isEditable: number;
 }
@@ -83,7 +85,18 @@ function TemplateCard({
     },
   });
 
+  const resetMutation = trpc.messageTemplates.reset.useMutation({
+    onSuccess: () => {
+      toast.success("Message reset to default");
+      onSaved();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
   const isLocked = !template.isEditable;
+  const isModified = template.defaultBody && template.body !== template.defaultBody;
   const previewText = substituteVars(template.body, sampleVars);
 
   return (
@@ -112,18 +125,33 @@ function TemplateCard({
             </div>
           </div>
           {!isLocked && !editing && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs gap-1 shrink-0"
-              onClick={() => {
-                setDraft(template.body);
-                setEditing(true);
-              }}
-            >
-              <Pencil className="w-3 h-3" />
-              Edit
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              {isModified && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                  disabled={resetMutation.isPending}
+                  onClick={() => resetMutation.mutate({ id: template.id })}
+                  title="Reset to original default message"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  {resetMutation.isPending ? "Resetting..." : "Reset"}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1 shrink-0"
+                onClick={() => {
+                  setDraft(template.body);
+                  setEditing(true);
+                }}
+              >
+                <Pencil className="w-3 h-3" />
+                Edit
+              </Button>
+            </div>
           )}
         </div>
 

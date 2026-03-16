@@ -14,6 +14,7 @@ import { getDb } from "./db";
 import { reactivationCampaigns, reactivationContacts, conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
+import { getTemplate } from "./messageTemplateRouter";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -614,9 +615,15 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
 
   for (const contact of pending) {
     try {
-      const message = renderMessage(campaign.messageTemplate, {
-        firstName: contact.firstName ?? "",
-        name: contact.name ?? "",
+      // Fetch the live template from DB (falls back to default if not yet seeded)
+      const firstName = contact.firstName ?? "";
+      const name = contact.name ?? "";
+      const discountPct = contact.discountPct ?? 10;
+      const message = await getTemplate("reactivation_initial", {
+        "[Name]": firstName || name,
+        "[FirstName]": firstName || name,
+        "[FullName]": name,
+        "[Discount]": String(discountPct),
       });
 
       await sendSms({ to: contact.phone, content: message });

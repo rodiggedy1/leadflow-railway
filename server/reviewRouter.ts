@@ -19,6 +19,7 @@ import {
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
+import { getTemplate } from "./messageTemplateRouter";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 export const GOOGLE_REVIEW_URL = "https://share.google/Tm468dywmXkUnBQBL";
@@ -133,7 +134,10 @@ export async function sendPendingReviewSms(): Promise<number> {
   let sent = 0;
   for (const job of pending) {
     const firstName = job.firstName ?? job.name?.split(" ")[0] ?? "there";
-    const message = REVIEW_INITIAL_MESSAGE(firstName);
+    const message = await getTemplate("review_initial", {
+      "[Name]": firstName,
+      "[FirstName]": firstName,
+    });
 
     // Create a conversation session for this review flow
     const [sessionInsert] = await db
@@ -260,8 +264,9 @@ export async function handleReviewReplyForJob(
       title: "⚠️ Unhappy Customer — Review Flow",
       content: `${job?.name ?? fromPhone} replied negatively to the post-cleaning review SMS. Switch to manual mode and follow up personally.`,
     }).catch(() => {});
+    const negativeReply = await getTemplate("review_negative", { "[Name]": firstName });
     return {
-      responseText: REVIEW_NEGATIVE_RESPONSE(firstName),
+      responseText: negativeReply,
       newStage: "REVIEW_DONE",
       switchToManual: true,
     };
@@ -316,8 +321,9 @@ export async function handleReviewReplyForJob(
       }
     }
 
+    const confirmedReply = await getTemplate("review_confirmed", { "[Name]": firstName });
     return {
-      responseText: REVIEW_CONFIRMED_RESPONSE(firstName),
+      responseText: confirmedReply,
       newStage: "REVIEW_DONE",
       switchToManual: false,
     };
@@ -334,8 +340,12 @@ export async function handleReviewReplyForJob(
         .set({ positiveCount: sql`${completedJobBatches.positiveCount} + 1` })
         .where(eq(completedJobBatches.id, job.batchId));
     }
+    const positiveReply = await getTemplate("review_positive", {
+      "[Name]": firstName,
+      "[GoogleReviewUrl]": GOOGLE_REVIEW_URL,
+    });
     return {
-      responseText: REVIEW_POSITIVE_RESPONSE(firstName),
+      responseText: positiveReply,
       newStage: "REVIEW_REQUESTED", // stay waiting for review confirmation
       switchToManual: false,
     };

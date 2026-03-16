@@ -27,6 +27,7 @@ import {
   handlePostBookingReply,
 } from "./aiService";
 import { notifyAgentOfLead } from "./agentNotification";
+import { getTemplate } from "./messageTemplateRouter";
 import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
 
 export interface ConversationContext {
@@ -263,28 +264,32 @@ function lookupPrice(bedrooms: string, bathrooms: string): string {
  *   3. STOP / opt-out → mark done, no further messages
  *   4. Anything else → route through availability flow
  */
-function handleReactivationReply(
+async function handleReactivationReply(
   leadReply: string,
   context: ConversationContext
-): StageResult {
+): Promise<StageResult> {
   const lower = leadReply.trim().toLowerCase();
   const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
   const discountPct = context.discountPct ?? 10;
 
   // STOP / opt-out
   if (/^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(lower)) {
-    return {
-      reply: `You've been unsubscribed and won't receive further messages from us. Have a great day! 🏠`,
-      nextStage: "DONE",
-    };
+    const reply = await getTemplate("reactivation_opt_out");
+    return { reply, nextStage: "DONE" };
   }
 
   // Price question
   if (isPricingQuestion(lower)) {
     if (context.lastPrice && context.lastPrice > 0) {
       const discounted = Math.round(context.lastPrice * (1 - discountPct / 100));
+      const reply = await getTemplate("reactivation_price_question", {
+        "[Name]": firstName,
+        "[LastPrice]": String(context.lastPrice),
+        "[Discount]": String(discountPct),
+        "[DiscountedPrice]": String(discounted),
+      });
       return {
-        reply: `Hi ${firstName}! Your last clean with us was $${context.lastPrice}. With your ${discountPct}% returning customer discount, your next clean would be just $${discounted}. Ready to get your home sparkling again? ${buildAvailabilityMessage(context.extras)}`,
+        reply: reply + " " + buildAvailabilityMessage(context.extras),
         nextStage: "AVAILABILITY",
       };
     }
@@ -297,8 +302,11 @@ function handleReactivationReply(
 
   // YES / positive intent
   if (/^\s*(yes|yeah|yep|sure|ok|okay|sounds good|let's do it|book|i'm in|im in|absolutely|definitely|great|perfect|yes please)\s*[!.]*\s*$/i.test(lower)) {
+    const reply = await getTemplate("reactivation_yes_reply", {
+      "[Name]": firstName,
+    });
     return {
-      reply: `Amazing, ${firstName}! Let's get you scheduled. ${buildAvailabilityMessage(context.extras)}`,
+      reply: reply + " " + buildAvailabilityMessage(context.extras),
       nextStage: "AVAILABILITY",
     };
   }

@@ -599,3 +599,13 @@
 - [x] Wire Reactivation campaign detail page: replaced old template card with MessageFlowPanel
 - [x] Wire Completed Jobs page: added Review Request Message Flow card at bottom
 - [x] 19 new tests in messageTemplateRouter.test.ts (368/368 total pass, 0 TS errors)
+
+## Live Template Wiring + Reset to Default — COMPLETED
+
+- [x] getTemplate(stepKey, vars?) server helper: fetches from DB, falls back to DEFAULT_TEMPLATES if not seeded
+- [x] messageTemplates.reset procedure: restores body to DEFAULT_TEMPLATES value (locked templates rejected)
+- [x] campaignRouter.ts sendNextBatch: reactivation_initial reads from DB via getTemplate
+- [x] conversationEngine.ts handleReactivationReply: yes/price/opt-out replies read from DB via getTemplate
+- [x] reviewRouter.ts: review_initial, review_positive, review_negative, review_confirmed all read from DB via getTemplate
+- [x] MessageFlowPanel: amber Reset button (RotateCcw icon) appears only when body !== defaultBody; disappears after reset
+- [x] 368/368 tests pass, 0 TypeScript errors
