@@ -480,3 +480,11 @@
 - [x] Add info banner explaining what the test campaign does
 - [x] Test campaign uses the same send flow as real campaigns (sendNextBatch, conversation engine, webhook)
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Message Preview in Campaign Detail — COMPLETED
+
+- [x] Add rendered message preview card to campaign detail view
+- [x] Substitute [Name]/[FirstName] with first contact's name (or "Customer" as fallback)
+- [x] Style as a realistic SMS bubble (right-aligned, primary color, rounded-2xl) so it's visually clear what the recipient will see
+- [x] Shows both raw template (monospace) and rendered preview side-by-side in same card
+- [x] 275/275 tests pass, 0 TypeScript errors
