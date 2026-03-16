@@ -409,3 +409,7 @@
 - [x] Add WIDGET_SIZING to SmsSimulator.tsx stage type and labels
 - [x] Add WIDGET_SIZING to simulator.chat stage enum in routers.ts
 - [x] 252/252 tests pass
+
+## Widget CORS Fix
+
+- [x] Fix "failed to fetch" error when widget on maidsinblack.com calls quotes.submitWidgetLead — added cors middleware allowing maidsinblack.com origin

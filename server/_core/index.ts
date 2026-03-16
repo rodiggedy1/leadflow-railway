@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -8,6 +9,27 @@ import { registerWebhookRoutes } from "../webhooks";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+
+// Allowed origins for cross-origin requests (widget on maidsinblack.com)
+const ALLOWED_ORIGINS = [
+  "https://maidsinblack.com",
+  "https://www.maidsinblack.com",
+  "http://localhost:3000",
+  "http://localhost:5173",
+];
+
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    // Allow same-origin requests (quote.maidinblack.com itself)
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+});
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,9 +53,15 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // CORS — must be before all other middleware so preflight OPTIONS requests are handled
+  app.use(corsMiddleware);
+  app.options("*", corsMiddleware); // handle preflight for all routes
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // OpenPhone webhook for inbound SMS replies
