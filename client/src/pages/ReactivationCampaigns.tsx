@@ -234,6 +234,14 @@ export default function ReactivationCampaigns() {
   function renderCampaignList() {
     return (
       <div className="space-y-6">
+        {/* Back to Admin */}
+        <a
+          href="/admin"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Admin
+        </a>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Reactivation Campaigns</h1>

@@ -488,3 +488,7 @@
 - [x] Style as a realistic SMS bubble (right-aligned, primary color, rounded-2xl) so it's visually clear what the recipient will see
 - [x] Shows both raw template (monospace) and rendered preview side-by-side in same card
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Navigation Fix — COMPLETED
+
+- [x] Add back-to-admin link on Campaigns page header (ArrowLeft icon, top of list view)
