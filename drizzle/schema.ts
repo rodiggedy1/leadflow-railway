@@ -396,3 +396,27 @@ export const completedJobs = mysqlTable("completed_jobs", {
 
 export type CompletedJob = typeof completedJobs.$inferSelect;
 export type InsertCompletedJob = typeof completedJobs.$inferInsert;
+
+/**
+ * messageTemplates — editable SMS copy for Reactivation and Post-Sale Review flows.
+ * flowType: "reactivation" | "review"
+ * stepKey: unique identifier for each step (e.g. "reactivation_initial", "review_positive")
+ * label: human-readable step name shown in the UI timeline
+ * triggerLabel: describes when this message fires (e.g. "Sent on campaign launch", "24h after job")
+ * body: the SMS copy with [Name], [Price], [DiscountedPrice], [GoogleReviewUrl] placeholders
+ * variables: JSON array of variable names used in the body (for hint display)
+ * isEditable: false for opt-out/unsubscribe messages that should not be changed
+ */
+export const messageTemplates = mysqlTable("message_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  flowType: mysqlEnum("flowType", ["reactivation", "review"]).notNull(),
+  stepKey: varchar("stepKey", { length: 100 }).notNull().unique(),
+  label: varchar("label", { length: 200 }).notNull(),
+  triggerLabel: varchar("triggerLabel", { length: 200 }).notNull(),
+  body: text("body").notNull(),
+  variables: text("variables"), // JSON array: ["[Name]", "[Price]"]
+  isEditable: int("isEditable").default(1).notNull(), // 0 = locked (opt-out messages)
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type MessageTemplate = typeof messageTemplates.$inferSelect;
+export type InsertMessageTemplate = typeof messageTemplates.$inferInsert;

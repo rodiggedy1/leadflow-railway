@@ -11,6 +11,7 @@
 
 import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -749,41 +750,27 @@ export default function ReactivationCampaigns() {
           </Card>
         )}
 
-        {/* Message template + preview */}
+        {/* Message Flow — editable SMS sequence */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Message Template &amp; Preview</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" />
+              Message Flow
+            </CardTitle>
+            <CardDescription>
+              The full SMS sequence sent to reactivation contacts. Click <strong>Edit</strong> on any message to update the copy.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Raw template */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5 font-medium">Template</p>
-              <p className="text-sm bg-muted rounded-lg p-3 font-mono leading-relaxed">{campaign.messageTemplate}</p>
-            </div>
-
-            {/* Rendered SMS preview */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5 font-medium">
-                Preview
-                {contacts.length > 0 && (
-                  <span className="ml-1 text-muted-foreground/60">
-                    (using {contacts[0].firstName || contacts[0].name || "first contact"}'s name)
-                  </span>
-                )}
-              </p>
-              <div className="flex justify-end">
-                <div className="max-w-[85%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed shadow-sm">
-                  {(() => {
-                    const sampleName = contacts[0]?.firstName || contacts[0]?.name || "Customer";
-                    return campaign.messageTemplate
-                      .replace(/\[Name\]/gi, sampleName)
-                      .replace(/\[FirstName\]/gi, sampleName)
-                      .replace(/\[FullName\]/gi, contacts[0]?.name || sampleName);
-                  })()}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground/50 text-right mt-1 mr-1">Delivered</p>
-            </div>
+          <CardContent>
+            <MessageFlowPanel
+              flowType="reactivation"
+              sampleVars={{
+                "[Name]": contacts[0]?.firstName || contacts[0]?.name || "Sarah",
+                "[Discount]": "10",
+                "[LastPrice]": "150",
+                "[DiscountedPrice]": "135",
+              }}
+            />
           </CardContent>
         </Card>
 

@@ -586,3 +586,16 @@
 - [x] extractUSDigits() + isValidUSPhone() exported from routers.ts
 - [x] phoneFormat.test.ts: 8 valid + 9 invalid + 5 extractUSDigits tests added (349/349 pass)
 - [x] The exact case from the screenshot (+10770748959) is now covered and rejected
+
+## Message Flow Transparency & Editing — Reactivation + Post-Sale — COMPLETED
+
+- [x] Audit all hardcoded message templates in campaignRouter.ts (reactivation) and reviewRouter.ts (post-sale)
+- [x] Add messageTemplates table to DB: id, flowType, stepKey, label, triggerLabel, body, variables (JSON), isEditable, updatedAt
+- [x] Seed 9 default templates (4 reactivation + 5 review) via messageTemplates.seed procedure (idempotent, auto-seeds on first load)
+- [x] Add messageTemplates.list, update, seed tRPC procedures (adminAgent protected)
+- [x] Build MessageFlowPanel component: vertical timeline with trigger label, SMS bubble preview, collapsible, variable substitution
+- [x] Inline editing: click Edit → textarea with clickable variable hint chips → live preview → Save
+- [x] Opt-out messages locked (isEditable=0) — show Locked badge, no Edit button
+- [x] Wire Reactivation campaign detail page: replaced old template card with MessageFlowPanel
+- [x] Wire Completed Jobs page: added Review Request Message Flow card at bottom
+- [x] 19 new tests in messageTemplateRouter.test.ts (368/368 total pass, 0 TS errors)

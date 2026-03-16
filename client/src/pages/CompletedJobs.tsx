@@ -10,6 +10,7 @@
  */
 import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -39,6 +40,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -463,6 +465,22 @@ export default function CompletedJobs() {
           })}
         </div>
       )}
+
+      {/* Post-Sale Review Message Flow */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Review Request Message Flow
+          </CardTitle>
+          <CardDescription>
+            The full SMS sequence sent to completed job customers. Click <strong>Edit</strong> on any message to update the copy.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MessageFlowPanel flowType="review" />
+        </CardContent>
+      </Card>
     </div>
   );
 }

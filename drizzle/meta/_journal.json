@@ -148,6 +148,13 @@
       "when": 1773649284006,
       "tag": "0020_remarkable_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1773690302139,
+      "tag": "0021_slim_killraven",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminAgentProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
@@ -1037,6 +1038,7 @@ export const appRouter = router({
    */
   campaigns: campaignRouter,
   completedJobs: reviewRouter,
+  messageTemplates: messageTemplateRouter,
 
   simulator: router({
     chat: publicProcedure
