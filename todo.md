@@ -450,3 +450,14 @@
 - [x] Webhook routes reactivation replies to REACTIVATION stage handler via lastPrice/discountPct context
 - [x] markReactivationContactReplied increments campaign repliedCount
 - [x] 275/275 tests pass (7 new reactivation conversation tests + 16 new campaign router tests)
+
+## Reactivation Leads in Admin Dashboard — COMPLETED
+
+- [x] Verify leads.list query includes reactivation sessions (leadSource = "reactivation") — confirmed, no filter exclusion
+- [x] Ensure conversation drawer renders correctly for reactivation leads (all fields conditional, renders cleanly)
+- [x] Add source filter to admin leads table: All / Form / Widget / Reactivation
+- [x] Wire source filter into filteredSessions useMemo (client-side filter, no backend change needed)
+- [x] Show "Reactivation" badge (purple) in source column for reactivation leads
+- [x] Show "Reactivation" badge in conversation drawer header
+- [x] Clear filters button now resets sourceFilter too
+- [x] 275/275 tests pass

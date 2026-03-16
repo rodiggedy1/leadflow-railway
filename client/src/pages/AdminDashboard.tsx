@@ -657,6 +657,8 @@ function ConversationDrawer({
           <div className="flex items-center gap-2">
             {session.leadSource === "widget" ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>
+            ) : session.leadSource === "reactivation" ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Reactivation</span>
             ) : (
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Form</span>
             )}
@@ -1425,6 +1427,7 @@ export default function AdminDashboard() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
 
   // Compute the active date range to send to the backend
@@ -1475,6 +1478,11 @@ export default function AdminDashboard() {
         agentFilter === "all" ||
         (agentFilter === "unassigned" && !s.assignedAgentId) ||
         s.assignedAgentName === agentFilter;
+      const matchesSource =
+        sourceFilter === "all" ||
+        (sourceFilter === "reactivation" && s.leadSource === "reactivation") ||
+        (sourceFilter === "widget" && s.leadSource === "widget") ||
+        (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
       const q = search.toLowerCase();
       const matchesSearch =
         !q ||
@@ -1483,9 +1491,9 @@ export default function AdminDashboard() {
         (s.serviceType ?? "").toLowerCase().includes(q) ||
         (s.address ?? "").toLowerCase().includes(q) ||
         (s.assignedAgentName ?? "").toLowerCase().includes(q);
-      return matchesStage && matchesAgent && matchesSearch;
+      return matchesStage && matchesAgent && matchesSource && matchesSearch;
     });
-  }, [sessions, stageFilter, agentFilter, search]);
+  }, [sessions, stageFilter, agentFilter, sourceFilter, search]);
 
   const unhandledCount = stats?.byStage?.["UNHANDLED"] ?? 0;
 
@@ -1755,9 +1763,20 @@ export default function AdminDashboard() {
               ))}
             </SelectContent>
           </Select>
-          {(stageFilter !== "all" || agentFilter !== "all") && (
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-40 bg-white">
+              <SelectValue placeholder="All sources" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="form">Form</SelectItem>
+              <SelectItem value="widget">Widget</SelectItem>
+              <SelectItem value="reactivation">Reactivation</SelectItem>
+            </SelectContent>
+          </Select>
+          {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all") && (
             <button
-              onClick={() => { setStageFilter("all"); setAgentFilter("all"); }}
+              onClick={() => { setStageFilter("all"); setAgentFilter("all"); setSourceFilter("all"); }}
               className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 self-center"
             >
               <X className="w-3 h-3" /> Clear filters
@@ -1831,6 +1850,8 @@ export default function AdminDashboard() {
                       <TableCell>
                         {session.leadSource === "widget" ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>
+                        ) : session.leadSource === "reactivation" ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Reactivation</span>
                         ) : (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Form</span>
                         )}
