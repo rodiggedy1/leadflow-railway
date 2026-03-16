@@ -609,3 +609,15 @@
 - [x] reviewRouter.ts: review_initial, review_positive, review_negative, review_confirmed all read from DB via getTemplate
 - [x] MessageFlowPanel: amber Reset button (RotateCcw icon) appears only when body !== defaultBody; disappears after reset
 - [x] 368/368 tests pass, 0 TypeScript errors
+
+## Launch27 Auto-Sync (Nightly REST API Connector) — COMPLETED
+
+- [x] Discovered Launch27 has a clean REST API: GET /v1/staff/bookings?from=DATE&to=DATE&options=completed,exclude_forecasted
+- [x] No Puppeteer needed — direct HTTP calls with JWT bearer token from localStorage
+- [x] Built server/launch27.ts: getCompletedBookingsForDate(date) returns {bookings, error}
+- [x] Stored LAUNCH27_BEARER_TOKEN (JWT, expires 2027) + LAUNCH27_TENANT as encrypted secrets
+- [x] Built launch27Router.ts: syncCompletedJobs procedure — fetches, deduplicates by phone+date, inserts new batch + jobs
+- [x] Wired launch27Router into appRouter as launch27 namespace
+- [x] Added Launch27 Sync card to Completed Jobs page: date picker, Sync Now button, last sync result (new/skipped/errors)
+- [x] 3 new tests in launch27.test.ts (371/371 total pass, 0 TS errors)
+- [x] Credentials validated: API returns real bookings for 2026-03-15 (Shirletta Miller etc.)

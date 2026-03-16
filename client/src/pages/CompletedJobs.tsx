@@ -41,6 +41,8 @@ import {
   XCircle,
   AlertCircle,
   MessageSquare,
+  CloudDownload,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -212,6 +214,30 @@ export default function CompletedJobs() {
     },
   });
 
+  // ─── Launch27 sync state ────────────────────────────────────────────────────
+  const [syncDate, setSyncDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+
+  const { data: lastSync, refetch: refetchLastSync } = trpc.launch27.getLastSync.useQuery();
+
+  const syncMutation = trpc.launch27.syncCompletedJobs.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        result.inserted > 0
+          ? `Synced ${result.inserted} new jobs from Launch27 for ${result.date}. ${result.skipped > 0 ? `${result.skipped} skipped (duplicates/invalid).` : ""}`
+          : `No new jobs to sync for ${result.date}. ${result.skipped > 0 ? `${result.skipped} already in system.` : ""}`
+      );
+      refetch();
+      refetchLastSync();
+    },
+    onError: (err) => {
+      toast.error(`Launch27 sync failed: ${err.message}`);
+    },
+  });
+
   const sendNowMutation = trpc.completedJobs.sendPendingNow.useMutation({
     onSuccess: (result) => {
       if (result.sent > 0) {
@@ -305,6 +331,68 @@ export default function CompletedJobs() {
           />
         </div>
       </div>
+
+      {/* Launch27 Auto-Sync Card */}
+      <Card className="mb-6 border-2" style={{ borderColor: "#E8603C20" }}>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: "#FFF0EC" }}
+              >
+                <CloudDownload className="w-4 h-4" style={{ color: "#E8603C" }} />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold text-gray-900">
+                  Launch27 Auto-Sync
+                </CardTitle>
+                <CardDescription className="text-xs mt-0">
+                  {lastSync
+                    ? `Last sync: ${lastSync.filename.replace("launch27-sync-", "")} · ${lastSync.totalCount} jobs imported`
+                    : "Never synced — click Sync to pull yesterday's completed bookings"}
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="date"
+                  value={syncDate}
+                  onChange={(e) => setSyncDate(e.target.value)}
+                  className="text-sm border rounded px-2 py-1 text-gray-700"
+                  style={{ borderColor: "#e5e7eb" }}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={() => syncMutation.mutate({ date: syncDate })}
+                disabled={syncMutation.isPending}
+                className="gap-1.5"
+                style={{ background: "#E8603C" }}
+              >
+                {syncMutation.isPending ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CloudDownload className="w-3.5 h-3.5" />
+                )}
+                {syncMutation.isPending ? "Syncing…" : "Sync from Launch27"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        {syncMutation.data && (
+          <CardContent className="pt-0">
+            <div
+              className="rounded-md px-3 py-2 text-sm"
+              style={{ background: syncMutation.data.inserted > 0 ? "#F0FDF4" : "#F9FAFB", color: syncMutation.data.inserted > 0 ? "#166534" : "#6b7280" }}
+            >
+              {syncMutation.data.message}
+            </div>
+          </CardContent>
+        )}
+      </Card>
 
       {/* Info banner */}
       <div
