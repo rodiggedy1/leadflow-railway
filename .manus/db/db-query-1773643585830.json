@@ -1,0 +1,18 @@
+{
+  "query": "SHOW COLUMNS FROM conversation_sessions WHERE Field = 'leadSource';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SHOW COLUMNS FROM conversation_sessions WHERE Field = 'leadSource';",
+  "rows": [
+    {
+      "Field": "leadSource",
+      "Type": "enum('form','widget')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "form",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nleadSource\tenum('form','widget')\tYES\t\tform\t\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}
