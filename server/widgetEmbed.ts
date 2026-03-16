@@ -407,25 +407,50 @@ function buildWidgetScript(apiBase: string, version: string): string {
     nameInput.addEventListener('blur', function() { nameInput.style.borderColor = '#E5E7EB'; nameInput.style.boxShadow = 'none'; });
     nameInput.addEventListener('input', function() { state.name = nameInput.value; });
 
+    // Phone input wrapper (relative positioning for checkmark overlay)
+    var phoneWrap = el('div', { position: 'relative', width: '100%' });
     var phoneInput = el('input', {
       width: '100%',
       border: '1.5px solid #E5E7EB',
       borderRadius: '10px',
-      padding: '11px 14px',
+      padding: '11px 40px 11px 14px',
       fontSize: '13px',
       outline: 'none',
       color: '#111827',
       background: '#fff',
       boxSizing: 'border-box',
       fontFamily: 'inherit',
-    }, { type: 'tel', placeholder: 'Phone number', required: '', autocomplete: 'tel', id: 'mib-phone', value: escHtml(state.phone) });
+    }, { type: 'tel', placeholder: 'Phone number', required: '', autocomplete: 'tel-national', id: 'mib-phone', value: escHtml(state.phone) });
+    // Green checkmark SVG — shown when exactly 10 digits entered
+    var phoneCheck = el('span', {
+      position: 'absolute',
+      right: '12px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      pointerEvents: 'none',
+      display: 'none',
+      lineHeight: '1',
+    });
+    phoneCheck.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8" fill="#22C55E"/><polyline points="4.5,8.5 7,11 11.5,5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+    function updatePhoneValid() {
+      var digits = state.phone.replace(/\\D/g, '');
+      var valid = digits.length === 10;
+      phoneCheck.style.display = valid ? 'block' : 'none';
+      if (document.activeElement !== phoneInput) {
+        phoneInput.style.borderColor = valid ? '#22C55E' : '#E5E7EB';
+        phoneInput.style.boxShadow = valid ? '0 0 0 3px rgba(34,197,94,0.12)' : 'none';
+      }
+    }
     phoneInput.addEventListener('focus', function() { phoneInput.style.borderColor = CORAL; phoneInput.style.boxShadow = '0 0 0 3px rgba(232,115,90,0.15)'; });
-    phoneInput.addEventListener('blur', function() { phoneInput.style.borderColor = '#E5E7EB'; phoneInput.style.boxShadow = 'none'; });
+    phoneInput.addEventListener('blur', function() { updatePhoneValid(); });
     phoneInput.addEventListener('input', function() {
       var formatted = formatPhone(phoneInput.value);
       state.phone = formatted;
       phoneInput.value = formatted;
+      updatePhoneValid();
     });
+    phoneWrap.appendChild(phoneInput);
+    phoneWrap.appendChild(phoneCheck);
 
     if (state.error) {
       var errEl = el('p', { fontSize: '12px', color: '#EF4444', textAlign: 'center', margin: '0' });
@@ -461,7 +486,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     consentNote.textContent = 'By tapping \u201cText Me Now\u201d you consent to receive SMS messages from Maids in Black about cleaning services, estimates & scheduling. Msg & data rates may apply. Reply STOP to opt out.';
 
     form.appendChild(nameInput);
-    form.appendChild(phoneInput);
+    form.appendChild(phoneWrap);
     form.appendChild(submitBtn);
     form.appendChild(consentNote);
 

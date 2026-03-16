@@ -842,14 +842,36 @@ export default function QuoteForm() {
                 {/* Row 2: Phone + Service Type */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div className="animate-fade-slide-up delay-3">
-                    <input
-                      type="tel"
-                      placeholder="Phone (e.g. 202-555-1234)"
-                      value={form.phone}
-                      onChange={(e) => handleChange("phone", e.target.value)}
-                      className="quote-input"
-                      style={errors.phone ? { borderColor: "#E8603C", boxShadow: "0 0 0 3px rgba(232,96,60,0.15)" } : {}}
-                    />
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        placeholder="Phone (e.g. 202-555-1234)"
+                        value={form.phone}
+                        onChange={(e) => handleChange("phone", e.target.value)}
+                        autoComplete="tel-national"
+                        className="quote-input"
+                        style={{
+                          paddingRight: "36px",
+                          ...(errors.phone
+                            ? { borderColor: "#E8603C", boxShadow: "0 0 0 3px rgba(232,96,60,0.15)" }
+                            : form.phone.replace(/\D/g, "").length === 10
+                            ? { borderColor: "#22C55E", boxShadow: "0 0 0 3px rgba(34,197,94,0.12)" }
+                            : {}),
+                        }}
+                      />
+                      {/* Green checkmark — appears once exactly 10 digits are entered */}
+                      {!errors.phone && form.phone.replace(/\D/g, "").length === 10 && (
+                        <span
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+                          aria-label="Valid phone number"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="8" cy="8" r="8" fill="#22C55E" />
+                            <polyline points="4.5,8.5 7,11 11.5,5.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
                     {errors.phone && (
                       <p className="mt-1 text-xs" style={{ color: "#E8603C", fontFamily: "'DM Sans', sans-serif" }}>
                         {errors.phone}

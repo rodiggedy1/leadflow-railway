@@ -551,3 +551,10 @@
 - [x] Write phoneFormat.test.ts covering 12 autofill formats for both normalizePhone (E.164) and formatPhoneWidget (display)
 - [x] Verify: E.164 with space, E.164 compact, 11-digit with leading 1, raw 10 digits, parentheses, dot-separated, dash-separated, space-separated, E.164+parentheses, country code+dashes, country code+parentheses, leading/trailing whitespace
 - [x] All 28 new tests pass (327/327 total)
+
+## Phone Input UX Improvements — COMPLETED
+
+- [x] Switch autocomplete="tel" to autocomplete="tel-national" in widget (widgetEmbed.ts) and QuoteForm.tsx
+- [x] Add live green checkmark + green border when phone reaches exactly 10 digits in widget
+- [x] Add live green checkmark + green border when phone reaches exactly 10 digits in QuoteForm.tsx
+- [x] 327/327 tests pass, 0 TypeScript errors
