@@ -95,6 +95,20 @@ function buildWidgetScript(apiBase: string, version: string): string {
     return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);
   }
 
+  /**
+   * Returns true only for valid US 10-digit numbers.
+   * Area code (NPA) and exchange (NXX) must both start with 2-9.
+   * Rejects international numbers like +10770748959 (Uganda +256 stripped to 0770748959).
+   */
+  function isValidUSPhone(raw) {
+    var digits = raw.replace(/\\D/g, '');
+    if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
+    if (digits.length !== 10) return false;
+    var npa = digits.charAt(0); // area code first digit
+    var nxx = digits.charAt(3); // exchange first digit
+    return npa >= '2' && nxx >= '2';
+  }
+
   function escHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -464,8 +478,7 @@ function buildWidgetScript(apiBase: string, version: string): string {
     });
     phoneCheck.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8" fill="#22C55E"/><polyline points="4.5,8.5 7,11 11.5,5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
     function updatePhoneValid() {
-      var digits = state.phone.replace(/\\D/g, '');
-      var valid = digits.length === 10;
+      var valid = isValidUSPhone(state.phone);
       if (valid && phoneCheck.style.display === 'none') {
         phoneCheck.style.display = 'block';
         phoneCheck.style.animation = 'none';
@@ -544,9 +557,8 @@ function buildWidgetScript(apiBase: string, version: string): string {
     // Consent is implicit — by submitting the form the visitor agrees to the
     // fine-print text shown below the button. No checkbox guard needed.
 
-    var phoneDigits = state.phone.replace(/\\D/g, '');
-    if (phoneDigits.length < 10) {
-      state.error = 'Please enter a valid 10-digit phone number.';
+    if (!isValidUSPhone(state.phone)) {
+      state.error = 'Please enter a valid US phone number (10 digits, US area code).';
       renderBody();
       return;
     }

@@ -577,3 +577,12 @@
 - [x] When isFormReady: button turns green (#22C55E gradient) with 2s pulse animation
 - [x] When not ready: submit button stays coral as before
 - [x] 327/327 tests pass, 0 TypeScript errors
+
+## Phone Validation Hardening — COMPLETED
+
+- [x] Widget: isValidUSPhone() validates NPA (area code first digit 2-9) and NXX (exchange first digit 2-9) — blocks submit with inline error "Please enter a valid US phone number"
+- [x] Widget: updatePhoneValid() uses isValidUSPhone so green checkmark only appears for valid US numbers
+- [x] Server (routers.ts submitWidgetLead): TRPCError BAD_REQUEST thrown if isValidUSPhone fails — server-side safety net
+- [x] extractUSDigits() + isValidUSPhone() exported from routers.ts
+- [x] phoneFormat.test.ts: 8 valid + 9 invalid + 5 extractUSDigits tests added (349/349 pass)
+- [x] The exact case from the screenshot (+10770748959) is now covered and rejected

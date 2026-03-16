@@ -2,6 +2,7 @@ import { COOKIE_NAME, AGENT_COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminAgentProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
@@ -1015,6 +1016,13 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Server-side US phone validation — rejects international numbers
+        if (!isValidUSPhone(input.phone)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Please enter a valid US phone number (10 digits, US area code).",
+          });
+        }
         processWidgetLeadInBackground(input).catch(err => {
           console.error("[submitWidgetLead] Background processing error:", err);
         });
@@ -1284,20 +1292,53 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Returns the 10-digit US local number from a raw phone string, or null if it
+ * cannot be resolved to a valid US number.
+ *
+ * Valid US numbers:
+ *   - Area code (NPA): 200-999 (first digit 2-9)
+ *   - Exchange  (NXX): 200-999 (first digit 2-9)
+ *
+ * Rejects:
+ *   - Non-US country codes (e.g. +44, +256)
+ *   - 11-digit strings starting with anything other than 1
+ *   - Numbers where NPA or NXX start with 0 or 1
+ */
+export function extractUSDigits(phone: string): string | null {
+  const digits = phone.replace(/[^\d]/g, "");
+  let local: string;
+  if (digits.length === 11 && digits.startsWith("1")) {
+    local = digits.slice(1);
+  } else if (digits.length === 10) {
+    local = digits;
+  } else {
+    return null; // wrong length or non-US country code
+  }
+  const npa = local[0]; // area code first digit
+  const nxx = local[3]; // exchange first digit
+  if (!npa || !nxx) return null;
+  if (npa < "2" || nxx < "2") return null; // 0xx or 1xx are invalid
+  return local;
+}
+
+/**
+ * Returns true if the raw phone string resolves to a valid 10-digit US number.
+ */
+export function isValidUSPhone(phone: string): boolean {
+  return extractUSDigits(phone) !== null;
+}
+
+/**
  * Normalizes a phone number to E.164 format (+1XXXXXXXXXX).
  * Handles inputs like: "7259009272", "725-900-9272", "(725) 900-9272", "+17259009272"
+ * Returns null for non-US or invalid numbers.
  */
 export function normalizePhone(phone: string): string {
+  const local = extractUSDigits(phone);
+  if (local) return `+1${local}`;
+  // Fallback for legacy callers — pass through as-is (will be caught by server validation)
   const digits = phone.replace(/[^\d]/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `+${digits}`;
-  }
-  if (digits.length === 10) {
-    return `+1${digits}`;
-  }
-  if (phone.startsWith("+")) {
-    return phone.replace(/[^\d+]/g, "");
-  }
+  if (phone.startsWith("+")) return phone.replace(/[^\d+]/g, "");
   return `+${digits}`;
 }
 
