@@ -522,3 +522,20 @@
 - [x] WidgetHealthBadge component in admin dashboard top bar: green pill (Wifi icon + version) when OK, red pill (WifiOff + "Widget DOWN") on failure
 - [x] Auto-refreshes every 5 minutes; click to manually re-check; tooltip shows full error message
 - [x] 275/275 tests pass, 0 TypeScript errors
+
+## Post-Cleaning Review Request Flow — COMPLETED
+
+- [x] Add REVIEW_REQUESTED and REVIEW_DONE stages to conversationStages enum in schema.ts
+- [x] Add completedJobs table: id, batchId, phone, name, firstName, serviceDate, status (PENDING/SENT/REPLIED_POSITIVE/REPLIED_NEGATIVE/REVIEW_CONFIRMED/OPTED_OUT), smsSentAt, createdAt
+- [x] Add completedJobBatches table: id, filename, uploadedAt, totalCount, sentCount, positiveCount, negativeCount, reviewConfirmedCount
+- [x] Run pnpm db:push to sync schema
+- [x] Add parseCompletedJobsCsv() helper (same CSV format as bookings CSV)
+- [x] Add completedJobs.upload tRPC procedure (parse CSV, insert batch + jobs, schedule SMS for 24h later)
+- [x] Add completedJobs.sendPendingNow procedure (finds PENDING jobs where 24h has passed, sends SMS, marks SENT)
+- [x] Add handleReviewReplyForJob() in reviewRouter.ts (positive → Google link + 10% off, negative → flag + manual, review confirmed → create reactivation contact)
+- [x] Add completedJobs.listBatches + getBatchContacts tRPC procedures
+- [x] Wire webhook: when session stage = REVIEW_REQUESTED or REVIEW_DONE, route to handleReviewReplyForJob()
+- [x] Build Completed Jobs admin page (/admin/completed-jobs): upload CSV, batch history with sent/positive/negative/review counts, per-contact detail view
+- [x] Add Completed Jobs nav link to Admin Dashboard header
+- [x] Wire /admin/completed-jobs route in App.tsx
+- [x] Write vitest tests for classifyReviewReply and parseCompletedJobsCsv (299/299 tests pass)

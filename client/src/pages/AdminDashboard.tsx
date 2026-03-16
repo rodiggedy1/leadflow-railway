@@ -1641,6 +1641,14 @@ export default function AdminDashboard() {
             <Send className="w-3.5 h-3.5" />
             Campaigns
           </a>
+          <a
+            href="/admin/completed-jobs"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+            style={{ borderColor: "transparent", color: "#6b7280" }}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Completed Jobs
+          </a>
         </div>
       </header>
 

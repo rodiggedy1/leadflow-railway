@@ -31,6 +31,7 @@ import type { ConversationStage } from "../drizzle/schema";
 import { normalizePhone } from "./routers";
 import { getNextAvailableSlots } from "./availability";
 import { markReactivationContactReplied } from "./campaignRouter";
+import { handleReviewReplyForJob } from "./reviewRouter";
 
 export function registerWebhookRoutes(app: Express) {
   app.post("/api/webhooks/openphone", async (req, res) => {
@@ -166,6 +167,27 @@ export function registerWebhookRoutes(app: Express) {
         lastPrice: session.reactivationLastPrice ?? undefined,
         discountPct: session.reactivationDiscountPct ?? undefined,
       };
+
+      // ── REVIEW_REQUESTED / REVIEW_DONE: Post-cleaning review flow ───────────────
+      if (session.stage === "REVIEW_REQUESTED" || session.stage === "REVIEW_DONE") {
+        const reviewResult = await handleReviewReplyForJob(session.id, fromPhone, inboundText);
+        console.log(`[Webhook] Review stage: ${session.stage} → ${reviewResult.newStage}. Reply: "${reviewResult.responseText}"`);
+        history.push({ role: "assistant", content: reviewResult.responseText, ts: Date.now() });
+        if (history.length > 20) history = history.slice(-20);
+        await db
+          .update(conversationSessions)
+          .set({
+            stage: reviewResult.newStage,
+            aiMode: reviewResult.switchToManual ? 0 : session.aiMode,
+            messageHistory: JSON.stringify(history),
+          })
+          .where(eq(conversationSessions.id, session.id));
+        const reviewSmsResult = await sendSms({ to: fromPhone, content: reviewResult.responseText });
+        if (!reviewSmsResult.success) {
+          console.error(`[Webhook] Failed to send review reply to ${fromPhone}:`, reviewSmsResult.error);
+        }
+        return;
+      }
 
       // Process the reply through the AI engine
       const result = await processLeadReply(inboundText, context);

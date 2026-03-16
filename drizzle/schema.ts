@@ -70,6 +70,12 @@ export const conversationStages = [
   "UNHANDLED",
   "BOOKED",
   "NOT_INTERESTED",
+  /**
+   * REVIEW_REQUESTED → Feedback SMS sent 24h after cleaning, waiting for reply
+   * REVIEW_DONE      → Review flow complete (positive or negative handled)
+   */
+  "REVIEW_REQUESTED",
+  "REVIEW_DONE",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -322,3 +328,71 @@ export const reactivationContacts = mysqlTable("reactivation_contacts", {
 
 export type ReactivationContact = typeof reactivationContacts.$inferSelect;
 export type InsertReactivationContact = typeof reactivationContacts.$inferInsert;
+
+/**
+ * completedJobBatches — one row per CSV upload of completed jobs.
+ * Tracks aggregate stats for each day's batch.
+ */
+export const completedJobBatches = mysqlTable("completed_job_batches", {
+  id: int("id").autoincrement().primaryKey(),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  /** Date the jobs were completed (from CSV or upload date) */
+  jobDate: varchar("jobDate", { length: 20 }), // YYYY-MM-DD
+  totalCount: int("totalCount").default(0).notNull(),
+  sentCount: int("sentCount").default(0).notNull(),
+  positiveCount: int("positiveCount").default(0).notNull(),
+  negativeCount: int("negativeCount").default(0).notNull(),
+  reviewConfirmedCount: int("reviewConfirmedCount").default(0).notNull(),
+  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+});
+
+export type CompletedJobBatch = typeof completedJobBatches.$inferSelect;
+export type InsertCompletedJobBatch = typeof completedJobBatches.$inferInsert;
+
+/**
+ * Completed job contact statuses:
+ * PENDING           → Uploaded, SMS not yet sent (waiting 24h)
+ * SENT              → Feedback SMS sent
+ * REPLIED_POSITIVE  → Customer replied positively (Google link + 10% off sent)
+ * REPLIED_NEGATIVE  → Customer replied negatively (flagged, manual mode)
+ * REVIEW_CONFIRMED  → Customer confirmed they left a review (reactivation contact created)
+ * OPTED_OUT         → Customer replied STOP
+ */
+export const completedJobStatuses = [
+  "PENDING",
+  "SENT",
+  "REPLIED_POSITIVE",
+  "REPLIED_NEGATIVE",
+  "REVIEW_CONFIRMED",
+  "OPTED_OUT",
+] as const;
+
+export type CompletedJobStatus = (typeof completedJobStatuses)[number];
+
+/**
+ * completedJobs — one row per customer per batch.
+ * Populated when a completed jobs CSV is uploaded.
+ */
+export const completedJobs = mysqlTable("completed_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  batchId: int("batchId").notNull(),
+  /** E.164 normalized phone number */
+  phone: varchar("phone", { length: 20 }).notNull(),
+  name: varchar("name", { length: 255 }),
+  firstName: varchar("firstName", { length: 100 }),
+  /** Service type from CSV */
+  serviceType: varchar("serviceType", { length: 100 }),
+  /** Date of the completed job (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }),
+  status: mysqlEnum("status", completedJobStatuses as unknown as [string, ...string[]]).default("PENDING").notNull(),
+  /** When the feedback SMS was sent */
+  smsSentAt: timestamp("smsSentAt"),
+  /** When the customer replied */
+  repliedAt: timestamp("repliedAt"),
+  /** Link to the conversation session created for the review flow */
+  sessionId: int("sessionId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CompletedJob = typeof completedJobs.$inferSelect;
+export type InsertCompletedJob = typeof completedJobs.$inferInsert;

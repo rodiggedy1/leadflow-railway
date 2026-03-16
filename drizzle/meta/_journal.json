@@ -141,6 +141,13 @@
       "when": 1773640999988,
       "tag": "0019_simple_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1773649284006,
+      "tag": "0020_remarkable_jackpot",
+      "breakpoints": true
     }
   ]
 }
