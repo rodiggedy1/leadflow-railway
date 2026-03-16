@@ -23,9 +23,10 @@ import { EXTRAS_LIST } from "@shared/extras";
 
 type Message = { role: "assistant" | "user"; content: string; ts: number };
 
-type Stage = "QUOTE_SENT" | "AVAILABILITY" | "SLOT_CHOICE" | "CONFIRMATION" | "ADDRESS" | "DONE" | "CALL_SCHEDULED";
+type Stage = "WIDGET_SIZING" | "QUOTE_SENT" | "AVAILABILITY" | "SLOT_CHOICE" | "CONFIRMATION" | "ADDRESS" | "DONE" | "CALL_SCHEDULED";
 
 const STAGE_LABELS: Record<Stage, string> = {
+  WIDGET_SIZING: "Sizing",
   QUOTE_SENT: "Quote Sent",
   AVAILABILITY: "Availability",
   SLOT_CHOICE: "Slot Choice",
@@ -36,6 +37,7 @@ const STAGE_LABELS: Record<Stage, string> = {
 };
 
 const STAGE_COLORS: Record<Stage, string> = {
+  WIDGET_SIZING: "bg-violet-100 text-violet-700",
   QUOTE_SENT: "bg-blue-100 text-blue-700",
   AVAILABILITY: "bg-yellow-100 text-yellow-700",
   SLOT_CHOICE: "bg-orange-100 text-orange-700",

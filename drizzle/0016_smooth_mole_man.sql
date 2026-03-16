@@ -1,1 +1,0 @@
-ALTER TABLE `conversation_sessions` ADD `leadSource` enum('form','widget') DEFAULT 'form';

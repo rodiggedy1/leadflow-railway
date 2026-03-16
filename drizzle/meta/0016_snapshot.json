@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "15ce99f8-edf9-4d10-9e8d-bc4b109c6875",
+  "id": "ed87c012-6511-4d9e-82e7-e727753b4598",
   "prevId": "2b9358f7-5cbb-4891-b200-80459af25385",
   "tables": {
     "agents": {
@@ -115,7 +115,7 @@
         },
         "stage": {
           "name": "stage",
-          "type": "enum('QUOTE_SENT','AVAILABILITY','SLOT_CHOICE','TIME_PREF','ADDRESS','CONFIRMATION','CALL_SCHEDULED','DONE','UNHANDLED','BOOKED','NOT_INTERESTED')",
+          "type": "enum('WIDGET_SIZING','QUOTE_SENT','AVAILABILITY','SLOT_CHOICE','TIME_PREF','ADDRESS','CONFIRMATION','CALL_SCHEDULED','DONE','UNHANDLED','BOOKED','NOT_INTERESTED')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -277,14 +277,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "leadSource": {
-          "name": "leadSource",
-          "type": "enum('form','widget')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'form'"
         },
         "utmSource": {
           "name": "utmSource",

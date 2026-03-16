@@ -88,7 +88,6 @@ type Session = {
   bookedAmount: number | null;
   internalNotes: string | null;
   aiMode: number;
-  leadSource: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -105,6 +104,7 @@ const OUTCOME_OPTIONS: { value: CallOutcome; label: string; icon: React.ReactNod
 ];
 
 const STAGE_LABELS: Record<string, string> = {
+  WIDGET_SIZING:  "Sizing",
   QUOTE_SENT:     "Quote Sent",
   AVAILABILITY:   "Availability",
   SLOT_CHOICE:    "Slot Choice",
@@ -117,6 +117,7 @@ const STAGE_LABELS: Record<string, string> = {
   NOT_INTERESTED: "Not Interested",
 };
 const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  WIDGET_SIZING:  { bg: "#ede9fe", text: "#7c3aed", border: "#ddd6fe" },
   QUOTE_SENT:     { bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe" },
   AVAILABILITY:   { bg: "#fef3c7", text: "#92400e", border: "#fde68a" },
   SLOT_CHOICE:    { bg: "#ffedd5", text: "#9a3412", border: "#fed7aa" },
@@ -860,27 +861,7 @@ function LeadCard({
                 )}
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-                {/* Source badge */}
-                {session.leadSource === "widget" ? (
-                  <span
-                    className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                    style={{ background: "#FFF0EB", color: "#E8603C", border: "1px solid #FECDBC" }}
-                  >
-                    💬 Widget
-                  </span>
-                ) : (
-                  <span
-                    className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                    style={{ background: "#F0F4FF", color: "#4F6EF7", border: "1px solid #C7D4FD" }}
-                  >
-                    📋 Form
-                  </span>
-                )}
-                {session.serviceType ? (
-                  <span>{session.serviceType}{session.bedrooms ? ` · ${session.bedrooms}bd/${session.bathrooms}ba` : ""}</span>
-                ) : session.leadSource === "widget" ? (
-                  <span className="italic text-gray-400">Service via SMS</span>
-                ) : null}
+                {session.serviceType && <span>{session.serviceType}</span>}
                 {session.quotedPrice && (
                   <span className="font-medium text-gray-700">${computeTotalQuote(session.quotedPrice, session.extras)}</span>
                 )}

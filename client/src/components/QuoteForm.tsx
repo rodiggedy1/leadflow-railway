@@ -571,30 +571,15 @@ export default function QuoteForm() {
     return () => document.removeEventListener("mouseleave", handleMouseLeave);
   }, [submitted]);
 
-  // Track this page visit — one unique visitor per browser per calendar day.
-  // Uses localStorage (not sessionStorage) so the key persists across tabs and
-  // browser restarts. The key is date-scoped so the same visitor is counted
-  // once per day, which matches standard analytics conventions.
+  // Track this page visit once per browser session
   const trackPageView = trpc.leads.trackPageView.useMutation();
   useEffect(() => {
-    // Build a date-scoped key: _lf_vid_2026-03-15
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const SK_KEY = `_lf_vid_${today}`;
-
-    // If we already tracked this visitor today, skip — do not fire the mutation
-    if (localStorage.getItem(SK_KEY)) return;
-
-    // Generate a stable visitor ID for today and persist it
-    const sessionKey = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem(SK_KEY, sessionKey);
-
-    // Clean up keys older than 7 days to avoid localStorage bloat
-    try {
-      Object.keys(localStorage)
-        .filter(k => k.startsWith("_lf_vid_") && k < `_lf_vid_${today}`)
-        .forEach(k => localStorage.removeItem(k));
-    } catch { /* ignore */ }
-
+    const SK_KEY = "_lf_sk";
+    let sessionKey = sessionStorage.getItem(SK_KEY);
+    if (!sessionKey) {
+      sessionKey = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      sessionStorage.setItem(SK_KEY, sessionKey);
+    }
     const sk = sessionKey;
     const utms = utmsRef.current;
 

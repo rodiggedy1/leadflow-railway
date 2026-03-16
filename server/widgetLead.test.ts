@@ -2,9 +2,9 @@
  * Tests for the widget lead flow:
  * - Input validation (name + phone required)
  * - Phone normalisation
- * - Welcome SMS message template
+ * - First SMS message template (sizing question)
  * - Admin alert message template
- * - Session creation shape
+ * - Session creation shape (WIDGET_SIZING stage)
  */
 import { describe, it, expect } from "vitest";
 
@@ -18,9 +18,13 @@ function normalizePhone(phone: string): string {
   return `+${digits}`;
 }
 
-function buildWelcomeMsg(name: string): string {
+/**
+ * Mirrors the updated first SMS sent to widget leads.
+ * Asks for bedrooms/bathrooms upfront to enable instant pricing in the next exchange.
+ */
+function buildSizingMsg(name: string): string {
   const firstName = name.split(" ")[0];
-  return `Hey ${firstName}! 👋 Thank you for checking out Maids in Black. How can we help you with your home today?`;
+  return `Hi ${firstName}! 👋 Thanks for reaching out to Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
 }
 
 function buildAdminAlert(name: string, phone: string, utmSource?: string): string {
@@ -44,24 +48,38 @@ describe("widget lead — phone normalisation", () => {
   });
 });
 
-describe("widget lead — welcome SMS", () => {
+describe("widget lead — first SMS (sizing question)", () => {
   it("uses first name only", () => {
-    const msg = buildWelcomeMsg("Rohan Gilkes");
-    expect(msg).toContain("Hey Rohan!");
+    const msg = buildSizingMsg("Rohan Gilkes");
+    expect(msg).toContain("Hi Rohan!");
     expect(msg).not.toContain("Gilkes");
   });
 
   it("includes brand name", () => {
-    expect(buildWelcomeMsg("Sarah")).toContain("Maids in Black");
+    expect(buildSizingMsg("Sarah")).toContain("Maids in Black");
   });
 
-  it("includes open-ended question", () => {
-    expect(buildWelcomeMsg("Sarah")).toContain("How can we help");
+  it("asks for bedrooms and bathrooms", () => {
+    const msg = buildSizingMsg("Sarah");
+    expect(msg).toContain("bedrooms");
+    expect(msg).toContain("bathrooms");
+  });
+
+  it("includes example format hint", () => {
+    const msg = buildSizingMsg("Sarah");
+    expect(msg).toContain("e.g.");
+    expect(msg).toContain("bed");
+    expect(msg).toContain("bath");
   });
 
   it("handles single-word name", () => {
-    const msg = buildWelcomeMsg("Madison");
-    expect(msg).toContain("Hey Madison!");
+    const msg = buildSizingMsg("Madison");
+    expect(msg).toContain("Hi Madison!");
+  });
+
+  it("promises an instant price", () => {
+    const msg = buildSizingMsg("Alex");
+    expect(msg.toLowerCase()).toContain("instant price");
   });
 });
 
@@ -89,20 +107,22 @@ describe("widget lead — admin alert", () => {
 });
 
 describe("widget lead — session shape", () => {
-  it("creates session with QUOTE_SENT stage", () => {
+  it("creates session with WIDGET_SIZING stage (not QUOTE_SENT)", () => {
     const session = {
       leadName: "Rohan Gilkes",
       leadPhone: normalizePhone("3029816191"),
-      stage: "QUOTE_SENT" as const,
+      stage: "WIDGET_SIZING" as const,
       quotedPrice: null,
       serviceType: null,
       bedrooms: null,
       bathrooms: null,
       extras: null,
     };
-    expect(session.stage).toBe("QUOTE_SENT");
+    expect(session.stage).toBe("WIDGET_SIZING");
     expect(session.quotedPrice).toBeNull();
     expect(session.serviceType).toBeNull();
+    expect(session.bedrooms).toBeNull();
+    expect(session.bathrooms).toBeNull();
   });
 
   it("stores normalised phone in session", () => {
@@ -110,15 +130,17 @@ describe("widget lead — session shape", () => {
     expect(phone).toBe("+13029816191");
   });
 
-  it("initial message history contains welcome message", () => {
-    const welcomeMsg = buildWelcomeMsg("Rohan");
+  it("initial message history contains sizing question", () => {
+    const sizingMsg = buildSizingMsg("Rohan");
     const history = JSON.stringify([
-      { role: "assistant", content: welcomeMsg, ts: Date.now() },
+      { role: "assistant", content: sizingMsg, ts: Date.now() },
     ]);
     const parsed = JSON.parse(history);
     expect(parsed).toHaveLength(1);
     expect(parsed[0].role).toBe("assistant");
-    expect(parsed[0].content).toContain("Hey Rohan!");
+    expect(parsed[0].content).toContain("Hi Rohan!");
+    expect(parsed[0].content).toContain("bedrooms");
+    expect(parsed[0].content).toContain("bathrooms");
   });
 });
 

@@ -57,6 +57,7 @@ export type InsertQuoteLead = typeof quoteLeads.$inferInsert;
  * NOT_INTERESTED → Lead declined or is not a fit
  */
 export const conversationStages = [
+  "WIDGET_SIZING",
   "QUOTE_SENT",
   "AVAILABILITY",
   "SLOT_CHOICE",
@@ -121,14 +122,6 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * Admin can edit this after marking a lead as BOOKED.
    */
   bookedAmount: int("bookedAmount"),
-
-  // ── Lead source ────────────────────────────────────────────────────────────
-  /**
-   * How this lead was created:
-   * "form"   → submitted via the quote form on quote.maidinblack.com
-   * "widget" → submitted via the SMS chat widget on maidsinblack.com
-   */
-  leadSource: mysqlEnum("leadSource", ["form", "widget"]).default("form"),
 
   // ── UTM Attribution fields ──────────────────────────────────────────────────
   /** Traffic source (e.g. "google", "facebook", "instagram") */

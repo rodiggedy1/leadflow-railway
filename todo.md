@@ -394,52 +394,18 @@
 - [x] Update summary table: Visitors column, Leads column, Conversion % column, Totals row
 - [x] Update vitest tests for new merged aggregation logic — 195/195 tests pass
 
-## SMS Chat Widget (LeadTruffle-style) — IN PROGRESS
+## Widget Flow: Sizing Question First — COMPLETED
 
-- [x] Add `quotes.submitWidgetLead` tRPC procedure (name + phone only, creates conversation_sessions row, sends admin SMS + lead welcome SMS)
-- [x] Build floating `SmsWidget` component: coral header, name/phone fields, SMS consent checkbox, Send button
-- [x] Auto-open after 10 seconds on page; floating button in bottom-right corner to open/close manually
-- [x] Success state: confirmation bubble "Thank you [First Name]! Check your phone..."
-- [x] Widget hands off to existing AI conversation engine (same flow as quote form leads)
-- [x] Add widget to Home.tsx (quote form page) and make it embeddable
-- [x] Write vitest tests for submitWidgetLead procedure — 213/213 tests pass
-
-## Widget Lead Pricing Fix
-
-- [x] Fix QUOTE_SENT stage handler: detect pricing questions, extract bedrooms/bathrooms from message, reply with actual price before moving to availability
-- [x] Update AI service to handle widget leads with no prior service details
-- [x] Write vitest tests for pricing extraction logic — 250/250 tests pass
-
-## SMS Widget Embed (for maidsinblack.com)
-
-- [x] Remove SmsWidget import and usage from Home.tsx (quote form page)
-- [x] Create GET /widget.js endpoint on the server that serves a self-contained JS snippet
-- [x] The snippet renders the full widget UI, auto-opens after 10s, posts to /api/trpc submitWidgetLead
-- [x] Deliver one-line embed code to user
-
-## Widget Auto-open & Consent Fix
-- [x] Pre-check consent checkbox by default
-- [x] Fix auto-open timer to 15 seconds — now only skips if user explicitly closed the widget this session (mib_closed flag)
-
-## Widget Exit-Intent & Service Info Writeback
-- [x] Add exit-intent trigger: open widget when mouse moves toward top of browser
-- [x] Update conversation engine: write serviceType, bedrooms, bathrooms, quotedPrice back to session when AI collects them from widget lead
-
-## Widget leadSource Bug Fix
-- [x] Fix: widget leads showing "Form" badge — leadSource not being saved as 'widget' in DB
-- [x] Backfill existing widget leads (rohan x2) to leadSource='widget'
-
-## Visitor Tracking Fix
-- [x] Audit visitor tracking — find why visitor counts are inflated
-- [x] Fix deduplication: use persistent localStorage visitor ID (not sessionStorage) so each real browser is counted once per day
-- [x] Clean up inflated page_views rows in DB
-
-## Daily Visitor Trend Chart
-- [x] Backend: leads.visitorTrend procedure — unique visitors + new leads per day for last 14 days
-- [x] Frontend: bar/line chart in admin dashboard using Recharts
-- [x] Write vitest tests for the trend data logic
-
-## Widget Embed Bug Fixes
-- [x] Fix: consent checkbox not pre-checked in widget embed script
-- [x] Fix: 15-second auto-open timer not firing in widget embed script
-- [x] Fix: exit-intent mouse-leave trigger not working in widget embed script
+- [x] Add WIDGET_SIZING stage to conversationStages enum in schema.ts
+- [x] Run pnpm db:push to migrate DB
+- [x] Add extractRoomInfo() and isPricingQuestion() helpers to conversationEngine.ts
+- [x] Add handleWidgetSizingReply() to conversationEngine.ts (extracts rooms, calculates price, advances to AVAILABILITY)
+- [x] Fix lookupPrice() to use real Maids in Black pricing table (mirrors estimatePrice in openphone.ts)
+- [x] Add WIDGET_SIZING case to processLeadReply() in conversationEngine.ts
+- [x] Add quotes.submitWidgetLead tRPC procedure to routers.ts (name + phone only)
+- [x] Add processWidgetLeadInBackground() function: sends sizing question SMS, creates WIDGET_SIZING session
+- [x] Add WIDGET_SIZING to AdminDashboard.tsx stage config and dropdown
+- [x] Add WIDGET_SIZING to AgentDashboard.tsx stage labels and colors
+- [x] Add WIDGET_SIZING to SmsSimulator.tsx stage type and labels
+- [x] Add WIDGET_SIZING to simulator.chat stage enum in routers.ts
+- [x] 252/252 tests pass

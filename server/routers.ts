@@ -159,13 +159,11 @@ export const appRouter = router({
           .where(conditions)
           .groupBy(conversationSessions.utmSource);
 
-        // Visitor counts per source (from page_views table).
-        // Uses COUNT(DISTINCT sessionKey) so duplicate rows from old
-        // sessionStorage-based keys are collapsed into unique visitor counts.
+        // Visitor counts per source (from page_views table)
         const visitorRows = await db
           .select({
             utmSource: pageViews.utmSource,
-            count: sql<number>`count(distinct \`sessionKey\`)`,
+            count: sql<number>`count(*)`,
           })
           .from(pageViews)
           .where(
@@ -242,12 +240,9 @@ export const appRouter = router({
 
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        // Visitor count from page_views table.
-        // Uses COUNT(DISTINCT sessionKey) as a server-side safety net so that
-        // any duplicate rows (e.g. from old sessionStorage-based keys) are
-        // automatically collapsed into unique visitor counts.
+        // Visitor count from page_views table
         const [visitorRow] = await db
-          .select({ count: sql<number>`count(distinct \`sessionKey\`)` })
+          .select({ count: sql<number>`count(*)` })
           .from(pageViews)
           .where(
             input?.dateFrom || input?.dateTo
@@ -278,76 +273,13 @@ export const appRouter = router({
       }),
 
     /**
-     * leads.visitorTrend — returns unique visitors + new leads per calendar day
-     * for the last N days (default 14). Used to render the trend chart in the
-     * admin dashboard. Days with zero activity are filled in so the chart
-     * always shows a complete continuous range.
-     */
-    visitorTrend: adminAgentProcedure
-      .input(z.object({
-        days: z.number().int().min(7).max(90).default(14),
-      }).optional())
-      .query(async ({ input }) => {
-        const db = await getDb();
-        if (!db) return [];
-
-        const numDays = input?.days ?? 14;
-
-        // Build the date range: today back to numDays-1 days ago (all in UTC)
-        const today = new Date();
-        today.setUTCHours(0, 0, 0, 0);
-        const startDate = new Date(today);
-        startDate.setUTCDate(startDate.getUTCDate() - (numDays - 1));
-
-        // Unique visitors per day from page_views
-        const visitorRows = await db
-          .select({
-            day: sql<string>`DATE(createdAt)`,
-            visitors: sql<number>`count(distinct \`sessionKey\`)`,
-          })
-          .from(pageViews)
-          .where(gte(pageViews.createdAt, startDate))
-          .groupBy(sql`DATE(createdAt)`);
-
-        // New leads per day from conversation_sessions
-        const leadRows = await db
-          .select({
-            day: sql<string>`DATE(createdAt)`,
-            leads: sql<number>`count(*)`,
-          })
-          .from(conversationSessions)
-          .where(gte(conversationSessions.createdAt, startDate))
-          .groupBy(sql`DATE(createdAt)`);
-
-        // Build lookup maps
-        const visitorMap = new Map<string, number>();
-        for (const r of visitorRows) visitorMap.set(r.day, Number(r.visitors));
-        const leadMap = new Map<string, number>();
-        for (const r of leadRows) leadMap.set(r.day, Number(r.leads));
-
-        // Fill every day in the range (zero-fill missing days)
-        const result: { date: string; visitors: number; leads: number }[] = [];
-        for (let i = 0; i < numDays; i++) {
-          const d = new Date(startDate);
-          d.setUTCDate(d.getUTCDate() + i);
-          const dateStr = d.toISOString().slice(0, 10); // YYYY-MM-DD
-          result.push({
-            date: dateStr,
-            visitors: visitorMap.get(dateStr) ?? 0,
-            leads: leadMap.get(dateStr) ?? 0,
-          });
-        }
-
-        return result;
-      }),
-
-    /**
      * leads.adminUpdateStage — admin overrides the stage of any lead.
      */
     adminUpdateStage: adminAgentProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
         stage: z.enum([
+          "WIDGET_SIZING",
           "QUOTE_SENT",
           "AVAILABILITY",
           "SLOT_CHOICE",
@@ -1062,20 +994,20 @@ export const appRouter = router({
     submit: publicProcedure
       .input(quoteFormSchema)
       .mutation(async ({ input }) => {
-        // ── 1. Calculate price synchronously (instant, no network call) ────
+        // ── 1. Calculate price synchronously (instant, no network call) ────────
         const price = estimatePrice({
           bedrooms: input.bedrooms,
           bathrooms: input.bathrooms,
           serviceType: input.serviceType,
         });
 
-        // ── 2. Fire-and-forget: AI generation + SMS + DB in background ─────
+        // ── 2. Fire-and-forget: AI generation + SMS + DB in background ─────────
         // We do NOT await this — the form gets an instant response
         processQuoteInBackground(input, price).catch(err => {
           console.error("[submitQuote] Background processing error:", err);
         });
 
-        // ── 3. Return immediately ─────────────────────────────────────────────────────────
+        // ── 3. Return immediately ──────────────────────────────────────────────
         return {
           success: true,
           smsSent: true, // optimistic — background will handle actual sending
@@ -1084,16 +1016,16 @@ export const appRouter = router({
       }),
 
     /**
-     * quotes.submitWidgetLead — floating SMS chat widget entry point.
-     * Only requires name + phone. Creates a lead in QUOTE_SENT stage,
-     * texts the admin alert and sends the lead a friendly welcome SMS.
-     * The existing AI engine handles all follow-up replies via webhook.
+     * quotes.submitWidgetLead — called by the floating chat widget on maidsinblack.com.
+     * Accepts only name + phone (no service/room info yet).
+     * Sends a sizing question SMS and creates a WIDGET_SIZING session so the
+     * conversation engine can extract room counts on the next reply and send a quote.
      */
     submitWidgetLead: publicProcedure
       .input(
         z.object({
-          name: z.string().min(1, "Name is required").max(255),
-          phone: z.string().min(7, "Phone is required").max(30),
+          name: z.string().min(1).max(100),
+          phone: z.string().min(10).max(20),
           utmSource: z.string().max(100).optional(),
           utmMedium: z.string().max(100).optional(),
           utmCampaign: z.string().max(255).optional(),
@@ -1102,9 +1034,8 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        // Fire-and-forget — return immediately so the widget feels instant
         processWidgetLeadInBackground(input).catch(err => {
-          console.error("[widgetLead] Background processing error:", err);
+          console.error("[submitWidgetLead] Background processing error:", err);
         });
         return { success: true };
       }),
@@ -1133,7 +1064,7 @@ export const appRouter = router({
           bedrooms: z.string().default("2"),
           bathrooms: z.string().default("1"),
           extras: z.array(z.string()).default([]),
-          stage: z.enum(["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "CONFIRMATION", "ADDRESS", "DONE", "CALL_SCHEDULED"]).default("AVAILABILITY"),
+          stage: z.enum(["WIDGET_SIZING", "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "CONFIRMATION", "ADDRESS", "DONE", "CALL_SCHEDULED"]).default("AVAILABILITY"),
           selectedSlot: z.string().nullable().default(null),
         })
       )
@@ -1179,9 +1110,9 @@ export type AppRouter = typeof appRouter;
 // ─── Background processor ─────────────────────────────────────────────────────
 
 /**
- * Handles the widget lead: sends admin alert + friendly welcome SMS to the lead,
- * then creates a conversation session in QUOTE_SENT stage so the AI webhook
- * can take over from the first reply.
+ * Handles the widget lead submission (name + phone only).
+ * Sends a sizing question SMS and creates a WIDGET_SIZING session.
+ * The conversation engine handles the reply to extract rooms and send a quote.
  */
 async function processWidgetLeadInBackground(input: {
   name: string;
@@ -1193,43 +1124,43 @@ async function processWidgetLeadInBackground(input: {
   gclid?: string;
 }): Promise<void> {
   const normalizedPhone = normalizePhone(input.phone);
-  const firstName = input.name.split(" ")[0];
+  const firstName = input.name.trim().split(" ")[0] ?? input.name.trim();
 
-  // ── Step 1: Alert admin ───────────────────────────────────────────────────
+  // ── Step 1: Send admin alert ──────────────────────────────────────────────
   const alertMsg = `New Widget Lead - Maids in Black\n\nName: ${input.name}\nPhone: ${normalizedPhone}\nSource: ${input.utmSource ?? "direct"}`;
+  sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
+    console.error("[submitWidgetLead] CS alert SMS failed:", err)
+  );
   sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err =>
-    console.error("[widgetLead] Admin alert SMS failed:", err)
+    console.error("[submitWidgetLead] Secondary alert SMS failed:", err)
   );
 
-  // ── Step 2: Send welcome SMS to lead ─────────────────────────────────────
-  const welcomeMsg = `Hey ${firstName}! 👋 Thank you for checking out Maids in Black. How can we help you with your home today?`;
-  const sms = await sendSms({ to: normalizedPhone, content: welcomeMsg });
-  console.log(`[widgetLead] Welcome SMS sent: ${sms.success}`);
-
-  const db = await getDb();
-  if (!db) {
-    console.warn("[widgetLead] No DB — skipping session save");
-    return;
-  }
+  // ── Step 2: Send sizing question SMS ─────────────────────────────────────
+  const sizingMsg = `Hi ${firstName}! \uD83D\uDC4B Thanks for reaching out to Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
+  const smsResult = await sendSms({ to: normalizedPhone, content: sizingMsg });
+  console.log(`[submitWidgetLead] Sizing SMS sent: ${smsResult.success}`);
 
   // ── Step 3: Create conversation session ──────────────────────────────────
+  const db = await getDb();
+  if (!db) {
+    console.warn("[submitWidgetLead] No DB — skipping session save");
+    return;
+  }
   const now = Date.now();
   const initialHistory = JSON.stringify([
-    { role: "assistant", content: welcomeMsg, ts: now },
+    { role: "assistant", content: sizingMsg, ts: now },
   ]);
-
   try {
     await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
-      leadName: input.name,
-      stage: "QUOTE_SENT",
+      leadName: input.name.trim(),
+      stage: "WIDGET_SIZING",
       quotedPrice: null,
       serviceType: null,
       bedrooms: null,
       bathrooms: null,
       extras: null,
       messageHistory: initialHistory,
-      leadSource: "widget",
       utmSource: input.utmSource ?? null,
       utmMedium: input.utmMedium ?? null,
       utmCampaign: input.utmCampaign ?? null,
@@ -1237,7 +1168,7 @@ async function processWidgetLeadInBackground(input: {
       gclid: input.gclid ?? null,
     });
   } catch (dbErr) {
-    console.error("[widgetLead] Failed to create conversation session:", dbErr);
+    console.error("[submitWidgetLead] Failed to create conversation session:", dbErr);
   }
 }
 
@@ -1331,7 +1262,6 @@ async function processQuoteInBackground(
       bathrooms: input.bathrooms,
       extras: input.extras && input.extras.length > 0 ? JSON.stringify(input.extras) : null,
       messageHistory: initialHistory,
-      leadSource: "form",
       // UTM attribution
       utmSource: input.utmSource ?? null,
       utmMedium: input.utmMedium ?? null,

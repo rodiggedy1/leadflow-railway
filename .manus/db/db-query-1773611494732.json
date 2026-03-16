@@ -1,9 +1,0 @@
-{
-  "query": "DELETE FROM page_views WHERE id NOT IN (SELECT min_id FROM (SELECT MIN(id) as min_id FROM page_views GROUP BY sessionKey) as keepers);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute DELETE FROM page_views WHERE id NOT IN (SELECT min_id FROM (SELECT MIN(id) as min_id FROM page_views GROUP BY sessionKey) as keepers);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 72
-}
