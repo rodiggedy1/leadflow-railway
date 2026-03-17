@@ -712,3 +712,16 @@
   - Dormant: 3,315
   - Active recurring (skipped): 190
 - [x] 413/413 tests passing, 0 TS errors
+
+## Always-On SMS Send Schedule (10 AM ET, Mon–Sat) — COMPLETED
+
+- [x] Build sendAlwaysOnBatch() in server/alwaysOnSend.ts: picks batchSize PENDING enrollments per group, sends via OpenPhone, marks SENT, updates sentCount
+- [x] TCPA compliance: isWithinTcpaWindow() — only sends Mon–Sat, 9 AM–8 PM ET; aborts entire batch if outside window
+- [x] Personalize message: [Name], [Price], [DiscountedPrice] tokens replaced per enrollment
+- [x] Add POST /api/cron/always-on-send endpoint in cronSync.ts (protected by X-Cron-Secret)
+- [x] Register 10 AM ET Mon–Sat cron schedule (0 0 15 * * 1-6 UTC = 10 AM ET)
+- [x] Update Always-On UI: two-column schedule info banner (10 PM sync + 10 AM send)
+- [x] Update Always-On UI: inline batch size editor per group (click to edit, save to DB)
+- [x] Update Always-On UI: Pending stat added to 5-stat row (Enrolled / Pending / Sent / Reply Rate / Booked)
+- [x] Add openPhoneMessageId column to always_on_enrollments (migration 0025 applied)
+- [x] 18 new tests for alwaysOnSend.ts (431/431 total pass, 0 TS errors)

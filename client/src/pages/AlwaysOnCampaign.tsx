@@ -132,6 +132,8 @@ function GroupCard({ group, onUpdated }: {
   const [expanded, setExpanded] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(false);
   const [templateDraft, setTemplateDraft] = useState(group.messageTemplate);
+  const [editingBatchSize, setEditingBatchSize] = useState(false);
+  const [batchSizeDraft, setBatchSizeDraft] = useState(String(group.batchSize));
   const [contactPage, setContactPage] = useState(0);
   const PAGE_SIZE = 50;
 
@@ -156,6 +158,16 @@ function GroupCard({ group, onUpdated }: {
   const handleSaveTemplate = () => {
     updateGroup.mutate({ groupId: group.id, messageTemplate: templateDraft });
     setEditingTemplate(false);
+  };
+
+  const handleSaveBatchSize = () => {
+    const val = parseInt(batchSizeDraft, 10);
+    if (isNaN(val) || val < 1 || val > 500) {
+      toast.error("Batch size must be between 1 and 500.");
+      return;
+    }
+    updateGroup.mutate({ groupId: group.id, batchSize: val });
+    setEditingBatchSize(false);
   };
 
   const replyRate = group.sentCount > 0
@@ -201,9 +213,10 @@ function GroupCard({ group, onUpdated }: {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
           {[
             { label: "Enrolled", value: group.totalEnrolled.toLocaleString(), icon: <Users className="w-4 h-4" /> },
+            { label: "Pending", value: (group.totalEnrolled - group.sentCount).toLocaleString(), icon: <Clock className="w-4 h-4" /> },
             { label: "Sent", value: group.sentCount.toLocaleString(), icon: <Send className="w-4 h-4" /> },
             { label: "Reply Rate", value: `${replyRate}%`, icon: <MessageSquare className="w-4 h-4" /> },
             { label: "Booked", value: `${bookRate}%`, icon: <Check className="w-4 h-4" /> },
@@ -216,6 +229,36 @@ function GroupCard({ group, onUpdated }: {
               <div className="text-xl font-bold text-gray-900">{stat.value}</div>
             </div>
           ))}
+        </div>
+
+        {/* Batch size editor */}
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-gray-500">Daily batch size:</span>
+          {editingBatchSize ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={batchSizeDraft}
+                onChange={(e) => setBatchSizeDraft(e.target.value)}
+                className="w-20 text-sm border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1"
+                style={{ borderColor: meta.borderColor }}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSaveBatchSize(); if (e.key === "Escape") setEditingBatchSize(false); }}
+                autoFocus
+              />
+              <button onClick={handleSaveBatchSize} className="text-xs text-green-600 font-medium hover:text-green-700">Save</button>
+              <button onClick={() => setEditingBatchSize(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setBatchSizeDraft(String(group.batchSize)); setEditingBatchSize(true); }}
+              className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity"
+              style={{ backgroundColor: meta.borderColor, color: meta.color }}
+            >
+              {group.batchSize} per day <Edit3 className="w-3 h-3" />
+            </button>
+          )}
         </div>
 
         {/* Rules summary */}
@@ -471,13 +514,22 @@ export default function AlwaysOnCampaign() {
         </div>
 
         {/* Schedule info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex items-center gap-3">
-          <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
-          <div className="text-sm text-gray-600">
-            <span className="font-medium text-gray-800">Nightly schedule: </span>
-            Sync runs at <strong>10 PM</strong> every night → new completed jobs are imported from Launch27 →
-            eligible contacts are automatically enrolled into the matching group below.
-            No manual action needed.
+        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex items-start gap-3 flex-1">
+              <Clock className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-gray-600">
+                <span className="font-medium text-gray-800">10 PM ET nightly — </span>
+                Sync runs → new completed jobs imported from Launch27 → eligible contacts enrolled into matching groups.
+              </div>
+            </div>
+            <div className="flex items-start gap-3 flex-1">
+              <Send className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-gray-600">
+                <span className="font-medium text-gray-800">10 AM ET, Mon–Sat — </span>
+                SMS batch sends automatically. Up to <strong>batchSize</strong> PENDING contacts per group per day. TCPA-compliant (9 AM–8 PM ET only).
+              </div>
+            </div>
           </div>
         </div>
 

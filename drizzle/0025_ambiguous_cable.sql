@@ -1,0 +1,1 @@
+ALTER TABLE `always_on_enrollments` ADD `openPhoneMessageId` varchar(100);

@@ -176,6 +176,13 @@
       "when": 1773707451605,
       "tag": "0024_dapper_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1773711296344,
+      "tag": "0025_ambiguous_cable",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ import { eq, and } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
+import { sendAlwaysOnBatch } from "./alwaysOnSend";
 
 /**
  * Core sync logic — fetches yesterday's completed bookings from Launch27 and
@@ -192,15 +193,18 @@ export async function runNightlySync(targetDate?: string): Promise<{
 }
 
 /**
- * Register the cron endpoint on the Express app.
- * POST /api/cron/nightly-sync
- * Header: X-Cron-Secret: <value of CRON_SECRET env var>
+ * Register the cron endpoints on the Express app.
+ *
+ * POST /api/cron/nightly-sync    — 10 PM ET nightly: sync Launch27 + enroll always-on
+ * POST /api/cron/always-on-send  — 10 AM ET Mon–Sat: send always-on SMS batch
+ *
+ * Both require: X-Cron-Secret: <CRON_SECRET env var>
  */
 export function registerCronRoutes(app: Express): void {
+  // ── Nightly sync (10 PM ET) ────────────────────────────────────────────────
   app.post("/api/cron/nightly-sync", async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;
 
-    // If CRON_SECRET is not configured, disable the endpoint
     if (!secret) {
       res.status(503).json({ error: "Cron endpoint is not configured (CRON_SECRET missing)" });
       return;
@@ -212,12 +216,54 @@ export function registerCronRoutes(app: Express): void {
       return;
     }
 
-    // Optional: allow caller to specify a date override (for backfill)
     const dateOverride = typeof req.body?.date === "string" ? req.body.date : undefined;
 
     try {
       const result = await runNightlySync(dateOverride);
       res.json({ ok: true, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Always-On SMS send (10 AM ET, Mon–Sat) ────────────────────────────────
+  app.post("/api/cron/always-on-send", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+
+    if (!secret) {
+      res.status(503).json({ error: "Cron endpoint is not configured (CRON_SECRET missing)" });
+      return;
+    }
+
+    const provided = req.headers["x-cron-secret"];
+    if (provided !== secret) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const results = await sendAlwaysOnBatch();
+      const totalSent = results.reduce((sum, r) => sum + r.sent, 0);
+      const totalFailed = results.reduce((sum, r) => sum + r.failed, 0);
+
+      // Notify owner if any messages were sent
+      if (totalSent > 0) {
+        const summary = results
+          .filter((r) => r.sent > 0)
+          .map((r) => `${r.groupType}: ${r.sent} sent`)
+          .join(", ");
+        try {
+          await notifyOwner({
+            title: `Always-On SMS — ${totalSent} messages sent`,
+            content: `Daily always-on batch complete. ${summary}. Failed: ${totalFailed}.`,
+          });
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      res.json({ ok: true, totalSent, totalFailed, groups: results });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ ok: false, error: msg });

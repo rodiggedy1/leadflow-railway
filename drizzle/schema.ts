@@ -535,6 +535,8 @@ export const alwaysOnEnrollments = mysqlTable("always_on_enrollments", {
   sessionId: int("sessionId"),
   /** Date of the job that triggered eligibility (YYYY-MM-DD) */
   jobDate: varchar("jobDate", { length: 20 }),
+  /** OpenPhone message ID returned after successful send */
+  openPhoneMessageId: varchar("openPhoneMessageId", { length: 100 }),
   enrolledAt: timestamp("enrolledAt").defaultNow().notNull(),
 });
 
