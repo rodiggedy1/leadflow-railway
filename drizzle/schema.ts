@@ -442,3 +442,101 @@ export const messageTemplates = mysqlTable("message_templates", {
 });
 export type MessageTemplate = typeof messageTemplates.$inferSelect;
 export type InsertMessageTemplate = typeof messageTemplates.$inferInsert;
+
+/**
+ * Always-On Campaign Groups
+ *
+ * Four standing groups that run continuously:
+ *   new-one-time     → First-time customers, messaged 3 days after job date
+ *   lapsed-one-time  → One-time customers who haven't rebooked, messaged 21 days after job date
+ *   lapsed-recurring → Recurring customers (monthly/biweekly/etc) who've gone past their
+ *                      frequency window + 7-day buffer
+ *   dormant          → Anyone (any frequency) whose last job was 6+ months ago
+ *
+ * Active recurring customers (last job within frequency window + 7 days) are NEVER enrolled.
+ */
+export const alwaysOnGroupTypes = [
+  "new-one-time",
+  "lapsed-one-time",
+  "lapsed-recurring",
+  "dormant",
+] as const;
+
+export type AlwaysOnGroupType = (typeof alwaysOnGroupTypes)[number];
+
+export const alwaysOnGroups = mysqlTable("always_on_groups", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Unique group identifier — matches AlwaysOnGroupType */
+  groupType: varchar("groupType", { length: 30 }).notNull().unique(),
+  /** Human-readable name shown in the UI */
+  name: varchar("name", { length: 100 }).notNull(),
+  /** Short description of who this group targets */
+  description: text("description"),
+  /** Whether this group is actively enrolling and sending */
+  isActive: int("isActive").default(1).notNull(),
+  /** SMS message template — supports [Name], [Price], [DiscountedPrice] placeholders */
+  messageTemplate: text("messageTemplate").notNull(),
+  /** Max SMS per hour for this group */
+  batchSize: int("batchSize").default(25).notNull(),
+  /** Aggregate counters */
+  totalEnrolled: int("totalEnrolled").default(0).notNull(),
+  sentCount: int("sentCount").default(0).notNull(),
+  repliedCount: int("repliedCount").default(0).notNull(),
+  bookedCount: int("bookedCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AlwaysOnGroup = typeof alwaysOnGroups.$inferSelect;
+export type InsertAlwaysOnGroup = typeof alwaysOnGroups.$inferInsert;
+
+/**
+ * Always-On Enrollment statuses:
+ * PENDING   → Enrolled, SMS not yet sent
+ * SENT      → SMS sent, awaiting reply
+ * REPLIED   → Customer replied (conversation engine took over)
+ * BOOKED    → Customer booked a clean
+ * OPTED_OUT → Customer replied STOP
+ * SKIPPED   → Skipped (e.g. active recurring detected at send time)
+ */
+export const alwaysOnEnrollmentStatuses = [
+  "PENDING",
+  "SENT",
+  "REPLIED",
+  "BOOKED",
+  "OPTED_OUT",
+  "SKIPPED",
+] as const;
+
+export type AlwaysOnEnrollmentStatus = (typeof alwaysOnEnrollmentStatuses)[number];
+
+export const alwaysOnEnrollments = mysqlTable("always_on_enrollments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Which always-on group this enrollment belongs to */
+  groupId: int("groupId").notNull(),
+  /** The completed job that triggered this enrollment */
+  completedJobId: int("completedJobId").notNull(),
+  /** E.164 normalized phone */
+  phone: varchar("phone", { length: 20 }).notNull(),
+  firstName: varchar("firstName", { length: 100 }),
+  name: varchar("name", { length: 255 }),
+  /** Booking frequency at time of enrollment */
+  frequency: varchar("frequency", { length: 100 }),
+  /** Last booking price (for discount calculation) */
+  lastBookingPrice: int("lastBookingPrice"),
+  /** Discount percentage offered (default 10) */
+  discountPct: int("discountPct").default(10).notNull(),
+  status: mysqlEnum("status", alwaysOnEnrollmentStatuses as unknown as [string, ...string[]]).default("PENDING").notNull(),
+  /** When the SMS was sent */
+  sentAt: timestamp("sentAt"),
+  /** When the customer first replied */
+  repliedAt: timestamp("repliedAt"),
+  /** Link to the conversation session created when they reply */
+  sessionId: int("sessionId"),
+  /** Date of the job that triggered eligibility (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }),
+  enrolledAt: timestamp("enrolledAt").defaultNow().notNull(),
+});
+
+export type AlwaysOnEnrollment = typeof alwaysOnEnrollments.$inferSelect;
+export type InsertAlwaysOnEnrollment = typeof alwaysOnEnrollments.$inferInsert;

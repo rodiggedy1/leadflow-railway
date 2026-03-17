@@ -169,6 +169,13 @@
       "when": 1773705326385,
       "tag": "0023_magenta_captain_america",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1773707451605,
+      "tag": "0024_dapper_wendigo",
+      "breakpoints": true
     }
   ]
 }

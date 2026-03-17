@@ -55,6 +55,7 @@ import {
   Wifi,
   WifiOff,
   RotateCcw,
+  Zap,
 } from "lucide-react";
 import {
   Dialog,
@@ -1648,6 +1649,14 @@ export default function AdminDashboard() {
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             Completed Jobs
+          </a>
+          <a
+            href="/admin/always-on"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+            style={{ borderColor: "transparent", color: "#6b7280" }}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Always-On
           </a>
         </div>
       </header>

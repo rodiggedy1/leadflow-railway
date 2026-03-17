@@ -9,6 +9,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AgentDashboard from "./pages/AgentDashboard";
 import ReactivationCampaigns from "./pages/ReactivationCampaigns";
 import CompletedJobs from "./pages/CompletedJobs";
+import AlwaysOnCampaign from "./pages/AlwaysOnCampaign";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -19,6 +20,7 @@ function Router() {
       <Route path={"/agent"} component={AgentDashboard} />
       <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
       <Route path={"/admin/completed-jobs"} component={CompletedJobs} />
+      <Route path={"/admin/always-on"} component={AlwaysOnCampaign} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

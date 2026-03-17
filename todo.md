@@ -660,3 +660,27 @@
 - [x] Remove createCampaign (CSV-based) mutation from campaign creation — use createFromCompletedJobs only
 - [x] Simplify the "Create Campaign" button label and disabled logic
 - [x] 385/385 tests passing, 0 TS errors
+
+## Always-On Campaign Engine (4 Groups) — COMPLETED
+
+- [x] Schema: alwaysOnGroups table (groupType, name, description, isActive, messageTemplate, batchSize, stats counters)
+- [x] Schema: alwaysOnEnrollments table (groupId, completedJobId, phone, firstName, frequency, status, sentAt, repliedAt, jobDate, enrolledAt)
+- [x] Run pnpm db:push to migrate (migration 0024 applied)
+- [x] Eligibility engine (server/alwaysOnEngine.ts): computeEligibleGroup() with 4-group priority logic
+  - Group 1 (new-one-time): frequency=one-time/unknown, daysSinceJob 3–20
+  - Group 2 (lapsed-one-time): frequency=one-time/unknown, daysSinceJob >= 21
+  - Group 3 (lapsed-recurring): recurring frequency, daysSinceJob >= frequencyWindowDays + 7
+  - Group 4 (dormant): any frequency, daysSinceJob >= 180
+  - Active recurring = frequency is recurring AND daysSinceJob < frequencyWindowDays + 7 → NEVER enrolled
+- [x] getFrequencyWindowDays(): maps Monthly/Biweekly/Weekly/Every 3 weeks/Every 6 weeks/etc to days
+- [x] Seed default group rows with default message templates on first run (seedDefaultGroups)
+- [x] Auto-enrollment: nightly cron calls enrollNewlyEligible() after syncCompletedJobs
+- [x] enrollNewlyEligible(): for each completedJob not already enrolled, check eligibility, insert into alwaysOnEnrollments, update totalEnrolled counter
+- [x] Wire into nightly cron: sync → enroll → notify owner with enrollment summary
+- [x] Admin UI: /admin/always-on page with 4 group cards (rules, editable message template, stats, contact list)
+- [x] Per-group toggle: enable/disable each group independently
+- [x] Per-group message template editor: inline edit + save to DB
+- [x] Contact list per group: name, phone, frequency, job date, enrolled date, status badge; paginated
+- [x] Manual enrollment button ("Enroll Now") for backfill
+- [x] "Always-On" nav link added to AdminDashboard tab bar
+- [x] 26 test files, 413 tests passing (28 new tests for alwaysOnEngine), 0 TS errors

@@ -18,6 +18,7 @@ import { completedJobs, completedJobBatches } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
+import { enrollNewlyEligible } from "./alwaysOnEngine";
 
 /**
  * Core sync logic — fetches yesterday's completed bookings from Launch27 and
@@ -29,6 +30,7 @@ export async function runNightlySync(targetDate?: string): Promise<{
   skipped: number;
   batchId: number | null;
   message: string;
+  alwaysOnEnrolled?: Record<string, number>;
 }> {
   const date =
     targetDate ??
@@ -156,19 +158,37 @@ export async function runNightlySync(targetDate?: string): Promise<{
 
   const message = `Nightly sync for ${date}: inserted ${inserted} new jobs, skipped ${skipped + invalidCount} (${skipped} duplicates, ${invalidCount} invalid phones).`;
 
+  // ── Always-On Campaign enrollment ─────────────────────────────────────────
+  // After syncing, enroll any newly eligible contacts into the always-on groups.
+  // This runs every night so new completedJobs are picked up as they become eligible.
+  let alwaysOnEnrolled: Record<string, number> = {};
+  try {
+    alwaysOnEnrolled = await enrollNewlyEligible();
+    const totalEnrolled = Object.values(alwaysOnEnrolled).reduce((a, b) => a + b, 0);
+    if (totalEnrolled > 0) {
+      console.log(`[AlwaysOn] Enrolled ${totalEnrolled} contacts:`, alwaysOnEnrolled);
+    }
+  } catch (enrollErr) {
+    console.error("[AlwaysOn] Enrollment error (non-fatal):", enrollErr);
+  }
+
   // Notify owner on success if any new jobs were inserted
   if (inserted > 0) {
+    const totalEnrolled = Object.values(alwaysOnEnrolled).reduce((a, b) => a + b, 0);
+    const enrolledSummary = totalEnrolled > 0
+      ? ` Always-On enrolled: ${totalEnrolled} new contacts (new-one-time: ${alwaysOnEnrolled["new-one-time"] ?? 0}, lapsed-one-time: ${alwaysOnEnrolled["lapsed-one-time"] ?? 0}, lapsed-recurring: ${alwaysOnEnrolled["lapsed-recurring"] ?? 0}, dormant: ${alwaysOnEnrolled["dormant"] ?? 0}).`
+      : "";
     try {
       await notifyOwner({
         title: `Launch27 Nightly Sync — ${inserted} new jobs`,
-        content: message,
+        content: message + enrolledSummary,
       });
     } catch {
       // Non-fatal — notification failure should not break the sync
     }
   }
 
-  return { date, inserted, skipped: skipped + invalidCount, batchId, message };
+  return { date, inserted, skipped: skipped + invalidCount, batchId, message, alwaysOnEnrolled };
 }
 
 /**
