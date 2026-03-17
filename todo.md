@@ -963,3 +963,10 @@
 - [x] Shows outcome badge (color-coded), agent name, timestamp, and notes for each call log
 - [x] Section auto-opens when call logs exist; hidden when no calls logged yet
 - [x] 493/493 tests passing, 0 TS errors
+
+## Notification Dropdown Scroll Fix — COMPLETED
+- [x] Fixed Activity Feed dropdown scrolling the page underneath instead of scrolling internally
+- [x] Root cause: Radix ScrollArea viewport uses size-full (100% height) — needs explicit height on root, not max-height
+- [x] Fix: changed ScrollArea from max-h-[480px] to h-[480px] so viewport has a fixed height to fill
+- [x] Added overflow-hidden + flex flex-col to outer dropdown container for clean layout
+- [x] 0 TS errors

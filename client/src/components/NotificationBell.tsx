@@ -83,7 +83,7 @@ export default function NotificationBell() {
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-96 rounded-xl border border-border bg-background shadow-xl">
+        <div className="absolute right-0 top-full mt-2 z-50 w-96 rounded-xl border border-border bg-background shadow-xl overflow-hidden flex flex-col max-h-[560px]">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="font-semibold text-sm">Activity Feed</span>
@@ -98,7 +98,7 @@ export default function NotificationBell() {
           </div>
 
           {/* Feed */}
-          <ScrollArea className="max-h-[480px]">
+          <ScrollArea className="h-[480px]">
             {items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Bell className="h-8 w-8 mb-3 opacity-30" />
