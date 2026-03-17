@@ -20,7 +20,10 @@ import { conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { invokeLLM } from "./_core/llm";
 
-// Stages that are considered "active" — the lead is mid-conversation and hasn't finished
+// Stages that are considered "active" — the lead is mid-conversation and hasn't finished.
+// REACTIVATION is intentionally excluded: those are first-touch always-on/campaign messages
+// that haven't received a reply yet. We don't want to double-nudge someone who just got
+// their first outbound SMS and hasn't had a chance to respond.
 const ACTIVE_STAGES = [
   "QUOTE_SENT",
   "AVAILABILITY",
@@ -28,7 +31,6 @@ const ACTIVE_STAGES = [
   "TIME_PREF",
   "ADDRESS",
   "CONFIRMATION",
-  "REACTIVATION",
   "WIDGET_SIZING",
 ];
 
