@@ -293,6 +293,7 @@ export const appRouter = router({
           "UNHANDLED",
           "BOOKED",
           "NOT_INTERESTED",
+          "FUTURE_BOOKING",
         ]),
       }))
       .mutation(async ({ input }) => {

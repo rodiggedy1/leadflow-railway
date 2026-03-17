@@ -190,6 +190,13 @@
       "when": 1773714877198,
       "tag": "0026_smart_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1773767717046,
+      "tag": "0027_new_pride",
+      "breakpoints": true
     }
   ]
 }

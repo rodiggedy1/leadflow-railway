@@ -224,7 +224,8 @@ type Stage =
   | "DONE"
   | "UNHANDLED"
   | "BOOKED"
-  | "NOT_INTERESTED";
+  | "NOT_INTERESTED"
+  | "FUTURE_BOOKING";
 
 const STAGE_CONFIG: Record<
   Stage,
@@ -299,6 +300,13 @@ const STAGE_CONFIG: Record<
     bgColor: "#f3f4f6",
     borderColor: "#d1d5db",
     order: 10,
+  },
+  FUTURE_BOOKING: {
+    label: "Future Booking 📅",
+    textColor: "#1e40af",
+    bgColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+    order: 11,
   },
 };
 
@@ -974,6 +982,7 @@ function ConversationDrawer({
                           "UNHANDLED",
                           "BOOKED",
                           "NOT_INTERESTED",
+                          "FUTURE_BOOKING",
                         ] as const).map(s => (
                           <SelectItem key={s} value={s} className="text-xs">
                             {STAGE_CONFIG[s as Stage]?.label ?? s}

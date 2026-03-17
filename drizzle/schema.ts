@@ -76,6 +76,11 @@ export const conversationStages = [
    */
   "REVIEW_REQUESTED",
   "REVIEW_DONE",
+  /**
+   * FUTURE_BOOKING → Lead expressed interest but for a future date (weeks/months away).
+   * We acknowledge the timeline, stop the booking flow, and tag them for follow-up.
+   */
+  "FUTURE_BOOKING",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

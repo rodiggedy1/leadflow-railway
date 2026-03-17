@@ -154,11 +154,11 @@ Instructions:
 
 // ─── Objection Handler ────────────────────────────────────────────────────────
 
-export type ObjectionType = "price_too_high" | "not_available" | "need_to_think" | "already_have_cleaner" | "other";
+export type ObjectionType = "price_too_high" | "not_available" | "need_to_think" | "already_have_cleaner" | "future_booking" | "other";
 
 export interface ObjectionResult {
   reply: string;
-  nextStage: "AVAILABILITY" | "SLOT_CHOICE" | "DONE" | null; // null = stay on current stage
+  nextStage: "AVAILABILITY" | "SLOT_CHOICE" | "DONE" | "FUTURE_BOOKING" | null; // null = stay on current stage
 }
 
 /**
@@ -175,6 +175,7 @@ export async function handleObjection(
     not_available: `The lead said the offered dates don't work. Acknowledge this, tell them we have other openings and our team can find a time that works, and ask them to share what days/times work best for them.`,
     need_to_think: `The lead said they need to think about it. Acknowledge this warmly, create gentle urgency (slots fill up), and ask if they'd like to tentatively hold a spot.`,
     already_have_cleaner: `The lead mentioned they already have a cleaner. Acknowledge this, briefly differentiate Maids in Black (insured, professional, satisfaction guarantee), and offer a first-clean trial at the quoted price.`,
+    future_booking: `The lead said they won't need the service until a future date (weeks or months away). Acknowledge their timeline warmly and positively — do NOT push for an immediate slot. Tell them we'd love to help when the time comes, and ask them to reach back out when they're ready or offer to make a note and follow up. Keep it warm and low-pressure. Do NOT mention current availability or ask them to book now.`,
     other: `The lead sent an unclear or unexpected message. Respond warmly and ask how you can help them get their home cleaned.`,
   };
 
@@ -193,7 +194,9 @@ export async function handleObjection(
     const text = typeof content === "string" ? content.trim() : "";
 
     if (text) {
-      return { reply: text, nextStage: null };
+      // For future_booking, advance the stage so the lead is tagged correctly
+      const nextStage = objectionType === "future_booking" ? "FUTURE_BOOKING" : null;
+      return { reply: text, nextStage };
     }
   } catch (err) {
     console.error("[AI] handleObjection failed:", err);
@@ -205,10 +208,13 @@ export async function handleObjection(
     not_available: `No problem! We have other openings too. What days/times generally work best for you?`,
     need_to_think: `Of course, take your time! Just a heads up — our slots do fill up quickly. Would you like to tentatively hold one of our upcoming openings?`,
     already_have_cleaner: `That's great! We'd love to show you what we can do — many of our regulars switched after just one clean. Want to try us for this one?`,
+    future_booking: `That's perfect — we'd love to help when the time comes! Just reach back out when you're ready and we'll get you all set. 🏠`,
     other: `Thanks for reaching out! How can we help get your home sparkling clean? 🏠`,
   };
 
-  return { reply: fallbacks[objectionType], nextStage: null };
+  // For future_booking, advance the stage even in fallback path
+  const fallbackNextStage = objectionType === "future_booking" ? "FUTURE_BOOKING" as const : null;
+  return { reply: fallbacks[objectionType], nextStage: fallbackNextStage };
 }
 
 // ─── Objection Detector ───────────────────────────────────────────────────────
@@ -227,8 +233,11 @@ export async function detectObjection(leadReply: string): Promise<ObjectionType 
 - "not_available" — if they say the offered times don't work for them
 - "need_to_think" — if they say they need to think, not sure, maybe later, etc.
 - "already_have_cleaner" — if they mention having a cleaner already
+- "future_booking" — if they express interest but for a future date that is weeks or months away (e.g. "early May", "next month", "in a few weeks", "after the holidays", "when I move in", "not until summer")
 - "off_script" — if it's a question or comment that doesn't fit the above
 - "on_track" — if the reply is a normal response continuing the booking flow
+
+IMPORTANT: "future_booking" takes priority over "need_to_think" when the lead mentions a specific future timeframe.
 
 Reply with ONLY the classification word, nothing else.`,
         },
@@ -246,6 +255,7 @@ Reply with ONLY the classification word, nothing else.`,
       "not_available",
       "need_to_think",
       "already_have_cleaner",
+      "future_booking",
     ];
 
     return objectionTypes.includes(classification as ObjectionType)

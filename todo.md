@@ -770,3 +770,18 @@
 - [x] "Sync Health" nav link added to AdminDashboard header
 - [x] Route /admin/sync-health registered in App.tsx
 - [x] 431/431 tests passing, 0 TS errors
+
+## AI Future Booking Intelligence — COMPLETED
+
+- [x] Add FUTURE_BOOKING stage to conversationStages enum in schema.ts
+- [x] Run pnpm db:push (migration 0027 applied)
+- [x] Add "future_booking" to ObjectionType in aiService.ts
+- [x] Update detectObjection LLM classifier to recognize future-date intent (e.g. "early May", "next month", "after the holidays")
+- [x] Add handleObjection prompt for future_booking: warm acknowledgment, no slot pushing, invite to reach back out
+- [x] Add fallback response for future_booking
+- [x] handleObjection returns nextStage: "FUTURE_BOOKING" for future_booking type
+- [x] Add regex pre-check in AVAILABILITY stage to catch month names, "next month", "in a few weeks" BEFORE the LLM
+- [x] Add FUTURE_BOOKING stage handler in processLeadReply: stays warm, re-enters AVAILABILITY if lead says they're ready
+- [x] Add FUTURE_BOOKING to AdminDashboard Stage type, STAGE_CONFIG (blue badge), and stage dropdown
+- [x] Add FUTURE_BOOKING to adminUpdateStage z.enum in routers.ts
+- [x] 431/431 tests passing, 0 TS errors

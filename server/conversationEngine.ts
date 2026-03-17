@@ -523,6 +523,30 @@ export async function processLeadReply(
     };
   }
 
+  // ── FUTURE_BOOKING: Lead is interested but not ready yet — stay warm, no pressure ──
+  if (stage === "FUTURE_BOOKING") {
+    const reply = await handleOffScriptReply({
+      stage,
+      leadName: context.leadName,
+      quotedPrice: context.quotedPrice,
+      serviceType: context.serviceType,
+      selectedSlot: context.selectedSlot,
+      messageHistory: context.messageHistory,
+      leadReply,
+      extrasContext,
+    });
+    // If they're now ready to book, let them back into the flow
+    const lower = leadReply.toLowerCase();
+    const readyNow = /\b(ready|book|schedule|let'?s do it|when can|available|yes|yeah|sure|ok|okay)\b/.test(lower);
+    if (readyNow) {
+      return {
+        reply: buildAvailabilityMessage(context.extras),
+        nextStage: "AVAILABILITY",
+      };
+    }
+    return { reply: reply.reply, nextStage: "FUTURE_BOOKING" };
+  }
+
   // ── For all other stages: check for objections first ──────────────────────
   // Only check objections in stages where the lead might push back
   if (["AVAILABILITY", "SLOT_CHOICE", "TIME_PREF", "ADDRESS", "CONFIRMATION"].includes(stage)) {
@@ -536,11 +560,9 @@ export async function processLeadReply(
         serviceType: context.serviceType,
       });
 
-      // For "not_available" objection at AVAILABILITY stage, we can advance
-      // to a flexible scheduling response but stay in AVAILABILITY
       return {
         reply: objectionResult.reply,
-        nextStage: objectionResult.nextStage ?? (stage as ConversationStage),
+        nextStage: (objectionResult.nextStage ?? stage) as ConversationStage,
       };
     }
   }
@@ -581,6 +603,29 @@ export async function processLeadReply(
           reply: buildTimePrefMessage(capitalizedDay),
           nextStage: "TIME_PREF",
           extractedData: { selectedSlot: capitalizedDay },
+        };
+      }
+
+      // Step 1b: Check for future-date intent BEFORE the LLM — catches "early May", "next month", etc.
+      // This runs after the day-name check but before the LLM to avoid misclassifying as "unclear"
+      const futureDatePatterns = [
+        /\b(next month|next year|in a few weeks|in a few months|in \d+ weeks|in \d+ months)\b/i,
+        /\b(early|mid|late)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+        /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+        /\b(not until|won't need|won't be ready|not ready|not for a while|a while from now|after the holidays|when i move|after i move|when we move|after we move)\b/i,
+        /\b(summer|fall|winter|spring|next season|after summer|after winter)\b/i,
+        /\b(in a month|in two months|in three months|in a couple months|in a couple of months)\b/i,
+      ];
+      const isFutureDate = futureDatePatterns.some(p => p.test(leadReply));
+      if (isFutureDate) {
+        const objectionResult = await handleObjection("future_booking", {
+          leadName: context.leadName,
+          quotedPrice: context.quotedPrice,
+          serviceType: context.serviceType,
+        });
+        return {
+          reply: objectionResult.reply,
+          nextStage: "FUTURE_BOOKING",
         };
       }
 
