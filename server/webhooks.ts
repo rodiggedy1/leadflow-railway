@@ -26,6 +26,7 @@ import { getDb } from "./db";
 import { conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
+import { processLeadReplyV2 } from "./engine";
 import type { ChatMessage, ConversationContext } from "./conversationEngine";
 import type { ConversationStage } from "../drizzle/schema";
 import { normalizePhone } from "./routers";
@@ -221,8 +222,8 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // Process the reply through the AI engine
-      const result = await processLeadReply(inboundText, context);
+      // Process the reply through the LLM-first AI engine
+      const result = await processLeadReplyV2(inboundText, context);
 
       console.log(`[Webhook] Stage: ${session.stage} → ${result.nextStage}. Reply: "${result.reply}"`);
 
@@ -257,6 +258,9 @@ export function registerWebhookRoutes(app: Express) {
         langUpdates.preLangStage = null; // Explicitly clear so it doesn't re-trigger language confirm
       }
 
+      // Extract engine data (bedrooms, bathrooms, quotedPrice, serviceType) from new engine
+      const engineData = (result as typeof result & { _engineData?: Record<string, string | undefined> })._engineData;
+
       await db
         .update(conversationSessions)
         .set({
@@ -267,6 +271,11 @@ export function registerWebhookRoutes(app: Express) {
           messageHistory: JSON.stringify(history),
           lastAiMessageAt: new Date(),
           autoFollowUpSent: isTerminalStage ? session.autoFollowUpSent : 0,
+          // Persist engine-extracted data (bedrooms, bathrooms, price, service type)
+          ...(engineData?.bedrooms    ? { bedrooms:    engineData.bedrooms }    : {}),
+          ...(engineData?.bathrooms   ? { bathrooms:   engineData.bathrooms }   : {}),
+          ...(engineData?.quotedPrice ? { quotedPrice: engineData.quotedPrice } : {}),
+          ...(engineData?.serviceType ? { serviceType: engineData.serviceType } : {}),
           ...(langUpdates.language !== undefined ? { language: langUpdates.language } : {}),
           // preLangStage: null clears it after confirmation; undefined means no change
           ...(langUpdates.preLangStage !== undefined ? { preLangStage: langUpdates.preLangStage } : {}),

@@ -939,3 +939,21 @@
 - [x] Removed lang variable from handleWidgetSizingReply
 - [x] 464/464 tests passing, 0 TS errors
 - [x] Architecture: any new stage added in future requires ZERO language work
+
+## AVAILABILITY Stage Recurring Pricing Bug — IN PROGRESS
+- [ ] Bug: "How much for recurring" in AVAILABILITY stage is ignored — bot sends generic slot re-ask instead of answering the pricing question
+- [ ] Root cause: isPricingQuestion() or the AVAILABILITY unclear path doesn't recognize recurring pricing questions
+- [ ] Fix: detect recurring pricing questions in AVAILABILITY, answer with actual recurring pricing, then re-ask for availability
+- [ ] Fix: ensure handleOffScriptReply receives enough context (quotedPrice, bedrooms, bathrooms) to give a real recurring price answer
+- [ ] Write vitest tests for recurring pricing question in AVAILABILITY stage
+
+## LLM-First Engine Rebuild — COMPLETED
+- [x] Built server/engine/ module: schema.ts, pricing.ts, stages.ts, rules.ts, prompt.ts, index.ts
+- [x] Single LLM call per message with structured JSON output (LLMDecision schema)
+- [x] System prompt includes: full pricing table with recurring discounts, knowledge base, stage instructions, available slots
+- [x] Business rule enforcer (rules.ts): validates LLM decisions, enforces stage guards, merges context, allows DONE from any stage
+- [x] Stage contracts (stages.ts): defines required fields and valid transitions per stage
+- [x] Language handled natively by LLM — no translation layer, no per-stage language code
+- [x] Recurring pricing, FAQs, objections, existing customers all handled by LLM with no special cases
+- [x] webhooks.ts updated to use processLeadReplyV2 from new engine
+- [x] 493/493 tests passing, 0 TS errors
