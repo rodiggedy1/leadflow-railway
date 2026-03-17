@@ -889,3 +889,11 @@
 - [x] Fix: all static English message builders wrapped with translateIfNeeded() for non-English sessions
 - [x] Fix: handleOffScriptReply, handleObjection, handlePostBookingReply now receive language context
 - [x] Fix: preLangStage is explicitly cleared (set to null) after language confirmation to prevent re-triggering
+
+## Multilingual Resume Bug — COMPLETED
+- [x] Fix: after language confirmation, conversation now correctly resumes the interrupted stage
+  - Added WIDGET_SIZING case to resumeStageAfterLanguageConfirm — asks bedrooms/bathrooms in confirmed language
+  - Fixed default fallback: if no quote yet, returns to WIDGET_SIZING; if quote exists, goes to AVAILABILITY
+  - Made handleWidgetSizingReply async and wrapped all static strings with translateIfNeeded()
+  - Fixed CONFIRMATION case in resume function to use buildConfirmationMessage instead of wrong address question
+  - 431/431 tests pass, 0 TS errors

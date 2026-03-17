@@ -353,17 +353,18 @@ async function handleReactivationReply(
  *   - Sends a quote + advances to AVAILABILITY (if both counts found)
  *   - Asks a follow-up question (if partial or no info)
  */
-function handleWidgetSizingReply(
+async function handleWidgetSizingReply(
   leadReply: string,
   context: ConversationContext
-): StageResult {
+): Promise<StageResult> {
   const { bedrooms, bathrooms } = extractRoomInfo(leadReply);
+  const lang = context.language;
 
   if (bedrooms && bathrooms) {
     const price = lookupPrice(bedrooms, bathrooms);
-    const reply = `Great! For a ${bedrooms} / ${bathrooms} home, a Standard Cleaning is $${price}. Ready to schedule? We have openings this week — would any of those work for you?`;
+    const englishReply = `Great! For a ${bedrooms} / ${bathrooms} home, a Standard Cleaning is $${price}. Ready to schedule? We have openings this week — would any of those work for you?`;
     return {
-      reply,
+      reply: await translateIfNeeded(englishReply, lang),
       nextStage: "AVAILABILITY",
       extractedData: {
         bedrooms,
@@ -376,21 +377,21 @@ function handleWidgetSizingReply(
 
   if (bedrooms && !bathrooms) {
     return {
-      reply: `Got it — ${bedrooms}! And how many bathrooms does your home have?`,
+      reply: await translateIfNeeded(`Got it — ${bedrooms}! And how many bathrooms does your home have?`, lang),
       nextStage: "WIDGET_SIZING",
     };
   }
 
   if (!bedrooms && bathrooms) {
     return {
-      reply: `Got it — ${bathrooms}! And how many bedrooms does your home have?`,
+      reply: await translateIfNeeded(`Got it — ${bathrooms}! And how many bedrooms does your home have?`, lang),
       nextStage: "WIDGET_SIZING",
     };
   }
 
   // No info extracted — ask again
   return {
-    reply: `To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`,
+    reply: await translateIfNeeded(`To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`, lang),
     nextStage: "WIDGET_SIZING",
   };
 }
@@ -1018,6 +1019,11 @@ async function resumeStageAfterLanguageConfirm(
   let nextStage: ConversationStage;
 
   switch (preLangStage) {
+    case "WIDGET_SIZING":
+      // Lead was in the middle of answering bedrooms/bathrooms — ask again in their language
+      englishMsg = `To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
+      nextStage = "WIDGET_SIZING";
+      break;
     case "QUOTE_SENT":
     case "AVAILABILITY":
     case "REACTIVATION":
@@ -1037,12 +1043,18 @@ async function resumeStageAfterLanguageConfirm(
       nextStage = "ADDRESS";
       break;
     case "CONFIRMATION":
-      englishMsg = `What's the address for the cleaning?`;
-      nextStage = "ADDRESS";
+      englishMsg = buildConfirmationMessage(context.selectedSlot || "your slot", context.address || "");
+      nextStage = "CONFIRMATION";
       break;
     default:
-      englishMsg = buildAvailabilityMessage(context.extras);
-      nextStage = "AVAILABILITY";
+      // Unknown stage — fall back to asking bedrooms/bathrooms if no quote yet, else availability
+      if (!context.quotedPrice || context.quotedPrice === "0") {
+        englishMsg = `To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
+        nextStage = "WIDGET_SIZING";
+      } else {
+        englishMsg = buildAvailabilityMessage(context.extras);
+        nextStage = "AVAILABILITY";
+      }
   }
 
   // If English, return as-is
