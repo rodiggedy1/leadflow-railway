@@ -1,0 +1,22 @@
+{
+  "query": "SELECT COUNT(*) as total_reactivation_contacts FROM reactivation_contacts;\nSELECT rc.campaignId, COUNT(*) as contacts, MIN(rc.lastBookingDate) as earliest, MAX(rc.lastBookingDate) as latest FROM reactivation_contacts rc GROUP BY rc.campaignId;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COUNT(*) as total_reactivation_contacts FROM reactivation_contacts;\nSELECT rc.campaignId, COUNT(*) as contacts, MIN(rc.lastBookingDate) as earliest, MAX(rc.lastBookingDate) as latest FROM reactivation_contacts rc GROUP BY rc.campaignId;",
+  "rows": [
+    {
+      "total_reactivation_contacts": "2"
+    },
+    {
+      "total_reactivation_contacts": "campaignId\tcontacts\tearliest\tlatest"
+    },
+    {
+      "total_reactivation_contacts": "1\t1\t2025-06-19\t2025-06-19"
+    },
+    {
+      "total_reactivation_contacts": "3\t1\t2025-06-19\t2025-06-19"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_reactivation_contacts\n2\ncampaignId\tcontacts\tearliest\tlatest\n1\t1\t2025-06-19\t2025-06-19\n3\t1\t2025-06-19\t2025-06-19\n",
+  "stderr": "",
+  "execution_time_ms": 62
+}

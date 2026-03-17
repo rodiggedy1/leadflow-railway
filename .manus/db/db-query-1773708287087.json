@@ -1,0 +1,67 @@
+{
+  "query": "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'completed_jobs' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'completed_jobs' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "batchId"
+    },
+    {
+      "COLUMN_NAME": "phone"
+    },
+    {
+      "COLUMN_NAME": "name"
+    },
+    {
+      "COLUMN_NAME": "firstName"
+    },
+    {
+      "COLUMN_NAME": "serviceType"
+    },
+    {
+      "COLUMN_NAME": "jobDate"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "smsSentAt"
+    },
+    {
+      "COLUMN_NAME": "repliedAt"
+    },
+    {
+      "COLUMN_NAME": "sessionId"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "email"
+    },
+    {
+      "COLUMN_NAME": "address"
+    },
+    {
+      "COLUMN_NAME": "frequency"
+    },
+    {
+      "COLUMN_NAME": "launch27BookingId"
+    },
+    {
+      "COLUMN_NAME": "lastBookingPrice"
+    },
+    {
+      "COLUMN_NAME": "reactivationEligible"
+    },
+    {
+      "COLUMN_NAME": "reactivationEligibleAt"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nbatchId\nphone\nname\nfirstName\nserviceType\njobDate\nstatus\nsmsSentAt\nrepliedAt\nsessionId\ncreatedAt\nemail\naddress\nfrequency\nlaunch27BookingId\nlastBookingPrice\nreactivationEligible\nreactivationEligibleAt\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

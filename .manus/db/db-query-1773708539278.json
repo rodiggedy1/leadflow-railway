@@ -1,0 +1,22 @@
+{
+  "query": "SELECT COUNT(*) as total_contacts FROM reactivation_contacts;\nSELECT id, name, phone, campaignId, createdAt FROM reactivation_contacts ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COUNT(*) as total_contacts FROM reactivation_contacts;\nSELECT id, name, phone, campaignId, createdAt FROM reactivation_contacts ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "total_contacts": "2"
+    },
+    {
+      "total_contacts": "id\tname\tphone\tcampaignId\tcreatedAt"
+    },
+    {
+      "total_contacts": "3\tRohan\t+13029816191\t3\t2026-03-16 06:52:37"
+    },
+    {
+      "total_contacts": "1\tRohan\t+13029816191\t1\t2026-03-16 06:38:48"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_contacts\n2\nid\tname\tphone\tcampaignId\tcreatedAt\n3\tRohan\t+13029816191\t3\t2026-03-16 06:52:37\n1\tRohan\t+13029816191\t1\t2026-03-16 06:38:48\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

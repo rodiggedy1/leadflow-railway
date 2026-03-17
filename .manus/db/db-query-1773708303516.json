@@ -1,0 +1,25 @@
+{
+  "query": "SELECT COUNT(*) as total FROM completed_jobs; SELECT jobDate, frequency, phone FROM completed_jobs LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COUNT(*) as total FROM completed_jobs; SELECT jobDate, frequency, phone FROM completed_jobs LIMIT 5;",
+  "rows": [
+    {
+      "total": "3"
+    },
+    {
+      "total": "jobDate\tfrequency\tphone"
+    },
+    {
+      "total": "2026-03-15\tMonthly (10%OFF)\t+12023843991"
+    },
+    {
+      "total": "2026-03-15\tMonthly (10%OFF)\t+12405953198"
+    },
+    {
+      "total": "2026-03-15\tMonthly (10%OFF)\t+12028235668"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\n3\njobDate\tfrequency\tphone\n2026-03-15\tMonthly (10%OFF)\t+12023843991\n2026-03-15\tMonthly (10%OFF)\t+12405953198\n2026-03-15\tMonthly (10%OFF)\t+12028235668\n",
+  "stderr": "",
+  "execution_time_ms": 64
+}

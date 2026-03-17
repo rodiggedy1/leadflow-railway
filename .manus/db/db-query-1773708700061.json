@@ -1,0 +1,86 @@
+{
+  "query": "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reactivation_contacts' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reactivation_contacts' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "campaignId",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "phone",
+      "COLUMN_TYPE": "varchar(20)"
+    },
+    {
+      "COLUMN_NAME": "phoneRaw",
+      "COLUMN_TYPE": "varchar(30)"
+    },
+    {
+      "COLUMN_NAME": "name",
+      "COLUMN_TYPE": "varchar(255)"
+    },
+    {
+      "COLUMN_NAME": "firstName",
+      "COLUMN_TYPE": "varchar(100)"
+    },
+    {
+      "COLUMN_NAME": "email",
+      "COLUMN_TYPE": "varchar(320)"
+    },
+    {
+      "COLUMN_NAME": "lastBookingDate",
+      "COLUMN_TYPE": "varchar(20)"
+    },
+    {
+      "COLUMN_NAME": "daysSince",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "bookingCount",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "lastPrice",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "discountPct",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "segment",
+      "COLUMN_TYPE": "varchar(20)"
+    },
+    {
+      "COLUMN_NAME": "status",
+      "COLUMN_TYPE": "enum('PENDING','SENT','REPLIED','BOOKED','OPTED_OUT')"
+    },
+    {
+      "COLUMN_NAME": "sentAt",
+      "COLUMN_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "repliedAt",
+      "COLUMN_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "sessionId",
+      "COLUMN_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "createdAt",
+      "COLUMN_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "completedJobId",
+      "COLUMN_TYPE": "int"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tCOLUMN_TYPE\nid\tint\ncampaignId\tint\nphone\tvarchar(20)\nphoneRaw\tvarchar(30)\nname\tvarchar(255)\nfirstName\tvarchar(100)\nemail\tvarchar(320)\nlastBookingDate\tvarchar(20)\ndaysSince\tint\nbookingCount\tint\nlastPrice\tint\ndiscountPct\tint\nsegment\tvarchar(20)\nstatus\tenum('PENDING','SENT','REPLIED','BOOKED','OPTED_OUT')\nsentAt\ttimestamp\nrepliedAt\ttimestamp\nsessionId\tint\ncreatedAt\ttimestamp\ncompletedJobId\tint\n",
+  "stderr": "",
+  "execution_time_ms": 63
+}

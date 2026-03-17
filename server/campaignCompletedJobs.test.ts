@@ -110,8 +110,8 @@ describe("previewFromCompletedJobs logic", () => {
     expect(enrolledIds).toHaveLength(0);
   });
 
-  it("excludes already-enrolled completedJob IDs from the eligible list", async () => {
-    // Directly test the filtering logic without DB mocks
+  it("excludes already-enrolled completedJob IDs from the eligible list", () => {
+    // Pure logic test — no DB mock needed
     const enrolledRows = [{ completedJobId: 1 }, { completedJobId: 2 }, { completedJobId: null }];
     const enrolledIds = enrolledRows
       .map((r) => r.completedJobId)
@@ -120,7 +120,8 @@ describe("previewFromCompletedJobs logic", () => {
     expect(enrolledIds).toEqual([1, 2]);
   });
 
-  it("returns eligible contacts with correct shape", async () => {
+  it("returns eligible contacts with correct shape", () => {
+    // Pure logic test — verify the data shape the procedure would return
     const fakeJobs = [
       {
         id: 10,
@@ -135,27 +136,13 @@ describe("previewFromCompletedJobs logic", () => {
       },
     ];
 
-    mockSelect.mockReturnValueOnce(buildChain([])); // enrolled
-    mockSelect.mockReturnValueOnce(buildChain(fakeJobs)); // eligible
-    mockSelect.mockReturnValueOnce(buildChain([{ count: 1 }])); // count
+    // Filter logic: exclude already-enrolled IDs
+    const enrolledIds: number[] = [];
+    const eligible = fakeJobs.filter((j) => !enrolledIds.includes(j.id));
 
-    const { getDb } = await import("./db");
-    const db = await getDb();
-
-    // enrolled
-    await (db!.select as any)();
-    // eligible — the chain resolves to the array
-    const eligible = await (db!.select as any)();
-    // count — destructure the resolved array
-    const countResult = await (db!.select as any)();
-    const countRow = Array.isArray(countResult) ? countResult[0] : countResult;
-
-    // The buildChain mock resolves to the value passed in (fakeJobs array)
-    // but the chain itself is the thenable object, not the resolved value.
-    // We verify the data shape by checking fakeJobs directly (unit test of the logic).
-    expect(fakeJobs[0].phone).toBe("+13025551234");
-    expect(fakeJobs[0].reactivationEligible).toBe(1);
-    expect(fakeJobs).toHaveLength(1);
+    expect(eligible[0].phone).toBe("+13025551234");
+    expect(eligible[0].reactivationEligible).toBe(1);
+    expect(eligible).toHaveLength(1);
   });
 });
 

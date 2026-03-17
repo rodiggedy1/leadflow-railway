@@ -1,0 +1,52 @@
+{
+  "query": "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name;",
+  "rows": [
+    {
+      "table_name": "__drizzle_migrations"
+    },
+    {
+      "table_name": "agents"
+    },
+    {
+      "table_name": "always_on_enrollments"
+    },
+    {
+      "table_name": "always_on_groups"
+    },
+    {
+      "table_name": "completed_job_batches"
+    },
+    {
+      "table_name": "completed_jobs"
+    },
+    {
+      "table_name": "conversation_sessions"
+    },
+    {
+      "table_name": "lead_call_logs"
+    },
+    {
+      "table_name": "message_templates"
+    },
+    {
+      "table_name": "page_views"
+    },
+    {
+      "table_name": "quote_leads"
+    },
+    {
+      "table_name": "reactivation_campaigns"
+    },
+    {
+      "table_name": "reactivation_contacts"
+    },
+    {
+      "table_name": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "table_name\n__drizzle_migrations\nagents\nalways_on_enrollments\nalways_on_groups\ncompleted_job_batches\ncompleted_jobs\nconversation_sessions\nlead_call_logs\nmessage_templates\npage_views\nquote_leads\nreactivation_campaigns\nreactivation_contacts\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

@@ -1,0 +1,10 @@
+{
+  "query": "SELECT COUNT(*) as total FROM reactivation_contacts;\nSELECT id, name, phone, frequency, jobDate, campaignId, createdAt FROM reactivation_contacts ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COUNT(*) as total FROM reactivation_contacts;\nSELECT id, name, phone, frequency, jobDate, campaignId, createdAt FROM reactivation_contacts ORDER BY id DESC LIMIT 5;",
+  "returncode": 1,
+  "logs": [
+    "total",
+    "2",
+    "ERROR 1054 (42S22) at line 2: Unknown column 'frequency' in 'field list'"
+  ]
+}

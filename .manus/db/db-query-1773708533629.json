@@ -1,0 +1,73 @@
+{
+  "query": "SELECT COUNT(*) as total FROM reactivation_contacts;\nSELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reactivation_contacts' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COUNT(*) as total FROM reactivation_contacts;\nSELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reactivation_contacts' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "total": "2"
+    },
+    {
+      "total": "COLUMN_NAME"
+    },
+    {
+      "total": "id"
+    },
+    {
+      "total": "campaignId"
+    },
+    {
+      "total": "phone"
+    },
+    {
+      "total": "phoneRaw"
+    },
+    {
+      "total": "name"
+    },
+    {
+      "total": "firstName"
+    },
+    {
+      "total": "email"
+    },
+    {
+      "total": "lastBookingDate"
+    },
+    {
+      "total": "daysSince"
+    },
+    {
+      "total": "bookingCount"
+    },
+    {
+      "total": "lastPrice"
+    },
+    {
+      "total": "discountPct"
+    },
+    {
+      "total": "segment"
+    },
+    {
+      "total": "status"
+    },
+    {
+      "total": "sentAt"
+    },
+    {
+      "total": "repliedAt"
+    },
+    {
+      "total": "sessionId"
+    },
+    {
+      "total": "createdAt"
+    },
+    {
+      "total": "completedJobId"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\n2\nCOLUMN_NAME\nid\ncampaignId\nphone\nphoneRaw\nname\nfirstName\nemail\nlastBookingDate\ndaysSince\nbookingCount\nlastPrice\ndiscountPct\nsegment\nstatus\nsentAt\nrepliedAt\nsessionId\ncreatedAt\ncompletedJobId\n",
+  "stderr": "",
+  "execution_time_ms": 63
+}

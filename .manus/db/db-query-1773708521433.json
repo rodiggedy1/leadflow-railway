@@ -1,0 +1,34 @@
+{
+  "query": "SELECT 'completed_jobs' as tbl, COUNT(*) as cnt FROM completed_jobs\nUNION ALL SELECT 'completed_job_batches', COUNT(*) FROM completed_job_batches\nUNION ALL SELECT 'reactivation_contacts', COUNT(*) FROM reactivation_contacts\nUNION ALL SELECT 'reactivation_campaigns', COUNT(*) FROM reactivation_campaigns\nUNION ALL SELECT 'always_on_enrollments', COUNT(*) FROM always_on_enrollments\nUNION ALL SELECT 'always_on_groups', COUNT(*) FROM always_on_groups;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT 'completed_jobs' as tbl, COUNT(*) as cnt FROM completed_jobs\nUNION ALL SELECT 'completed_job_batches', COUNT(*) FROM completed_job_batches\nUNION ALL SELECT 'reactivation_contacts', COUNT(*) FROM reactivation_contacts\nUNION ALL SELECT 'reactivation_campaigns', COUNT(*) FROM reactivation_campaigns\nUNION ALL SELECT 'always_on_enrollments', COUNT(*) FROM always_on_enrollments\nUNION ALL SELECT 'always_on_groups', COUNT(*) FROM always_on_groups;",
+  "rows": [
+    {
+      "tbl": "completed_jobs",
+      "cnt": "3"
+    },
+    {
+      "tbl": "completed_job_batches",
+      "cnt": "1"
+    },
+    {
+      "tbl": "always_on_enrollments",
+      "cnt": "0"
+    },
+    {
+      "tbl": "reactivation_contacts",
+      "cnt": "2"
+    },
+    {
+      "tbl": "reactivation_campaigns",
+      "cnt": "2"
+    },
+    {
+      "tbl": "always_on_groups",
+      "cnt": "4"
+    }
+  ],
+  "messages": [],
+  "stdout": "tbl\tcnt\ncompleted_jobs\t3\ncompleted_job_batches\t1\nalways_on_enrollments\t0\nreactivation_contacts\t2\nreactivation_campaigns\t2\nalways_on_groups\t4\n",
+  "stderr": "",
+  "execution_time_ms": 74
+}

@@ -1,0 +1,31 @@
+{
+  "query": "SELECT id, jobDate, frequency, phone, name FROM completed_jobs ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, jobDate, frequency, phone, name FROM completed_jobs ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "3",
+      "jobDate": "2026-03-15",
+      "frequency": "Monthly (10%OFF)",
+      "phone": "+12028235668",
+      "name": "Talia Harris"
+    },
+    {
+      "id": "2",
+      "jobDate": "2026-03-15",
+      "frequency": "Monthly (10%OFF)",
+      "phone": "+12405953198",
+      "name": "Vincent Ronquillo"
+    },
+    {
+      "id": "1",
+      "jobDate": "2026-03-15",
+      "frequency": "Monthly (10%OFF)",
+      "phone": "+12023843991",
+      "name": "Shirletta Miller"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tjobDate\tfrequency\tphone\tname\n3\t2026-03-15\tMonthly (10%OFF)\t+12028235668\tTalia Harris\n2\t2026-03-15\tMonthly (10%OFF)\t+12405953198\tVincent Ronquillo\n1\t2026-03-15\tMonthly (10%OFF)\t+12023843991\tShirletta Miller\n",
+  "stderr": "",
+  "execution_time_ms": 135
+}

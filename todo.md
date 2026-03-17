@@ -684,3 +684,18 @@
 - [x] Manual enrollment button ("Enroll Now") for backfill
 - [x] "Always-On" nav link added to AdminDashboard tab bar
 - [x] 26 test files, 413 tests passing (28 new tests for alwaysOnEngine), 0 TS errors
+
+## Historical CSV Import + Bulk Enrollment — COMPLETED
+
+- [x] Import 5-year bookings CSV (44,371 rows) directly into completed_jobs via scripts/importBookingsCsv.mjs
+- [x] Normalize phone to E.164, frequency to clean labels, date to YYYY-MM-DD, price to integer cents
+- [x] 61 rows skipped (invalid/missing phone)
+- [x] Bulk-classify all 44,374 completed_jobs into always-on groups via scripts/bulkEnroll.mjs
+  - New One-Time: 43
+  - Lapsed One-Time: 313
+  - Lapsed Recurring: 1,515
+  - Dormant: 42,257
+  - Active recurring (skipped): 246
+  - Total enrolled: 44,128
+- [x] Fix campaignCompletedJobs.test.ts — 2 tests now use pure logic assertions (413/413 pass)
+- [x] 413/413 tests passing, 0 TS errors

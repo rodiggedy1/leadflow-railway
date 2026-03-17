@@ -1,0 +1,43 @@
+{
+  "query": "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'completed_job_batches' ORDER BY ORDINAL_POSITION;\nSELECT * FROM completed_job_batches ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'completed_job_batches' ORDER BY ORDINAL_POSITION;\nSELECT * FROM completed_job_batches ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "filename"
+    },
+    {
+      "COLUMN_NAME": "jobDate"
+    },
+    {
+      "COLUMN_NAME": "totalCount"
+    },
+    {
+      "COLUMN_NAME": "sentCount"
+    },
+    {
+      "COLUMN_NAME": "positiveCount"
+    },
+    {
+      "COLUMN_NAME": "negativeCount"
+    },
+    {
+      "COLUMN_NAME": "reviewConfirmedCount"
+    },
+    {
+      "COLUMN_NAME": "uploadedAt"
+    },
+    {
+      "COLUMN_NAME": "id\tfilename\tjobDate\ttotalCount\tsentCount\tpositiveCount\tnegativeCount\treviewConfirmedCount\tuploadedAt"
+    },
+    {
+      "COLUMN_NAME": "1\tlaunch27-sync-2026-03-15\t2026-03-15\t3\t0\t0\t0\t0\t2026-03-16 23:45:31"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nfilename\njobDate\ntotalCount\nsentCount\npositiveCount\nnegativeCount\nreviewConfirmedCount\nuploadedAt\nid\tfilename\tjobDate\ttotalCount\tsentCount\tpositiveCount\tnegativeCount\treviewConfirmedCount\tuploadedAt\n1\tlaunch27-sync-2026-03-15\t2026-03-15\t3\t0\t0\t0\t0\t2026-03-16 23:45:31\n",
+  "stderr": "",
+  "execution_time_ms": 63
+}
