@@ -49,6 +49,7 @@ import {
   Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,11 @@ function GroupCard({ group, onUpdated }: {
   const [contactPage, setContactPage] = useState(0);
   const PAGE_SIZE = 50;
 
+  // Test message dialog
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [lastRenderedMessage, setLastRenderedMessage] = useState<string | null>(null);
+
   const updateGroup = trpc.alwaysOn.updateGroup.useMutation({
     onSuccess: () => {
       toast.success("Group updated — changes saved.");
@@ -158,6 +164,23 @@ function GroupCard({ group, onUpdated }: {
   const handleSaveTemplate = () => {
     updateGroup.mutate({ groupId: group.id, messageTemplate: templateDraft });
     setEditingTemplate(false);
+  };
+
+  const sendTestMessage = trpc.alwaysOn.sendTestMessage.useMutation({
+    onSuccess: (data) => {
+      setLastRenderedMessage(data.renderedMessage);
+      toast.success(`Test message sent to ${data.sentTo}`);
+    },
+    onError: (e) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const handleSendTest = () => {
+    const digits = testPhone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      toast.error("Please enter a valid 10-digit US phone number.");
+      return;
+    }
+    sendTestMessage.mutate({ groupId: group.id, testPhone });
   };
 
   const handleSaveBatchSize = () => {
@@ -338,6 +361,78 @@ function GroupCard({ group, onUpdated }: {
             </div>
           )}
         </div>
+
+        {/* Test message button */}
+        <div className="mt-3">
+          <button
+            onClick={() => { setTestDialogOpen(true); setLastRenderedMessage(null); }}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:opacity-80"
+            style={{ borderColor: meta.borderColor, color: meta.color, backgroundColor: meta.bgColor }}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            Send Test Message
+          </button>
+        </div>
+
+        {/* Test message dialog */}
+        <Dialog open={testDialogOpen} onOpenChange={(open) => { setTestDialogOpen(open); if (!open) setLastRenderedMessage(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span style={{ color: meta.color }}>{meta.icon}</span>
+                Test: {group.name}
+              </DialogTitle>
+              <DialogDescription>
+                Send a sample message to your phone to preview exactly what customers will receive.
+                Tokens like [Name] and [Price] will be filled with real data from a pending contact (or placeholders if none exist).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-2">
+              {/* Message preview */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Message Preview</p>
+                <div
+                  className="rounded-lg p-3 text-sm text-gray-700 leading-relaxed border"
+                  style={{ backgroundColor: meta.bgColor, borderColor: meta.borderColor }}
+                >
+                  {lastRenderedMessage ?? group.messageTemplate}
+                </div>
+                {lastRenderedMessage && (
+                  <p className="text-xs text-green-600 mt-1">✓ Tokens replaced with real data — this is exactly what was sent.</p>
+                )}
+              </div>
+
+              {/* Phone input */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Send to Phone Number</p>
+                <Input
+                  type="tel"
+                  placeholder="e.g. 202-555-1234"
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSendTest(); }}
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => setTestDialogOpen(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  onClick={handleSendTest}
+                  disabled={sendTestMessage.isPending}
+                  style={{ backgroundColor: meta.color }}
+                  className="text-white"
+                >
+                  {sendTestMessage.isPending
+                    ? <><RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> Sending...</>
+                    : <><Send className="w-3.5 h-3.5 mr-1" /> Send Test</>}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Expand/collapse contacts */}
         <button

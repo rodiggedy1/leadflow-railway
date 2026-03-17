@@ -725,3 +725,11 @@
 - [x] Update Always-On UI: Pending stat added to 5-stat row (Enrolled / Pending / Sent / Reply Rate / Booked)
 - [x] Add openPhoneMessageId column to always_on_enrollments (migration 0025 applied)
 - [x] 18 new tests for alwaysOnSend.ts (431/431 total pass, 0 TS errors)
+
+## Always-On Test Message Feature — COMPLETED
+
+- [x] Add alwaysOn.sendTestMessage tRPC procedure: takes groupId + testPhone, picks a real PENDING enrollment (or placeholder tokens), sends via OpenPhone, returns rendered message text
+- [x] Add "Send Test Message" button to each group card in AlwaysOnCampaign.tsx
+- [x] Dialog: phone number input, message preview (shows template before send, rendered message after send), confirm send button
+- [x] After send: dialog shows the exact rendered message with tokens replaced and a green confirmation
+- [x] 431/431 tests passing, 0 TS errors

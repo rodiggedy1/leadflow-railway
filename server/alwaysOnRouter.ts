@@ -21,6 +21,8 @@ import {
 } from "../drizzle/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { enrollNewlyEligible, seedDefaultGroups } from "./alwaysOnEngine";
+import { personalizeMessage } from "./alwaysOnSend";
+import { sendSms } from "./openphone";
 import { TRPCError } from "@trpc/server";
 
 export const alwaysOnRouter = router({
@@ -124,6 +126,71 @@ export const alwaysOnRouter = router({
     const total = Object.values(enrolled).reduce((a, b) => a + b, 0);
     return { ok: true, enrolled, total };
   }),
+
+  /**
+   * Sends a test message for a group to a specified phone number.
+   * Uses a sample enrollment (or placeholder tokens) to render the personalized message.
+   */
+  sendTestMessage: protectedProcedure
+    .input(
+      z.object({
+        groupId: z.number(),
+        testPhone: z.string().min(10).max(20),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Load the group
+      const [group] = await db
+        .select()
+        .from(alwaysOnGroups)
+        .where(eq(alwaysOnGroups.id, input.groupId))
+        .limit(1);
+
+      if (!group) throw new TRPCError({ code: "NOT_FOUND", message: "Group not found" });
+
+      // Try to find a real PENDING enrollment to use as sample data
+      const [sampleEnrollment] = await db
+        .select()
+        .from(alwaysOnEnrollments)
+        .where(
+          and(
+            eq(alwaysOnEnrollments.groupId, input.groupId),
+            eq(alwaysOnEnrollments.status, "PENDING")
+          )
+        )
+        .limit(1);
+
+      // Render the message with real or placeholder tokens
+      const renderedMessage = personalizeMessage(group.messageTemplate, {
+        firstName: sampleEnrollment?.firstName ?? "Sarah",
+        lastBookingPrice: sampleEnrollment?.lastBookingPrice ?? 18000, // $180 placeholder
+        discountPct: sampleEnrollment?.discountPct ?? 10,
+      });
+
+      // Normalize phone number to E.164
+      const digits = input.testPhone.replace(/\D/g, "");
+      const e164 = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
+
+      // Send via OpenPhone
+      const result = await sendSms({ to: e164, content: renderedMessage });
+
+      if (!result.success) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: result.error ?? "Failed to send test message",
+        });
+      }
+
+      return {
+        ok: true,
+        renderedMessage,
+        sentTo: e164,
+        usedSampleData: !!sampleEnrollment,
+      };
+    }),
 
   /**
    * Returns per-group stats breakdown (pending/sent/replied/booked counts).
