@@ -86,6 +86,11 @@ export const conversationStages = [
    * The system will automatically send a circle-back SMS on that date.
    */
   "FOLLOW_UP_SCHEDULED",
+  /**
+   * LANGUAGE_CONFIRM → AI detected a non-English message and sent a bilingual confirmation.
+   * Waiting for the lead to confirm their preferred language before continuing.
+   */
+  "LANGUAGE_CONFIRM",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -172,6 +177,18 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   followUpMessage: text("followUpMessage"),
   /** Whether the scheduled follow-up SMS has already been sent */
   followUpSent: int("followUpSent").default(0).notNull(),
+
+  // ── Language / Multilingual fields ────────────────────────────────────────
+  /**
+   * ISO 639-1 language code for this conversation (e.g. "en", "es", "fr", "zh").
+   * Defaults to "en". Set after lead confirms language preference.
+   */
+  language: varchar("language", { length: 10 }).default("en").notNull(),
+  /**
+   * The stage the conversation was in before LANGUAGE_CONFIRM was triggered.
+   * Used to resume the correct flow after language is confirmed.
+   */
+  preLangStage: varchar("preLangStage", { length: 50 }),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

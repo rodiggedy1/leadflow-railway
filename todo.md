@@ -860,3 +860,21 @@
 - [ ] Add tRPC procedures: getActivityFeed, markAllRead
 - [ ] Build NotificationBell component with unread badge and dropdown feed
 - [ ] Wire NotificationBell into AdminDashboard header
+
+## Multilingual Support — IN PROGRESS
+- [ ] Add `language` column to conversationSessions schema
+- [ ] Create language detection utility (LLM-based)
+- [ ] Add LANGUAGE_CONFIRM stage to conversationStages enum
+- [ ] Detect non-English on first message and send bilingual confirmation
+- [ ] Persist confirmed language on session
+- [ ] Inject language instruction into all AI prompts
+- [ ] Show language flag badge in admin leads table
+
+## Multilingual Support — COMPLETED
+- [x] Add language column and LANGUAGE_CONFIRM stage to schema
+- [x] Create language detection utility (LLM-based, regex pre-filter)
+- [x] Add LANGUAGE_CONFIRM stage to conversation engine with bilingual confirmation message
+- [x] Persist confirmed language on session in webhooks.ts
+- [x] Inject language instruction into all AI prompts (handleOffScriptReply, handleObjection, handlePostBookingReply)
+- [x] Show language flag badge in leads table (Source column)
+- [x] Show language flag badge in lead detail drawer header

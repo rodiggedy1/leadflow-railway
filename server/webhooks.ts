@@ -233,6 +233,27 @@ export function registerWebhookRoutes(app: Express) {
       // Track lastAiMessageAt so the silence-follow-up cron can detect 5-min inactivity.
       // Reset autoFollowUpSent so a new nudge can fire if the conversation restarts.
       const isTerminalStage = ["DONE", "BOOKED", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"].includes(result.nextStage);
+
+      // Extract language metadata from the result (set by language detection / confirmation)
+      const extResult = result as typeof result & {
+        _detectedLanguage?: string;
+        _detectedLanguageName?: string;
+        _preLangStage?: string;
+        _confirmedLanguage?: string;
+      };
+
+      // Build language update fields
+      const langUpdates: { language?: string; preLangStage?: string | undefined } = {};
+      if (extResult._detectedLanguage) {
+        // Language detected but not yet confirmed — store it temporarily so LANGUAGE_CONFIRM can use it
+        langUpdates.language = extResult._detectedLanguage;
+        langUpdates.preLangStage = extResult._preLangStage ?? session.stage;
+      } else if (extResult._confirmedLanguage !== undefined) {
+        // Language confirmed (yes or no) — finalize it
+        langUpdates.language = extResult._confirmedLanguage;
+        // Clear preLangStage by omitting it (Drizzle won't update it if not provided)
+      }
+
       await db
         .update(conversationSessions)
         .set({
@@ -243,6 +264,8 @@ export function registerWebhookRoutes(app: Express) {
           messageHistory: JSON.stringify(history),
           lastAiMessageAt: new Date(),
           autoFollowUpSent: isTerminalStage ? session.autoFollowUpSent : 0,
+          ...(langUpdates.language !== undefined ? { language: langUpdates.language } : {}),
+          ...(langUpdates.preLangStage !== undefined ? { preLangStage: langUpdates.preLangStage } : {}),
         })
         .where(eq(conversationSessions.id, session.id));
 

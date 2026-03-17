@@ -482,9 +482,37 @@ type DrawerSession = {
   followUpDate: string | null;
   followUpMessage: string | null;
   followUpSent: number;
+  language: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
+
+/** Returns a flag emoji + language label for non-English sessions */
+function getLanguageBadge(language: string | null): React.ReactElement | null {
+  if (!language || language === "en") return null;
+  const langMap: Record<string, { flag: string; label: string }> = {
+    es: { flag: "🇪🇸", label: "Spanish" },
+    fr: { flag: "🇫🇷", label: "French" },
+    pt: { flag: "🇧🇷", label: "Portuguese" },
+    zh: { flag: "🇨🇳", label: "Chinese" },
+    ar: { flag: "🇸🇦", label: "Arabic" },
+    hi: { flag: "🇮🇳", label: "Hindi" },
+    ko: { flag: "🇰🇷", label: "Korean" },
+    ja: { flag: "🇯🇵", label: "Japanese" },
+    de: { flag: "🇩🇪", label: "German" },
+    it: { flag: "🇮🇹", label: "Italian" },
+    ru: { flag: "🇷🇺", label: "Russian" },
+    vi: { flag: "🇻🇳", label: "Vietnamese" },
+    tl: { flag: "🇵🇭", label: "Tagalog" },
+    am: { flag: "🇪🇹", label: "Amharic" },
+  };
+  const info = langMap[language] ?? { flag: "🌐", label: language.toUpperCase() };
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+      {info.flag} {info.label}
+    </span>
+  );
+}
 
 /**
  * Maps a leadSource string to a human-readable badge.
@@ -788,6 +816,7 @@ function ConversationDrawer({
           </div>
           <div className="flex items-center gap-2">
             {getSourceBadge(session.leadSource)}
+            {getLanguageBadge(session.language)}
             <StageBadge stage={session.stage} />
             <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
               <X className="w-4 h-4" />
@@ -2120,7 +2149,10 @@ export default function AdminDashboard() {
 
                       {/* Source */}
                       <TableCell>
-                        {getSourceBadge(session.leadSource)}
+                        <div className="flex flex-col gap-1">
+                          {getSourceBadge(session.leadSource)}
+                          {getLanguageBadge(session.language)}
+                        </div>
                       </TableCell>
 
                       {/* Service */}

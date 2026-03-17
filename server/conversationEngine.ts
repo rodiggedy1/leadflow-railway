@@ -20,6 +20,7 @@
 
 import { invokeLLM } from "./_core/llm";
 import type { ConversationStage } from "../drizzle/schema";
+import { detectLanguage, buildLanguageConfirmSms, parseLanguageConfirmReply, getLanguageInstruction } from "./languageDetect";
 import {
   handleOffScriptReply,
   handleObjection,
@@ -49,6 +50,10 @@ export interface ConversationContext {
   lastPrice?: number | null;
   /** Discount percentage for reactivation offer (default 10) */
   discountPct?: number | null;
+  /** ISO 639-1 language code for this conversation (default "en") */
+  language?: string | null;
+  /** Stage before LANGUAGE_CONFIRM was triggered — used to resume flow */
+  preLangStage?: string | null;
 }
 
 export interface ChatMessage {
@@ -487,6 +492,45 @@ export async function processLeadReply(
     ? context.extras.map(k => k.replace(/_/g, " ")).join(", ")
     : null;
 
+  // ── LANGUAGE_CONFIRM: Lead replied to the bilingual language confirmation ──────────────────────
+  if (stage === "LANGUAGE_CONFIRM") {
+    return handleLanguageConfirmReply(leadReply, context);
+  }
+
+  // ── Language detection: detect non-English on first meaningful reply ──────────────────────────
+  // Only detect on the very first reply (no language set yet) and skip terminal/simple stages
+  const currentLanguage = context.language || "en";
+  const shouldDetectLanguage =
+    currentLanguage === "en" &&
+    stage !== "DONE" &&
+    stage !== "BOOKED" &&
+    stage !== "NOT_INTERESTED" &&
+    stage !== "FUTURE_BOOKING" &&
+    stage !== "FOLLOW_UP_SCHEDULED" &&
+    leadReply.trim().length > 1;
+
+  if (shouldDetectLanguage) {
+    try {
+      const langResult = await detectLanguage(leadReply);
+      if (!langResult.isEnglish && langResult.confidence >= 0.75) {
+        const confirmMsg = buildLanguageConfirmSms(langResult.language, langResult.languageName);
+        return {
+          reply: confirmMsg,
+          nextStage: "LANGUAGE_CONFIRM",
+          extractedData: {
+            // Pass language info via a special marker in selectedSlot (will be parsed in webhooks.ts)
+          },
+          // Attach language metadata for the webhook to persist
+          _detectedLanguage: langResult.language,
+          _detectedLanguageName: langResult.languageName,
+          _preLangStage: stage,
+        } as StageResult & { _detectedLanguage: string; _detectedLanguageName: string; _preLangStage: string };
+      }
+    } catch (err) {
+      console.error("[ConversationEngine] Language detection failed:", err);
+    }
+  }
+
   // ── Post-booking stages — route through AI instead of a static dead-end ───────────────────────
   if (stage === "DONE" || stage === "CALL_SCHEDULED") {
     const reply = await handlePostBookingReply({
@@ -856,5 +900,97 @@ export async function processLeadReply(
         };
       }
     }
+  }
+}
+
+/**
+ * Handle a reply to the bilingual language confirmation message.
+ * If the lead says yes → confirm in their language and resume the pre-lang stage.
+ * If the lead says no → confirm English and resume.
+ * If unclear → ask again.
+ */
+async function handleLanguageConfirmReply(
+  leadReply: string,
+  context: ConversationContext
+): Promise<StageResult & { _confirmedLanguage?: string; _confirmedLanguageName?: string }> {
+  const answer = parseLanguageConfirmReply(leadReply);
+  const preLangStage = (context.preLangStage as ConversationStage) || "AVAILABILITY";
+  const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+
+  if (answer === "yes") {
+    // Confirmed non-English — resume in their language
+    const langCode = context.language || "en";
+    const langInstruction = getLanguageInstruction(langCode, langCode);
+
+    // Generate a brief acknowledgment in their language
+    let ackMsg = "";
+    try {
+      const ackResponse = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are a friendly cleaning service assistant. Respond ONLY in the language with code "${langCode}". Keep it very short (1 sentence).`,
+          },
+          {
+            role: "user",
+            content: `Say "Great! I'll continue in [language name]. Let's get you scheduled!" in the language with code "${langCode}".`,
+          },
+        ],
+      });
+      ackMsg = (ackResponse.choices?.[0]?.message?.content as string) || "";
+    } catch {
+      ackMsg = `Great! Let's continue. 😊`;
+    }
+
+    // Now resume the pre-lang stage flow
+    const resumeResult = await resumeStageAfterLanguageConfirm(preLangStage, context);
+    const fullReply = ackMsg ? `${ackMsg}\n\n${resumeResult.reply}` : resumeResult.reply;
+
+    return {
+      reply: fullReply,
+      nextStage: resumeResult.nextStage,
+      _confirmedLanguage: langCode,
+    };
+  } else if (answer === "no") {
+    // Wants English — resume normally
+    const resumeResult = await resumeStageAfterLanguageConfirm(preLangStage, context);
+    return {
+      reply: `No problem! ${resumeResult.reply}`,
+      nextStage: resumeResult.nextStage,
+      _confirmedLanguage: "en",
+    };
+  } else {
+    // Unclear — ask again
+    return {
+      reply: `Sorry, I didn't catch that! Reply *Yes* to continue in your language, or *No* for English.`,
+      nextStage: "LANGUAGE_CONFIRM",
+    };
+  }
+}
+
+/**
+ * Resume the conversation at the appropriate stage after language is confirmed.
+ */
+async function resumeStageAfterLanguageConfirm(
+  preLangStage: ConversationStage,
+  context: ConversationContext
+): Promise<{ reply: string; nextStage: ConversationStage }> {
+  switch (preLangStage) {
+    case "QUOTE_SENT":
+      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
+    case "AVAILABILITY":
+      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
+    case "SLOT_CHOICE":
+      return { reply: buildSlotChoiceMessage(), nextStage: "SLOT_CHOICE" };
+    case "TIME_PREF":
+      return { reply: buildTimePrefMessage(context.selectedSlot || "your slot"), nextStage: "TIME_PREF" };
+    case "ADDRESS":
+      return { reply: buildAddressRequestMessage(context.selectedSlot || ""), nextStage: "ADDRESS" };
+    case "CONFIRMATION":
+      return { reply: `Let me confirm your booking details. What's the address for the cleaning?`, nextStage: "ADDRESS" };
+    case "REACTIVATION":
+      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
+    default:
+      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
   }
 }
