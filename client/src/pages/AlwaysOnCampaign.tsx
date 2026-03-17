@@ -174,11 +174,40 @@ function GroupCard({ group, onUpdated }: {
     onError: (e) => toast.error(e.message),
   });
 
-  const { data: contactsData, isLoading: contactsLoading, refetch: refetchContacts } =
+  // Contacts table shows only responders (REPLIED + BOOKED) by default.
+  // The full send list is visible in the stats cards above.
+  const [contactStatusFilter, setContactStatusFilter] = useState<"responded" | "all">("responded");
+
+  // We fetch REPLIED and BOOKED in two separate queries and merge, OR use "all" for the full list.
+  const { data: repliedData, isLoading: repliedLoading } =
+    trpc.alwaysOn.getGroupContacts.useQuery(
+      { groupId: group.id, status: "REPLIED", limit: PAGE_SIZE, offset: contactPage * PAGE_SIZE },
+      { enabled: expanded && contactStatusFilter === "responded" }
+    );
+  const { data: bookedData, isLoading: bookedLoading } =
+    trpc.alwaysOn.getGroupContacts.useQuery(
+      { groupId: group.id, status: "BOOKED", limit: PAGE_SIZE, offset: contactPage * PAGE_SIZE },
+      { enabled: expanded && contactStatusFilter === "responded" }
+    );
+  const { data: allContactsData, isLoading: allLoading, refetch: refetchContacts } =
     trpc.alwaysOn.getGroupContacts.useQuery(
       { groupId: group.id, limit: PAGE_SIZE, offset: contactPage * PAGE_SIZE },
-      { enabled: expanded }
+      { enabled: expanded && contactStatusFilter === "all" }
     );
+
+  // Merge REPLIED + BOOKED for the "responded" view
+  const respondedContacts = [
+    ...(repliedData?.contacts ?? []),
+    ...(bookedData?.contacts ?? []),
+  ].sort((a, b) => (b.repliedAt?.getTime?.() ?? 0) - (a.repliedAt?.getTime?.() ?? 0));
+  const respondedTotal = (repliedData?.total ?? 0) + (bookedData?.total ?? 0);
+
+  const contactsData = contactStatusFilter === "responded"
+    ? { contacts: respondedContacts, total: respondedTotal }
+    : allContactsData;
+  const contactsLoading = contactStatusFilter === "responded"
+    ? (repliedLoading || bookedLoading)
+    : allLoading;
 
   const handleToggleActive = () => {
     updateGroup.mutate({ groupId: group.id, isActive: group.isActive === 0 });
@@ -471,9 +500,34 @@ function GroupCard({ group, onUpdated }: {
       {expanded && (
         <div className="border-t bg-white" style={{ borderColor: meta.borderColor }}>
           <div className="p-4 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">
-              {contactsData ? `${contactsData.total.toLocaleString()} contacts` : "Loading..."}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">
+                {contactsData ? `${contactsData.total.toLocaleString()} ${contactStatusFilter === "responded" ? "responders" : "contacts"}` : "Loading..."}
+              </span>
+              {/* Filter toggle */}
+              <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                <button
+                  onClick={() => { setContactStatusFilter("responded"); setContactPage(0); }}
+                  className={`px-2.5 py-1 font-medium transition-colors ${
+                    contactStatusFilter === "responded"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  Responded
+                </button>
+                <button
+                  onClick={() => { setContactStatusFilter("all"); setContactPage(0); }}
+                  className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
+                    contactStatusFilter === "all"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  All Sent
+                </button>
+              </div>
+            </div>
             <button onClick={() => refetchContacts()} className="text-gray-400 hover:text-gray-600">
               <RefreshCw className="w-4 h-4" />
             </button>

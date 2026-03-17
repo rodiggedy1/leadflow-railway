@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, ne, or, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -69,7 +69,26 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) return [];
-        const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+        const dateConditions = buildDateConditions(input?.dateFrom, input?.dateTo);
+
+        // Include sessions that are either:
+        //   (a) NOT from always-on campaigns (form leads, reactivation CSV, widget, etc.)
+        //   (b) FROM always-on campaigns but have progressed past REACTIVATION stage
+        //       (meaning the customer replied and entered the booking flow)
+        const sourceFilter = or(
+          // Non-always-on sources
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT LIKE 'always-on%')`,
+          // Always-on but replied (stage advanced past REACTIVATION)
+          and(
+            sql`${conversationSessions.leadSource} LIKE 'always-on%'`,
+            ne(conversationSessions.stage, "REACTIVATION")
+          )
+        );
+
+        const conditions = dateConditions
+          ? and(dateConditions, sourceFilter)
+          : sourceFilter;
+
         const sessions = await db
           .select()
           .from(conversationSessions)

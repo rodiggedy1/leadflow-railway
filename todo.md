@@ -812,3 +812,17 @@
 - [x] Added "Conversation" column to contacts table with "View" button for REPLIED/BOOKED contacts
 - [x] Built conversation thread Sheet drawer with message bubbles, stage badge, address/slot metadata strip
 - [x] 431/431 tests passing, 0 TS errors
+
+## Always-On Responders on Main Leads Page — IN PROGRESS
+
+- [ ] Update leads query to include always-on sessions where stage != REACTIVATION (i.e. they replied)
+- [ ] Add "Always-On" source badge to leads table rows sourced from always-on campaigns
+- [ ] Filter Always-On contacts table to REPLIED/BOOKED only (remove SENT/PENDING noise)
+
+## Always-On Responders on Main Leads Page — COMPLETED (2026-03-17)
+
+- [x] Updated leads.list query to include always-on sessions where stage != REACTIVATION (replied leads)
+- [x] Always-on responders now appear on main leads page with orange "Always-On: <group>" badge
+- [x] Always-On contacts table defaults to "Responded" view (REPLIED + BOOKED only)
+- [x] Added "Responded / All Sent" toggle on contacts table header for full list access
+- [x] 431/431 tests passing, 0 TS errors
