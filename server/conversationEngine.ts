@@ -376,6 +376,7 @@ async function handleWidgetSizingReply(
   }
 
   if (bedrooms && !bathrooms) {
+    // Have bedrooms but not bathrooms — ask specifically for bathrooms
     return {
       reply: await translateIfNeeded(`Got it — ${bedrooms}! And how many bathrooms does your home have?`, lang),
       nextStage: "WIDGET_SIZING",
@@ -383,15 +384,28 @@ async function handleWidgetSizingReply(
   }
 
   if (!bedrooms && bathrooms) {
+    // Have bathrooms but not bedrooms — ask specifically for bedrooms
     return {
       reply: await translateIfNeeded(`Got it — ${bathrooms}! And how many bedrooms does your home have?`, lang),
       nextStage: "WIDGET_SIZING",
     };
   }
 
-  // No info extracted — ask again
+  // GUARD: No room info extracted — reply is off-topic or a FAQ.
+  // Use AI to answer naturally, then steer back to asking for room counts.
+  const offScript = await handleOffScriptReply({
+    stage: "WIDGET_SIZING",
+    leadName: context.leadName,
+    quotedPrice: context.quotedPrice ?? "TBD",
+    serviceType: context.serviceType ?? "Standard Cleaning",
+    selectedSlot: null,
+    messageHistory: context.messageHistory,
+    leadReply,
+    extrasContext: null,
+    language: lang,
+  });
   return {
-    reply: await translateIfNeeded(`To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`, lang),
+    reply: offScript.reply,
     nextStage: "WIDGET_SIZING",
   };
 }
@@ -800,7 +814,7 @@ export async function processLeadReply(
       };
     }
 
-    // ── Stage 3.5: Time preference (morning or afternoon) ─────────────────────
+    // ── Stage 3.5: Time preference (morning or afternoon) ─────────────────
     case "TIME_PREF": {
       const parsed = await parseLeadReply(stage, leadReply, context);
       const slot = context.selectedSlot ?? "your selected day";
@@ -809,7 +823,26 @@ export async function processLeadReply(
         morning: "Morning",
         afternoon: "Afternoon",
       };
-      const timePref = timePrefMap[parsed.intent] ?? "Morning";
+      const timePref = timePrefMap[parsed.intent];
+
+      // GUARD: must have a clear morning/afternoon answer before advancing
+      if (!timePref) {
+        const offScript = await handleOffScriptReply({
+          stage,
+          leadName: context.leadName,
+          quotedPrice: context.quotedPrice,
+          serviceType: context.serviceType,
+          selectedSlot: slot,
+          messageHistory: context.messageHistory,
+          leadReply,
+          extrasContext,
+          language: context.language,
+        });
+        return {
+          reply: offScript.reply,
+          nextStage: "TIME_PREF", // stay here until we get morning or afternoon
+        };
+      }
 
       // Append time preference to the slot label for the confirmation message
       const slotWithTime = `${slot} (${timePref})`;
@@ -831,14 +864,17 @@ export async function processLeadReply(
       };
     }
 
-    // ── Stage 4: Address ──────────────────────────────────────────────────────
+       // ── Stage 4: Address ────────────────────────────────────────────
     case "ADDRESS": {
       const parsed = await parseLeadReply(stage, leadReply, context);
-      const address = parsed.extractedAddress ?? leadReply.trim();
+      // GUARD: only use the LLM-extracted address — never fall back to raw reply text.
+      // Raw text could be a FAQ question ("Do you bring supplies?") which would
+      // pass the length check but is not a real address.
+      const address = parsed.extractedAddress;
       const slot = context.selectedSlot ?? "Saturday 9AM";
 
       if (!address || address.length < 5) {
-        // Use AI to ask for address more naturally
+        // Use AI to answer naturally and re-ask for address
         const offScript = await handleOffScriptReply({
           stage,
           leadName: context.leadName,

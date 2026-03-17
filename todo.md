@@ -897,3 +897,15 @@
   - Made handleWidgetSizingReply async and wrapped all static strings with translateIfNeeded()
   - Fixed CONFIRMATION case in resume function to use buildConfirmationMessage instead of wrong address question
   - 431/431 tests pass, 0 TS errors
+
+## Stage Guard Rule — COMPLETED
+- [x] Define required data for each stage (what must be present before advancing)
+- [x] TIME_PREF: removed silent default to "Morning" — now calls handleOffScriptReply and stays on TIME_PREF if no morning/afternoon answer
+- [x] ADDRESS: removed raw reply fallback — now only uses LLM-extracted address; FAQ replies stay on ADDRESS
+- [x] WIDGET_SIZING: FAQ/unclear replies now use handleOffScriptReply and stay on WIDGET_SIZING
+- [x] AVAILABILITY: unclear/FAQ replies already stayed on AVAILABILITY (confirmed correct)
+- [x] SLOT_CHOICE: unclear replies already stayed on SLOT_CHOICE (confirmed correct)
+- [x] CONFIRMATION: unclear replies already stayed on CONFIRMATION (confirmed correct)
+- [x] Added TIME_PREF and WIDGET_SIZING cases to getNextActionPrompt in aiService.ts
+- [x] Wrote 14 new vitest guard rule tests covering all 6 stages
+- [x] 445/445 tests passing, 0 TS errors

@@ -277,6 +277,9 @@ describe("processLeadReply — State Machine", () => {
 
   // Stage: ADDRESS → address provided → CONFIRMATION
   it("ADDRESS: address reply captured and advances to CONFIRMATION", async () => {
+    // Call 1: detectObjection returns "on_track" (ADDRESS is in the objection check list)
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply extracts the address
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "address_provided", extractedSlot: null, extractedAddress: "456 Oak Ave, Washington DC 20002", extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -444,5 +447,259 @@ describe("REACTIVATION stage", () => {
     });
     const result = await processLeadReply("I'm interested but need more info", ctx);
     expect(result.nextStage).toBe("AVAILABILITY");
+  });
+});
+
+// ─── Stage Guard Rule tests ───────────────────────────────────────────────────
+// The guard rule: a stage must NOT advance until it has a valid answer.
+// Off-topic replies (FAQs, unclear) get answered by AI and the bot re-asks.
+describe("Stage Guard Rule — no stage advances without a valid answer", () => {
+  beforeEach(() => {
+    mockLLM.mockReset();
+  });
+
+  // ── WIDGET_SIZING guard ──────────────────────────────────────────────────────
+  it("WIDGET_SIZING: FAQ reply stays at WIDGET_SIZING and uses AI off-script handler", async () => {
+    // handleOffScriptReply calls LLM once — returns an answer + re-asks for rooms
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "Great question! We're fully insured. How many bedrooms and bathrooms does your home have?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({
+      stage: "WIDGET_SIZING",
+      quotedPrice: "TBD",
+      serviceType: "Standard Cleaning",
+      bedrooms: null as any,
+      bathrooms: null as any,
+    });
+    const result = await processLeadReply("Are you insured?", ctx);
+
+    expect(result.nextStage).toBe("WIDGET_SIZING");
+    expect(result.reply).toBeTruthy();
+    expect(mockLLM).toHaveBeenCalled();
+  });
+
+  it("WIDGET_SIZING: reply with only bedrooms stays at WIDGET_SIZING and asks for bathrooms", async () => {
+    const ctx = makeContext({
+      stage: "WIDGET_SIZING",
+      quotedPrice: "TBD",
+      serviceType: "Standard Cleaning",
+      bedrooms: null as any,
+      bathrooms: null as any,
+    });
+    const result = await processLeadReply("3 bedrooms", ctx);
+
+    expect(result.nextStage).toBe("WIDGET_SIZING");
+    expect(result.reply.toLowerCase()).toContain("bathroom");
+    expect(mockLLM).not.toHaveBeenCalled(); // partial info path is static, no LLM needed
+  });
+
+  it("WIDGET_SIZING: reply with only bathrooms stays at WIDGET_SIZING and asks for bedrooms", async () => {
+    const ctx = makeContext({
+      stage: "WIDGET_SIZING",
+      quotedPrice: "TBD",
+      serviceType: "Standard Cleaning",
+      bedrooms: null as any,
+      bathrooms: null as any,
+    });
+    const result = await processLeadReply("2 bathrooms", ctx);
+
+    expect(result.nextStage).toBe("WIDGET_SIZING");
+    expect(result.reply.toLowerCase()).toContain("bedroom");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  it("WIDGET_SIZING: reply with both rooms advances to AVAILABILITY", async () => {
+    const ctx = makeContext({
+      stage: "WIDGET_SIZING",
+      quotedPrice: "TBD",
+      serviceType: "Standard Cleaning",
+      bedrooms: null as any,
+      bathrooms: null as any,
+    });
+    const result = await processLeadReply("3 bed 2 bath", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).toContain("$");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  // ── TIME_PREF guard ──────────────────────────────────────────────────────────
+  it("TIME_PREF: unclear reply stays at TIME_PREF and uses AI off-script handler", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns unclear (no morning/afternoon)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: handleOffScriptReply — returns a re-ask
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "No problem! Would morning or afternoon work better for you on Thursday?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "TIME_PREF", selectedSlot: "Thursday" });
+    const result = await processLeadReply("I'm not sure yet", ctx);
+
+    expect(result.nextStage).toBe("TIME_PREF");
+    expect(result.reply).toBeTruthy();
+  });
+
+  it("TIME_PREF: 'morning' reply advances to ADDRESS", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns morning
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "morning", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "TIME_PREF", selectedSlot: "Thursday" });
+    const result = await processLeadReply("morning please", ctx);
+
+    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.extractedData?.selectedSlot).toContain("Morning");
+  });
+
+  it("TIME_PREF: 'afternoon' reply advances to ADDRESS", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns afternoon
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "afternoon", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "TIME_PREF", selectedSlot: "Friday" });
+    const result = await processLeadReply("afternoon works", ctx);
+
+    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.extractedData?.selectedSlot).toContain("Afternoon");
+  });
+
+  it("TIME_PREF: FAQ reply stays at TIME_PREF (guard prevents advance)", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns unclear (FAQ about price)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: handleOffScriptReply — answers FAQ and re-asks
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "The price is $130. Would morning or afternoon work better for you?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "TIME_PREF", selectedSlot: "Thursday" });
+    const result = await processLeadReply("what's included in the cleaning?", ctx);
+
+    expect(result.nextStage).toBe("TIME_PREF"); // GUARD: must not advance
+    expect(result.reply).toBeTruthy();
+  });
+
+  // ── ADDRESS guard ────────────────────────────────────────────────────────────
+  it("ADDRESS: short/unclear reply stays at ADDRESS", async () => {
+    // Call 1: parseLeadReply — returns no address
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 2: handleOffScriptReply — re-asks for address
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "No worries! What's the address for the cleaning on Thursday?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "ADDRESS", selectedSlot: "Thursday (Morning)" });
+    const result = await processLeadReply("hmm", ctx);
+
+    expect(result.nextStage).toBe("ADDRESS"); // GUARD: must not advance
+    expect(result.reply).toBeTruthy();
+  });
+
+  it("ADDRESS: FAQ reply stays at ADDRESS (guard prevents advance)", async () => {
+    // Call 1: parseLeadReply — returns no address (FAQ, not an address)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 2: handleOffScriptReply — answers FAQ and re-asks for address
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "We bring all our own supplies! What's the address for the cleaning?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "ADDRESS", selectedSlot: "Thursday (Morning)" });
+    const result = await processLeadReply("Do you bring your own supplies?", ctx);
+
+    expect(result.nextStage).toBe("ADDRESS"); // GUARD: must not advance
+    expect(result.reply).toBeTruthy();
+  });
+
+  // ── CONFIRMATION guard ───────────────────────────────────────────────────────
+  it("CONFIRMATION: unclear reply stays at CONFIRMATION", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns unclear
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: handleOffScriptReply — re-asks for call preference
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "No worries! Should we call you now or in a few minutes to confirm?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "CONFIRMATION", selectedSlot: "Thursday (Morning)", address: "123 Main St" });
+    const result = await processLeadReply("I'm not sure", ctx);
+
+    expect(result.nextStage).toBe("CONFIRMATION"); // GUARD: must not advance
+    expect(result.reply).toBeTruthy();
+  });
+
+  it("CONFIRMATION: FAQ reply stays at CONFIRMATION (guard prevents advance)", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns unclear (FAQ, not a call preference)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: handleOffScriptReply — answers FAQ and re-asks
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "We accept all major cards! Should we call you now or in a few minutes?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "CONFIRMATION", selectedSlot: "Thursday (Morning)", address: "123 Main St" });
+    const result = await processLeadReply("What payment methods do you accept?", ctx);
+
+    expect(result.nextStage).toBe("CONFIRMATION"); // GUARD: must not advance
+    expect(result.reply).toBeTruthy();
+  });
+
+  // ── AVAILABILITY guard ───────────────────────────────────────────────────────
+  it("AVAILABILITY: FAQ reply stays at AVAILABILITY (guard prevents advance)", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns unclear (FAQ, not a day selection)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "AVAILABILITY" });
+    const result = await processLeadReply("Do you clean apartments?", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY"); // GUARD: must not advance
+    expect(result.reply).toContain("openings"); // re-asks with slot options
+  });
+
+  // ── SLOT_CHOICE guard ────────────────────────────────────────────────────────
+  it("SLOT_CHOICE: FAQ reply stays at SLOT_CHOICE (guard prevents advance)", async () => {
+    // Call 1: detectObjection — returns "on_track"
+    mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
+    // Call 2: parseLeadReply — returns unclear (FAQ, not a slot choice)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: handleOffScriptReply — answers FAQ and re-asks for slot
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "Yes we do deep cleaning! Which slot works better for you — option 1 or 2?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+
+    const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Thursday, March 19", "Friday, March 20"] });
+    const result = await processLeadReply("Do you do deep cleaning?", ctx);
+
+    expect(result.nextStage).toBe("SLOT_CHOICE"); // GUARD: must not advance
+    expect(result.reply).toBeTruthy();
   });
 });

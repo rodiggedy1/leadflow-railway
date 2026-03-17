@@ -399,10 +399,14 @@ function getNextActionPrompt(stage: string, selectedSlot?: string | null): strin
       return formatAvailabilityQuestion(getNextAvailableSlots(2));
     case "SLOT_CHOICE":
       return formatSlotChoiceQuestion(getNextAvailableSlots(2));
+    case "TIME_PREF":
+      return `Would morning or afternoon work better for you${selectedSlot ? ` on ${selectedSlot}` : ""}?`;
     case "ADDRESS":
       return `What's the address for the cleaning${selectedSlot ? ` on ${selectedSlot}` : ""}?`;
     case "CONFIRMATION":
       return "Should we call you now or in a few minutes to confirm?";
+    case "WIDGET_SIZING":
+      return "How many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)";
     default:
       return "How can we help you today?";
   }
