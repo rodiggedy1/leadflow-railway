@@ -313,6 +313,7 @@ export const appRouter = router({
           "BOOKED",
           "NOT_INTERESTED",
           "FUTURE_BOOKING",
+          "FOLLOW_UP_SCHEDULED",
         ]),
       }))
       .mutation(async ({ input }) => {
@@ -325,6 +326,45 @@ export const appRouter = router({
         // If marking as BOOKED, increment campaign bookedCount for reactivation leads
         if (input.stage === "BOOKED") {
           await markReactivationContactBooked(input.sessionId).catch(console.error);
+        }
+        return { success: true };
+      }),
+
+    /**
+     * leads.adminSetFollowUp — set or clear a scheduled follow-up date and message.
+     * Setting a date moves the session to FOLLOW_UP_SCHEDULED stage.
+     * Clearing (date = null) reverts to AVAILABILITY.
+     */
+    adminSetFollowUp: adminAgentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        followUpDate: z.string().nullable(), // YYYY-MM-DD or null to clear
+        followUpMessage: z.string().nullable(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        if (input.followUpDate) {
+          await db
+            .update(conversationSessions)
+            .set({
+              followUpDate: input.followUpDate,
+              followUpMessage: input.followUpMessage ?? "Hi, just circling back on this. We have some availability and would love to get you scheduled!",
+              followUpSent: 0,
+              stage: "FOLLOW_UP_SCHEDULED",
+            })
+            .where(eq(conversationSessions.id, input.sessionId));
+        } else {
+          // Clear the follow-up
+          await db
+            .update(conversationSessions)
+            .set({
+              followUpDate: null,
+              followUpMessage: null,
+              followUpSent: 0,
+              stage: "AVAILABILITY",
+            })
+            .where(eq(conversationSessions.id, input.sessionId));
         }
         return { success: true };
       }),

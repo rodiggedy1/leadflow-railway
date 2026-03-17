@@ -837,3 +837,13 @@
 - [x] Webhook awaits the result and fires admin SMS to +13029816191 on first reply
 - [x] Alert message: "🔔 Always-On Reply: {Name} ({phone}) just responded to your {Group} campaign."
 - [x] 431/431 tests passing, 0 TS errors
+
+## Follow-Up Features — IN PROGRESS
+
+- [x] Add FOLLOW_UP_SCHEDULED to conversationStages enum in schema + db:push
+- [x] Add lastAiMessageAt timestamp column to conversationSessions for silence detection
+- [x] Build 5-minute silence follow-up cron: send contextual nudge if no reply in 5 min
+- [x] Add followUpDate + followUpMessage columns to conversationSessions
+- [x] Add manual follow-up date setter in admin lead detail (date picker + editable message)
+- [x] Build scheduled follow-up cron: fire circle-back SMS on followUpDate
+- [x] Show FOLLOW_UP_SCHEDULED badge in admin leads table

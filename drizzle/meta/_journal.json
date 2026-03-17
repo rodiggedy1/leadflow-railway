@@ -197,6 +197,13 @@
       "when": 1773767717046,
       "tag": "0027_new_pride",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1773774256986,
+      "tag": "0028_remarkable_jean_grey",
+      "breakpoints": true
     }
   ]
 }

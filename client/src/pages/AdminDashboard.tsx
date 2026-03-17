@@ -225,7 +225,8 @@ type Stage =
   | "UNHANDLED"
   | "BOOKED"
   | "NOT_INTERESTED"
-  | "FUTURE_BOOKING";
+  | "FUTURE_BOOKING"
+  | "FOLLOW_UP_SCHEDULED";
 
 const STAGE_CONFIG: Record<
   Stage,
@@ -307,6 +308,13 @@ const STAGE_CONFIG: Record<
     bgColor: "#eff6ff",
     borderColor: "#bfdbfe",
     order: 11,
+  },
+  FOLLOW_UP_SCHEDULED: {
+    label: "Follow Up",
+    textColor: "#7c3aed",
+    bgColor: "#f5f3ff",
+    borderColor: "#ddd6fe",
+    order: 12,
   },
 };
 
@@ -470,6 +478,9 @@ type DrawerSession = {
   leadSource: string | null;
   reactivationLastPrice: number | null;
   reactivationDiscountPct: number | null;
+  followUpDate: string | null;
+  followUpMessage: string | null;
+  followUpSent: number;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -733,6 +744,27 @@ function ConversationDrawer({
   });
   const loadedNotes = notesData?.notes ?? "";
 
+  // Follow-up scheduling
+  const DEFAULT_FOLLOWUP_MSG = "Hi, just circling back on this. We have some availability and would love to get you scheduled!";
+  const [followUpDate, setFollowUpDate] = useState(session.followUpDate ?? "");
+  const [followUpMessage, setFollowUpMessage] = useState(session.followUpMessage ?? DEFAULT_FOLLOWUP_MSG);
+  const [followUpSaved, setFollowUpSaved] = useState(false);
+  const setFollowUpMutation = trpc.leads.adminSetFollowUp.useMutation({
+    onSuccess: (_, vars) => {
+      setFollowUpSaved(true);
+      setTimeout(() => setFollowUpSaved(false), 2000);
+      onSessionUpdate({
+        stage: vars.followUpDate ? "FOLLOW_UP_SCHEDULED" : "AVAILABILITY",
+        followUpDate: vars.followUpDate,
+        followUpMessage: vars.followUpMessage,
+        followUpSent: 0,
+      } as any);
+      utils.leads.list.invalidate();
+      toast.success(vars.followUpDate ? `Follow-up scheduled for ${vars.followUpDate}` : "Follow-up cleared");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
@@ -983,6 +1015,7 @@ function ConversationDrawer({
                           "BOOKED",
                           "NOT_INTERESTED",
                           "FUTURE_BOOKING",
+                          "FOLLOW_UP_SCHEDULED",
                         ] as const).map(s => (
                           <SelectItem key={s} value={s} className="text-xs">
                             {STAGE_CONFIG[s as Stage]?.label ?? s}
@@ -1079,6 +1112,74 @@ function ConversationDrawer({
                 )}
               </div>
             )}
+
+            {/* Follow-Up Scheduler */}
+            <div className="border-t">
+              <details className="group">
+                <summary className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:bg-gray-50 transition-colors cursor-pointer list-none">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Schedule Follow-Up
+                    {session.followUpDate && !session.followUpSent && (
+                      <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-violet-100 text-violet-700">{session.followUpDate}</span>
+                    )}
+                    {session.followUpSent === 1 && (
+                      <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">Sent ✓</span>
+                    )}
+                  </span>
+                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▾</span>
+                </summary>
+                <div className="px-4 pb-3 space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Follow-up date</label>
+                    <Input
+                      type="date"
+                      value={followUpDate}
+                      onChange={e => setFollowUpDate(e.target.value)}
+                      className="h-8 text-xs"
+                      min={new Date().toISOString().split("T")[0]}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Message (editable)</label>
+                    <Textarea
+                      value={followUpMessage}
+                      onChange={e => setFollowUpMessage(e.target.value)}
+                      rows={3}
+                      className="resize-none text-xs"
+                      placeholder="Hi, just circling back on this..."
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {followUpSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+                      {followUpDate && (
+                        <button
+                          type="button"
+                          className="text-xs text-red-400 hover:text-red-600 underline"
+                          onClick={() => {
+                            setFollowUpDate("");
+                            setFollowUpMessage(DEFAULT_FOLLOWUP_MSG);
+                            setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: null, followUpMessage: null });
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-3 text-xs bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
+                      onClick={() => setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: followUpDate || null, followUpMessage })}
+                      disabled={setFollowUpMutation.isPending || !followUpDate}
+                    >
+                      {setFollowUpMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Follow-Up"}
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            </div>
 
             {/* Internal Notes */}
             <div className="px-4 py-4 flex-1">

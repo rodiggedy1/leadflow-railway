@@ -221,6 +221,9 @@ export function registerWebhookRoutes(app: Express) {
       if (history.length > 20) history = history.slice(-20);
 
       // Update the session in DB
+      // Track lastAiMessageAt so the silence-follow-up cron can detect 5-min inactivity.
+      // Reset autoFollowUpSent so a new nudge can fire if the conversation restarts.
+      const isTerminalStage = ["DONE", "BOOKED", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"].includes(result.nextStage);
       await db
         .update(conversationSessions)
         .set({
@@ -229,6 +232,8 @@ export function registerWebhookRoutes(app: Express) {
           address: result.extractedData?.address ?? session.address ?? undefined,
           callPreference: result.extractedData?.callPreference ?? session.callPreference ?? undefined,
           messageHistory: JSON.stringify(history),
+          lastAiMessageAt: new Date(),
+          autoFollowUpSent: isTerminalStage ? session.autoFollowUpSent : 0,
         })
         .where(eq(conversationSessions.id, session.id));
 

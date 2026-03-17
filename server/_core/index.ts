@@ -7,6 +7,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerWebhookRoutes } from "../webhooks";
 import { registerCronRoutes } from "../cronSync";
+import { registerFollowUpCronRoutes } from "../followUpCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -72,6 +73,8 @@ async function startServer() {
   registerWidgetEmbedRoute(app);
   // Nightly cron endpoint for Launch27 auto-sync
   registerCronRoutes(app);
+  // Follow-up cron endpoints (5-min silence nudge + scheduled circle-back)
+  registerFollowUpCronRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",

@@ -81,6 +81,11 @@ export const conversationStages = [
    * We acknowledge the timeline, stop the booking flow, and tag them for follow-up.
    */
   "FUTURE_BOOKING",
+  /**
+   * FOLLOW_UP_SCHEDULED → Agent has set a specific future date to re-engage this lead.
+   * The system will automatically send a circle-back SMS on that date.
+   */
+  "FOLLOW_UP_SCHEDULED",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -152,6 +157,21 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   reactivationLastPrice: int("reactivationLastPrice"),
   /** For reactivation leads: discount percentage offered (e.g. 10 = 10%) */
   reactivationDiscountPct: int("reactivationDiscountPct"),
+
+  // ── Follow-up fields ──────────────────────────────────────────────────────
+  /**
+   * Timestamp of the last outbound AI message sent to this lead.
+   * Used to detect 5-minute silence and trigger an auto follow-up nudge.
+   */
+  lastAiMessageAt: timestamp("lastAiMessageAt"),
+  /** Whether the 5-minute auto follow-up nudge has already been sent (prevents double-send) */
+  autoFollowUpSent: int("autoFollowUpSent").default(0).notNull(),
+  /** Date (YYYY-MM-DD ET) on which to send the manual circle-back SMS */
+  followUpDate: varchar("followUpDate", { length: 20 }),
+  /** Editable circle-back message to send on followUpDate */
+  followUpMessage: text("followUpMessage"),
+  /** Whether the scheduled follow-up SMS has already been sent */
+  followUpSent: int("followUpSent").default(0).notNull(),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
