@@ -847,3 +847,16 @@
 - [x] Add manual follow-up date setter in admin lead detail (date picker + editable message)
 - [x] Build scheduled follow-up cron: fire circle-back SMS on followUpDate
 - [x] Show FOLLOW_UP_SCHEDULED badge in admin leads table
+
+## Activity Notification Widget — IN PROGRESS
+- [ ] Add activity_log table to schema (type, title, body, metadata, readAt, createdAt)
+- [ ] Instrument: inbound lead replies (webhooks.ts)
+- [ ] Instrument: outbound AI SMS sends (webhooks.ts)
+- [ ] Instrument: silence nudge sends (followUpCron.ts)
+- [ ] Instrument: scheduled follow-up sends (followUpCron.ts)
+- [ ] Instrument: always-on SMS batch sends (cronSync.ts)
+- [ ] Instrument: nightly sync completions (cronSync.ts)
+- [ ] Instrument: new bookings (conversationEngine.ts)
+- [ ] Add tRPC procedures: getActivityFeed, markAllRead
+- [ ] Build NotificationBell component with unread badge and dropdown feed
+- [ ] Wire NotificationBell into AdminDashboard header

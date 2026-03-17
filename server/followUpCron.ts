@@ -19,6 +19,7 @@ import { getDb } from "./db";
 import { conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { invokeLLM } from "./_core/llm";
+import { logActivity } from "./activityLogger";
 
 // Stages that are considered "active" — the lead is mid-conversation and hasn't finished.
 // REACTIVATION is intentionally excluded: those are first-touch always-on/campaign messages
@@ -133,6 +134,12 @@ Example: "Hey ${firstName}, just circling back — can we help get this set up f
           .where(eq(conversationSessions.id, session.id));
 
         console.log(`[SilenceFollowUp] Sent nudge to ${session.leadPhone} (session ${session.id}): "${nudgeMessage}"`);
+        logActivity({
+          eventType: "silence_nudge",
+          title: `Auto-nudge sent to ${firstName}`,
+          body: nudgeMessage.length > 120 ? nudgeMessage.slice(0, 120) + "…" : nudgeMessage,
+          meta: { sessionId: session.id, leadPhone: session.leadPhone, leadName: session.leadName, stage: session.stage },
+        }).catch(() => {});
         sent++;
       } else {
         console.error(`[SilenceFollowUp] Failed to send nudge to ${session.leadPhone}:`, smsResult.error);
@@ -202,7 +209,13 @@ export async function runScheduledFollowUp(): Promise<{
           })
           .where(eq(conversationSessions.id, session.id));
 
-        console.log(`[ScheduledFollowUp] Sent circle-back to ${session.leadPhone} (session ${session.id}): "${message}"`);
+        console.log(`[ScheduledFollowUp] Sent circle-back to ${session.leadPhone} (session ${session.id})`);
+        logActivity({
+          eventType: "scheduled_followup",
+          title: `Scheduled follow-up sent to ${session.leadName ?? session.leadPhone}`,
+          body: message.length > 120 ? message.slice(0, 120) + "…" : message,
+          meta: { sessionId: session.id, leadPhone: session.leadPhone, leadName: session.leadName, followUpDate: session.followUpDate },
+        }).catch(() => {});
         sent++;
       } else {
         console.error(`[ScheduledFollowUp] Failed to send to ${session.leadPhone}:`, smsResult.error);

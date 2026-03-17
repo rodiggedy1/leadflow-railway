@@ -1,0 +1,23 @@
+{
+  "query": "\nSELECT id, leadName, leadPhone, stage, leadSource, aiMode, \n       lastAiMessageAt, autoFollowUpSent, createdAt, updatedAt,\n       SUBSTRING(messageHistory, 1, 300) as msgPreview\nFROM conversation_sessions\nWHERE leadSource = 'widget' OR stage = 'WIDGET_SIZING'\nORDER BY createdAt DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT id, leadName, leadPhone, stage, leadSource, aiMode, \n       lastAiMessageAt, autoFollowUpSent, createdAt, updatedAt,\n       SUBSTRING(messageHistory, 1, 300) as msgPreview\nFROM conversation_sessions\nWHERE leadSource = 'widget' OR stage = 'WIDGET_SIZING'\nORDER BY createdAt DESC\nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "690002",
+      "leadName": "rohan test",
+      "leadPhone": "+13029816191",
+      "stage": "AVAILABILITY",
+      "leadSource": "widget",
+      "aiMode": "1",
+      "lastAiMessageAt": "2026-03-17 19:49:19",
+      "autoFollowUpSent": "0",
+      "createdAt": "2026-03-17 19:48:54",
+      "updatedAt": "2026-03-17 19:49:19",
+      "msgPreview": "[{\"role\":\"assistant\",\"content\":\"Hi rohan! 👋 Thanks for reaching out to Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)\",\"ts\":1773776934466},{\"role\":\"user\",\"content\":\"3 bedroom 2 bathroom\",\"ts\":1773776958744},{\"role\":\"assistant\","
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadName\tleadPhone\tstage\tleadSource\taiMode\tlastAiMessageAt\tautoFollowUpSent\tcreatedAt\tupdatedAt\tmsgPreview\n690002\trohan test\t+13029816191\tAVAILABILITY\twidget\t1\t2026-03-17 19:49:19\t0\t2026-03-17 19:48:54\t2026-03-17 19:49:19\t[{\"role\":\"assistant\",\"content\":\"Hi rohan! 👋 Thanks for reaching out to Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)\",\"ts\":1773776934466},{\"role\":\"user\",\"content\":\"3 bedroom 2 bathroom\",\"ts\":1773776958744},{\"role\":\"assistant\",\n",
+  "stderr": "",
+  "execution_time_ms": 53
+}

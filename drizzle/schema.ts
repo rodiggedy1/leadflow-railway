@@ -620,3 +620,35 @@ export const syncRuns = mysqlTable("sync_runs", {
 
 export type SyncRun = typeof syncRuns.$inferSelect;
 export type InsertSyncRun = typeof syncRuns.$inferInsert;
+
+// ── Activity Log ──────────────────────────────────────────────────────────────
+// Unified feed of all notable events in the system for the notification widget.
+
+export const activityEventTypes = [
+  "lead_reply",        // Inbound SMS from a lead
+  "ai_sms_sent",       // AI sent an outbound SMS during a conversation
+  "silence_nudge",     // Auto 5-min silence nudge sent
+  "scheduled_followup",// Manual scheduled follow-up SMS sent
+  "always_on_batch",   // Always-On batch SMS send completed
+  "nightly_sync",      // Nightly Launch27 sync completed
+  "booking",           // Lead reached BOOKED stage
+  "new_lead",          // New quote form / widget submission
+] as const;
+
+export const activityLog = mysqlTable("activity_log", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Event category */
+  eventType: mysqlEnum("eventType", activityEventTypes as unknown as [string, ...string[]]).notNull(),
+  /** Short title shown in the notification feed */
+  title: varchar("title", { length: 255 }).notNull(),
+  /** Longer description / body */
+  body: text("body"),
+  /** JSON metadata (e.g. sessionId, leadPhone, leadName, smsSent) */
+  meta: text("meta"),
+  /** Null = unread, set to timestamp when admin marks read */
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ActivityLog = typeof activityLog.$inferSelect;
+export type InsertActivityLog = typeof activityLog.$inferInsert;

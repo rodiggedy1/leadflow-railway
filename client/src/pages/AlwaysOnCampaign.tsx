@@ -39,8 +39,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Zap,
+import NotificationBell from "@/components/NotificationBell";
+import { Zap,
   Users,
   Send,
   MessageSquare,
@@ -756,17 +756,20 @@ export default function AlwaysOnCampaign() {
               <h1 className="text-lg font-semibold text-gray-900">Always-On Campaign</h1>
             </div>
           </div>
-          <Button
-            onClick={() => manualEnroll.mutate()}
-            disabled={manualEnroll.isPending}
-            className="flex items-center gap-2"
-            style={{ backgroundColor: "#E8603C" }}
-          >
-            {manualEnroll.isPending
-              ? <><RefreshCw className="w-4 h-4 animate-spin" /> Enrolling...</>
-              : <><RefreshCw className="w-4 h-4" /> Enroll Now</>
-            }
-          </Button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <Button
+              onClick={() => manualEnroll.mutate()}
+              disabled={manualEnroll.isPending}
+              className="flex items-center gap-2"
+              style={{ backgroundColor: "#E8603C" }}
+            >
+              {manualEnroll.isPending
+                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Enrolling...</>
+                : <><RefreshCw className="w-4 h-4" /> Enroll Now</>
+              }
+            </Button>
+          </div>
         </div>
       </header>
 

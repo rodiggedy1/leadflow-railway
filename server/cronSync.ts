@@ -20,6 +20,7 @@ import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { sendAlwaysOnBatch } from "./alwaysOnSend";
+import { logActivity } from "./activityLogger";
 
 /**
  * Write a sync run record to the database.
@@ -247,6 +248,16 @@ export async function runNightlySync(targetDate?: string): Promise<{
     durationMs: Date.now() - startedAt.getTime(),
   });
 
+  // Log nightly sync activity event
+  logActivity({
+    eventType: "nightly_sync",
+    title: inserted > 0
+      ? `✅ Nightly sync: ${inserted} jobs imported (${date})`
+      : `⚠️ Nightly sync: no new jobs (${date})`,
+    body: message,
+    meta: { date, inserted, skipped: skipped + invalidCount, alwaysOnEnrolled, status: syncStatus },
+  }).catch(() => {});
+
   // Notify owner on success if any new jobs were inserted
   if (inserted > 0) {
     const totalEnrolled = Object.values(alwaysOnEnrolled).reduce((a, b) => a + b, 0);
@@ -342,6 +353,18 @@ export function registerCronRoutes(app: Express): void {
         startedAt: sendStartedAt,
         durationMs: Date.now() - sendStartedAt.getTime(),
       });
+
+      // Log always_on_batch activity event
+      logActivity({
+        eventType: "always_on_batch",
+        title: totalSent > 0
+          ? `📤 Always-On batch: ${totalSent} SMS sent`
+          : `Always-On batch: no messages sent`,
+        body: totalSent > 0
+          ? `Sent ${totalSent} messages (${totalFailed} failed) across ${results.filter(r => r.sent > 0).length} groups`
+          : "All groups inactive, empty, or outside TCPA window",
+        meta: { totalSent, totalFailed, groupBreakdown },
+      }).catch(() => {});
 
       // Notify owner if any messages were sent
       if (totalSent > 0) {

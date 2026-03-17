@@ -15,10 +15,12 @@ import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
 import { campaignRouter, markReactivationContactBooked } from "./campaignRouter";
+import { logActivity } from "./activityLogger";
 import { reviewRouter } from "./reviewRouter";
 import { launch27Router } from "./launch27Router";
 import { alwaysOnRouter } from "./alwaysOnRouter";
 import { syncHealthRouter } from "./syncHealthRouter";
+import { activityRouter } from "./activityRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
@@ -1105,6 +1107,7 @@ export const appRouter = router({
   launch27: launch27Router,
   alwaysOn: alwaysOnRouter,
   syncHealth: syncHealthRouter,
+  activity: activityRouter,
 
   simulator: router({
     chat: publicProcedure
@@ -1334,6 +1337,14 @@ async function processQuoteInBackground(
   } catch (dbErr) {
     console.error("[submitQuote] Failed to create conversation session:", dbErr);
   }
+
+  // ── Log new_lead activity event ─────────────────────────────────────────
+  logActivity({
+    eventType: "new_lead",
+    title: `New quote request: ${input.name}`,
+    body: `${input.serviceType} · ${input.bedrooms} / ${input.bathrooms} · $${price}`,
+    meta: { leadPhone: normalizedPhone, leadName: input.name, serviceType: input.serviceType, price },
+  }).catch(() => {});
 
   // ── Step 6: Save lead record ──────────────────────────────────────────────
   try {

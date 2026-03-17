@@ -6,6 +6,7 @@
  * Supports date range filtering and stage filtering.
  */
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import NotificationBell from "@/components/NotificationBell";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1764,6 +1765,7 @@ export default function AdminDashboard() {
                 Refresh
               </Button>
             )}
+            <NotificationBell />
           </div>
         </div>
         {/* Tab navigation */}

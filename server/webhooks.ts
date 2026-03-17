@@ -33,6 +33,7 @@ import { getNextAvailableSlots } from "./availability";
 import { markReactivationContactReplied } from "./campaignRouter";
 import { markAlwaysOnContactReplied } from "./alwaysOnSend";
 import { handleReviewReplyForJob } from "./reviewRouter";
+import { logActivity } from "./activityLogger";
 
 export function registerWebhookRoutes(app: Express) {
   app.post("/api/webhooks/openphone", async (req, res) => {
@@ -144,6 +145,14 @@ export function registerWebhookRoutes(app: Express) {
         history = history.slice(-20);
       }
 
+      // Log the inbound reply as an activity event
+      logActivity({
+        eventType: "lead_reply",
+        title: `New reply from ${session.leadName ?? fromPhone}`,
+        body: inboundText.length > 120 ? inboundText.slice(0, 120) + "…" : inboundText,
+        meta: { sessionId: session.id, leadPhone: fromPhone, leadName: session.leadName, stage: session.stage },
+      }).catch(() => {});
+
       // If agent has taken over (aiMode = 0), just store the inbound message and stop.
       // The agent will reply manually from the app.
       if (session.aiMode === 0) {
@@ -245,6 +254,24 @@ export function registerWebhookRoutes(app: Express) {
 
       if (!smsResult.success) {
         console.error(`[Webhook] Failed to send reply to ${fromPhone}:`, smsResult.error);
+      } else {
+        // Log the outbound AI SMS
+        logActivity({
+          eventType: "ai_sms_sent",
+          title: `AI replied to ${session.leadName ?? fromPhone}`,
+          body: result.reply.length > 120 ? result.reply.slice(0, 120) + "…" : result.reply,
+          meta: { sessionId: session.id, leadPhone: fromPhone, leadName: session.leadName, stage: result.nextStage },
+        }).catch(() => {});
+
+        // Log booking event if conversation just reached BOOKED
+        if (result.nextStage === "BOOKED" && session.stage !== "BOOKED") {
+          logActivity({
+            eventType: "booking",
+            title: `🎉 Booking confirmed: ${session.leadName ?? fromPhone}`,
+            body: `Slot: ${result.extractedData?.selectedSlot ?? session.selectedSlot ?? "TBD"}`,
+            meta: { sessionId: session.id, leadPhone: fromPhone, leadName: session.leadName, selectedSlot: result.extractedData?.selectedSlot ?? session.selectedSlot },
+          }).catch(() => {});
+        }
       }
     } catch (err) {
       console.error("[Webhook] Error processing OpenPhone event:", err);
