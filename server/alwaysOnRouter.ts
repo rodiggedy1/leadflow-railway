@@ -23,6 +23,7 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import { enrollNewlyEligible, seedDefaultGroups } from "./alwaysOnEngine";
 import { personalizeMessage } from "./alwaysOnSend";
 import { sendSms } from "./openphone";
+import { conversationSessions } from "../drizzle/schema";
 import { TRPCError } from "@trpc/server";
 
 export const alwaysOnRouter = router({
@@ -183,6 +184,36 @@ export const alwaysOnRouter = router({
           message: result.error ?? "Failed to send test message",
         });
       }
+
+      // Create a conversation session so replies to the test message go through the AI engine
+      // Delete any existing REACTIVATION session for this test phone first to avoid duplicates
+      await db
+        .delete(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.leadPhone, e164),
+            eq(conversationSessions.leadSource, "always-on-test")
+          )
+        );
+
+      const lastPrice = sampleEnrollment?.lastBookingPrice
+        ? Math.round(sampleEnrollment.lastBookingPrice / 100)
+        : 180; // $180 placeholder
+      const discountPct = sampleEnrollment?.discountPct ?? 10;
+
+      await db.insert(conversationSessions).values({
+        leadPhone: e164,
+        leadName: sampleEnrollment?.firstName ?? "Sarah",
+        stage: "REACTIVATION",
+        leadSource: "always-on-test",
+        reactivationLastPrice: lastPrice,
+        reactivationDiscountPct: discountPct,
+        messageHistory: JSON.stringify([
+          { role: "assistant", content: renderedMessage, ts: Date.now() },
+        ]),
+        aiMode: 1,
+        isBooked: 0,
+      });
 
       return {
         ok: true,

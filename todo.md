@@ -733,3 +733,13 @@
 - [x] Dialog: phone number input, message preview (shows template before send, rendered message after send), confirm send button
 - [x] After send: dialog shows the exact rendered message with tokens replaced and a green confirmation
 - [x] 431/431 tests passing, 0 TS errors
+
+## Always-On Conversation Engine Wiring — COMPLETED
+
+- [x] Update sendAlwaysOnBatch: after each successful send, creates a conversationSession (stage=REACTIVATION, leadSource=always-on) so replies route through the AI engine
+- [x] sessionId column already existed in alwaysOnEnrollments schema — now populated after each send
+- [x] Add markAlwaysOnContactReplied() to alwaysOnSend.ts — marks SENT enrollment as REPLIED and increments repliedCount
+- [x] Wire markAlwaysOnContactReplied into webhook handler (runs alongside markReactivationContactReplied)
+- [x] Update sendTestMessage: also creates a conversationSession (leadSource=always-on-test) so test replies go through the AI; clears previous test session for same phone first
+- [x] Insert 4 demo contacts (Emma/James/Maria/Robert, +1555 numbers) — one per group — for UI preview and test message use
+- [x] 431/431 tests passing, 0 TS errors

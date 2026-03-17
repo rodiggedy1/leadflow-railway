@@ -31,6 +31,7 @@ import type { ConversationStage } from "../drizzle/schema";
 import { normalizePhone } from "./routers";
 import { getNextAvailableSlots } from "./availability";
 import { markReactivationContactReplied } from "./campaignRouter";
+import { markAlwaysOnContactReplied } from "./alwaysOnSend";
 import { handleReviewReplyForJob } from "./reviewRouter";
 
 export function registerWebhookRoutes(app: Express) {
@@ -106,6 +107,11 @@ export function registerWebhookRoutes(app: Express) {
       // If this phone belongs to a reactivation campaign contact, mark them as REPLIED
       markReactivationContactReplied(fromPhone).catch(err =>
         console.error("[Webhook] Failed to mark reactivation contact replied:", err)
+      );
+
+      // If this phone belongs to an always-on enrollment, mark them as REPLIED
+      markAlwaysOnContactReplied(fromPhone).catch(err =>
+        console.error("[Webhook] Failed to mark always-on contact replied:", err)
       );
 
       // Parse message history

@@ -13,7 +13,7 @@
  */
 
 import { getDb } from "./db";
-import { alwaysOnGroups, alwaysOnEnrollments, type AlwaysOnGroupType } from "../drizzle/schema";
+import { alwaysOnGroups, alwaysOnEnrollments, conversationSessions, type AlwaysOnGroupType } from "../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { sendSms } from "./openphone";
 
@@ -89,6 +89,45 @@ export function personalizeMessage(
     .replace(/\[Name\]/gi, name)
     .replace(/\[Price\]/gi, price)
     .replace(/\[DiscountedPrice\]/gi, discountedPrice);
+}
+
+// ─── Mark replied ────────────────────────────────────────────────────────────
+
+/**
+ * Marks the most recent SENT always-on enrollment for a given phone as REPLIED.
+ * Called by the webhook when an inbound message arrives.
+ */
+export async function markAlwaysOnContactReplied(phone: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  // Find the most recent SENT enrollment for this phone
+  const [enrollment] = await db
+    .select()
+    .from(alwaysOnEnrollments)
+    .where(
+      and(
+        eq(alwaysOnEnrollments.phone, phone),
+        eq(alwaysOnEnrollments.status, "SENT")
+      )
+    )
+    .orderBy(alwaysOnEnrollments.sentAt)
+    .limit(1);
+
+  if (!enrollment) return;
+
+  await db
+    .update(alwaysOnEnrollments)
+    .set({ status: "REPLIED", repliedAt: new Date() })
+    .where(eq(alwaysOnEnrollments.id, enrollment.id));
+
+  // Update the group's repliedCount
+  await db
+    .update(alwaysOnGroups)
+    .set({ repliedCount: sql`${alwaysOnGroups.repliedCount} + 1` })
+    .where(eq(alwaysOnGroups.id, enrollment.groupId));
+
+  console.log(`[AlwaysOn] Marked enrollment ${enrollment.id} (${phone}) as REPLIED.`);
 }
 
 // ─── Send batch ───────────────────────────────────────────────────────────────
@@ -182,13 +221,35 @@ export async function sendAlwaysOnBatch(
       }
 
       if (success) {
-        // Mark as SENT
+        // Create a conversation session so inbound replies are routed through the AI engine
+        let sessionId: number | null = null;
+        try {
+          const [sessionResult] = await db.insert(conversationSessions).values({
+            leadPhone: enrollment.phone,
+            leadName: enrollment.name ?? enrollment.firstName ?? "",
+            stage: "REACTIVATION",
+            leadSource: "always-on",
+            reactivationLastPrice: enrollment.lastBookingPrice
+              ? Math.round(enrollment.lastBookingPrice / 100)
+              : null,
+            reactivationDiscountPct: enrollment.discountPct ?? 10,
+            messageHistory: "[]",
+            aiMode: 1,
+            isBooked: 0,
+          });
+          sessionId = (sessionResult as any).insertId as number;
+        } catch (err) {
+          console.error(`[AlwaysOn] Failed to create session for ${enrollment.phone}:`, err);
+        }
+
+        // Mark as SENT and link session
         await db
           .update(alwaysOnEnrollments)
           .set({
             status: "SENT",
             sentAt: new Date(),
             openPhoneMessageId: openPhoneMessageId ?? null,
+            sessionId: sessionId ?? undefined,
           })
           .where(eq(alwaysOnEnrollments.id, enrollment.id));
 
