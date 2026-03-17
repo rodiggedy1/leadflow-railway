@@ -94,18 +94,126 @@ export interface OffScriptContext {
 export interface OffScriptResult {
   reply: string;
   shouldAdvanceStage: boolean; // true if the AI thinks the lead is ready to continue
+  isWrongPath: boolean;        // true if this person is NOT a new booking lead (existing customer, support request, wrong number)
+}
+
+/**
+ * Classifies whether a reply is from someone who is NOT a new booking lead.
+ * Returns true for: existing customers needing support, reschedule/cancel requests,
+ * wrong number, "I already booked", "I need help with my account", etc.
+ * Returns false for: FAQs, pricing questions, hesitation, objections — all still in-funnel.
+ */
+async function isWrongPathReply(leadReply: string): Promise<boolean> {
+  try {
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are a classifier. Determine if the message is from someone who is NOT a new booking lead.
+
+Return JSON: { "wrong_path": true } or { "wrong_path": false }
+
+Return true ONLY if the message clearly indicates:
+- They are an EXISTING customer needing support (reschedule, cancel, complaint, account help)
+- They received this message by mistake / wrong number
+- They are asking about a booking they already made
+- They explicitly say they don't need a new cleaning and need customer service instead
+
+Return false for:
+- Questions about pricing, services, availability, what's included
+- Hesitation or "I'm not sure yet"
+- General curiosity about the company
+- Anything that could still lead to a new booking`,
+        },
+        { role: "user", content: `Message: "${leadReply}"` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "wrong_path_classification",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: { wrong_path: { type: "boolean" } },
+            required: ["wrong_path"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const raw = response.choices?.[0]?.message?.content;
+    if (typeof raw === "string") {
+      const parsed = JSON.parse(raw);
+      return parsed.wrong_path === true;
+    }
+  } catch (err) {
+    console.error("[AI] isWrongPathReply classification failed:", err);
+  }
+  return false; // default to in-funnel on failure
 }
 
 /**
  * Handles off-script replies (FAQs, objections, random questions).
- * Always ends with a nudge back toward the current stage's goal.
+ *
+ * Three outcomes:
+ * 1. wrong_path (existing customer / support request / wrong number)
+ *    → warm exit message with support contact, isWrongPath: true
+ * 2. FAQ / curiosity / hesitation (still a potential new booking lead)
+ *    → answer + steer back to current stage question, isWrongPath: false
+ *
  * Falls back to a safe generic response if AI fails.
  */
 export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffScriptResult> {
   const { stage, leadName, quotedPrice, serviceType, selectedSlot, messageHistory, leadReply, extrasContext } = ctx;
   const firstName = leadName.split(" ")[0] ?? leadName;
 
-  // Build the next expected action based on current stage
+  // Build language instruction if non-English
+  const langCode = ctx.language || "en";
+  const langInstruction = langCode !== "en"
+    ? `\n\nIMPORTANT: This customer prefers ${langCode}. Respond ONLY in that language.`
+    : "";
+
+  // ── Step 1: Classify — is this person NOT a new booking lead? ────────────────
+  const wrongPath = await isWrongPathReply(leadReply);
+
+  if (wrongPath) {
+    // Generate a warm, helpful exit message — do NOT push booking
+    try {
+      const exitResponse = await invokeLLM({
+        messages: [
+          { role: "system", content: BRAND_SYSTEM_PROMPT + langInstruction },
+          {
+            role: "user",
+            content: `The person who received this SMS is NOT a new booking lead. They need customer support or reached us by mistake.
+
+Lead name: ${firstName}
+Their message: "${leadReply}"
+
+Instructions:
+1. Acknowledge their situation warmly in 1 sentence
+2. Direct them to our support team: call/text 202-888-5362 or email support@maidsinblacksupport.com
+3. Do NOT ask about bedrooms, bathrooms, availability, or anything booking-related
+4. Keep reply under 160 characters`,
+          },
+        ],
+      });
+      const content = exitResponse.choices?.[0]?.message?.content;
+      const text = typeof content === "string" ? content.trim() : "";
+      if (text) {
+        return { reply: text, shouldAdvanceStage: false, isWrongPath: true };
+      }
+    } catch (err) {
+      console.error("[AI] handleOffScriptReply wrong_path exit failed:", err);
+    }
+    // Fallback exit message
+    return {
+      reply: `Hi ${firstName}! For support with an existing booking, please call/text us at 202-888-5362 or email support@maidsinblacksupport.com. We're happy to help! 😊`,
+      shouldAdvanceStage: false,
+      isWrongPath: true,
+    };
+  }
+
+  // ── Step 2: In-funnel — answer FAQ and steer back to current stage ────────────
   const nextAction = getNextActionPrompt(stage, selectedSlot);
 
   // Build conversation history for context (last 6 messages)
@@ -113,12 +221,6 @@ export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffSc
     role: m.role as "assistant" | "user",
     content: m.content,
   }));
-
-  // Build language instruction if non-English
-  const langCode = ctx.language || "en";
-  const langInstruction = langCode !== "en"
-    ? `\n\nIMPORTANT: This customer prefers ${langCode}. Respond ONLY in that language.`
-    : "";
 
   try {
     const response = await invokeLLM({
@@ -150,13 +252,13 @@ Instructions:
     const text = typeof content === "string" ? content.trim() : "";
 
     if (text) {
-      return { reply: text, shouldAdvanceStage: false };
+      return { reply: text, shouldAdvanceStage: false, isWrongPath: false };
     }
 
-    return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false };
+    return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false, isWrongPath: false };
   } catch (err) {
     console.error("[AI] handleOffScriptReply failed:", err);
-    return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false };
+    return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false, isWrongPath: false };
   }
 }
 

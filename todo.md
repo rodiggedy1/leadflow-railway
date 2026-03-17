@@ -909,3 +909,12 @@
 - [x] Added TIME_PREF and WIDGET_SIZING cases to getNextActionPrompt in aiService.ts
 - [x] Wrote 14 new vitest guard rule tests covering all 6 stages
 - [x] 445/445 tests passing, 0 TS errors
+
+## Smart Off-Script Routing — COMPLETED
+- [x] Added isWrongPathReply() classifier in aiService.ts: detects existing customers, support requests, wrong number
+- [x] wrong_path → exit funnel gracefully (warm exit message with 202-888-5362 / support@maidsinblacksupport.com, nextStage: DONE)
+- [x] FAQ/curiosity → answer + re-ask stage question (existing behavior, kept)
+- [x] Soft objection → already handled by detectObjection (confirmed correct)
+- [x] All 7 handleOffScriptReply call sites in conversationEngine.ts updated to check isWrongPath
+- [x] Wrote 7 new vitest wrong-path routing tests
+- [x] 452/452 tests passing, 0 TS errors

@@ -393,6 +393,7 @@ async function handleWidgetSizingReply(
 
   // GUARD: No room info extracted — reply is off-topic or a FAQ.
   // Use AI to answer naturally, then steer back to asking for room counts.
+  // If the person is an existing customer / wrong path, exit the funnel gracefully.
   const offScript = await handleOffScriptReply({
     stage: "WIDGET_SIZING",
     leadName: context.leadName,
@@ -406,7 +407,7 @@ async function handleWidgetSizingReply(
   });
   return {
     reply: offScript.reply,
-    nextStage: "WIDGET_SIZING",
+    nextStage: offScript.isWrongPath ? "DONE" : "WIDGET_SIZING",
   };
 }
 
@@ -633,7 +634,7 @@ export async function processLeadReply(
         nextStage: "AVAILABILITY",
       };
     }
-    return { reply: reply.reply, nextStage: "FUTURE_BOOKING" };
+    return { reply: reply.reply, nextStage: reply.isWrongPath ? "DONE" : "FUTURE_BOOKING" };
   }
 
   // ── For all other stages: check for objections first ──────────────────────
@@ -810,7 +811,7 @@ export async function processLeadReply(
 
       return {
         reply: offScript.reply,
-        nextStage: "SLOT_CHOICE",
+        nextStage: offScript.isWrongPath ? "DONE" : "SLOT_CHOICE",
       };
     }
 
@@ -840,7 +841,7 @@ export async function processLeadReply(
         });
         return {
           reply: offScript.reply,
-          nextStage: "TIME_PREF", // stay here until we get morning or afternoon
+          nextStage: offScript.isWrongPath ? "DONE" : "TIME_PREF",
         };
       }
 
@@ -889,7 +890,7 @@ export async function processLeadReply(
 
         return {
           reply: offScript.reply,
-          nextStage: "ADDRESS",
+          nextStage: offScript.isWrongPath ? "DONE" : "ADDRESS",
         };
       }
       return {
@@ -941,7 +942,7 @@ export async function processLeadReply(
 
       return {
         reply: offScript.reply,
-        nextStage: "CONFIRMATION",
+        nextStage: offScript.isWrongPath ? "DONE" : "CONFIRMATION",
       };
     }
 
@@ -963,7 +964,7 @@ export async function processLeadReply(
 
         return {
           reply: offScript.reply,
-          nextStage: "UNHANDLED",
+          nextStage: offScript.isWrongPath ? "DONE" : "UNHANDLED",
         };
       } catch {
         return {
