@@ -259,6 +259,8 @@ export const reactivationCampaigns = mysqlTable("reactivation_campaigns", {
   messageTemplate: text("messageTemplate").notNull(), // supports [Name] merge tag
   /** Target segment: "6-12mo" | "1-2yr" | "all" */
   segment: varchar("segment", { length: 20 }).notNull(),
+  /** Source type: "csv" = uploaded CSV, "completed_jobs" = pulled from completedJobs DB */
+  sourceType: varchar("sourceType", { length: 20 }).default("csv").notNull(),
   status: mysqlEnum("status", campaignStatuses as unknown as [string, ...string[]]).default("DRAFT").notNull(),
   /** Max SMS per hour (throttle rate) */
   batchSize: int("batchSize").default(50).notNull(),
@@ -323,6 +325,8 @@ export const reactivationContacts = mysqlTable("reactivation_contacts", {
   repliedAt: timestamp("repliedAt"),
   /** Link to the conversation session created when they reply */
   sessionId: int("sessionId"),
+  /** Link back to the completedJobs row this contact was sourced from (null for CSV-sourced contacts) */
+  completedJobId: int("completedJobId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

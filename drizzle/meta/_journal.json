@@ -162,6 +162,13 @@
       "when": 1773694186797,
       "tag": "0022_moaning_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1773705326385,
+      "tag": "0023_magenta_captain_america",
+      "breakpoints": true
     }
   ]
 }

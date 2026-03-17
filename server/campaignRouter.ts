@@ -8,10 +8,10 @@
  */
 
 import { z } from "zod";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { router, protectedProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { reactivationCampaigns, reactivationContacts, conversationSessions } from "../drizzle/schema";
+import { reactivationCampaigns, reactivationContacts, conversationSessions, completedJobs } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { getTemplate } from "./messageTemplateRouter";
@@ -526,6 +526,174 @@ export const campaignRouter = router({
         .where(eq(reactivationCampaigns.id, input.id));
 
       return { ok: true };
+    }),
+
+  /**
+   * Preview eligible contacts from the completedJobs table.
+   * Returns contacts where reactivationEligible = 1 and not already enrolled in any campaign.
+   * Supports optional frequency filter.
+   */
+  previewFromCompletedJobs: protectedProcedure
+    .input(
+      z.object({
+        frequency: z.enum(["all", "one-time", "recurring"]).default("all"),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { contacts: [], total: 0, alreadyEnrolled: 0 };
+
+      // Find all completedJob IDs already linked to a reactivationContact
+      const enrolledRows = await db
+        .select({ completedJobId: reactivationContacts.completedJobId })
+        .from(reactivationContacts)
+        .where(ne(reactivationContacts.completedJobId, 0));
+      const enrolledIds = enrolledRows
+        .map((r) => r.completedJobId)
+        .filter((id): id is number => id != null && id > 0);
+
+      // Build frequency filter
+      const RECURRING_FREQS = ["Bi-weekly (15%OFF)", "Monthly (10%OFF)", "Weekly (20%OFF)", "Tri-weekly (10%OFF)", "Bi-monthly"];
+      const freqCondition =
+        input.frequency === "one-time"
+          ? or(
+              isNull(completedJobs.frequency),
+              ...RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f))
+            )
+          : input.frequency === "recurring"
+          ? or(...RECURRING_FREQS.map((f) => eq(completedJobs.frequency, f)))
+          : undefined;
+
+      const baseConditions = [
+        eq(completedJobs.reactivationEligible, 1),
+        ...(enrolledIds.length > 0 ? [notInArray(completedJobs.id, enrolledIds)] : []),
+        ...(freqCondition ? [freqCondition] : []),
+      ];
+
+      const eligible = await db
+        .select()
+        .from(completedJobs)
+        .where(and(...baseConditions))
+        .orderBy(desc(completedJobs.jobDate))
+        .limit(500);
+
+      const [countRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(completedJobs)
+        .where(and(...baseConditions));
+
+      return {
+        contacts: eligible.slice(0, 200), // preview cap
+        total: Number(countRow?.count ?? 0),
+        alreadyEnrolled: enrolledIds.length,
+      };
+    }),
+
+  /**
+   * Create a campaign sourced directly from the completedJobs table.
+   * Pulls all eligible contacts (reactivationEligible = 1, not already enrolled).
+   * Campaign starts in DRAFT status — no SMS sent yet.
+   */
+  createFromCompletedJobs: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        messageTemplate: z.string().min(10).max(1000),
+        frequency: z.enum(["all", "one-time", "recurring"]).default("all"),
+        batchSize: z.number().int().min(1).max(200).default(50),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      // Find already-enrolled completedJob IDs
+      const enrolledRows = await db
+        .select({ completedJobId: reactivationContacts.completedJobId })
+        .from(reactivationContacts)
+        .where(ne(reactivationContacts.completedJobId, 0));
+      const enrolledIds = enrolledRows
+        .map((r) => r.completedJobId)
+        .filter((id): id is number => id != null && id > 0);
+
+      const RECURRING_FREQS = ["Bi-weekly (15%OFF)", "Monthly (10%OFF)", "Weekly (20%OFF)", "Tri-weekly (10%OFF)", "Bi-monthly"];
+      const freqCondition =
+        input.frequency === "one-time"
+          ? or(
+              isNull(completedJobs.frequency),
+              ...RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f))
+            )
+          : input.frequency === "recurring"
+          ? or(...RECURRING_FREQS.map((f) => eq(completedJobs.frequency, f)))
+          : undefined;
+
+      const baseConditions = [
+        eq(completedJobs.reactivationEligible, 1),
+        ...(enrolledIds.length > 0 ? [notInArray(completedJobs.id, enrolledIds)] : []),
+        ...(freqCondition ? [freqCondition] : []),
+      ];
+
+      const eligible = await db
+        .select()
+        .from(completedJobs)
+        .where(and(...baseConditions))
+        .orderBy(desc(completedJobs.jobDate));
+
+      if (eligible.length === 0) {
+        throw new Error("No eligible contacts found in Completed Jobs. Sync more data or adjust filters.");
+      }
+
+      // Compute daysSince for each contact
+      const now = new Date();
+      const withDays = eligible.map((job) => {
+        const jobDate = job.jobDate ? new Date(job.jobDate) : null;
+        const daysSince = jobDate ? Math.floor((now.getTime() - jobDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
+        const segment: "6-12mo" | "1-2yr" | "all" =
+          daysSince != null && daysSince <= 365 ? "6-12mo" :
+          daysSince != null && daysSince <= 730 ? "1-2yr" : "all";
+        return { job, daysSince, segment };
+      });
+
+      // Create campaign record
+      const [result] = await db.insert(reactivationCampaigns).values({
+        name: input.name,
+        messageTemplate: input.messageTemplate,
+        segment: "all",
+        sourceType: "completed_jobs",
+        status: "DRAFT",
+        batchSize: input.batchSize,
+        totalContacts: eligible.length,
+        sentCount: 0,
+        repliedCount: 0,
+        bookedCount: 0,
+      });
+      const campaignId = (result as any).insertId as number;
+
+      // Bulk insert contacts in chunks of 500
+      const CHUNK = 500;
+      for (let i = 0; i < withDays.length; i += CHUNK) {
+        const chunk = withDays.slice(i, i + CHUNK);
+        await db.insert(reactivationContacts).values(
+          chunk.map(({ job, daysSince, segment }) => ({
+            campaignId,
+            phone: job.phone,
+            phoneRaw: job.phone,
+            name: job.name ?? "",
+            firstName: job.firstName ?? job.name ?? "",
+            email: job.email ?? "",
+            lastBookingDate: job.jobDate ?? "",
+            daysSince: daysSince ?? 0,
+            bookingCount: 1,
+            lastPrice: job.lastBookingPrice ?? null,
+            discountPct: 10,
+            segment,
+            status: "PENDING" as const,
+            completedJobId: job.id,
+          }))
+        );
+      }
+
+      return { campaignId, contactCount: eligible.length };
     }),
 
   /** Get contacts for a campaign with optional status filter */

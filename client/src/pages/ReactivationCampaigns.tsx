@@ -62,17 +62,23 @@ import {
   DollarSign,
   TrendingUp,
   FlaskConical,
+  Database,
+  RefreshCw,
+  Filter,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED";
+type AudienceSource = "completed_jobs" | "csv";
+type FrequencyFilter = "all" | "one-time" | "recurring";
 
 interface Campaign {
   id: number;
   name: string;
   messageTemplate: string;
   segment: string;
+  sourceType: string;
   status: CampaignStatus;
   batchSize: number;
   totalContacts: number;
@@ -122,9 +128,15 @@ export default function ReactivationCampaigns() {
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
 
-  // CSV upload state
+  // Source selector state
+  const [audienceSource, setAudienceSource] = useState<AudienceSource>("completed_jobs");
+
+  // CSV upload state (only used when audienceSource === "csv")
   const [csvText, setCsvText] = useState<string>("");
   const [csvFileName, setCsvFileName] = useState<string>("");
+
+  // Completed Jobs filter state
+  const [frequencyFilter, setFrequencyFilter] = useState<FrequencyFilter>("all");
 
   // Campaign form state
   const [campaignName, setCampaignName] = useState("");
@@ -140,8 +152,12 @@ export default function ReactivationCampaigns() {
   const { data: campaigns = [], refetch: refetchCampaigns } =
     trpc.campaigns.list.useQuery(undefined, { refetchInterval: 10_000 });
 
-  const { data: previewData, isPending: isPreviewing } =
-    trpc.campaigns.previewCsv.useMutation();
+  // Completed Jobs preview query — runs live as filters change
+  const { data: completedJobsPreview, isLoading: isLoadingCJPreview, refetch: refetchCJPreview } =
+    trpc.campaigns.previewFromCompletedJobs.useQuery(
+      { frequency: frequencyFilter },
+      { enabled: view === "new" && audienceSource === "completed_jobs" }
+    );
 
   const { data: campaignDetail, refetch: refetchDetail } =
     trpc.campaigns.get.useQuery(
@@ -161,9 +177,19 @@ export default function ReactivationCampaigns() {
       onError: (err) => toast.error(err.message),
   });
 
-  const createCampaign = trpc.campaigns.createFromCsv.useMutation({
+  const createCampaignFromCsv = trpc.campaigns.createFromCsv.useMutation({
     onSuccess: (data) => {
       toast.success(`Campaign created — ${data.contactCount} contacts loaded. Ready to launch.`);
+      refetchCampaigns();
+      setSelectedCampaignId(data.campaignId);
+      setView("detail");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const createCampaignFromCompletedJobs = trpc.campaigns.createFromCompletedJobs.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Campaign created — ${data.contactCount} contacts from Completed Jobs. Ready to launch.`);
       refetchCampaigns();
       setSelectedCampaignId(data.campaignId);
       setView("detail");
@@ -215,16 +241,27 @@ export default function ReactivationCampaigns() {
   }
 
   function handleCreateCampaign() {
-    if (!csvText) {
-      toast.error("Please upload a CSV file first.");
-      return;
-    }
     if (!campaignName.trim()) {
       toast.error("Please enter a campaign name.");
       return;
     }
-    createCampaign.mutate({ name: campaignName, messageTemplate, segment, batchSize, csvText });
+    if (audienceSource === "completed_jobs") {
+      createCampaignFromCompletedJobs.mutate({
+        name: campaignName,
+        messageTemplate,
+        frequency: frequencyFilter,
+        batchSize,
+      });
+    } else {
+      if (!csvText) {
+        toast.error("Please upload a CSV file first.");
+        return;
+      }
+      createCampaignFromCsv.mutate({ name: campaignName, messageTemplate, segment, batchSize, csvText });
+    }
   }
+
+  const isCreating = createCampaignFromCompletedJobs.isPending || createCampaignFromCsv.isPending;
 
   function handleStatusChange(id: number, status: CampaignStatus) {
     updateStatus.mutate({ id, status });
@@ -309,8 +346,19 @@ export default function ReactivationCampaigns() {
                             {STATUS_BADGE[c.status].label}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {SEGMENT_LABELS[c.segment] ?? c.segment} · {c.totalContacts} contacts
+                        <p className="text-sm text-muted-foreground flex items-center gap-2">
+                          {(c as Campaign).sourceType === "completed_jobs" ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                              <Database className="w-3 h-3" />
+                              Completed Jobs
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                              <Upload className="w-3 h-3" />
+                              CSV
+                            </span>
+                          )}
+                          · {c.totalContacts} contacts
                         </p>
                       </div>
                     </div>
@@ -349,13 +397,21 @@ export default function ReactivationCampaigns() {
   }
 
   function renderNewCampaign() {
-    const preview = previewCsv.data;
+    const csvPreview = previewCsv.data;
     const contactsForSegment =
       segment === "6-12mo"
-        ? preview?.warmTotal ?? 0
+        ? csvPreview?.warmTotal ?? 0
         : segment === "1-2yr"
-        ? preview?.lapsedTotal ?? 0
-        : (preview?.warmTotal ?? 0) + (preview?.lapsedTotal ?? 0);
+        ? csvPreview?.lapsedTotal ?? 0
+        : (csvPreview?.warmTotal ?? 0) + (csvPreview?.lapsedTotal ?? 0);
+
+    const cjTotal = completedJobsPreview?.total ?? 0;
+    const cjContacts = completedJobsPreview?.contacts ?? [];
+    const cjAlreadyEnrolled = completedJobsPreview?.alreadyEnrolled ?? 0;
+
+    const canCreate =
+      campaignName.trim() &&
+      (audienceSource === "completed_jobs" ? cjTotal > 0 : !!csvText);
 
     return (
       <div className="space-y-6">
@@ -368,50 +424,143 @@ export default function ReactivationCampaigns() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Upload + Config */}
+          {/* Left: Config */}
           <div className="space-y-5">
-            {/* Step 1: Upload CSV */}
+
+            {/* Step 1: Audience Source */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>
-                  Upload Customer List
+                  Choose Audience Source
                 </CardTitle>
                 <CardDescription>
-                  Export your booking history as CSV. Only one-time customers inactive 6–24 months will be included.
+                  Pull contacts automatically from your synced booking history, or upload a CSV manually.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="w-4 h-4" />
-                  {csvFileName || "Choose CSV file"}
-                </Button>
+              <CardContent className="space-y-3">
+                {/* Source toggle */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAudienceSource("completed_jobs")}
+                    className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-4 text-left transition-all ${
+                      audienceSource === "completed_jobs"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Database className={`w-4 h-4 ${audienceSource === "completed_jobs" ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="text-sm font-semibold">Completed Jobs</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-snug">
+                      Auto-pulls eligible contacts from your nightly synced booking data. No upload needed.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAudienceSource("csv")}
+                    className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-4 text-left transition-all ${
+                      audienceSource === "csv"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Upload className={`w-4 h-4 ${audienceSource === "csv" ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="text-sm font-semibold">CSV Upload</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-snug">
+                      Upload a booking history export. Filters to one-time customers inactive 6–24 months.
+                    </p>
+                  </button>
+                </div>
 
-                {isPreviewing && (
-                  <p className="text-sm text-muted-foreground mt-2 text-center">Analyzing contacts…</p>
+                {/* Completed Jobs filters */}
+                {audienceSource === "completed_jobs" && (
+                  <div className="pt-1 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium flex items-center gap-1.5">
+                        <Filter className="w-3.5 h-3.5" />
+                        Frequency Filter
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => refetchCJPreview()}
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isLoadingCJPreview ? "animate-spin" : ""}`} />
+                        Refresh
+                      </button>
+                    </div>
+                    <Select value={frequencyFilter} onValueChange={(v) => setFrequencyFilter(v as FrequencyFilter)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All eligible contacts</SelectItem>
+                        <SelectItem value="one-time">One-time bookings only</SelectItem>
+                        <SelectItem value="recurring">Recurring customers only</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {isLoadingCJPreview ? (
+                      <p className="text-sm text-muted-foreground text-center py-2">Loading eligible contacts…</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3 text-center">
+                          <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{cjTotal}</div>
+                          <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">Eligible contacts</div>
+                        </div>
+                        <div className="bg-muted rounded-lg p-3 text-center">
+                          <div className="text-2xl font-bold text-muted-foreground">{cjAlreadyEnrolled}</div>
+                          <div className="text-xs text-muted-foreground mt-1">Already enrolled</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {cjTotal === 0 && !isLoadingCJPreview && (
+                      <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
+                        No eligible contacts yet. Run a sync from the Completed Jobs page to populate your database.
+                      </p>
+                    )}
+                  </div>
                 )}
 
-                {preview && (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{preview.warmTotal}</div>
-                      <div className="text-xs text-blue-600 dark:text-blue-500 mt-1">Warm (6–12 mo)</div>
-                    </div>
-                    <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{preview.lapsedTotal}</div>
-                      <div className="text-xs text-amber-600 dark:text-amber-500 mt-1">Lapsed (1–2 yr)</div>
-                    </div>
+                {/* CSV upload */}
+                {audienceSource === "csv" && (
+                  <div className="pt-1 space-y-3">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="w-4 h-4" />
+                      {csvFileName || "Choose CSV file"}
+                    </Button>
+                    {previewCsv.isPending && (
+                      <p className="text-sm text-muted-foreground text-center">Analyzing contacts…</p>
+                    )}
+                    {csvPreview && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 text-center">
+                          <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{csvPreview.warmTotal}</div>
+                          <div className="text-xs text-blue-600 dark:text-blue-500 mt-1">Warm (6–12 mo)</div>
+                        </div>
+                        <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 text-center">
+                          <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{csvPreview.lapsedTotal}</div>
+                          <div className="text-xs text-amber-600 dark:text-amber-500 mt-1">Lapsed (1–2 yr)</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -429,30 +578,33 @@ export default function ReactivationCampaigns() {
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Campaign Name</label>
                   <Input
-                    placeholder="e.g. March Reactivation — Warm Leads"
+                    placeholder="e.g. March Reactivation — One-Time Customers"
                     value={campaignName}
                     onChange={(e) => setCampaignName(e.target.value)}
                   />
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Target Segment</label>
-                  <Select value={segment} onValueChange={(v) => setSegment(v as typeof segment)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="6-12mo">Warm — 6 to 12 months ({preview?.warmTotal ?? "—"} contacts)</SelectItem>
-                      <SelectItem value="1-2yr">Lapsed — 1 to 2 years ({preview?.lapsedTotal ?? "—"} contacts)</SelectItem>
-                      <SelectItem value="all">All Eligible ({(preview?.warmTotal ?? 0) + (preview?.lapsedTotal ?? 0)} contacts)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {preview && contactsForSegment > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {contactsForSegment} contacts will receive this message
-                    </p>
-                  )}
-                </div>
+                {/* Segment selector only shown for CSV source */}
+                {audienceSource === "csv" && (
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Target Segment</label>
+                    <Select value={segment} onValueChange={(v) => setSegment(v as typeof segment)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="6-12mo">Warm — 6 to 12 months ({csvPreview?.warmTotal ?? "—"} contacts)</SelectItem>
+                        <SelectItem value="1-2yr">Lapsed — 1 to 2 years ({csvPreview?.lapsedTotal ?? "—"} contacts)</SelectItem>
+                        <SelectItem value="all">All Eligible ({(csvPreview?.warmTotal ?? 0) + (csvPreview?.lapsedTotal ?? 0)} contacts)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {csvPreview && contactsForSegment > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {contactsForSegment} contacts will receive this message
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
@@ -497,7 +649,6 @@ export default function ReactivationCampaigns() {
                     <span className="text-amber-600 ml-1">(will send as 2 SMS segments)</span>
                   )}
                 </p>
-                {/* Preview */}
                 {messageTemplate && (
                   <div className="mt-3 bg-muted rounded-lg p-3">
                     <p className="text-xs text-muted-foreground mb-1 font-medium">Preview:</p>
@@ -513,9 +664,9 @@ export default function ReactivationCampaigns() {
               className="w-full gap-2"
               size="lg"
               onClick={handleCreateCampaign}
-              disabled={createCampaign.isPending || !csvText || !campaignName.trim()}
+              disabled={isCreating || !canCreate}
             >
-              {createCampaign.isPending ? "Creating…" : "Create Campaign (Draft)"}
+              {isCreating ? "Creating…" : `Create Campaign (Draft) — ${audienceSource === "completed_jobs" ? cjTotal : contactsForSegment} contacts`}
             </Button>
           </div>
 
@@ -528,11 +679,49 @@ export default function ReactivationCampaigns() {
                   Contact Preview
                 </CardTitle>
                 <CardDescription>
-                  Showing up to 200 contacts for the selected segment
+                  {audienceSource === "completed_jobs"
+                    ? `Showing up to 200 of ${cjTotal} eligible contacts from your booking database`
+                    : "Showing up to 100 contacts for the selected segment"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                {!preview ? (
+                {audienceSource === "completed_jobs" ? (
+                  isLoadingCJPreview ? (
+                    <div className="flex items-center justify-center py-12">
+                      <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : cjContacts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                      <Database className="w-8 h-8 text-muted-foreground mb-3" />
+                      <p className="text-sm text-muted-foreground">
+                        No eligible contacts yet. Sync completed jobs to populate this list.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="max-h-[500px] overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Phone</TableHead>
+                            <TableHead>Frequency</TableHead>
+                            <TableHead className="text-right">Job Date</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {cjContacts.map((c: any, i: number) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-medium">{c.firstName || c.name || "—"}</TableCell>
+                              <TableCell className="text-muted-foreground text-xs">{c.phone}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{c.frequency || "One-time"}</TableCell>
+                              <TableCell className="text-right text-xs text-muted-foreground">{c.jobDate || "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )
+                ) : !csvPreview ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center px-6">
                     <Upload className="w-8 h-8 text-muted-foreground mb-3" />
                     <p className="text-sm text-muted-foreground">Upload a CSV to preview contacts</p>
@@ -549,7 +738,7 @@ export default function ReactivationCampaigns() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(segment === "6-12mo" ? preview.warm : segment === "1-2yr" ? preview.lapsed : [...preview.warm, ...preview.lapsed])
+                        {(segment === "6-12mo" ? csvPreview.warm : segment === "1-2yr" ? csvPreview.lapsed : [...csvPreview.warm, ...csvPreview.lapsed])
                           .slice(0, 100)
                           .map((c: PreviewContact, i: number) => (
                             <TableRow key={i}>
@@ -604,8 +793,19 @@ export default function ReactivationCampaigns() {
                   {STATUS_BADGE[campaign.status].label}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {SEGMENT_LABELS[campaign.segment] ?? campaign.segment} · {campaign.totalContacts} contacts
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                {campaign.sourceType === "completed_jobs" ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                    <Database className="w-3 h-3" />
+                    From Completed Jobs
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                    <Upload className="w-3 h-3" />
+                    CSV Upload
+                  </span>
+                )}
+                · {campaign.totalContacts} contacts
               </p>
             </div>
           </div>

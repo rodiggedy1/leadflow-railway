@@ -638,3 +638,15 @@
 - [x] Add "Runs nightly at 10 PM" badge to Launch27 sync card
 - [x] Update getLastSync to find both launch27-sync- and launch27-auto- batches
 - [x] Write 7 tests for cronSync.ts (378/378 total pass, 0 TS errors)
+
+## "From Completed Jobs" Campaign Source — COMPLETED
+
+- [x] Add completedJobId column to reactivationContacts (links contact back to source completedJob row)
+- [x] Add sourceType column to reactivationCampaigns ("csv" | "completed_jobs")
+- [x] Run pnpm db:push to sync schema (migration 0023 applied)
+- [x] Add campaigns.previewFromCompletedJobs procedure: query completedJobs WHERE reactivationEligible=1, not already enrolled, with frequency filter
+- [x] Add campaigns.createFromCompletedJobs procedure: pull eligible contacts from DB, insert into reactivationContacts with completedJobId link
+- [x] Update ReactivationCampaigns UI: source selector card ("From Completed Jobs" | "CSV Upload") replaces old CSV-only step
+- [x] "From Completed Jobs" flow: live count, frequency filter (all/one-time/recurring), refresh button, preview table with name/phone/frequency/job date
+- [x] Show source type badge (green Database / blue Upload) on campaign list and detail view
+- [x] Write 7 tests for campaignCompletedJobs.ts (385/385 total pass, 0 TS errors)
