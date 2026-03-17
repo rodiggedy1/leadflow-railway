@@ -763,6 +763,9 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  // Call logs
+  const { data: callLogs } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
+
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
   const [notes, setNotes] = useState("");
@@ -1210,6 +1213,49 @@ function ConversationDrawer({
                 </div>
               </details>
             </div>
+
+            {/* Call History */}
+            {callLogs && callLogs.length > 0 && (
+              <div className="px-4 pb-2">
+                <details open>
+                  <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none flex items-center gap-1.5 py-1">
+                    <Phone className="w-3 h-3" />
+                    Call History ({callLogs.length})
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {callLogs.map((log) => {
+                      const outcomeColors: Record<string, string> = {
+                        ANSWERED: "bg-green-100 text-green-700",
+                        BOOKED: "bg-emerald-100 text-emerald-700",
+                        NO_ANSWER: "bg-gray-100 text-gray-600",
+                        VOICEMAIL: "bg-blue-100 text-blue-700",
+                        BUSY: "bg-yellow-100 text-yellow-700",
+                        CALLBACK: "bg-violet-100 text-violet-700",
+                      };
+                      const colorClass = outcomeColors[log.outcome] ?? "bg-gray-100 text-gray-600";
+                      return (
+                        <div key={log.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${colorClass}`}>
+                                {log.outcome.replace("_", " ")}
+                              </span>
+                              <span className="text-xs text-gray-500">{log.agentName}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-400 shrink-0">
+                              {new Date(log.calledAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          {log.notes && (
+                            <p className="text-xs text-gray-600 leading-relaxed">{log.notes}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
+            )}
 
             {/* Internal Notes */}
             <div className="px-4 py-4 flex-1">

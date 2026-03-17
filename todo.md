@@ -957,3 +957,9 @@
 - [x] Recurring pricing, FAQs, objections, existing customers all handled by LLM with no special cases
 - [x] webhooks.ts updated to use processLeadReplyV2 from new engine
 - [x] 493/493 tests passing, 0 TS errors
+
+## Admin: Show Call Logs & Agent Notes in Lead Detail — COMPLETED
+- [x] Added Call History section to admin lead detail drawer (right panel, above Internal Notes)
+- [x] Shows outcome badge (color-coded), agent name, timestamp, and notes for each call log
+- [x] Section auto-opens when call logs exist; hidden when no calls logged yet
+- [x] 493/493 tests passing, 0 TS errors
