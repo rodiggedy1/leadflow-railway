@@ -1,11 +1,15 @@
 /**
  * bulkEnroll.mjs
  *
- * Fast bulk enrollment script using direct SQL.
- * Classifies all completed_jobs into the 4 always-on groups using
- * SQL-level date arithmetic instead of row-by-row JS processing.
+ * Fast bulk enrollment script with phone-level deduplication.
  *
- * Runs in seconds instead of minutes.
+ * Key rule: each unique phone number appears ONCE in always_on_enrollments,
+ * classified based on their MOST RECENT booking job date and frequency.
+ *
+ * Logic:
+ * 1. For each unique phone, pick the row with the latest jobDate
+ * 2. Classify that row into one of the 4 groups (or skip if active recurring)
+ * 3. Insert one enrollment row per phone (IGNORE duplicates)
  *
  * Usage:
  *   node scripts/bulkEnroll.mjs
@@ -26,13 +30,15 @@ const NOW_MS = TODAY.getTime();
 function getWindowDays(freq) {
   if (!freq) return null;
   const f = freq.toLowerCase().trim();
-  if (f.includes("biweekly") || f.includes("bi-weekly") || f.includes("bi weekly") || f.includes("every 2 week") || f.includes("every other week")) return 14;
-  if (f.includes("week") && !f.includes("bi") && !f.includes("every 2") && !f.includes("every 3") && !f.includes("every 6") && !f.includes("every 8") && !f.includes("3 week") && !f.includes("6 week") && !f.includes("8 week") && !f.includes("other")) return 7;
+  // Order matters: check more specific patterns first
+  if (f.includes("every other week") || f.includes("bi-weekly") || f.includes("biweekly") || f.includes("bi weekly") || f.includes("every 2 week")) return 14;
   if (f.includes("tri-weekly") || f.includes("triweekly") || f.includes("tri weekly") || f.includes("every 3 week") || f.includes("3 week")) return 21;
-  if (f.includes("month") && !f.includes("bi") && !f.includes("every 2")) return 30;
-  if (f.includes("bimonthly") || f.includes("bi-monthly") || f.includes("every 2 month") || f.includes("every 6 week") || f.includes("6 week")) return 56;
-  if (f.includes("every 8 week") || f.includes("8 week")) return 56;
+  if (f.includes("every 6 week") || f.includes("6 week")) return 42;
+  if (f.includes("every 8 week") || f.includes("8 week") || f.includes("bimonthly") || f.includes("bi-monthly")) return 56;
   if (f.includes("quarter") || f.includes("every 3 month")) return 90;
+  if (f.includes("month")) return 30;
+  // Weekly — only if none of the above matched
+  if (f.includes("week")) return 7;
   return null;
 }
 
@@ -55,16 +61,16 @@ function computeGroup(jobDateStr, frequency) {
   // Active recurring — NEVER enroll
   if (recurring && windowDays !== null && daysSince < windowDays + 7) return null;
 
-  // Group 4: Dormant (6+ months)
+  // Group 4: Dormant (6+ months, any frequency)
   if (daysSince >= 180) return "dormant";
 
-  // Group 3: Lapsed Recurring
+  // Group 3: Lapsed Recurring (past their window + 7-day buffer, but < 6 months)
   if (recurring && windowDays !== null && daysSince >= windowDays + 7) return "lapsed-recurring";
 
-  // Group 2: Lapsed One-Time (21+ days)
+  // Group 2: Lapsed One-Time (21+ days, never rebooked)
   if (!recurring && daysSince >= 21) return "lapsed-one-time";
 
-  // Group 1: New One-Time (3–20 days)
+  // Group 1: New One-Time (3–20 days after first cleaning)
   if (!recurring && daysSince >= 3 && daysSince < 21) return "new-one-time";
 
   return null;
@@ -80,12 +86,26 @@ async function main() {
   for (const g of groups) groupMap[g.groupType] = g.id;
   console.log("Groups:", groupMap);
 
-  // Fetch all completed_jobs
-  console.log("Fetching all completed_jobs...");
-  const [jobs] = await db.execute(
-    "SELECT id, phone, name, firstName, frequency, jobDate, lastBookingPrice FROM completed_jobs"
-  );
-  console.log(`Fetched ${jobs.length} jobs`);
+  // Fetch ONE row per unique phone — the most recent booking
+  console.log("Fetching most recent booking per unique phone...");
+  const [jobs] = await db.execute(`
+    SELECT cj.id, cj.phone, cj.name, cj.firstName, cj.frequency, cj.jobDate, cj.lastBookingPrice
+    FROM completed_jobs cj
+    INNER JOIN (
+      SELECT phone, MAX(jobDate) as latestDate
+      FROM completed_jobs
+      WHERE phone IS NOT NULL AND phone != ''
+      GROUP BY phone
+    ) latest ON cj.phone = latest.phone AND cj.jobDate = latest.latestDate
+    -- If two rows share the same phone + max date, pick the one with the highest id
+    INNER JOIN (
+      SELECT phone, MAX(id) as maxId
+      FROM completed_jobs
+      WHERE phone IS NOT NULL AND phone != ''
+      GROUP BY phone
+    ) dedup ON cj.id = dedup.maxId
+  `);
+  console.log(`Fetched ${jobs.length} unique customers (phones)`);
 
   // Classify
   const buckets = {
@@ -102,12 +122,19 @@ async function main() {
     buckets[group].push(job);
   }
 
-  console.log(`\nClassification:`);
+  const total = Object.values(buckets).reduce((a, b) => a + b.length, 0);
+  console.log(`\nClassification (unique customers):`);
   console.log(`  New One-Time:      ${buckets["new-one-time"].length}`);
   console.log(`  Lapsed One-Time:   ${buckets["lapsed-one-time"].length}`);
   console.log(`  Lapsed Recurring:  ${buckets["lapsed-recurring"].length}`);
   console.log(`  Dormant:           ${buckets["dormant"].length}`);
-  console.log(`  Skipped (active):  ${skipped}`);
+  console.log(`  Active (skipped):  ${skipped}`);
+  console.log(`  Total to enroll:   ${total}`);
+
+  // Clear existing enrollments and reset counters
+  console.log("\nClearing previous enrollments...");
+  await db.execute("DELETE FROM always_on_enrollments WHERE 1=1");
+  await db.execute("UPDATE always_on_groups SET totalEnrolled = 0");
 
   const BATCH = 1000;
   let totalInserted = 0;
@@ -126,7 +153,7 @@ async function main() {
         groupId,
         j.id,
         j.phone,
-        j.firstName ?? j.name?.split(" ")[0] ?? null,
+        j.firstName ?? (j.name ? j.name.split(" ")[0] : null),
         j.name ?? null,
         j.frequency ?? null,
         j.lastBookingPrice ?? null,
@@ -151,7 +178,7 @@ async function main() {
     totalInserted += inserted;
   }
 
-  console.log(`\n✅ Bulk enrollment complete: ${totalInserted} total contacts enrolled`);
+  console.log(`\n✅ Bulk enrollment complete: ${totalInserted} unique customers enrolled`);
   await db.end();
 }
 

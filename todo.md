@@ -699,3 +699,16 @@
   - Total enrolled: 44,128
 - [x] Fix campaignCompletedJobs.test.ts — 2 tests now use pure logic assertions (413/413 pass)
 - [x] 413/413 tests passing, 0 TS errors
+
+## Always-On Deduplication Fix — COMPLETED
+
+- [x] Identified root cause: 44,374 rows enrolled (one per booking) instead of one per unique customer
+- [x] Fixed bulkEnroll.mjs: SELECT most recent job per phone using MAX(jobDate) + MAX(id) dedup join
+- [x] Fixed alwaysOnEngine.ts enrollNewlyEligible(): deduplicate by phone in-memory, skip already-enrolled phones
+- [x] Re-ran bulk enrollment: 3,613 unique customers enrolled (was 44,128 before fix)
+  - New One-Time: 41
+  - Lapsed One-Time: 178
+  - Lapsed Recurring: 79
+  - Dormant: 3,315
+  - Active recurring (skipped): 190
+- [x] 413/413 tests passing, 0 TS errors

@@ -255,19 +255,28 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
 
   const groupMap = Object.fromEntries(groups.map((g: AlwaysOnGroup) => [g.groupType, g])) as Record<string, AlwaysOnGroup>;
 
-  // Find completedJobs not already enrolled in any always-on group
-  const alreadyEnrolledJobIds = await db
-    .selectDistinct({ completedJobId: alwaysOnEnrollments.completedJobId })
+  // Find phones already enrolled in any always-on group (to skip duplicates)
+  const alreadyEnrolledPhones = await db
+    .selectDistinct({ phone: alwaysOnEnrollments.phone })
     .from(alwaysOnEnrollments);
 
-  const excludeIds = alreadyEnrolledJobIds.map((r: { completedJobId: number }) => r.completedJobId);
+  const excludePhones = new Set(alreadyEnrolledPhones.map((r: { phone: string }) => r.phone));
 
-  const jobs = excludeIds.length > 0
-    ? await db
-        .select()
-        .from(completedJobs)
-        .where(notInArray(completedJobs.id, excludeIds))
-    : await db.select().from(completedJobs);
+  // Fetch all completed jobs not yet enrolled by phone
+  const allJobs = await db.select().from(completedJobs);
+
+  // Deduplicate by phone: keep only the most recent job per phone number
+  const latestJobByPhone = new Map<string, typeof allJobs[0]>();
+  for (const job of allJobs) {
+    if (!job.phone) continue;
+    if (excludePhones.has(job.phone)) continue;
+    const existing = latestJobByPhone.get(job.phone);
+    if (!existing || (job.jobDate ?? '') > (existing.jobDate ?? '')) {
+      latestJobByPhone.set(job.phone, job);
+    }
+  }
+
+  const jobs = Array.from(latestJobByPhone.values());
 
   const enrolled: Record<AlwaysOnGroupType, number> = {
     "new-one-time": 0,
