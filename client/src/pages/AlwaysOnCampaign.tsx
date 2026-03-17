@@ -33,6 +33,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
   Zap,
   Users,
   Send,
@@ -47,6 +54,8 @@ import {
   X,
   Clock,
   Info,
+  MapPin,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -142,6 +151,20 @@ function GroupCard({ group, onUpdated }: {
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [lastRenderedMessage, setLastRenderedMessage] = useState<string | null>(null);
+
+  // Conversation thread drawer
+  const [convDrawerOpen, setConvDrawerOpen] = useState(false);
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(null);
+
+  const { data: convData, isLoading: convLoading } = trpc.alwaysOn.getConversation.useQuery(
+    { enrollmentId: selectedEnrollmentId! },
+    { enabled: convDrawerOpen && selectedEnrollmentId !== null }
+  );
+
+  const handleViewConversation = (enrollmentId: number) => {
+    setSelectedEnrollmentId(enrollmentId);
+    setConvDrawerOpen(true);
+  };
 
   const updateGroup = trpc.alwaysOn.updateGroup.useMutation({
     onSuccess: () => {
@@ -470,6 +493,7 @@ function GroupCard({ group, onUpdated }: {
                       <TableHead>Job Date</TableHead>
                       <TableHead>Enrolled</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Conversation</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -486,6 +510,21 @@ function GroupCard({ group, onUpdated }: {
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[c.status] || "bg-gray-100 text-gray-600"}`}>
                             {c.status}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          {(c.status === "REPLIED" || c.status === "BOOKED" || c.sessionId) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                              onClick={() => handleViewConversation(c.id)}
+                            >
+                              <MessageSquare className="w-3 h-3 mr-1" />
+                              View
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -526,6 +565,106 @@ function GroupCard({ group, onUpdated }: {
           )}
         </div>
       )}
+
+      {/* ── Conversation Thread Drawer ─────────────────────────────────── */}
+      <Sheet open={convDrawerOpen} onOpenChange={setConvDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <MessageSquare className="w-4 h-4 text-blue-600" />
+              Conversation Thread
+            </SheetTitle>
+            {convData && (
+              <SheetDescription className="text-xs text-gray-500 space-y-0.5">
+                <span className="font-medium text-gray-700">{convData.enrollment.name || convData.enrollment.firstName || convData.enrollment.phone}</span>
+                {" · "}{convData.enrollment.phone}
+                {convData.session && (
+                  <>
+                    {" · "}
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                      convData.session.stage === "DONE" || convData.session.isBooked
+                        ? "bg-green-100 text-green-700"
+                        : convData.session.stage === "CONFIRMATION" || convData.session.stage === "CALL_SCHEDULED"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}>{convData.session.stage}</span>
+                  </>
+                )}
+              </SheetDescription>
+            )}
+          </SheetHeader>
+
+          {/* Session metadata strip */}
+          {convData?.session && (convData.session.address || convData.session.selectedSlot) && (
+            <div className="px-5 py-2 bg-gray-50 border-b flex flex-wrap gap-3 text-xs text-gray-600">
+              {convData.session.selectedSlot && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {convData.session.selectedSlot}
+                </span>
+              )}
+              {convData.session.address && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {convData.session.address}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+            {convLoading && (
+              <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                Loading conversation...
+              </div>
+            )}
+            {!convLoading && convData && !convData.hasSession && (
+              <div className="text-center py-12 text-gray-400 text-sm">
+                <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                No conversation yet — this contact hasn't replied.
+              </div>
+            )}
+            {!convLoading && convData?.hasSession && convData.messages.length === 0 && (
+              <div className="text-center py-12 text-gray-400 text-sm">
+                <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                Conversation started but no messages recorded yet.
+              </div>
+            )}
+            {!convLoading && convData?.messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${
+                  msg.role === "assistant" ? "justify-start" : "justify-end"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                    msg.role === "assistant"
+                      ? "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
+                      : "bg-blue-600 text-white rounded-tr-sm"
+                  }`}
+                >
+                  {msg.content}
+                  {msg.ts && (
+                    <div className={`text-[10px] mt-1 ${
+                      msg.role === "assistant" ? "text-gray-400" : "text-blue-200"
+                    }`}>
+                      {new Date(msg.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer note */}
+          <div className="px-5 py-3 border-t bg-gray-50 text-xs text-gray-400">
+            Read-only view · Replies are handled automatically by the AI engine
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

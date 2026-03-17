@@ -791,3 +791,24 @@
 - [x] Fix cronSync.ts "yesterday" date calculation to use Eastern Time instead of UTC
 - [x] 431/431 tests passing, 0 TS errors
 - [ ] Backfill missed March 16 bookings via manual sync trigger on health page
+
+## Always-On: Skip Address for Existing Customers — IN PROGRESS
+
+- [ ] Detect always-on leads in conversation engine and skip ADDRESS stage (address already in completedJobs)
+- [ ] Pre-populate address from completedJobs when creating always-on conversation session
+- [ ] Go straight from TIME_PREF (or SLOT_CHOICE) to CONFIRMATION with address already set
+
+## Always-On: Full Conversation Thread Viewer — IN PROGRESS
+
+- [ ] Add tRPC procedure to fetch full conversation messages for a given phone/session
+- [ ] Add "View Conversation" button/link on Always-On contacts list rows
+- [ ] Build conversation thread drawer showing all SMS messages in chronological order
+
+## Always-On Improvements — COMPLETED (2026-03-17)
+
+- [x] Skip ADDRESS stage for always-on leads — address pre-populated from completedJobs at session creation
+- [x] TIME_PREF stage now checks context.address and jumps straight to CONFIRMATION if address is on file
+- [x] Added getConversation tRPC procedure to alwaysOnRouter
+- [x] Added "Conversation" column to contacts table with "View" button for REPLIED/BOOKED contacts
+- [x] Built conversation thread Sheet drawer with message bubbles, stage badge, address/slot metadata strip
+- [x] 431/431 tests passing, 0 TS errors

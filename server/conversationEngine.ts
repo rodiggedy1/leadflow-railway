@@ -736,6 +736,16 @@ export async function processLeadReply(
       // Append time preference to the slot label for the confirmation message
       const slotWithTime = `${slot} (${timePref})`;
 
+      // If we already have the address on file (always-on / reactivation leads),
+      // skip the ADDRESS step and go straight to CONFIRMATION.
+      if (context.address && context.address.length >= 5) {
+        return {
+          reply: buildConfirmationMessage(slotWithTime, context.address),
+          nextStage: "CONFIRMATION",
+          extractedData: { selectedSlot: slotWithTime },
+        };
+      }
+
       return {
         reply: buildAddressRequestAfterTimePref(slot, timePref),
         nextStage: "ADDRESS",

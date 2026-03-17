@@ -13,7 +13,7 @@
  */
 
 import { getDb } from "./db";
-import { alwaysOnGroups, alwaysOnEnrollments, conversationSessions, type AlwaysOnGroupType } from "../drizzle/schema";
+import { alwaysOnGroups, alwaysOnEnrollments, conversationSessions, completedJobs, type AlwaysOnGroupType } from "../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { sendSms } from "./openphone";
 
@@ -221,6 +221,19 @@ export async function sendAlwaysOnBatch(
       }
 
       if (success) {
+        // Look up the address from completedJobs so we can skip the ADDRESS step
+        let knownAddress: string | null = null;
+        try {
+          const jobRow = await db
+            .select({ address: completedJobs.address })
+            .from(completedJobs)
+            .where(eq(completedJobs.id, enrollment.completedJobId))
+            .limit(1);
+          knownAddress = jobRow[0]?.address ?? null;
+        } catch {
+          // Non-fatal — address lookup failure should not block the send
+        }
+
         // Create a conversation session so inbound replies are routed through the AI engine
         let sessionId: number | null = null;
         try {
@@ -236,6 +249,8 @@ export async function sendAlwaysOnBatch(
             messageHistory: "[]",
             aiMode: 1,
             isBooked: 0,
+            // Pre-populate address so the AI skips the ADDRESS step
+            address: knownAddress ?? undefined,
           });
           sessionId = (sessionResult as any).insertId as number;
         } catch (err) {

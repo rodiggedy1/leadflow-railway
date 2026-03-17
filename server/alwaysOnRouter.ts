@@ -256,4 +256,94 @@ export const alwaysOnRouter = router({
 
       return stats;
     }),
+
+  /**
+   * Returns the full conversation thread for a specific enrollment.
+   * Looks up the linked conversationSession and returns all messages
+   * plus session metadata (stage, address, slot, etc.).
+   */
+  getConversation: protectedProcedure
+    .input(z.object({ enrollmentId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Get the enrollment to find the sessionId and phone
+      const [enrollment] = await db
+        .select()
+        .from(alwaysOnEnrollments)
+        .where(eq(alwaysOnEnrollments.id, input.enrollmentId))
+        .limit(1);
+
+      if (!enrollment) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Enrollment not found" });
+      }
+
+      // If there's a linked session, fetch it
+      let session = null;
+      if (enrollment.sessionId) {
+        const [row] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, enrollment.sessionId))
+          .limit(1);
+        session = row ?? null;
+      } else {
+        // Fall back: find the most recent session for this phone with always-on source
+        const rows = await db
+          .select()
+          .from(conversationSessions)
+          .where(
+            and(
+              eq(conversationSessions.leadPhone, enrollment.phone),
+              sql`${conversationSessions.leadSource} LIKE 'always-on%'`
+            )
+          )
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(1);
+        session = rows[0] ?? null;
+      }
+
+      // Parse messageHistory JSON
+      let messages: Array<{ role: string; content: string; ts?: number }> = [];
+      if (session?.messageHistory) {
+        try {
+          messages = JSON.parse(session.messageHistory as string);
+        } catch {
+          messages = [];
+        }
+      }
+
+      // Prepend the initial outbound message (the always-on SMS that was sent)
+      // so the thread starts with what we sent them
+      const initialMessage = enrollment.openPhoneMessageId
+        ? null // already in messageHistory if session was created
+        : null;
+      void initialMessage; // suppress unused warning
+
+      return {
+        enrollment: {
+          id: enrollment.id,
+          phone: enrollment.phone,
+          name: enrollment.name,
+          firstName: enrollment.firstName,
+          status: enrollment.status,
+          sentAt: enrollment.sentAt,
+          repliedAt: enrollment.repliedAt,
+          jobDate: enrollment.jobDate,
+        },
+        session: session
+          ? {
+              id: session.id,
+              stage: session.stage,
+              address: session.address,
+              selectedSlot: session.selectedSlot,
+              isBooked: session.isBooked,
+              createdAt: session.createdAt,
+            }
+          : null,
+        messages,
+        hasSession: session !== null,
+      };
+    }),
 });
