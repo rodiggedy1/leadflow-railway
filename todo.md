@@ -785,3 +785,9 @@
 - [x] Add FUTURE_BOOKING to AdminDashboard Stage type, STAGE_CONFIG (blue badge), and stage dropdown
 - [x] Add FUTURE_BOOKING to adminUpdateStage z.enum in routers.ts
 - [x] 431/431 tests passing, 0 TS errors
+
+## Cron Date Fix — COMPLETED
+
+- [x] Fix cronSync.ts "yesterday" date calculation to use Eastern Time instead of UTC
+- [x] 431/431 tests passing, 0 TS errors
+- [ ] Backfill missed March 16 bookings via manual sync trigger on health page

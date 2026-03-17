@@ -82,9 +82,17 @@ export async function runNightlySync(targetDate?: string): Promise<{
   const date =
     targetDate ??
     (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 1);
-      return d.toISOString().slice(0, 10);
+      // Use Eastern Time for the date calculation so the cron running at
+      // 10 PM ET (which is 2-3 AM UTC the next day) always picks up
+      // the correct previous calendar day in ET, not UTC.
+      const etNow = new Date(
+        new Date().toLocaleString("en-US", { timeZone: "America/New_York" })
+      );
+      etNow.setDate(etNow.getDate() - 1);
+      const yyyy = etNow.getFullYear();
+      const mm = String(etNow.getMonth() + 1).padStart(2, "0");
+      const dd = String(etNow.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
     })();
 
   const db = await getDb();
