@@ -3,13 +3,13 @@
  * Admin page for managing reactivation SMS campaigns.
  *
  * Flow:
- *  1. Upload CSV → preview eligible contacts by segment
- *  2. Configure campaign (name, message, segment, batch size)
+ *  1. Filter contacts from the unified completedJobs database (frequency, eligibility)
+ *  2. Configure campaign (name, message, batch size)
  *  3. Review contact list → Launch (DRAFT → ACTIVE)
  *  4. Monitor campaign progress (sent / replied / booked)
  */
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Upload,
   Users,
   MessageSquare,
   Play,
@@ -65,12 +64,12 @@ import {
   Database,
   RefreshCw,
   Filter,
+  PlusCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED";
-type AudienceSource = "completed_jobs" | "csv";
 type FrequencyFilter = "all" | "one-time" | "recurring";
 
 interface Campaign {
@@ -85,20 +84,9 @@ interface Campaign {
   sentCount: number;
   repliedCount: number;
   bookedCount: number;
-  bookedRevenue: number; // live-computed from joined conversation_sessions
+  bookedRevenue: number;
   lastSentAt: Date | null;
   createdAt: Date;
-}
-
-interface PreviewContact {
-  phone: string;
-  name: string;
-  firstName: string;
-  email: string;
-  lastBookingDate: string;
-  daysSince: number;
-  bookingCount: number;
-  segment: "6-12mo" | "1-2yr";
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -113,35 +101,19 @@ const STATUS_BADGE: Record<CampaignStatus, { label: string; variant: "default" |
   COMPLETED: { label: "Completed", variant: "secondary" },
 };
 
-const SEGMENT_LABELS: Record<string, string> = {
-  "6-12mo": "Warm (6–12 months)",
-  "1-2yr": "Lapsed (1–2 years)",
-  all: "All Eligible",
-};
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ReactivationCampaigns() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // View state: "list" | "new" | "detail"
+  // View state
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
 
-  // Source selector state
-  const [audienceSource, setAudienceSource] = useState<AudienceSource>("completed_jobs");
-
-  // CSV upload state (only used when audienceSource === "csv")
-  const [csvText, setCsvText] = useState<string>("");
-  const [csvFileName, setCsvFileName] = useState<string>("");
-
-  // Completed Jobs filter state
+  // Audience filter state
   const [frequencyFilter, setFrequencyFilter] = useState<FrequencyFilter>("all");
 
   // Campaign form state
   const [campaignName, setCampaignName] = useState("");
   const [messageTemplate, setMessageTemplate] = useState(DEFAULT_TEMPLATE);
-  const [segment, setSegment] = useState<"6-12mo" | "1-2yr" | "all">("6-12mo");
   const [batchSize, setBatchSize] = useState(50);
 
   // Delete confirmation
@@ -152,11 +124,11 @@ export default function ReactivationCampaigns() {
   const { data: campaigns = [], refetch: refetchCampaigns } =
     trpc.campaigns.list.useQuery(undefined, { refetchInterval: 10_000 });
 
-  // Completed Jobs preview query — runs live as filters change
-  const { data: completedJobsPreview, isLoading: isLoadingCJPreview, refetch: refetchCJPreview } =
+  // Live preview of eligible contacts as filters change
+  const { data: preview, isLoading: isLoadingPreview, refetch: refetchPreview } =
     trpc.campaigns.previewFromCompletedJobs.useQuery(
       { frequency: frequencyFilter },
-      { enabled: view === "new" && audienceSource === "completed_jobs" }
+      { enabled: view === "new" }
     );
 
   const { data: campaignDetail, refetch: refetchDetail } =
@@ -173,23 +145,9 @@ export default function ReactivationCampaigns() {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
-  const previewCsv = trpc.campaigns.previewCsv.useMutation({
-      onError: (err) => toast.error(err.message),
-  });
-
-  const createCampaignFromCsv = trpc.campaigns.createFromCsv.useMutation({
+  const createCampaign = trpc.campaigns.createFromCompletedJobs.useMutation({
     onSuccess: (data) => {
       toast.success(`Campaign created — ${data.contactCount} contacts loaded. Ready to launch.`);
-      refetchCampaigns();
-      setSelectedCampaignId(data.campaignId);
-      setView("detail");
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const createCampaignFromCompletedJobs = trpc.campaigns.createFromCompletedJobs.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Campaign created — ${data.contactCount} contacts from Completed Jobs. Ready to launch.`);
       refetchCampaigns();
       setSelectedCampaignId(data.campaignId);
       setView("detail");
@@ -215,7 +173,7 @@ export default function ReactivationCampaigns() {
     onError: (err) => toast.error(err.message),
   });
 
-  const deleteCampaign= trpc.campaigns.delete.useMutation({
+  const deleteCampaign = trpc.campaigns.delete.useMutation({
     onSuccess: () => {
       toast.success("Campaign deleted");
       refetchCampaigns();
@@ -227,41 +185,18 @@ export default function ReactivationCampaigns() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCsvFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      setCsvText(text);
-      previewCsv.mutate({ csvText: text });
-    };
-    reader.readAsText(file);
-  }
-
   function handleCreateCampaign() {
     if (!campaignName.trim()) {
       toast.error("Please enter a campaign name.");
       return;
     }
-    if (audienceSource === "completed_jobs") {
-      createCampaignFromCompletedJobs.mutate({
-        name: campaignName,
-        messageTemplate,
-        frequency: frequencyFilter,
-        batchSize,
-      });
-    } else {
-      if (!csvText) {
-        toast.error("Please upload a CSV file first.");
-        return;
-      }
-      createCampaignFromCsv.mutate({ name: campaignName, messageTemplate, segment, batchSize, csvText });
-    }
+    createCampaign.mutate({
+      name: campaignName,
+      messageTemplate,
+      frequency: frequencyFilter,
+      batchSize,
+    });
   }
-
-  const isCreating = createCampaignFromCompletedJobs.isPending || createCampaignFromCsv.isPending;
 
   function handleStatusChange(id: number, status: CampaignStatus) {
     updateStatus.mutate({ id, status });
@@ -284,7 +219,7 @@ export default function ReactivationCampaigns() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Reactivation Campaigns</h1>
             <p className="text-muted-foreground mt-1">
-              Re-engage past customers who haven't booked in 6–24 months.
+              Re-engage past customers from your booking history.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -300,7 +235,7 @@ export default function ReactivationCampaigns() {
               {createTestCampaign.isPending ? "Creating…" : "Test Campaign"}
             </Button>
             <Button onClick={() => setView("new")} className="gap-2">
-              <Upload className="w-4 h-4" />
+              <PlusCircle className="w-4 h-4" />
               New Campaign
             </Button>
           </div>
@@ -320,10 +255,10 @@ export default function ReactivationCampaigns() {
               <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
               <p className="text-muted-foreground mb-4 max-w-sm">
-                Upload your customer list to create your first reactivation campaign.
+                Create your first reactivation campaign from your booking history.
               </p>
               <Button onClick={() => setView("new")} className="gap-2">
-                <Upload className="w-4 h-4" />
+                <PlusCircle className="w-4 h-4" />
                 Create Campaign
               </Button>
             </CardContent>
@@ -346,19 +281,11 @@ export default function ReactivationCampaigns() {
                             {STATUS_BADGE[c.status].label}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                          {(c as Campaign).sourceType === "completed_jobs" ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-                              <Database className="w-3 h-3" />
-                              Completed Jobs
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs font-medium">
-                              <Upload className="w-3 h-3" />
-                              CSV
-                            </span>
-                          )}
-                          · {c.totalContacts} contacts
+                        <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                          <Database className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Booking History</span>
+                          <span>·</span>
+                          <span>{c.totalContacts} contacts</span>
                         </p>
                       </div>
                     </div>
@@ -397,21 +324,10 @@ export default function ReactivationCampaigns() {
   }
 
   function renderNewCampaign() {
-    const csvPreview = previewCsv.data;
-    const contactsForSegment =
-      segment === "6-12mo"
-        ? csvPreview?.warmTotal ?? 0
-        : segment === "1-2yr"
-        ? csvPreview?.lapsedTotal ?? 0
-        : (csvPreview?.warmTotal ?? 0) + (csvPreview?.lapsedTotal ?? 0);
-
-    const cjTotal = completedJobsPreview?.total ?? 0;
-    const cjContacts = completedJobsPreview?.contacts ?? [];
-    const cjAlreadyEnrolled = completedJobsPreview?.alreadyEnrolled ?? 0;
-
-    const canCreate =
-      campaignName.trim() &&
-      (audienceSource === "completed_jobs" ? cjTotal > 0 : !!csvText);
+    const total = preview?.total ?? 0;
+    const contacts = preview?.contacts ?? [];
+    const alreadyEnrolled = preview?.alreadyEnrolled ?? 0;
+    const canCreate = campaignName.trim() && total > 0;
 
     return (
       <div className="space-y-6">
@@ -420,148 +336,78 @@ export default function ReactivationCampaigns() {
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
-          <h1 className="text-2xl font-bold text-foreground">New Campaign</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">New Campaign</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Contacts are pulled from your booking history database — no upload needed.
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Config */}
           <div className="space-y-5">
 
-            {/* Step 1: Audience Source */}
+            {/* Step 1: Filter Audience */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>
-                  Choose Audience Source
+                  Filter Audience
                 </CardTitle>
                 <CardDescription>
-                  Pull contacts automatically from your synced booking history, or upload a CSV manually.
+                  Choose which customers from your booking history to target.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Source toggle */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAudienceSource("completed_jobs")}
-                    className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-4 text-left transition-all ${
-                      audienceSource === "completed_jobs"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Database className={`w-4 h-4 ${audienceSource === "completed_jobs" ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className="text-sm font-semibold">Completed Jobs</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-snug">
-                      Auto-pulls eligible contacts from your nightly synced booking data. No upload needed.
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAudienceSource("csv")}
-                    className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-4 text-left transition-all ${
-                      audienceSource === "csv"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Upload className={`w-4 h-4 ${audienceSource === "csv" ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className="text-sm font-semibold">CSV Upload</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-snug">
-                      Upload a booking history export. Filters to one-time customers inactive 6–24 months.
-                    </p>
-                  </button>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium flex items-center gap-1.5">
+                      <Filter className="w-3.5 h-3.5" />
+                      Booking Frequency
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => refetchPreview()}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingPreview ? "animate-spin" : ""}`} />
+                      Refresh
+                    </button>
+                  </div>
+                  <Select value={frequencyFilter} onValueChange={(v) => setFrequencyFilter(v as FrequencyFilter)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All eligible customers</SelectItem>
+                      <SelectItem value="one-time">One-time bookings only</SelectItem>
+                      <SelectItem value="recurring">Recurring customers only</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Completed Jobs filters */}
-                {audienceSource === "completed_jobs" && (
-                  <div className="pt-1 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium flex items-center gap-1.5">
-                        <Filter className="w-3.5 h-3.5" />
-                        Frequency Filter
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => refetchCJPreview()}
-                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isLoadingCJPreview ? "animate-spin" : ""}`} />
-                        Refresh
-                      </button>
+                {isLoadingPreview ? (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{total}</div>
+                      <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">Eligible contacts</div>
                     </div>
-                    <Select value={frequencyFilter} onValueChange={(v) => setFrequencyFilter(v as FrequencyFilter)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All eligible contacts</SelectItem>
-                        <SelectItem value="one-time">One-time bookings only</SelectItem>
-                        <SelectItem value="recurring">Recurring customers only</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {isLoadingCJPreview ? (
-                      <p className="text-sm text-muted-foreground text-center py-2">Loading eligible contacts…</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3 text-center">
-                          <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{cjTotal}</div>
-                          <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">Eligible contacts</div>
-                        </div>
-                        <div className="bg-muted rounded-lg p-3 text-center">
-                          <div className="text-2xl font-bold text-muted-foreground">{cjAlreadyEnrolled}</div>
-                          <div className="text-xs text-muted-foreground mt-1">Already enrolled</div>
-                        </div>
-                      </div>
-                    )}
-
-                    {cjTotal === 0 && !isLoadingCJPreview && (
-                      <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
-                        No eligible contacts yet. Run a sync from the Completed Jobs page to populate your database.
-                      </p>
-                    )}
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-muted-foreground">{alreadyEnrolled}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Already enrolled</div>
+                    </div>
                   </div>
                 )}
 
-                {/* CSV upload */}
-                {audienceSource === "csv" && (
-                  <div className="pt-1 space-y-3">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".csv"
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload className="w-4 h-4" />
-                      {csvFileName || "Choose CSV file"}
-                    </Button>
-                    {previewCsv.isPending && (
-                      <p className="text-sm text-muted-foreground text-center">Analyzing contacts…</p>
-                    )}
-                    {csvPreview && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 text-center">
-                          <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{csvPreview.warmTotal}</div>
-                          <div className="text-xs text-blue-600 dark:text-blue-500 mt-1">Warm (6–12 mo)</div>
-                        </div>
-                        <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 text-center">
-                          <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{csvPreview.lapsedTotal}</div>
-                          <div className="text-xs text-amber-600 dark:text-amber-500 mt-1">Lapsed (1–2 yr)</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                {total === 0 && !isLoadingPreview && (
+                  <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
+                    No eligible contacts yet. Run a sync from the Completed Jobs page to populate your database.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -583,28 +429,6 @@ export default function ReactivationCampaigns() {
                     onChange={(e) => setCampaignName(e.target.value)}
                   />
                 </div>
-
-                {/* Segment selector only shown for CSV source */}
-                {audienceSource === "csv" && (
-                  <div>
-                    <label className="text-sm font-medium mb-1.5 block">Target Segment</label>
-                    <Select value={segment} onValueChange={(v) => setSegment(v as typeof segment)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="6-12mo">Warm — 6 to 12 months ({csvPreview?.warmTotal ?? "—"} contacts)</SelectItem>
-                        <SelectItem value="1-2yr">Lapsed — 1 to 2 years ({csvPreview?.lapsedTotal ?? "—"} contacts)</SelectItem>
-                        <SelectItem value="all">All Eligible ({(csvPreview?.warmTotal ?? 0) + (csvPreview?.lapsedTotal ?? 0)} contacts)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {csvPreview && contactsForSegment > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {contactsForSegment} contacts will receive this message
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
@@ -664,9 +488,11 @@ export default function ReactivationCampaigns() {
               className="w-full gap-2"
               size="lg"
               onClick={handleCreateCampaign}
-              disabled={isCreating || !canCreate}
+              disabled={createCampaign.isPending || !canCreate}
             >
-              {isCreating ? "Creating…" : `Create Campaign (Draft) — ${audienceSource === "completed_jobs" ? cjTotal : contactsForSegment} contacts`}
+              {createCampaign.isPending
+                ? "Creating…"
+                : `Create Campaign (Draft) — ${total} contacts`}
             </Button>
           </div>
 
@@ -679,52 +505,20 @@ export default function ReactivationCampaigns() {
                   Contact Preview
                 </CardTitle>
                 <CardDescription>
-                  {audienceSource === "completed_jobs"
-                    ? `Showing up to 200 of ${cjTotal} eligible contacts from your booking database`
-                    : "Showing up to 100 contacts for the selected segment"}
+                  Showing up to 200 of {total} eligible contacts from your booking database
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                {audienceSource === "completed_jobs" ? (
-                  isLoadingCJPreview ? (
-                    <div className="flex items-center justify-center py-12">
-                      <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : cjContacts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center px-6">
-                      <Database className="w-8 h-8 text-muted-foreground mb-3" />
-                      <p className="text-sm text-muted-foreground">
-                        No eligible contacts yet. Sync completed jobs to populate this list.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="max-h-[500px] overflow-y-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Frequency</TableHead>
-                            <TableHead className="text-right">Job Date</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {cjContacts.map((c: any, i: number) => (
-                            <TableRow key={i}>
-                              <TableCell className="font-medium">{c.firstName || c.name || "—"}</TableCell>
-                              <TableCell className="text-muted-foreground text-xs">{c.phone}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">{c.frequency || "One-time"}</TableCell>
-                              <TableCell className="text-right text-xs text-muted-foreground">{c.jobDate || "—"}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )
-                ) : !csvPreview ? (
+                {isLoadingPreview ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : contacts.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center px-6">
-                    <Upload className="w-8 h-8 text-muted-foreground mb-3" />
-                    <p className="text-sm text-muted-foreground">Upload a CSV to preview contacts</p>
+                    <Database className="w-8 h-8 text-muted-foreground mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      No eligible contacts yet. Sync completed jobs to populate this list.
+                    </p>
                   </div>
                 ) : (
                   <div className="max-h-[500px] overflow-y-auto">
@@ -733,23 +527,19 @@ export default function ReactivationCampaigns() {
                         <TableRow>
                           <TableHead>Name</TableHead>
                           <TableHead>Phone</TableHead>
-                          <TableHead className="text-right">Last Booking</TableHead>
-                          <TableHead className="text-right">Bookings</TableHead>
+                          <TableHead>Frequency</TableHead>
+                          <TableHead className="text-right">Job Date</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(segment === "6-12mo" ? csvPreview.warm : segment === "1-2yr" ? csvPreview.lapsed : [...csvPreview.warm, ...csvPreview.lapsed])
-                          .slice(0, 100)
-                          .map((c: PreviewContact, i: number) => (
-                            <TableRow key={i}>
-                              <TableCell className="font-medium">{c.firstName || c.name}</TableCell>
-                              <TableCell className="text-muted-foreground text-xs">{c.phone}</TableCell>
-                              <TableCell className="text-right text-xs text-muted-foreground">
-                                {c.daysSince}d ago
-                              </TableCell>
-                              <TableCell className="text-right text-xs">{c.bookingCount}</TableCell>
-                            </TableRow>
-                          ))}
+                        {contacts.map((c: any, i: number) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{c.firstName || c.name || "—"}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs">{c.phone}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{c.frequency || "One-time"}</TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground">{c.jobDate || "—"}</TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -793,19 +583,10 @@ export default function ReactivationCampaigns() {
                   {STATUS_BADGE[campaign.status].label}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                {campaign.sourceType === "completed_jobs" ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-                    <Database className="w-3 h-3" />
-                    From Completed Jobs
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs font-medium">
-                    <Upload className="w-3 h-3" />
-                    CSV Upload
-                  </span>
-                )}
-                · {campaign.totalContacts} contacts
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                <Database className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Booking History</span>
+                <span>· {campaign.totalContacts} contacts</span>
               </p>
             </div>
           </div>
@@ -860,119 +641,72 @@ export default function ReactivationCampaigns() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <Card>
-            <CardContent className="pt-5 pb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Total</span>
-              </div>
-              <div className="text-2xl font-bold">{campaign.totalContacts}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{sentPct}% sent</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-5 pb-4">
+            <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Sent</span>
+                <span className="text-xs text-muted-foreground">Progress</span>
               </div>
-              <div className="text-2xl font-bold">{campaign.sentCount}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">of {campaign.totalContacts}</div>
+              <div className="text-2xl font-bold">{sentPct}%</div>
+              <div className="text-xs text-muted-foreground">{campaign.sentCount} / {campaign.totalContacts} sent</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-5 pb-4">
+            <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <MessageSquare className="w-4 h-4 text-blue-500" />
-                <span className="text-xs text-muted-foreground">Replied</span>
+                <span className="text-xs text-muted-foreground">Reply Rate</span>
               </div>
-              <div className="text-2xl font-bold text-blue-600">{campaign.repliedCount}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{replyRate}% reply rate</div>
+              <div className="text-2xl font-bold text-blue-600">{replyRate}%</div>
+              <div className="text-xs text-muted-foreground">{campaign.repliedCount} replies</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-5 pb-4">
+            <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <span className="text-xs text-muted-foreground">Booked</span>
               </div>
               <div className="text-2xl font-bold text-green-600">{campaign.bookedCount}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{bookRate}% of replies</div>
+              <div className="text-xs text-muted-foreground">{bookRate}% of replies</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-5 pb-4">
+            <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="w-4 h-4 text-purple-500" />
                 <span className="text-xs text-muted-foreground">Revenue</span>
               </div>
               <div className="text-2xl font-bold text-purple-600">
-                {campaignStats?.bookedRevenue ? `$${campaignStats.bookedRevenue.toLocaleString()}` : "$0"}
+                {campaign.bookedRevenue > 0 ? `$${campaign.bookedRevenue.toLocaleString()}` : "—"}
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">from booked leads</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-5 pb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-orange-500" />
-                <span className="text-xs text-muted-foreground">Conv. Rate</span>
-              </div>
-              <div className="text-2xl font-bold text-orange-600">
-                {campaignStats?.conversionRate ?? bookRate}%
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">replies → booked</div>
+              <div className="text-xs text-muted-foreground">from bookings</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Progress bar */}
-        {campaign.totalContacts > 0 && (
+        {/* A/B Test stats if available */}
+        {campaignStats && (campaignStats as any).abTestResults && (
           <Card>
-            <CardContent className="pt-5 pb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Send Progress</span>
-                <span className="text-sm text-muted-foreground">{campaign.sentCount} / {campaign.totalContacts}</span>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                A/B Test Results
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                {((campaignStats as any).abTestResults as any[]).map((variant: any, i: number) => (
+                  <div key={i} className="bg-muted rounded-lg p-3">
+                    <div className="font-medium text-sm mb-1">{variant.label}</div>
+                    <div className="text-xs text-muted-foreground">{variant.replyRate}% reply rate · {variant.bookRate}% book rate</div>
+                  </div>
+                ))}
               </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-500"
-                  style={{ width: `${sentPct}%` }}
-                />
-              </div>
-              {campaign.lastSentAt && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Last sent: {new Date(campaign.lastSentAt).toLocaleString()}
-                </p>
-              )}
             </CardContent>
           </Card>
         )}
-
-        {/* Message Flow — editable SMS sequence */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Message Flow
-            </CardTitle>
-            <CardDescription>
-              The full SMS sequence sent to reactivation contacts. Click <strong>Edit</strong> on any message to update the copy.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MessageFlowPanel
-              flowType="reactivation"
-              sampleVars={{
-                "[Name]": contacts[0]?.firstName || contacts[0]?.name || "Sarah",
-                "[Discount]": "10",
-                "[LastPrice]": "150",
-                "[DiscountedPrice]": "135",
-              }}
-            />
-          </CardContent>
-        </Card>
 
         {/* Contact list */}
         <Card>
@@ -983,32 +717,37 @@ export default function ReactivationCampaigns() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="max-h-[500px] overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Phone</TableHead>
-                    <TableHead>Segment</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Last Booking</TableHead>
+                    <TableHead className="text-right">Sent</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {contacts.slice(0, 200).map((c: any) => (
-                    <TableRow key={c.id}>
+                  {(contacts as any[]).map((c: any, i: number) => (
+                    <TableRow
+                      key={i}
+                      className={c.conversationId ? "cursor-pointer hover:bg-muted/50" : ""}
+                    >
                       <TableCell className="font-medium">{c.firstName || c.name || "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-xs">{c.phone}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {SEGMENT_LABELS[c.segment ?? ""] ?? c.segment ?? "—"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <ContactStatusBadge status={c.status} />
+                        {c.booked ? (
+                          <Badge variant="default" className="text-xs bg-green-600">Booked</Badge>
+                        ) : c.replied ? (
+                          <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">Replied</Badge>
+                        ) : c.sentAt ? (
+                          <Badge variant="secondary" className="text-xs">Sent</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">Pending</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">
-                        {c.daysSince ? `${c.daysSince}d ago` : c.lastBookingDate ?? "—"}
+                        {c.sentAt ? new Date(c.sentAt).toLocaleDateString() : "—"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1017,6 +756,9 @@ export default function ReactivationCampaigns() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Message flow panel */}
+        <MessageFlowPanel flowType="reactivation" />
       </div>
     );
   }
@@ -1024,7 +766,7 @@ export default function ReactivationCampaigns() {
   // ── Main render ───────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="max-w-5xl mx-auto px-4 py-8">
       {view === "list" && renderCampaignList()}
       {view === "new" && renderNewCampaign()}
       {view === "detail" && renderCampaignDetail()}
@@ -1033,9 +775,9 @@ export default function ReactivationCampaigns() {
       <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Campaign?</DialogTitle>
+            <DialogTitle>Delete Campaign</DialogTitle>
             <DialogDescription>
-              This will permanently delete the campaign and all its contacts. This cannot be undone.
+              This will permanently delete the campaign and all its contacts. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1045,29 +787,11 @@ export default function ReactivationCampaigns() {
               onClick={() => deleteConfirmId && deleteCampaign.mutate({ id: deleteConfirmId })}
               disabled={deleteCampaign.isPending}
             >
-              {deleteCampaign.isPending ? "Deleting…" : "Delete"}
+              {deleteCampaign.isPending ? "Deleting…" : "Delete Campaign"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function ContactStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; className: string }> = {
-    PENDING: { label: "Pending", className: "bg-muted text-muted-foreground" },
-    SENT: { label: "Sent", className: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400" },
-    REPLIED: { label: "Replied", className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400" },
-    BOOKED: { label: "Booked", className: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400" },
-    OPTED_OUT: { label: "Opted Out", className: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400" },
-  };
-  const c = config[status] ?? config.PENDING;
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c.className}`}>
-      {c.label}
-    </span>
   );
 }

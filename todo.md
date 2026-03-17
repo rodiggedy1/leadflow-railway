@@ -650,3 +650,13 @@
 - [x] "From Completed Jobs" flow: live count, frequency filter (all/one-time/recurring), refresh button, preview table with name/phone/frequency/job date
 - [x] Show source type badge (green Database / blue Upload) on campaign list and detail view
 - [x] Write 7 tests for campaignCompletedJobs.ts (385/385 total pass, 0 TS errors)
+
+## Simplified Campaign Creation — One Unified Audience — COMPLETED
+
+- [x] Remove source selector (CSV vs Completed Jobs) from campaign creation UI
+- [x] Campaign creation: single flow — filter by frequency + eligibility, preview contacts, name + message, create
+- [x] Keep CSV import as a data tool on Completed Jobs page only (not in campaign flow)
+- [x] Remove csvText / fileInputRef / previewCsv / audienceSource state from ReactivationCampaigns
+- [x] Remove createCampaign (CSV-based) mutation from campaign creation — use createFromCompletedJobs only
+- [x] Simplify the "Create Campaign" button label and disabled logic
+- [x] 385/385 tests passing, 0 TS errors
