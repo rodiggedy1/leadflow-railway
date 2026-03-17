@@ -21,11 +21,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -292,12 +287,11 @@ function RunRow({ run }: { run: SyncRun }) {
     (run.enrollmentBreakdown && Object.keys(run.enrollmentBreakdown).length > 0);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <TableRow
-          className={`cursor-pointer hover:bg-gray-50 transition-colors ${hasDetails ? "" : "cursor-default"}`}
-          onClick={() => hasDetails && setOpen(!open)}
-        >
+    <>
+      <TableRow
+        className={`cursor-pointer hover:bg-gray-50 transition-colors ${hasDetails ? "" : "cursor-default"}`}
+        onClick={() => hasDetails && setOpen(!open)}
+      >
           <TableCell className="w-8 py-2.5">
             {hasDetails ? (
               open ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
@@ -326,9 +320,7 @@ function RunRow({ run }: { run: SyncRun }) {
             {formatDuration(run.durationMs)}
           </TableCell>
         </TableRow>
-      </CollapsibleTrigger>
-      {hasDetails && (
-        <CollapsibleContent asChild>
+      {hasDetails && open && (
           <TableRow className="bg-gray-50 border-t-0">
             <TableCell colSpan={6} className="py-3 px-8">
               <div className="space-y-2">
@@ -379,9 +371,8 @@ function RunRow({ run }: { run: SyncRun }) {
               </div>
             </TableCell>
           </TableRow>
-        </CollapsibleContent>
       )}
-    </Collapsible>
+    </>
   );
 }
 

@@ -23,7 +23,7 @@ import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQues
 const STAGE_INSTRUCTIONS: Record<string, string> = {
   WIDGET_SIZING: `
 You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
-- If they give you both → calculate the price using the pricing table, send the quote, and move to AVAILABILITY.
+- If they give you both → calculate the price using the pricing table, send the quote, then ask: "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. When were you hoping to schedule that so we can see how fast we can get you taken care of?" and move to AVAILABILITY.
 - If they give you only one → ask for the missing one and stay on WIDGET_SIZING.
 - If they ask a question (FAQ, pricing, etc.) → answer it using the knowledge base, then re-ask for bedrooms/bathrooms.
 - If they are an existing customer needing support → give them the support contact and move to DONE.
@@ -31,19 +31,25 @@ You are waiting for the lead to tell you how many bedrooms and bathrooms their h
 
   QUOTE_SENT: `
 The lead just received their quote. They may reply with anything.
-- If they say yes/ready/let's go → move to AVAILABILITY.
-- If they ask about recurring pricing → give the recurring price breakdown and ask about availability.
-- If they ask any question → answer it using the knowledge base, then ask about availability.
+- If they say yes/ready/let's go → ask: "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. When were you hoping to schedule that so we can see how fast we can get you taken care of?" and move to AVAILABILITY.
+- If they ask about recurring pricing → give the recurring price breakdown, then ask when they want to schedule using the same "Got it..." format.
+- If they ask any question → answer it using the knowledge base, then ask when they want to schedule.
 - If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
 - If they opt out → acknowledge politely, move to DONE.
 `.trim(),
 
   AVAILABILITY: `
-You offered 2 available days. You are waiting for the lead to pick one.
-- If they pick a day or say yes → confirm the day, move to SLOT_CHOICE.
-- If they ask about recurring pricing → answer with the full recurring price breakdown (weekly/biweekly/monthly), then re-ask which day works.
-- If they ask any other question → answer it, then re-ask which day works. Stay on AVAILABILITY.
-- If they want a specific day not offered → confirm it as selectedSlot, move to SLOT_CHOICE.
+You are asking when the lead would like to schedule their service.
+
+When FIRST asking about availability (transitioning from QUOTE_SENT or WIDGET_SIZING), use this format:
+"Got it, [briefly echo what they need — e.g. 'you need a standard cleaning for your 2-bedroom home' or 'you need your HVAC serviced']. When were you hoping to schedule that so we can see how fast we can get you taken care of?"
+
+Do NOT offer specific days upfront. Let them tell you when they want it first.
+
+- If they give a specific day or timeframe → confirm it as selectedSlot, move to SLOT_CHOICE.
+- If they say "as soon as possible" or "this week" → tell them the next available slots (see AVAILABLE SLOTS section above) and ask which works.
+- If they ask about recurring pricing → answer with the full recurring price breakdown (weekly/biweekly/monthly), then re-ask when they want to schedule.
+- If they ask any other question → answer it, then re-ask when they want to schedule. Stay on AVAILABILITY.
 - If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
 - If they opt out → acknowledge politely, move to DONE.
 CRITICAL: Do NOT advance to SLOT_CHOICE unless selectedSlot is set.

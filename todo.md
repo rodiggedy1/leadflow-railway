@@ -970,3 +970,10 @@
 - [x] Fix: changed ScrollArea from max-h-[480px] to h-[480px] so viewport has a fixed height to fill
 - [x] Added overflow-hidden + flex flex-col to outer dropdown container for clean layout
 - [x] 0 TS errors
+
+## Availability Question Wording — COMPLETED
+- [x] Updated AVAILABILITY stage: bot now asks "Got it, [echo what they need]. When were you hoping to schedule that so we can see how fast we can get you taken care of?"
+- [x] Updated WIDGET_SIZING: after quoting, uses same "Got it..." format before moving to AVAILABILITY
+- [x] Updated QUOTE_SENT: when lead says yes/ready, uses same "Got it..." format
+- [x] Bot no longer offers specific days upfront — asks open-ended "when" first, then offers slots if they say ASAP
+- [x] 493/493 tests passing, 0 TS errors
