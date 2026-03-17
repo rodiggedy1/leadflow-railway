@@ -87,8 +87,6 @@ export interface OffScriptContext {
   leadReply: string;
   /** Extras the lead selected on the quote form (human-readable labels) */
   extrasContext?: string | null;
-  /** ISO 639-1 language code for this conversation (default "en") */
-  language?: string | null;
 }
 
 export interface OffScriptResult {
@@ -167,12 +165,6 @@ export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffSc
   const { stage, leadName, quotedPrice, serviceType, selectedSlot, messageHistory, leadReply, extrasContext } = ctx;
   const firstName = leadName.split(" ")[0] ?? leadName;
 
-  // Build language instruction if non-English
-  const langCode = ctx.language || "en";
-  const langInstruction = langCode !== "en"
-    ? `\n\nIMPORTANT: This customer prefers ${langCode}. Respond ONLY in that language.`
-    : "";
-
   // ── Step 1: Classify — is this person NOT a new booking lead? ────────────────
   const wrongPath = await isWrongPathReply(leadReply);
 
@@ -181,7 +173,7 @@ export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffSc
     try {
       const exitResponse = await invokeLLM({
         messages: [
-          { role: "system", content: BRAND_SYSTEM_PROMPT + langInstruction },
+          { role: "system", content: BRAND_SYSTEM_PROMPT },
           {
             role: "user",
             content: `The person who received this SMS is NOT a new booking lead. They need customer support or reached us by mistake.
@@ -225,7 +217,7 @@ Instructions:
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT + langInstruction },
+        { role: "system", content: BRAND_SYSTEM_PROMPT },
         ...recentHistory,
         {
           role: "user",
@@ -276,13 +268,9 @@ export interface ObjectionResult {
  */
 export async function handleObjection(
   objectionType: ObjectionType,
-  ctx: { leadName: string; quotedPrice: string; serviceType: string; language?: string | null }
+  ctx: { leadName: string; quotedPrice: string; serviceType: string }
 ): Promise<ObjectionResult> {
   const firstName = ctx.leadName.split(" ")[0] ?? ctx.leadName;
-  const langCode = ctx.language || "en";
-  const langInstruction = langCode !== "en"
-    ? `\n\nIMPORTANT: This customer prefers ${langCode}. Respond ONLY in that language.`
-    : "";
 
   const objectionPrompts: Record<ObjectionType, string> = {
     price_too_high: `The lead thinks the price of $${ctx.quotedPrice} is too high. Acknowledge their concern, briefly justify the value (professional team, insured, satisfaction guarantee), and offer to discuss options on the confirmation call. End with the availability question.`,
@@ -296,7 +284,7 @@ export async function handleObjection(
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT + langInstruction },
+        { role: "system", content: BRAND_SYSTEM_PROMPT },
         {
           role: "user",
           content: `Handle this sales objection for lead ${firstName}. Keep reply under 200 characters.\n\n${objectionPrompts[objectionType]}`,
@@ -392,7 +380,6 @@ export interface PostBookingContext {
   messageHistory: Array<{ role: "assistant" | "user"; content: string }>;
   leadReply: string;
   extrasContext?: string | null;
-  language?: string | null;
 }
 
 /**
@@ -419,15 +406,10 @@ export async function handlePostBookingReply(ctx: PostBookingContext): Promise<s
     content: m.content,
   }));
 
-  const langCode2 = ctx.language || "en";
-  const langInstruction2 = langCode2 !== "en"
-    ? `\n\nIMPORTANT: This customer prefers ${langCode2}. Respond ONLY in that language.`
-    : "";
-
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT + langInstruction2 },
+        { role: "system", content: BRAND_SYSTEM_PROMPT },
         ...recentHistory,
         {
           role: "user",

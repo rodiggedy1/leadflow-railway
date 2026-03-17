@@ -927,3 +927,15 @@
 - [x] LLM failure falls back gracefully to regex result
 - [x] 12 new vitest tests: English fast path, Spanish/French/Portuguese LLM fallback, partial results, LLM failure
 - [x] 464/464 tests passing, 0 TS errors
+
+## Infrastructure-Level Language Handling — COMPLETED
+- [x] Added normalizeInput(text, language): translates lead reply to English (no-op for English, no LLM cost)
+- [x] Added localizeOutput(msg, language): translates bot reply to lead's language (no-op for English, no LLM cost)
+- [x] processLeadReply is now the single language boundary: normalize → _processLeadReplyCore → localize
+- [x] Removed all 20 translateIfNeeded/localizeOutput calls from stage handlers
+- [x] Removed language parameter from parseLeadReply (langNote removed — input is always English)
+- [x] Removed language field and langInstruction from all aiService.ts context interfaces
+- [x] Removed extractRoomInfoWithLLM — extractRoomInfo (regex) is sufficient since input is always English
+- [x] Removed lang variable from handleWidgetSizingReply
+- [x] 464/464 tests passing, 0 TS errors
+- [x] Architecture: any new stage added in future requires ZERO language work
