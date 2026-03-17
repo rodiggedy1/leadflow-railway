@@ -878,3 +878,14 @@
 - [x] Inject language instruction into all AI prompts (handleOffScriptReply, handleObjection, handlePostBookingReply)
 - [x] Show language flag badge in leads table (Source column)
 - [x] Show language flag badge in lead detail drawer header
+
+## Conversation Engine Bug Fixes — COMPLETED
+- [x] Fix Bug 1: language confirmation reply sent in English even after "sí" confirms Spanish
+  - Root cause: context.language was not populated from session.language in webhooks.ts
+  - Fix: added language + preLangStage to context object in webhooks.ts (lines 199-200)
+- [x] Fix Bug 2: resume message after language confirmation was in English (static builders)
+  - Fix: resumeStageAfterLanguageConfirm now translates messages using LLM when language != en
+- [x] Fix: parseLeadReply is now language-aware (passes language code to LLM for non-English replies)
+- [x] Fix: all static English message builders wrapped with translateIfNeeded() for non-English sessions
+- [x] Fix: handleOffScriptReply, handleObjection, handlePostBookingReply now receive language context
+- [x] Fix: preLangStage is explicitly cleared (set to null) after language confirmation to prevent re-triggering

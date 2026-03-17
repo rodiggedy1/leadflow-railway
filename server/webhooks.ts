@@ -195,6 +195,9 @@ export function registerWebhookRoutes(app: Express) {
         // Reactivation-specific context (map DB column names to context field names)
         lastPrice: session.reactivationLastPrice ?? undefined,
         discountPct: session.reactivationDiscountPct ?? undefined,
+        // Language context — critical for multilingual confirmation flow
+        language: session.language ?? "en",
+        preLangStage: session.preLangStage ?? undefined,
       };
 
       // ── REVIEW_REQUESTED / REVIEW_DONE: Post-cleaning review flow ───────────────
@@ -243,15 +246,15 @@ export function registerWebhookRoutes(app: Express) {
       };
 
       // Build language update fields
-      const langUpdates: { language?: string; preLangStage?: string | undefined } = {};
+      const langUpdates: { language?: string; preLangStage?: string | null } = {};
       if (extResult._detectedLanguage) {
         // Language detected but not yet confirmed — store it temporarily so LANGUAGE_CONFIRM can use it
         langUpdates.language = extResult._detectedLanguage;
         langUpdates.preLangStage = extResult._preLangStage ?? session.stage;
       } else if (extResult._confirmedLanguage !== undefined) {
-        // Language confirmed (yes or no) — finalize it
+        // Language confirmed (yes or no) — finalize it and clear the temporary preLangStage
         langUpdates.language = extResult._confirmedLanguage;
-        // Clear preLangStage by omitting it (Drizzle won't update it if not provided)
+        langUpdates.preLangStage = null; // Explicitly clear so it doesn't re-trigger language confirm
       }
 
       await db
@@ -265,6 +268,7 @@ export function registerWebhookRoutes(app: Express) {
           lastAiMessageAt: new Date(),
           autoFollowUpSent: isTerminalStage ? session.autoFollowUpSent : 0,
           ...(langUpdates.language !== undefined ? { language: langUpdates.language } : {}),
+          // preLangStage: null clears it after confirmation; undefined means no change
           ...(langUpdates.preLangStage !== undefined ? { preLangStage: langUpdates.preLangStage } : {}),
         })
         .where(eq(conversationSessions.id, session.id));

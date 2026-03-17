@@ -160,6 +160,30 @@ export function buildCallScheduledMessage(preference: string): string {
   return `No problem! We'll give you a call in a few minutes. Talk soon! 🏠✨`;
 }
 
+// ─── Language-aware message translation helper ───────────────────────────────────────
+
+/**
+ * Translates a static English message into the target language if needed.
+ * Returns the original message if language is English or translation fails.
+ */
+async function translateIfNeeded(msg: string, langCode: string | null | undefined): Promise<string> {
+  if (!langCode || langCode === "en") return msg;
+  try {
+    const result = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are a translation assistant for a home cleaning service SMS bot. Translate the following message into the language with ISO code "${langCode}". Keep the same tone (friendly, concise), preserve any emojis, and keep date/slot names in their original form. Return ONLY the translated message, no explanations.`,
+        },
+        { role: "user", content: msg },
+      ],
+    });
+    return (result.choices?.[0]?.message?.content as string) || msg;
+  } catch {
+    return msg;
+  }
+}
+
 // ─── Widget Sizing Helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -388,7 +412,11 @@ async function parseLeadReply(
   extractedCallPreference?: string;
   confidence: "high" | "low";
 }> {
-  const systemPrompt = `You are an AI assistant helping parse SMS replies from leads for a home cleaning service called "Maids in Black".
+  const langNote = context.language && context.language !== "en"
+    ? `\nIMPORTANT: The lead may be replying in a non-English language (language code: ${context.language}). Understand their reply in that language and map it to the same intents listed below.`
+    : "";
+
+  const systemPrompt = `You are an AI assistant helping parse SMS replies from leads for a home cleaning service called "Maids in Black".${langNote}
 
 Current conversation stage: ${stage}
 Lead's name: ${context.leadName}
@@ -543,6 +571,7 @@ export async function processLeadReply(
       messageHistory: context.messageHistory,
       leadReply,
       extrasContext,
+      language: context.language,
     });
     return {
       reply,
@@ -562,7 +591,7 @@ export async function processLeadReply(
   // ── QUOTE_SENT: Any reply → send availability (no objection check needed) ──
   if (stage === "QUOTE_SENT") {
     return {
-      reply: buildAvailabilityMessage(context.extras),
+      reply: await translateIfNeeded(buildAvailabilityMessage(context.extras), context.language),
       nextStage: "AVAILABILITY",
     };
   }
@@ -578,13 +607,14 @@ export async function processLeadReply(
       messageHistory: context.messageHistory,
       leadReply,
       extrasContext,
+      language: context.language,
     });
     // If they're now ready to book, let them back into the flow
     const lower = leadReply.toLowerCase();
     const readyNow = /\b(ready|book|schedule|let'?s do it|when can|available|yes|yeah|sure|ok|okay)\b/.test(lower);
     if (readyNow) {
       return {
-        reply: buildAvailabilityMessage(context.extras),
+        reply: await translateIfNeeded(buildAvailabilityMessage(context.extras), context.language),
         nextStage: "AVAILABILITY",
       };
     }
@@ -602,6 +632,7 @@ export async function processLeadReply(
         leadName: context.leadName,
         quotedPrice: context.quotedPrice,
         serviceType: context.serviceType,
+        language: context.language,
       });
 
       return {
@@ -629,14 +660,14 @@ export async function processLeadReply(
         // Try to match against one of the offered slots first
         if (slot1 && slot1.shortLabel.toLowerCase() === mentionedDay) {
           return {
-            reply: buildTimePrefMessage(slot1.label),
+            reply: await translateIfNeeded(buildTimePrefMessage(slot1.label), context.language),
             nextStage: "TIME_PREF",
             extractedData: { selectedSlot: slot1.label },
           };
         }
         if (slot2 && slot2.shortLabel.toLowerCase() === mentionedDay) {
           return {
-            reply: buildTimePrefMessage(slot2.label),
+            reply: await translateIfNeeded(buildTimePrefMessage(slot2.label), context.language),
             nextStage: "TIME_PREF",
             extractedData: { selectedSlot: slot2.label },
           };
@@ -644,7 +675,7 @@ export async function processLeadReply(
         // They mentioned a day not in the offered slots — treat as custom date request
         const capitalizedDay = mentionedDay.charAt(0).toUpperCase() + mentionedDay.slice(1);
         return {
-          reply: buildTimePrefMessage(capitalizedDay),
+          reply: await translateIfNeeded(buildTimePrefMessage(capitalizedDay), context.language),
           nextStage: "TIME_PREF",
           extractedData: { selectedSlot: capitalizedDay },
         };
@@ -666,6 +697,7 @@ export async function processLeadReply(
           leadName: context.leadName,
           quotedPrice: context.quotedPrice,
           serviceType: context.serviceType,
+          language: context.language,
         });
         return {
           reply: objectionResult.reply,
@@ -679,7 +711,7 @@ export async function processLeadReply(
       // Step 3: Only send DONE on explicit hard opt-out ("not interested", "remove me", "stop")
       if (parsed.intent === "no" && parsed.confidence === "high") {
         return {
-          reply: `No worries at all! If you ever need a cleaning in the future, we're here. Have a great day! 🏠`,
+          reply: await translateIfNeeded(`No worries at all! If you ever need a cleaning in the future, we're here. Have a great day! 🏠`, context.language),
           nextStage: "DONE",
         };
       }
@@ -690,7 +722,7 @@ export async function processLeadReply(
         const matchedSlot = dynamicSlotsForAvail.find(s => s.shortLabel.toLowerCase() === dayLower);
         const slotLabel = matchedSlot?.label ?? parsed.extractedSlot;
         return {
-          reply: buildTimePrefMessage(slotLabel),
+          reply: await translateIfNeeded(buildTimePrefMessage(slotLabel), context.language),
           nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slotLabel },
         };
@@ -703,14 +735,14 @@ export async function processLeadReply(
         const slot1Label = slots[0]?.shortLabel ?? "Thursday";
         const slot2Label = slots[1]?.shortLabel ?? "Friday";
         return {
-          reply: `No worries! We have openings ${slot1Label} or ${slot2Label} — would either of those work for you? We make it super easy to get your home sparkling. ✨`,
+          reply: await translateIfNeeded(`No worries! We have openings ${slot1Label} or ${slot2Label} — would either of those work for you? We make it super easy to get your home sparkling. ✨`, context.language),
           nextStage: "AVAILABILITY",
         };
       }
 
       // Step 6: Positive reply — show slot choice
       return {
-        reply: buildSlotChoiceMessage(),
+        reply: await translateIfNeeded(buildSlotChoiceMessage(), context.language),
         nextStage: "SLOT_CHOICE",
       };
     } // ── Stage 3: Slot choice ──────────────────────────────────────────────────
@@ -724,7 +756,7 @@ export async function processLeadReply(
 
       if (parsed.intent === "slot1") {
         return {
-          reply: buildTimePrefMessage(slot1Label),
+          reply: await translateIfNeeded(buildTimePrefMessage(slot1Label), context.language),
           nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slot1Label },
         };
@@ -732,7 +764,7 @@ export async function processLeadReply(
 
       if (parsed.intent === "slot2") {
         return {
-          reply: buildTimePrefMessage(slot2Label),
+          reply: await translateIfNeeded(buildTimePrefMessage(slot2Label), context.language),
           nextStage: "TIME_PREF",
           extractedData: { selectedSlot: slot2Label },
         };
@@ -742,7 +774,7 @@ export async function processLeadReply(
       if (parsed.intent === "custom_date" || parsed.extractedSlot) {
         const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
         return {
-          reply: buildTimePrefMessage(requestedSlot),
+          reply: await translateIfNeeded(buildTimePrefMessage(requestedSlot), context.language),
           nextStage: "TIME_PREF",
           extractedData: { selectedSlot: requestedSlot },
         };
@@ -758,6 +790,7 @@ export async function processLeadReply(
         messageHistory: context.messageHistory,
         leadReply,
         extrasContext,
+        language: context.language,
       });
 
       return {
@@ -784,14 +817,14 @@ export async function processLeadReply(
       // skip the ADDRESS step and go straight to CONFIRMATION.
       if (context.address && context.address.length >= 5) {
         return {
-          reply: buildConfirmationMessage(slotWithTime, context.address),
+          reply: await translateIfNeeded(buildConfirmationMessage(slotWithTime, context.address), context.language),
           nextStage: "CONFIRMATION",
           extractedData: { selectedSlot: slotWithTime },
         };
       }
 
       return {
-        reply: buildAddressRequestAfterTimePref(slot, timePref),
+        reply: await translateIfNeeded(buildAddressRequestAfterTimePref(slot, timePref), context.language),
         nextStage: "ADDRESS",
         extractedData: { selectedSlot: slotWithTime },
       };
@@ -810,6 +843,7 @@ export async function processLeadReply(
           leadName: context.leadName,
           quotedPrice: context.quotedPrice,
           serviceType: context.serviceType,
+          language: context.language,
           selectedSlot: slot,
           messageHistory: context.messageHistory,
           leadReply,
@@ -821,9 +855,8 @@ export async function processLeadReply(
           nextStage: "ADDRESS",
         };
       }
-
       return {
-        reply: buildConfirmationMessage(slot, address),
+        reply: await translateIfNeeded(buildConfirmationMessage(slot, address), context.language),
         nextStage: "CONFIRMATION",
         extractedData: { address },
       };
@@ -850,7 +883,7 @@ export async function processLeadReply(
         );
 
         return {
-          reply: buildCallScheduledMessage(pref),
+          reply: await translateIfNeeded(buildCallScheduledMessage(pref), context.language),
           nextStage: "CALL_SCHEDULED",
           extractedData: { callPreference: pref },
         };
@@ -866,6 +899,7 @@ export async function processLeadReply(
         messageHistory: context.messageHistory,
         leadReply,
         extrasContext,
+        language: context.language,
       });
 
       return {
@@ -887,6 +921,7 @@ export async function processLeadReply(
           messageHistory: context.messageHistory,
           leadReply,
           extrasContext,
+          language: context.language,
         });
 
         return {
@@ -970,27 +1005,69 @@ async function handleLanguageConfirmReply(
 
 /**
  * Resume the conversation at the appropriate stage after language is confirmed.
+ * Translates the resume message into the confirmed language if not English.
  */
 async function resumeStageAfterLanguageConfirm(
   preLangStage: ConversationStage,
   context: ConversationContext
 ): Promise<{ reply: string; nextStage: ConversationStage }> {
+  const langCode = context.language || "en";
+
+  // Build the English base message first
+  let englishMsg: string;
+  let nextStage: ConversationStage;
+
   switch (preLangStage) {
     case "QUOTE_SENT":
-      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
     case "AVAILABILITY":
-      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
-    case "SLOT_CHOICE":
-      return { reply: buildSlotChoiceMessage(), nextStage: "SLOT_CHOICE" };
-    case "TIME_PREF":
-      return { reply: buildTimePrefMessage(context.selectedSlot || "your slot"), nextStage: "TIME_PREF" };
-    case "ADDRESS":
-      return { reply: buildAddressRequestMessage(context.selectedSlot || ""), nextStage: "ADDRESS" };
-    case "CONFIRMATION":
-      return { reply: `Let me confirm your booking details. What's the address for the cleaning?`, nextStage: "ADDRESS" };
     case "REACTIVATION":
-      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
+      englishMsg = buildAvailabilityMessage(context.extras);
+      nextStage = "AVAILABILITY";
+      break;
+    case "SLOT_CHOICE":
+      englishMsg = buildSlotChoiceMessage();
+      nextStage = "SLOT_CHOICE";
+      break;
+    case "TIME_PREF":
+      englishMsg = buildTimePrefMessage(context.selectedSlot || "your slot");
+      nextStage = "TIME_PREF";
+      break;
+    case "ADDRESS":
+      englishMsg = buildAddressRequestMessage(context.selectedSlot || "");
+      nextStage = "ADDRESS";
+      break;
+    case "CONFIRMATION":
+      englishMsg = `What's the address for the cleaning?`;
+      nextStage = "ADDRESS";
+      break;
     default:
-      return { reply: buildAvailabilityMessage(context.extras), nextStage: "AVAILABILITY" };
+      englishMsg = buildAvailabilityMessage(context.extras);
+      nextStage = "AVAILABILITY";
+  }
+
+  // If English, return as-is
+  if (langCode === "en") {
+    return { reply: englishMsg, nextStage };
+  }
+
+  // Translate the message into the confirmed language
+  try {
+    const translated = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are a translation assistant for a home cleaning service SMS bot. Translate the following message into the language with ISO code "${langCode}". Keep the same tone (friendly, concise), preserve any emojis, and keep slot/date names in their original form. Return ONLY the translated message, no explanations.`,
+        },
+        {
+          role: "user",
+          content: englishMsg,
+        },
+      ],
+    });
+    const translatedMsg = (translated.choices?.[0]?.message?.content as string) || englishMsg;
+    return { reply: translatedMsg, nextStage };
+  } catch {
+    // Fallback to English on translation error
+    return { reply: englishMsg, nextStage };
   }
 }
