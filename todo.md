@@ -918,3 +918,12 @@
 - [x] All 7 handleOffScriptReply call sites in conversationEngine.ts updated to check isWrongPath
 - [x] Wrote 7 new vitest wrong-path routing tests
 - [x] 452/452 tests passing, 0 TS errors
+
+## Language-Agnostic Room Count Parsing — COMPLETED
+- [x] Added extractRoomInfoWithLLM(text, language): regex fast path for English (no LLM cost), LLM fallback for all other languages
+- [x] LLM fallback uses structured JSON schema (bedrooms: int|null, bathrooms: number|null) — works for any language
+- [x] handleWidgetSizingReply now calls extractRoomInfoWithLLM(leadReply, context.language)
+- [x] Numeric inputs ("3 bed 2 bath") use regex even in non-English sessions (no LLM cost)
+- [x] LLM failure falls back gracefully to regex result
+- [x] 12 new vitest tests: English fast path, Spanish/French/Portuguese LLM fallback, partial results, LLM failure
+- [x] 464/464 tests passing, 0 TS errors

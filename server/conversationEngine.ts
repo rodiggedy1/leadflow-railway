@@ -251,6 +251,102 @@ export function extractRoomInfo(text: string): { bedrooms: string | null; bathro
 }
 
 /**
+ * Language-agnostic room count extractor.
+ * Fast path: tries the English regex first (free, instant).
+ * Fallback: if language is non-English and counts are still missing, uses a structured
+ * LLM call to extract bedrooms/bathrooms from any language (Spanish, French, Portuguese, etc.).
+ *
+ * Examples that the LLM fallback handles:
+ *   "3 habitaciones y 2 baños" (Spanish)
+ *   "2 chambres et 1 salle de bain" (French)
+ *   "3 quartos e 2 banheiros" (Portuguese)
+ *   "2室で1厅" (Japanese)
+ */
+export async function extractRoomInfoWithLLM(
+  text: string,
+  language?: string | null
+): Promise<{ bedrooms: string | null; bathrooms: string | null }> {
+  // Step 1: Try English regex (fast path — works for English and numeric inputs in any language)
+  const regexResult = extractRoomInfo(text);
+
+  // If both values found, no LLM needed
+  if (regexResult.bedrooms && regexResult.bathrooms) {
+    return regexResult;
+  }
+
+  // If English (or no language set), regex is authoritative — don't call LLM
+  const lang = (language ?? "en").toLowerCase().split("-")[0];
+  if (lang === "en" || lang === "") {
+    return regexResult;
+  }
+
+  // Step 2: LLM fallback for non-English inputs
+  try {
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You extract bedroom and bathroom counts from text in any language.
+Return JSON with "bedrooms" (integer or null) and "bathrooms" (number or null, can be 1.5).
+Examples:
+  "3 habitaciones y 2 baños" → {"bedrooms":3,"bathrooms":2}
+  "2 chambres et 1 salle de bain" → {"bedrooms":2,"bathrooms":1}
+  "studio" → {"bedrooms":0,"bathrooms":null}
+  "I don't know" → {"bedrooms":null,"bathrooms":null}`,
+        },
+        { role: "user", content: text },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "room_counts",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              bedrooms: { type: ["integer", "null"] },
+              bathrooms: { type: ["number", "null"] },
+            },
+            required: ["bedrooms", "bathrooms"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+
+    const raw = response.choices?.[0]?.message?.content;
+    if (typeof raw === "string") {
+      const parsed = JSON.parse(raw);
+      const bedroomsNum: number | null = parsed.bedrooms;
+      const bathroomsNum: number | null = parsed.bathrooms;
+
+      // Format to match the same labels as extractRoomInfo
+      let bedrooms: string | null = regexResult.bedrooms; // keep regex result if already found
+      let bathrooms: string | null = regexResult.bathrooms;
+
+      if (!bedrooms && bedroomsNum !== null) {
+        if (bedroomsNum === 0) {
+          bedrooms = "Studio";
+        } else {
+          bedrooms = bedroomsNum === 1 ? "1 Bedroom" : `${bedroomsNum} Bedrooms`;
+        }
+      }
+
+      if (!bathrooms && bathroomsNum !== null) {
+        bathrooms = bathroomsNum === 1 ? "1 Bathroom" : `${bathroomsNum} Bathrooms`;
+      }
+
+      return { bedrooms, bathrooms };
+    }
+  } catch (err) {
+    console.error("[extractRoomInfoWithLLM] LLM fallback failed:", err);
+  }
+
+  // If LLM also fails, return whatever regex found
+  return regexResult;
+}
+
+/**
  * Real Maids in Black pricing — mirrors estimatePrice() in openphone.ts.
  * Standard Cleaning base prices (1 bathroom included):
  *   Studio/1 bed = $179, 2 bed = $209, 3 bed = $229, 4 bed = $279, 5 bed = $319, 6+ bed = $379
@@ -357,7 +453,8 @@ async function handleWidgetSizingReply(
   leadReply: string,
   context: ConversationContext
 ): Promise<StageResult> {
-  const { bedrooms, bathrooms } = extractRoomInfo(leadReply);
+  // Use language-agnostic extractor: English regex fast path, LLM fallback for all other languages
+  const { bedrooms, bathrooms } = await extractRoomInfoWithLLM(leadReply, context.language);
   const lang = context.language;
 
   if (bedrooms && bathrooms) {
