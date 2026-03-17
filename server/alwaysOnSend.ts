@@ -228,7 +228,7 @@ export async function sendAlwaysOnBatch(
             leadPhone: enrollment.phone,
             leadName: enrollment.name ?? enrollment.firstName ?? "",
             stage: "REACTIVATION",
-            leadSource: "always-on",
+            leadSource: `always-on:${group.groupType}`,
             reactivationLastPrice: enrollment.lastBookingPrice
               ? Math.round(enrollment.lastBookingPrice / 100)
               : null,

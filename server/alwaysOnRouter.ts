@@ -192,7 +192,7 @@ export const alwaysOnRouter = router({
         .where(
           and(
             eq(conversationSessions.leadPhone, e164),
-            eq(conversationSessions.leadSource, "always-on-test")
+            sql`${conversationSessions.leadSource} LIKE 'always-on-test:%'`
           )
         );
 
@@ -205,7 +205,7 @@ export const alwaysOnRouter = router({
         leadPhone: e164,
         leadName: sampleEnrollment?.firstName ?? "Sarah",
         stage: "REACTIVATION",
-        leadSource: "always-on-test",
+        leadSource: `always-on-test:${group.groupType}`,
         reactivationLastPrice: lastPrice,
         reactivationDiscountPct: discountPct,
         messageHistory: JSON.stringify([

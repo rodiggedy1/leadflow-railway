@@ -465,6 +465,47 @@ type DrawerSession = {
   updatedAt: Date | string;
 };
 
+/**
+ * Maps a leadSource string to a human-readable badge.
+ * Handles always-on group types like "always-on:new-one-time" and "always-on-test:dormant".
+ */
+function getSourceBadge(leadSource: string | null): React.ReactElement {
+  if (!leadSource || leadSource === "form") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Quote Form</span>;
+  }
+  if (leadSource === "widget") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>;
+  }
+  if (leadSource === "reactivation") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
+  }
+  // always-on:new-one-time, always-on:lapsed-one-time, always-on:lapsed-recurring, always-on:dormant
+  if (leadSource.startsWith("always-on:")) {
+    const groupType = leadSource.replace("always-on:", "");
+    const label = formatGroupType(groupType);
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">Always-On: {label}</span>;
+  }
+  // always-on-test:new-one-time, etc.
+  if (leadSource.startsWith("always-on-test:")) {
+    const groupType = leadSource.replace("always-on-test:", "");
+    const label = formatGroupType(groupType);
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">Test: {label}</span>;
+  }
+  // Fallback for any unknown source
+  return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">{leadSource}</span>;
+}
+
+/** Converts a groupType slug to a readable label */
+function formatGroupType(groupType: string): string {
+  switch (groupType) {
+    case "new-one-time": return "New One-Time";
+    case "lapsed-one-time": return "Lapsed One-Time";
+    case "lapsed-recurring": return "Lapsed Recurring";
+    case "dormant": return "Dormant";
+    default: return groupType.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+}
+
 /** Collapsible internal notes panel — saves vertical space in the drawer */
 function AdminNotesSection({
   session,
@@ -704,13 +745,7 @@ function ConversationDrawer({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {session.leadSource === "widget" ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>
-            ) : session.leadSource === "reactivation" ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Reactivation</span>
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Form</span>
-            )}
+            {getSourceBadge(session.leadSource)}
             <StageBadge stage={session.stage} />
             <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
               <X className="w-4 h-4" />
@@ -1546,6 +1581,7 @@ export default function AdminDashboard() {
         sourceFilter === "all" ||
         (sourceFilter === "reactivation" && s.leadSource === "reactivation") ||
         (sourceFilter === "widget" && s.leadSource === "widget") ||
+        (sourceFilter === "always-on" && (s.leadSource?.startsWith("always-on:") ?? false)) ||
         (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
       const q = search.toLowerCase();
       const matchesSearch =
@@ -1883,9 +1919,10 @@ export default function AdminDashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sources</SelectItem>
-              <SelectItem value="form">Form</SelectItem>
+              <SelectItem value="form">Quote Form</SelectItem>
               <SelectItem value="widget">Widget</SelectItem>
-              <SelectItem value="reactivation">Reactivation</SelectItem>
+              <SelectItem value="reactivation">Campaign</SelectItem>
+              <SelectItem value="always-on">Always-On</SelectItem>
             </SelectContent>
           </Select>
           {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all") && (
@@ -1962,13 +1999,7 @@ export default function AdminDashboard() {
 
                       {/* Source */}
                       <TableCell>
-                        {session.leadSource === "widget" ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>
-                        ) : session.leadSource === "reactivation" ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Reactivation</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Form</span>
-                        )}
+                        {getSourceBadge(session.leadSource)}
                       </TableCell>
 
                       {/* Service */}

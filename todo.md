@@ -743,3 +743,15 @@
 - [x] Update sendTestMessage: also creates a conversationSession (leadSource=always-on-test) so test replies go through the AI; clears previous test session for same phone first
 - [x] Insert 4 demo contacts (Emma/James/Maria/Robert, +1555 numbers) — one per group — for UI preview and test message use
 - [x] 431/431 tests passing, 0 TS errors
+
+## Fix Lead Source Labels in Admin Conversations — COMPLETED
+
+- [x] Add getSourceBadge(leadSource) helper + formatGroupType() to AdminDashboard
+- [x] Handles always-on:{groupType} → orange badge "Always-On: New One-Time" etc.
+- [x] Handles always-on-test:{groupType} → yellow badge "Test: New One-Time" etc.
+- [x] Handles reactivation → purple "Campaign", widget → blue "Widget", form/null → grey "Quote Form"
+- [x] Updated both badge locations (drawer header + table row)
+- [x] Added "Always-On" filter option to source filter dropdown
+- [x] Updated sendAlwaysOnBatch to store leadSource as always-on:{groupType}
+- [x] Updated sendTestMessage to store leadSource as always-on-test:{groupType}
+- [x] 431/431 tests passing, 0 TS errors
