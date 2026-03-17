@@ -826,3 +826,14 @@
 - [x] Always-On contacts table defaults to "Responded" view (REPLIED + BOOKED only)
 - [x] Added "Responded / All Sent" toggle on contacts table header for full list access
 - [x] 431/431 tests passing, 0 TS errors
+
+## Always-On First-Reply SMS Alert — IN PROGRESS
+
+- [ ] Send SMS to admin (302-981-6191) when an always-on lead replies for the first time
+
+## Always-On First-Reply SMS Alert — COMPLETED (2026-03-17)
+
+- [x] markAlwaysOnContactReplied now returns enrollment info (name, groupType) on first reply
+- [x] Webhook awaits the result and fires admin SMS to +13029816191 on first reply
+- [x] Alert message: "🔔 Always-On Reply: {Name} ({phone}) just responded to your {Group} campaign."
+- [x] 431/431 tests passing, 0 TS errors

@@ -110,9 +110,23 @@ export function registerWebhookRoutes(app: Express) {
       );
 
       // If this phone belongs to an always-on enrollment, mark them as REPLIED
-      markAlwaysOnContactReplied(fromPhone).catch(err =>
-        console.error("[Webhook] Failed to mark always-on contact replied:", err)
-      );
+      // and send an immediate SMS alert to the admin on first reply
+      const alwaysOnReply = await markAlwaysOnContactReplied(fromPhone).catch(err => {
+        console.error("[Webhook] Failed to mark always-on contact replied:", err);
+        return null;
+      });
+
+      if (alwaysOnReply?.isFirstReply) {
+        const displayName = alwaysOnReply.name ?? fromPhone;
+        const groupLabel = alwaysOnReply.groupType
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (c: string) => c.toUpperCase());
+        const adminAlertMsg = `🔔 Always-On Reply: ${displayName} (${fromPhone}) just responded to your ${groupLabel} campaign. Check the leads page to follow up.`;
+        sendSms({ to: "+13029816191", content: adminAlertMsg }).catch(err =>
+          console.error("[Webhook] Failed to send admin always-on alert:", err)
+        );
+        console.log(`[Webhook] Admin alerted for always-on first reply from ${fromPhone} (${groupLabel}).`);
+      }
 
       // Parse message history
       let history: ChatMessage[] = [];

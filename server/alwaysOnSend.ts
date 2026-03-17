@@ -97,14 +97,21 @@ export function personalizeMessage(
  * Marks the most recent SENT always-on enrollment for a given phone as REPLIED.
  * Called by the webhook when an inbound message arrives.
  */
-export async function markAlwaysOnContactReplied(phone: string): Promise<void> {
+export async function markAlwaysOnContactReplied(phone: string): Promise<{ isFirstReply: true; name: string | null; groupType: string } | null> {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return null;
 
-  // Find the most recent SENT enrollment for this phone
-  const [enrollment] = await db
-    .select()
+  // Find the most recent SENT enrollment for this phone, joining group for groupType
+  const [row] = await db
+    .select({
+      enrollmentId: alwaysOnEnrollments.id,
+      groupId: alwaysOnEnrollments.groupId,
+      name: alwaysOnEnrollments.name,
+      firstName: alwaysOnEnrollments.firstName,
+      groupType: alwaysOnGroups.groupType,
+    })
     .from(alwaysOnEnrollments)
+    .innerJoin(alwaysOnGroups, eq(alwaysOnEnrollments.groupId, alwaysOnGroups.id))
     .where(
       and(
         eq(alwaysOnEnrollments.phone, phone),
@@ -114,20 +121,26 @@ export async function markAlwaysOnContactReplied(phone: string): Promise<void> {
     .orderBy(alwaysOnEnrollments.sentAt)
     .limit(1);
 
-  if (!enrollment) return;
+  if (!row) return null;
 
   await db
     .update(alwaysOnEnrollments)
     .set({ status: "REPLIED", repliedAt: new Date() })
-    .where(eq(alwaysOnEnrollments.id, enrollment.id));
+    .where(eq(alwaysOnEnrollments.id, row.enrollmentId));
 
   // Update the group's repliedCount
   await db
     .update(alwaysOnGroups)
     .set({ repliedCount: sql`${alwaysOnGroups.repliedCount} + 1` })
-    .where(eq(alwaysOnGroups.id, enrollment.groupId));
+    .where(eq(alwaysOnGroups.id, row.groupId));
 
-  console.log(`[AlwaysOn] Marked enrollment ${enrollment.id} (${phone}) as REPLIED.`);
+  console.log(`[AlwaysOn] Marked enrollment ${row.enrollmentId} (${phone}) as REPLIED.`);
+
+  return {
+    isFirstReply: true,
+    name: row.name ?? row.firstName ?? null,
+    groupType: row.groupType,
+  };
 }
 
 // ─── Send batch ───────────────────────────────────────────────────────────────
