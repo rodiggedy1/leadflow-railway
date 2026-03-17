@@ -56,6 +56,7 @@ import {
   WifiOff,
   RotateCcw,
   Zap,
+  Activity,
 } from "lucide-react";
 import {
   Dialog,
@@ -1693,6 +1694,14 @@ export default function AdminDashboard() {
           >
             <Zap className="w-3.5 h-3.5" />
             Always-On
+          </a>
+          <a
+            href="/admin/sync-health"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+            style={{ borderColor: "transparent", color: "#6b7280" }}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            Sync Health
           </a>
         </div>
       </header>

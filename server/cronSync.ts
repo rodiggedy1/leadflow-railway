@@ -14,12 +14,57 @@
 import type { Express, Request, Response } from "express";
 import { getCompletedBookingsForDate } from "./launch27";
 import { getDb } from "./db";
-import { completedJobs, completedJobBatches } from "../drizzle/schema";
+import { completedJobs, completedJobBatches, syncRuns } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { sendAlwaysOnBatch } from "./alwaysOnSend";
+
+/**
+ * Write a sync run record to the database.
+ * Non-fatal — errors here should never break the actual sync.
+ */
+async function recordSyncRun(
+  params: {
+    runType: "launch27-sync" | "always-on-send";
+    status: "success" | "partial" | "error" | "skipped";
+    message?: string;
+    errorDetail?: string;
+    recordsInserted?: number;
+    recordsSkipped?: number;
+    smsSent?: number;
+    smsFailed?: number;
+    groupBreakdown?: Record<string, { sent: number; failed: number }>;
+    enrollmentBreakdown?: Record<string, number>;
+    targetDate?: string;
+    durationMs?: number;
+    startedAt: Date;
+  }
+): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(syncRuns).values({
+      runType: params.runType,
+      status: params.status,
+      message: params.message ?? null,
+      errorDetail: params.errorDetail ?? null,
+      recordsInserted: params.recordsInserted ?? 0,
+      recordsSkipped: params.recordsSkipped ?? 0,
+      smsSent: params.smsSent ?? 0,
+      smsFailed: params.smsFailed ?? 0,
+      groupBreakdown: params.groupBreakdown ? JSON.stringify(params.groupBreakdown) : null,
+      enrollmentBreakdown: params.enrollmentBreakdown ? JSON.stringify(params.enrollmentBreakdown) : null,
+      targetDate: params.targetDate ?? null,
+      durationMs: params.durationMs ?? null,
+      startedAt: params.startedAt,
+      completedAt: new Date(),
+    });
+  } catch (err) {
+    console.error("[SyncRuns] Failed to record sync run (non-fatal):", err);
+  }
+}
 
 /**
  * Core sync logic — fetches yesterday's completed bookings from Launch27 and
@@ -33,6 +78,7 @@ export async function runNightlySync(targetDate?: string): Promise<{
   message: string;
   alwaysOnEnrolled?: Record<string, number>;
 }> {
+  const startedAt = new Date();
   const date =
     targetDate ??
     (() => {
@@ -43,6 +89,7 @@ export async function runNightlySync(targetDate?: string): Promise<{
 
   const db = await getDb();
   if (!db) {
+    await recordSyncRun({ runType: "launch27-sync", status: "error", message: "DB unavailable", targetDate: date, startedAt, durationMs: Date.now() - startedAt.getTime() });
     return {
       date,
       inserted: 0,
@@ -55,22 +102,26 @@ export async function runNightlySync(targetDate?: string): Promise<{
   const result = await getCompletedBookingsForDate(date);
 
   if (result.error) {
+    const msg = `Launch27 error: ${result.error}`;
+    await recordSyncRun({ runType: "launch27-sync", status: "error", message: msg, errorDetail: result.error, targetDate: date, startedAt, durationMs: Date.now() - startedAt.getTime() });
     return {
       date,
       inserted: 0,
       skipped: 0,
       batchId: null,
-      message: `Launch27 error: ${result.error}`,
+      message: msg,
     };
   }
 
   if (result.bookings.length === 0) {
+    const msg = `No completed bookings found for ${date}`;
+    await recordSyncRun({ runType: "launch27-sync", status: "skipped", message: msg, targetDate: date, startedAt, durationMs: Date.now() - startedAt.getTime() });
     return {
       date,
       inserted: 0,
       skipped: 0,
       batchId: null,
-      message: `No completed bookings found for ${date}`,
+      message: msg,
     };
   }
 
@@ -173,6 +224,21 @@ export async function runNightlySync(targetDate?: string): Promise<{
     console.error("[AlwaysOn] Enrollment error (non-fatal):", enrollErr);
   }
 
+  // ── Record sync run in health log ─────────────────────────────────────────
+  const totalSkipped = skipped + invalidCount;
+  const syncStatus = inserted > 0 ? "success" : totalSkipped > 0 ? "partial" : "skipped";
+  await recordSyncRun({
+    runType: "launch27-sync",
+    status: syncStatus,
+    message,
+    recordsInserted: inserted,
+    recordsSkipped: totalSkipped,
+    enrollmentBreakdown: alwaysOnEnrolled,
+    targetDate: date,
+    startedAt,
+    durationMs: Date.now() - startedAt.getTime(),
+  });
+
   // Notify owner on success if any new jobs were inserted
   if (inserted > 0) {
     const totalEnrolled = Object.values(alwaysOnEnrolled).reduce((a, b) => a + b, 0);
@@ -242,10 +308,32 @@ export function registerCronRoutes(app: Express): void {
       return;
     }
 
+    const sendStartedAt = new Date();
     try {
       const results = await sendAlwaysOnBatch();
       const totalSent = results.reduce((sum, r) => sum + r.sent, 0);
       const totalFailed = results.reduce((sum, r) => sum + r.failed, 0);
+
+      // Build per-group breakdown for health log
+      const groupBreakdown: Record<string, { sent: number; failed: number }> = {};
+      for (const r of results) {
+        groupBreakdown[r.groupType] = { sent: r.sent, failed: r.failed };
+      }
+
+      // Record in health log
+      const sendStatus = totalSent > 0 ? (totalFailed > 0 ? "partial" : "success") : "skipped";
+      await recordSyncRun({
+        runType: "always-on-send",
+        status: sendStatus,
+        message: totalSent > 0
+          ? `Sent ${totalSent} messages (${totalFailed} failed) across ${results.filter(r => r.sent > 0).length} groups`
+          : "No messages sent (all groups inactive, empty, or outside TCPA window)",
+        smsSent: totalSent,
+        smsFailed: totalFailed,
+        groupBreakdown,
+        startedAt: sendStartedAt,
+        durationMs: Date.now() - sendStartedAt.getTime(),
+      });
 
       // Notify owner if any messages were sent
       if (totalSent > 0) {
@@ -266,6 +354,14 @@ export function registerCronRoutes(app: Express): void {
       res.json({ ok: true, totalSent, totalFailed, groups: results });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      await recordSyncRun({
+        runType: "always-on-send",
+        status: "error",
+        message: `Always-on send failed: ${msg}`,
+        errorDetail: msg,
+        startedAt: sendStartedAt,
+        durationMs: Date.now() - sendStartedAt.getTime(),
+      });
       res.status(500).json({ ok: false, error: msg });
     }
   });

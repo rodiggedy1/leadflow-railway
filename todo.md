@@ -755,3 +755,18 @@
 - [x] Updated sendAlwaysOnBatch to store leadSource as always-on:{groupType}
 - [x] Updated sendTestMessage to store leadSource as always-on-test:{groupType}
 - [x] 431/431 tests passing, 0 TS errors
+
+## Sync Health Dashboard — COMPLETED
+
+- [x] Add sync_runs table to schema (runType, status, message, errorDetail, recordsInserted, recordsSkipped, smsSent, smsFailed, groupBreakdown, enrollmentBreakdown, targetDate, durationMs, startedAt, completedAt)
+- [x] Migration 0026 applied successfully
+- [x] recordSyncRun() helper in cronSync.ts — non-fatal, logs every run outcome
+- [x] runNightlySync() records success/partial/error/skipped with timing and enrollment breakdown
+- [x] always-on-send cron endpoint records per-group SMS breakdown
+- [x] syncHealthRouter.ts: getRecentRuns, getSummary (with streak), triggerSync procedures
+- [x] SyncHealthPage.tsx: status cards with last run, duration, streak, inserted/sent counts, mini sparkline
+- [x] Run History table with collapsible group/enrollment breakdowns
+- [x] Manual Sync Trigger with date picker
+- [x] "Sync Health" nav link added to AdminDashboard header
+- [x] Route /admin/sync-health registered in App.tsx
+- [x] 431/431 tests passing, 0 TS errors

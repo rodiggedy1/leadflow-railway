@@ -183,6 +183,13 @@
       "when": 1773711296344,
       "tag": "0025_ambiguous_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1773714877198,
+      "tag": "0026_smart_killmonger",
+      "breakpoints": true
     }
   ]
 }

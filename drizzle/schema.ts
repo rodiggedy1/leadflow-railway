@@ -542,3 +542,56 @@ export const alwaysOnEnrollments = mysqlTable("always_on_enrollments", {
 
 export type AlwaysOnEnrollment = typeof alwaysOnEnrollments.$inferSelect;
 export type InsertAlwaysOnEnrollment = typeof alwaysOnEnrollments.$inferInsert;
+
+/**
+ * syncRuns — one row per automated cron job execution.
+ * Tracks success/failure, record counts, and timing for the health dashboard.
+ *
+ * runType:
+ *   "launch27-sync"   → Nightly Launch27 booking import (10 PM ET)
+ *   "always-on-send"  → Daily always-on SMS batch (10 AM ET Mon-Sat)
+ *
+ * status:
+ *   "success" → Completed without errors
+ *   "partial" → Completed but with some failures/warnings
+ *   "error"   → Failed with an exception
+ *   "skipped" → Nothing to do (e.g. no bookings, outside TCPA window)
+ */
+export const syncRunStatuses = ["success", "partial", "error", "skipped"] as const;
+export type SyncRunStatus = (typeof syncRunStatuses)[number];
+
+export const syncRunTypes = ["launch27-sync", "always-on-send"] as const;
+export type SyncRunType = (typeof syncRunTypes)[number];
+
+export const syncRuns = mysqlTable("sync_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Type of cron job that produced this run */
+  runType: mysqlEnum("runType", syncRunTypes as unknown as [string, ...string[]]).notNull(),
+  /** Overall result of the run */
+  status: mysqlEnum("status", syncRunStatuses as unknown as [string, ...string[]]).notNull(),
+  /** Human-readable summary message */
+  message: text("message"),
+  /** Error details if status = error */
+  errorDetail: text("errorDetail"),
+  /** For launch27-sync: number of new records inserted */
+  recordsInserted: int("recordsInserted").default(0),
+  /** For launch27-sync: number of records skipped (duplicates/invalid) */
+  recordsSkipped: int("recordsSkipped").default(0),
+  /** For always-on-send: total SMS sent across all groups */
+  smsSent: int("smsSent").default(0),
+  /** For always-on-send: total SMS that failed to send */
+  smsFailed: int("smsFailed").default(0),
+  /** For always-on-send: per-group breakdown as JSON { groupType: { sent, failed } } */
+  groupBreakdown: text("groupBreakdown"),
+  /** For launch27-sync: always-on enrollment counts as JSON { groupType: count } */
+  enrollmentBreakdown: text("enrollmentBreakdown"),
+  /** Target date for the sync (YYYY-MM-DD) — null for always-on-send */
+  targetDate: varchar("targetDate", { length: 20 }),
+  /** How long the run took in milliseconds */
+  durationMs: int("durationMs"),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type SyncRun = typeof syncRuns.$inferSelect;
+export type InsertSyncRun = typeof syncRuns.$inferInsert;
