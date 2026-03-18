@@ -114,7 +114,22 @@ export const appRouter = router({
               lastActivityText = typeof last.content === "string"
                 ? last.content.slice(0, 100)
                 : null;
-              lastActivityAt = last.ts ? new Date(last.ts) : s.updatedAt;
+              // Sanity-guard: if the stored ts is more than 30 days older than
+              // the session's own updatedAt, it's corrupt data (e.g. a test call
+              // with a wrong clock). Fall back to updatedAt so the dashboard
+              // never shows a wildly stale timestamp.
+              if (last.ts) {
+                const sessionUpdatedMs = s.updatedAt instanceof Date
+                  ? s.updatedAt.getTime()
+                  : new Date(s.updatedAt as string).getTime();
+                const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+                const tsDiff = sessionUpdatedMs - last.ts;
+                lastActivityAt = tsDiff > THIRTY_DAYS_MS
+                  ? s.updatedAt  // ts is suspiciously old — use session updatedAt
+                  : new Date(last.ts);
+              } else {
+                lastActivityAt = s.updatedAt;
+              }
               lastActivityType = "sms";
             }
           } catch {

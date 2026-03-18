@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT id, leadName, leadPhone, messageHistory, updatedAt, createdAt \nFROM conversation_sessions \nWHERE leadPhone = '+13029816191'\nORDER BY createdAt DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT id, leadName, leadPhone, messageHistory, updatedAt, createdAt \nFROM conversation_sessions \nWHERE leadPhone = '+13029816191'\nORDER BY createdAt DESC;\n",
+  "rows": [
+    {
+      "id": "750002",
+      "leadName": "Rohan Gilkes",
+      "leadPhone": "+13029816191",
+      "messageHistory": "[{\"role\":\"assistant\",\"content\":\"Hi Rohan! Thanks for calling Maids in Black. Here's your booking summary: Standard Cleaning for $259, scheduled for Tomorrow at 10 AM. Someone from our team will call you shortly to confirm. Questions? Reply here or call 202-888-5362.\",\"ts\":1742271532000}]",
+      "updatedAt": "2026-03-18 05:11:08",
+      "createdAt": "2026-03-18 04:03:07"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadName\tleadPhone\tmessageHistory\tupdatedAt\tcreatedAt\n750002\tRohan Gilkes\t+13029816191\t[{\"role\":\"assistant\",\"content\":\"Hi Rohan! Thanks for calling Maids in Black. Here's your booking summary: Standard Cleaning for $259, scheduled for Tomorrow at 10 AM. Someone from our team will call you shortly to confirm. Questions? Reply here or call 202-888-5362.\",\"ts\":1742271532000}]\t2026-03-18 05:11:08\t2026-03-18 04:03:07\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

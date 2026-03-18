@@ -11,7 +11,8 @@ type ChatMessage = { role: string; content: string; ts?: number };
 function deriveLastActivity(
   messageHistoryJson: string,
   lastCalledAt: Date | null,
-  lastCalledByAgentName: string | null
+  lastCalledByAgentName: string | null,
+  sessionUpdatedAt?: Date
 ): {
   lastActivityText: string | null;
   lastActivityAt: Date | null;
@@ -26,7 +27,18 @@ function deriveLastActivity(
     if (history.length > 0) {
       const last = history[history.length - 1];
       lastActivityText = typeof last.content === "string" ? last.content.slice(0, 100) : null;
-      lastActivityAt = last.ts ? new Date(last.ts) : null;
+      // Sanity-guard: if the stored ts is more than 30 days older than
+      // the session's own updatedAt, it's corrupt data. Fall back to updatedAt.
+      if (last.ts) {
+        const sessionUpdatedMs = sessionUpdatedAt?.getTime() ?? Date.now();
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const tsDiff = sessionUpdatedMs - last.ts;
+        lastActivityAt = tsDiff > THIRTY_DAYS_MS
+          ? (sessionUpdatedAt ?? new Date(sessionUpdatedMs))
+          : new Date(last.ts);
+      } else {
+        lastActivityAt = sessionUpdatedAt ?? null;
+      }
       lastActivityType = "sms";
     }
   } catch {
@@ -57,40 +69,45 @@ describe("lastActivity derivation", () => {
   });
 
   it("extracts the last SMS message text", () => {
+    const now = Date.now();
     const history: ChatMessage[] = [
-      { role: "assistant", content: "Hi! Madison here...", ts: 1000 },
-      { role: "user", content: "Yes I'm interested", ts: 2000 },
+      { role: "assistant", content: "Hi! Madison here...", ts: now - 2000 },
+      { role: "user", content: "Yes I'm interested", ts: now - 1000 },
     ];
-    const result = deriveLastActivity(JSON.stringify(history), null, null);
+    const sessionUpdatedAt = new Date(now);
+    const result = deriveLastActivity(JSON.stringify(history), null, null, sessionUpdatedAt);
     expect(result.lastActivityText).toBe("Yes I'm interested");
     expect(result.lastActivityType).toBe("sms");
-    expect(result.lastActivityAt).toEqual(new Date(2000));
+    expect(result.lastActivityAt).toEqual(new Date(now - 1000));
   });
 
   it("truncates long messages to 100 characters", () => {
     const longMsg = "A".repeat(150);
-    const history: ChatMessage[] = [{ role: "user", content: longMsg, ts: 1000 }];
-    const result = deriveLastActivity(JSON.stringify(history), null, null);
+    const now = Date.now();
+    const history: ChatMessage[] = [{ role: "user", content: longMsg, ts: now - 1000 }];
+    const result = deriveLastActivity(JSON.stringify(history), null, null, new Date(now));
     expect(result.lastActivityText?.length).toBe(100);
   });
 
   it("prefers call log over SMS when call is more recent", () => {
+    const now = Date.now();
     const history: ChatMessage[] = [
-      { role: "user", content: "Yes I'm interested", ts: 1000 },
+      { role: "user", content: "Yes I'm interested", ts: now - 5000 },
     ];
-    const callAt = new Date(2000);
-    const result = deriveLastActivity(JSON.stringify(history), callAt, "Sarah");
+    const callAt = new Date(now - 1000); // call is more recent than SMS
+    const result = deriveLastActivity(JSON.stringify(history), callAt, "Sarah", new Date(now));
     expect(result.lastActivityText).toBe("Call: Sarah");
     expect(result.lastActivityType).toBe("call");
     expect(result.lastActivityAt).toEqual(callAt);
   });
 
   it("keeps SMS when it is more recent than the call", () => {
+    const now = Date.now();
     const history: ChatMessage[] = [
-      { role: "user", content: "Can we reschedule?", ts: 5000 },
+      { role: "user", content: "Can we reschedule?", ts: now - 1000 },
     ];
-    const callAt = new Date(1000);
-    const result = deriveLastActivity(JSON.stringify(history), callAt, "Sarah");
+    const callAt = new Date(now - 5000); // call is older than SMS
+    const result = deriveLastActivity(JSON.stringify(history), callAt, "Sarah", new Date(now));
     expect(result.lastActivityText).toBe("Can we reschedule?");
     expect(result.lastActivityType).toBe("sms");
   });
@@ -106,6 +123,31 @@ describe("lastActivity derivation", () => {
     const callAt = new Date(3000);
     const result = deriveLastActivity("[]", callAt, null);
     expect(result.lastActivityText).toBe("Call: agent");
+  });
+
+  it("sanity guard: uses session updatedAt when message ts is 365 days older than updatedAt", () => {
+    // Simulate Rohan's bug: message ts is from 2025, session updatedAt is 2026
+    const staleTs = new Date("2025-03-18T04:00:00Z").getTime(); // 1 year ago
+    const sessionUpdatedAt = new Date("2026-03-18T05:11:08Z");  // now
+    const history: ChatMessage[] = [
+      { role: "assistant", content: "Hi Rohan! Thanks for calling.", ts: staleTs },
+    ];
+    const result = deriveLastActivity(JSON.stringify(history), null, null, sessionUpdatedAt);
+    // Should NOT use the stale ts — should fall back to sessionUpdatedAt
+    expect(result.lastActivityAt).toEqual(sessionUpdatedAt);
+    expect(result.lastActivityText).toBe("Hi Rohan! Thanks for calling.");
+    expect(result.lastActivityType).toBe("sms");
+  });
+
+  it("sanity guard: uses the real ts when it is within 30 days of updatedAt", () => {
+    const now = Date.now();
+    const recentTs = now - 2 * 24 * 60 * 60 * 1000; // 2 days ago
+    const sessionUpdatedAt = new Date(now);
+    const history: ChatMessage[] = [
+      { role: "user", content: "Can we reschedule?", ts: recentTs },
+    ];
+    const result = deriveLastActivity(JSON.stringify(history), null, null, sessionUpdatedAt);
+    expect(result.lastActivityAt).toEqual(new Date(recentTs));
   });
 });
 
