@@ -536,11 +536,43 @@ export async function handleCreateLead(args: {
   }
 }
 
+/**
+ * Append an outbound message to a session's messageHistory so it appears
+ * in the lead's text thread in the dashboard.
+ */
+async function appendMessageToSession(
+  sessionId: number,
+  content: string,
+  role: "assistant" | "user" = "assistant"
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const [session] = await db
+    .select({ messageHistory: conversationSessions.messageHistory })
+    .from(conversationSessions)
+    .where(eq(conversationSessions.id, sessionId))
+    .limit(1);
+  if (!session) return;
+  let history: Array<{ role: string; content: string; ts: number }> = [];
+  try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+  history.push({ role, content, ts: Date.now() });
+  if (history.length > 50) history = history.slice(-50);
+  await db
+    .update(conversationSessions)
+    .set({ messageHistory: JSON.stringify(history) })
+    .where(eq(conversationSessions.id, sessionId));
+}
+
 export async function handleSendSms(args: {
   to: string;
   message: string;
+  sessionId?: number;
 }): Promise<{ success: boolean; message: string }> {
   const result = await sendSms({ to: args.to, content: args.message });
+  // If we have a session, record the outbound message in the thread
+  if (result.success && args.sessionId) {
+    appendMessageToSession(args.sessionId, args.message, "assistant").catch(console.error);
+  }
   return {
     success: result.success,
     message: result.success ? "SMS sent successfully" : (result.error ?? "Failed to send SMS"),
@@ -704,8 +736,12 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
       ? `Hi ${firstName}! Thanks for calling Maids in Black. Here's your booking summary: ${structuredData?.serviceType ?? "Cleaning"} for $${price}, scheduled for ${slot}. Someone from our team will call you shortly to confirm. Questions? Reply here or call 202-888-5362.`
       : `Hi ${firstName}! Thanks for calling Maids in Black. Someone from our team will follow up with you shortly. Questions? Reply here or call 202-888-5362.`;
 
-    await sendSms({ to: normalizedPhone, content: smsText });
+    const smsSent = await sendSms({ to: normalizedPhone, content: smsText });
     console.log(`[Vapi] Follow-up SMS sent to ${normalizedPhone}`);
+    // Log the outbound SMS to the session's message thread so it appears in the dashboard
+    if (smsSent.success && sessionId) {
+      appendMessageToSession(sessionId, smsText, "assistant").catch(console.error);
+    }
   }
 
   // Notify agent/owner of the call

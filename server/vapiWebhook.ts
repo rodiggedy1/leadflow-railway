@@ -91,6 +91,8 @@ export function registerVapiWebhookRoute(app: Express): void {
         const callerPhone = (callObj?.customer as Record<string, unknown> | undefined)?.number as string | undefined ?? "";
 
         const results: Array<{ toolCallId: string; result: string }> = [];
+        // Track sessionId created by createLead so sendSms in the same batch can log to the thread
+        let batchSessionId: number | undefined;
 
         for (const rawTc of rawList) {
           const { id, name, args } = parseToolCall(rawTc);
@@ -132,7 +134,7 @@ export function registerVapiWebhookRoute(app: Express): void {
                 console.warn(`[Vapi] createLead phone was business number — overriding with callerPhone: ${callerPhone}`);
                 createArgs.phone = callerPhone;
               }
-              result = await handleCreateLead(createArgs as {
+              const createResult = await handleCreateLead(createArgs as {
                 name: string;
                 phone: string;
                 email?: string;
@@ -143,10 +145,18 @@ export function registerVapiWebhookRoute(app: Express): void {
                 quotedPrice: number;
                 preferredDate?: string;
               });
+              // Capture sessionId so sendSms in this batch can log to the thread
+              if (createResult.success && createResult.sessionId) {
+                batchSessionId = createResult.sessionId;
+              }
+              result = createResult;
               break;
             }
             case "sendSms": {
-              result = await handleSendSms(args as { to: string; message: string });
+              result = await handleSendSms({
+                ...(args as { to: string; message: string }),
+                sessionId: batchSessionId,
+              });
               break;
             }
             default: {

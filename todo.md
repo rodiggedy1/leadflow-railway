@@ -1073,3 +1073,10 @@
 - [x] Fix: voice call record now inserted with sessionId=null, then updated AFTER all lead creation to always link to the most recent session for that phone
 - [x] Fix: existing broken record (019cff18) manually corrected in DB to point to session 750002
 - [x] 529/529 tests passing, 0 TS errors
+
+## Bug: Voice agent SMS not showing in lead message thread
+
+- [x] Diagnosed: sendSms in vapiService sent via OpenPhone but never wrote to conversationSessions.messageHistory
+- [x] Fix: added appendMessageToSession() helper; called after mid-call sendSms tool (with batchSessionId from createLead) and after end-of-call follow-up SMS
+- [x] Backfilled existing session 750002 with the confirmation SMS
+- [x] 529/529 tests passing, 0 TS errors
