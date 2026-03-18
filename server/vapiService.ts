@@ -884,8 +884,9 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     console.log(`[Vapi] Voice call linked to session ${sessionId}`);
   }
 
-  // If a lead was created mid-call and we have their phone, send a follow-up SMS
-  if ((leadCreated || sessionId) && normalizedPhone && summary) {
+  // Send a follow-up SMS for any completed call where we have a phone number and summary.
+  // Previously gated on leadCreated||sessionId, which silently skipped FAQ-only calls.
+  if (normalizedPhone && summary) {
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;

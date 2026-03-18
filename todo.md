@@ -1177,6 +1177,10 @@
 - [x] Fix callback cards: voiceCallId not being saved — link callbackTasks to voice_calls at end-of-call
 - [x] Add date filters to All Calls page (Today / Last 7 / Last 30 / All)
 
+## Post-call SMS gate fix
+
+- [x] Fix post-call SMS gate: remove leadCreated||sessionId condition so SMS fires for all completed calls (FAQ-only calls were silently skipped)
+
 ## All Calls: Outcome Filter + Caller Name + Missed Call SMS
 
 - [x] All Calls: add outcome filter dropdown (booked, callback_requested, faq_answered, etc.)
