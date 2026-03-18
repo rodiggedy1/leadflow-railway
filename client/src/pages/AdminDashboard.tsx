@@ -2017,16 +2017,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Funnel stats — clicking a card filters the table */}
-        {stats && (
-          <FunnelStats
-            byStage={stats.byStage}
-            total={stats.total}
-            onStageClick={stage => setStageFilter(stage)}
-            activeStage={stageFilter}
-          />
-        )}
-
         {/* Summary metrics row — Visitors → Leads → Booked → Revenue */}
         {stats && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

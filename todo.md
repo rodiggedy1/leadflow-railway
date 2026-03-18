@@ -992,3 +992,7 @@
 - [x] Frontend: add "Last Activity" column to leads table showing truncated message text + relative time
 - [x] Frontend: add inline sparkline bar charts to each of the 4 summary cards (Visitors, Leads, Jobs Booked, Booked Revenue)
 - [x] Write vitest tests for new backend procedures/fields
+
+## Remove Stage Funnel Cards
+
+- [x] Remove the FunnelStats stage breakdown grid from the admin dashboard
