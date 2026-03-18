@@ -1214,3 +1214,8 @@
 - [x] Fix: normalizedPhone now falls back to structuredData.callerPhone when call.customer.number is empty
 - [x] Added diagnostic logging to trace phone number resolution in end-of-call webhook
 - [x] Reverted unnecessary FAQ phone-collection prompt (call.customer.number is reliably populated for direct Vapi calls)
+
+## Voice: Phone Number Confirmation Before SMS
+- [x] Madison always confirms the SMS/callback number before any tool call — reads back {{customer.number}} digit by digit if available and asks caller to confirm, or asks for the number directly if blank
+- [x] FAQ close flow added: Madison confirms number, sends summary SMS, then closes the call
+- [x] Callback flow updated: confirm number before scheduling callback
