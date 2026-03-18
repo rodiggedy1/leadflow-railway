@@ -984,3 +984,11 @@
 - [x] Removed ConversionFunnelCard component usage from AdminDashboard (no longer needed)
 - [x] Added visitorStats query directly in AdminDashboard so Visitors card is date-range aware
 - [x] 493/493 tests pass, 0 TS errors
+
+## Last Activity Column + Sparkline Trends
+
+- [x] Backend: extend leads.list to return lastActivity (text + timestamp) — most recent inbound SMS or call log entry
+- [x] Backend: extend leads.stats (or add new procedure) to return 7-day daily breakdown for visitors, leads, and booked
+- [x] Frontend: add "Last Activity" column to leads table showing truncated message text + relative time
+- [x] Frontend: add inline sparkline bar charts to each of the 4 summary cards (Visitors, Leads, Jobs Booked, Booked Revenue)
+- [x] Write vitest tests for new backend procedures/fields

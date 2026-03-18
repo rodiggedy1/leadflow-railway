@@ -58,6 +58,7 @@ import {
   RotateCcw,
   Zap,
   Activity,
+  MessageSquare,
 } from "lucide-react";
 import {
   Dialog,
@@ -85,6 +86,48 @@ import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
+
+// ── Sparkline ────────────────────────────────────────────────────────────────
+/**
+ * Tiny 7-bar sparkline rendered as inline SVG.
+ * data: array of 7 numbers (oldest → newest)
+ * color: bar fill color
+ */
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  const bars = data.length === 0 ? Array(7).fill(0) : data;
+  const max = Math.max(...bars, 1); // avoid division by zero
+  const W = 100;
+  const H = 28;
+  const gap = 2;
+  const barW = (W - gap * (bars.length - 1)) / bars.length;
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full mt-2"
+      style={{ height: H }}
+      aria-hidden="true"
+    >
+      {bars.map((v, i) => {
+        const barH = Math.max((v / max) * H, v > 0 ? 2 : 0);
+        const x = i * (barW + gap);
+        const y = H - barH;
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={y}
+            width={barW}
+            height={barH}
+            rx={1.5}
+            fill={color}
+            opacity={i === bars.length - 1 ? 1 : 0.45 + (i / bars.length) * 0.45}
+          />
+        );
+      })}
+    </svg>
+  );
+}
 
 // ── Widget Health Badge ─────────────────────────────────────────────────────
 function WidgetHealthBadge() {
@@ -1742,6 +1785,11 @@ export default function AdminDashboard() {
     enabled: isAdmin || isAuthenticated,
   });
 
+  const { data: dailyTrend = [] } = trpc.leads.dailyTrend.useQuery(undefined, {
+    refetchInterval: 300_000, // refresh every 5 minutes
+    enabled: isAdmin || isAuthenticated,
+  });
+
   const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
     refetchInterval: 60000,
     enabled: isAdmin || isAuthenticated,
@@ -1996,6 +2044,7 @@ export default function AdminDashboard() {
               <span className="text-xs" style={{ color: "#1e40af", opacity: 0.7 }}>
                 page views in range
               </span>
+              <Sparkline data={dailyTrend.map(d => d.visitors)} color="#3b82f6" />
             </div>
 
             {/* Leads */}
@@ -2014,6 +2063,7 @@ export default function AdminDashboard() {
                   ? `${((stats.total / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
                   : "form submissions"}
               </span>
+              <Sparkline data={dailyTrend.map(d => d.leads)} color="#f59e0b" />
             </div>
 
             {/* Jobs Booked */}
@@ -2032,6 +2082,7 @@ export default function AdminDashboard() {
                   ? `${stats.conversionRate ?? 0}% lead → booked`
                   : "no leads yet"}
               </span>
+              <Sparkline data={dailyTrend.map(d => d.booked)} color="#2563eb" />
             </div>
 
             {/* Booked Revenue */}
@@ -2080,6 +2131,7 @@ export default function AdminDashboard() {
                   from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? "s" : ""}
                 </span>
               )}
+              <Sparkline data={dailyTrend.map(d => d.booked)} color="#059669" />
             </div>
           </div>
         )}
@@ -2187,6 +2239,7 @@ export default function AdminDashboard() {
                     <TableHead className="font-semibold text-gray-700 w-32">Last Called</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-32">Booking</TableHead>
                     <TableHead className="font-semibold text-gray-700">Slot / Address</TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-48">Last Activity</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Updated</TableHead>
                     <TableHead className="w-16"></TableHead>
                   </TableRow>
@@ -2326,6 +2379,29 @@ export default function AdminDashboard() {
                             <span className="text-gray-300 text-xs">—</span>
                           )}
                         </div>
+                      </TableCell>
+
+                      {/* Last Activity */}
+                      <TableCell>
+                        {session.lastActivityText ? (
+                          <div className="flex flex-col gap-0.5 max-w-[180px]">
+                            <span className="text-xs text-gray-700 truncate flex items-center gap-1">
+                              {session.lastActivityType === "call" ? (
+                                <PhoneCall className="w-3 h-3 text-blue-400 shrink-0" />
+                              ) : (
+                                <MessageSquare className="w-3 h-3 text-orange-400 shrink-0" />
+                              )}
+                              <span className="truncate">{session.lastActivityText}</span>
+                            </span>
+                            {session.lastActivityAt && (
+                              <span className="text-[10px] text-gray-400 pl-4">
+                                {timeAgo(session.lastActivityAt)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
                       </TableCell>
 
                       {/* Updated */}

@@ -97,7 +97,38 @@ export const appRouter = router({
           .where(conditions)
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(500);
-        return sessions;
+
+        // Derive lastActivity from messageHistory (most recent SMS) or lastCalledAt
+        return sessions.map(s => {
+          let lastActivityText: string | null = null;
+          let lastActivityAt: Date | null = null;
+          let lastActivityType: "sms" | "call" | null = null;
+
+          // Parse message history to find the most recent message
+          try {
+            const history: Array<{ role: string; content: string; ts?: number }> =
+              JSON.parse(s.messageHistory ?? "[]");
+            if (history.length > 0) {
+              const last = history[history.length - 1];
+              lastActivityText = typeof last.content === "string"
+                ? last.content.slice(0, 100)
+                : null;
+              lastActivityAt = last.ts ? new Date(last.ts) : s.updatedAt;
+              lastActivityType = "sms";
+            }
+          } catch {
+            // ignore parse errors
+          }
+
+          // If the most recent call log is newer than the last SMS, prefer it
+          if (s.lastCalledAt && (!lastActivityAt || s.lastCalledAt > lastActivityAt)) {
+            lastActivityText = `Call: ${s.lastCalledByAgentName ?? "agent"}`;
+            lastActivityAt = s.lastCalledAt;
+            lastActivityType = "call";
+          }
+
+          return { ...s, lastActivityText, lastActivityAt, lastActivityType };
+        });
       }),
     stats: publicProcedure
       .input(
@@ -294,6 +325,75 @@ export const appRouter = router({
           booked: Number(bookedRow?.count ?? 0),
         };
       }),
+
+    /**
+     * leads.dailyTrend — returns the last 7 days of daily counts for visitors, leads, and booked.
+     * Used to render sparkline bar charts on the summary cards.
+     * Each entry: { date: "YYYY-MM-DD", visitors: number, leads: number, booked: number }
+     */
+    dailyTrend: adminAgentProcedure.query(async () => {
+      const db = await getDb();
+      // Build last 7 calendar days (UTC) as YYYY-MM-DD strings
+      const days: string[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - i);
+        days.push(d.toISOString().slice(0, 10));
+      }
+
+      if (!db) return days.map(date => ({ date, visitors: 0, leads: 0, booked: 0 }));
+
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
+      sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+
+      // Daily visitor counts
+      const visitorRows = await db
+        .select({
+          day: sql<string>`DATE(${pageViews.createdAt})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(pageViews)
+        .where(gte(pageViews.createdAt, sevenDaysAgo))
+        .groupBy(sql`DATE(${pageViews.createdAt})`);
+
+      // Daily lead counts
+      const leadRows = await db
+        .select({
+          day: sql<string>`DATE(${conversationSessions.createdAt})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(conversationSessions)
+        .where(gte(conversationSessions.createdAt, sevenDaysAgo))
+        .groupBy(sql`DATE(${conversationSessions.createdAt})`);
+
+      // Daily booked counts
+      const bookedRows = await db
+        .select({
+          day: sql<string>`DATE(${conversationSessions.bookedAt})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.bookedAt, sevenDaysAgo),
+            eq(conversationSessions.isBooked, 1)
+          )
+        )
+        .groupBy(sql`DATE(${conversationSessions.bookedAt})`);
+
+      // Build lookup maps
+      const visitorMap = new Map(visitorRows.map(r => [r.day, Number(r.count)]));
+      const leadMap = new Map(leadRows.map(r => [r.day, Number(r.count)]));
+      const bookedMap = new Map(bookedRows.map(r => [r.day, Number(r.count)]));
+
+      return days.map(date => ({
+        date,
+        visitors: visitorMap.get(date) ?? 0,
+        leads: leadMap.get(date) ?? 0,
+        booked: bookedMap.get(date) ?? 0,
+      }));
+    }),
 
     /**
      * leads.adminUpdateStage — admin overrides the stage of any lead.
