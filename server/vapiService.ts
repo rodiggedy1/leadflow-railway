@@ -64,18 +64,53 @@ function buildSystemPrompt(): string {
   });
   const etNow = etFormatter.format(now);
 
-  // Compute the next business morning (Mon–Fri) in ET
+  // Compute time-aware callback context
   const etDate = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const dayOfWeek = etDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  let daysUntilNextBusinessDay = 1;
-  if (dayOfWeek === 5) daysUntilNextBusinessDay = 3; // Friday → Monday
-  if (dayOfWeek === 6) daysUntilNextBusinessDay = 2; // Saturday → Monday
-  const nextBizDate = new Date(etDate);
-  nextBizDate.setDate(etDate.getDate() + daysUntilNextBusinessDay);
-  const nextBizDayName = nextBizDate.toLocaleDateString("en-US", {
+  const etHour = etDate.getHours(); // 0-23
+  const isBusinessHours = etHour >= 8 && etHour < 17; // 8am–5pm ET
+
+  // Determine the next available morning for off-hours callbacks
+  // If before 8am: same day at 9am or 10am
+  // If after 5pm: next day at 9am or 10am
+  let nextMorningDate: Date;
+  if (etHour < 8) {
+    // Same day
+    nextMorningDate = new Date(etDate);
+  } else {
+    // Next day
+    nextMorningDate = new Date(etDate);
+    nextMorningDate.setDate(etDate.getDate() + 1);
+  }
+  const nextMorningDayName = nextMorningDate.toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     weekday: "long",
   });
+  const isSameDay = etHour < 8;
+  const nextMorningLabel = isSameDay ? "this morning" : `tomorrow (${nextMorningDayName})`;
+
+  // Callback scheduling instructions injected into the prompt
+  const callbackSchedulingInstructions = isBusinessHours
+    ? `The current time is within business hours (8am–5pm ET). When a caller asks for a human:
+1. Say: "Someone from our team can call you back in just a few minutes — let me get your number."
+2. Confirm their callback number (see "Confirming the SMS/callback number" section).
+3. Call the scheduleCallback tool with:
+   - phone: the confirmed number
+   - preferredCallbackTime: "today, as soon as possible"
+   - callerName: their name if you have it
+   - notes: brief summary of why they called
+4. After scheduleCallback succeeds, say: "Perfect — someone will call you back shortly. Is there anything else I can help you with?"
+5. If they decline a callback, say: "No problem! You can always reach us at 202-888-5362. Have a great day!"`
+    : `The current time is outside business hours. When a caller asks for a human:
+1. Say: "Our team can call you back ${nextMorningLabel} — would 9am or 10am work better for you?"
+2. Listen to their preference (accept any time they give).
+3. Confirm their callback number (see "Confirming the SMS/callback number" section).
+4. Call the scheduleCallback tool with:
+   - phone: the confirmed number
+   - preferredCallbackTime: their answer (e.g. "${nextMorningDayName} at 9am")
+   - callerName: their name if you have it
+   - notes: brief summary of why they called
+5. After scheduleCallback succeeds, say: "Perfect — you're on the schedule for ${nextMorningDayName} at [their time]. Someone from our team will call you then. Is there anything else I can help you with in the meantime?"
+6. If they decline a callback, say: "No problem! You can always reach us at 202-888-5362. Have a great day!"`;
 
   return `You are Madison, the friendly and professional AI receptionist for Maids in Black — a 5-star cleaning service in the Washington DC / DMV area.
 
@@ -83,7 +118,7 @@ Your personality: warm, confident, helpful, and concise. You speak naturally and
 
 ## Current date and time (Eastern Time)
 ${etNow}
-Next available business morning: ${nextBizDayName}
+Next available callback morning: ${nextMorningDayName} (${isSameDay ? "today" : "tomorrow"})
 
 ## Caller context
 The caller's phone number on file is: {{customer.number}}
@@ -205,20 +240,9 @@ Before calling sendSms, createLead, or scheduleCallback, you MUST confirm the be
 
 Do this ONCE per call. Once confirmed, use that number for all tool calls.
 
-## Callback Scheduling (when caller asks for a human)
-Our team is available Monday through Friday during business hours. Calls come in at night, so there is no one available to speak right now.
-
+### Callback Scheduling (when caller asks for a human)
 When a caller asks to speak to a human, or says "can I talk to someone?", or asks for a manager:
-1. Confirm their callback number (see "Confirming the SMS/callback number" section above).
-2. Say: "Our team is in the office ${nextBizDayName} morning. I can have someone call you back then — would 9am or 10am work better for you?"
-3. Listen to their preference (9am, 10am, or they may suggest a different time — accept any time they give).
-4. Call the scheduleCallback tool with:
-   - phone: the confirmed number
-   - preferredCallbackTime: their answer (e.g. "${nextBizDayName} at 9am")
-   - callerName: their name if you have it
-   - notes: a brief summary of why they called (e.g. "Asked about deep clean pricing for 3bd home, wanted to speak to a human")
-5. After scheduleCallback succeeds, say: "Perfect — you're on the schedule for ${nextBizDayName} at [their time]. Someone from our team will call you then. Is there anything else I can help you with in the meantime?"
-6. If they decline a callback, say: "No problem! You can always reach us at 202-888-5362 during business hours, or visit maidsinblack.com. Have a great evening!"
+${callbackSchedulingInstructions}
 
 ## FAQ close (when caller is done asking questions and not booking)
 When the caller has finished their questions and is ready to hang up:

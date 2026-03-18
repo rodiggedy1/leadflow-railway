@@ -1229,3 +1229,8 @@
 - [x] createLead tool updated to accept selectedExtras array
 - [x] Extras saved to both quoteLeads and conversationSessions records
 - [x] structuredDataSchema updated to extract selectedExtras from transcript (fallback path)
+
+## Voice: Time-Aware Callback Scheduling
+- [x] 8am–5pm any day: Madison offers "a few minutes" callback, still creates card in dashboard with time "today, as soon as possible"
+- [x] Outside 8am–5pm: Madison offers 9am or 10am on the next available morning (same day if before 8am, next day if after 5pm)
+- [x] callbackSchedulingInstructions variable injected into system prompt dynamically at call time
