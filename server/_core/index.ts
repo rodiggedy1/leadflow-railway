@@ -8,6 +8,8 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerWebhookRoutes } from "../webhooks";
 import { registerCronRoutes } from "../cronSync";
 import { registerFollowUpCronRoutes } from "../followUpCron";
+import { registerVapiWebhookRoute } from "../vapiWebhook";
+import { bootstrapVapiAssistant } from "../vapiService";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -75,6 +77,8 @@ async function startServer() {
   registerCronRoutes(app);
   // Follow-up cron endpoints (5-min silence nudge + scheduled circle-back)
   registerFollowUpCronRoutes(app);
+  // Vapi voice AI webhook (tool-calls + end-of-call-report)
+  registerVapiWebhookRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -99,6 +103,9 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Bootstrap Vapi assistant after server is ready
+    const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? `https://${process.env.VITE_APP_ID ?? "app"}.manus.computer/api/webhooks/vapi`;
+    bootstrapVapiAssistant(webhookUrl).catch(console.error);
   });
 }
 

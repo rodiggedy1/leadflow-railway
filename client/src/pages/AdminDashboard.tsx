@@ -59,6 +59,10 @@ import {
   Zap,
   Activity,
   MessageSquare,
+  Mic,
+  MicOff,
+  Volume2,
+  PlayCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -567,6 +571,9 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "widget") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>;
   }
+  if (leadSource === "voice") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-violet-100 text-violet-700">Voice Call</span>;
+  }
   if (leadSource === "reactivation") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
   }
@@ -805,8 +812,11 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
-  // Call logs
+  // Call logs (agent-logged)
   const { data: callLogs } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
+
+  // Voice calls (Vapi AI calls)
+  const { data: voiceCalls } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
 
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
@@ -1290,6 +1300,82 @@ function ConversationDrawer({
                           </div>
                           {log.notes && (
                             <p className="text-xs text-gray-600 leading-relaxed">{log.notes}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
+            )}
+
+            {/* Voice Calls (Vapi AI) */}
+            {voiceCalls && voiceCalls.length > 0 && (
+              <div className="px-4 pb-2">
+                <details open>
+                  <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none flex items-center gap-1.5 py-1">
+                    <Mic className="w-3 h-3" />
+                    AI Voice Calls ({voiceCalls.length})
+                  </summary>
+                  <div className="mt-2 space-y-3">
+                    {voiceCalls.map((call) => {
+                      const outcomeColors: Record<string, string> = {
+                        booked: "bg-emerald-100 text-emerald-700",
+                        quote_given: "bg-blue-100 text-blue-700",
+                        faq_answered: "bg-violet-100 text-violet-700",
+                        transferred: "bg-orange-100 text-orange-700",
+                        callback_requested: "bg-yellow-100 text-yellow-700",
+                        no_action: "bg-gray-100 text-gray-500",
+                      };
+                      const colorClass = outcomeColors[call.outcome] ?? "bg-gray-100 text-gray-600";
+                      const durationMin = Math.floor((call.durationSeconds ?? 0) / 60);
+                      const durationSec = (call.durationSeconds ?? 0) % 60;
+                      const durationLabel = call.durationSeconds
+                        ? `${durationMin}:${String(durationSec).padStart(2, "0")}`
+                        : null;
+                      return (
+                        <div key={call.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5">
+                          {/* Header row */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <Mic className="w-3 h-3 text-gray-400" />
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${colorClass}`}>
+                                {call.outcome.replace(/_/g, " ")}
+                              </span>
+                              {durationLabel && (
+                                <span className="text-[10px] text-gray-400">{durationLabel}</span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-gray-400 shrink-0">
+                              {new Date(call.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          {/* Summary */}
+                          {call.summary && (
+                            <p className="text-xs text-gray-600 leading-relaxed">{call.summary}</p>
+                          )}
+                          {/* Recording link */}
+                          {call.recordingUrl && (
+                            <a
+                              href={call.recordingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              <PlayCircle className="w-3 h-3" />
+                              Listen to recording
+                            </a>
+                          )}
+                          {/* Transcript toggle */}
+                          {call.transcript && (
+                            <details className="mt-1">
+                              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+                                View transcript
+                              </summary>
+                              <p className="mt-1 text-[10px] text-gray-500 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                {call.transcript}
+                              </p>
+                            </details>
                           )}
                         </div>
                       );
@@ -1785,6 +1871,11 @@ export default function AdminDashboard() {
     enabled: isAdmin || isAuthenticated,
   });
 
+  const { data: voiceStats } = trpc.voice.stats.useQuery({ days: 30 }, {
+    refetchInterval: 300_000,
+    enabled: isAdmin || isAuthenticated,
+  });
+
   const { data: dailyTrend = [] } = trpc.leads.dailyTrend.useQuery(undefined, {
     refetchInterval: 300_000, // refresh every 5 minutes
     enabled: isAdmin || isAuthenticated,
@@ -2017,9 +2108,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Summary metrics row — Visitors → Leads → Booked → Revenue */}
+        {/* Summary metrics row — Visitors → Leads → Booked → Revenue + Voice */}
         {stats && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
             {/* Visitors */}
             <div
               className="rounded-xl border p-4 flex flex-col gap-1"
@@ -2122,6 +2213,25 @@ export default function AdminDashboard() {
                 </span>
               )}
               <Sparkline data={dailyTrend.map(d => d.booked)} color="#059669" />
+            </div>
+
+            {/* Voice Calls */}
+            <div
+              className="rounded-xl border p-4 flex flex-col gap-1"
+              style={{ backgroundColor: "#f5f3ff", borderColor: "#c4b5fd" }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#5b21b6" }}>
+                AI Voice Calls
+              </span>
+              <span className="text-2xl font-bold" style={{ color: "#5b21b6" }}>
+                {(voiceStats?.totalCalls ?? 0).toLocaleString()}
+              </span>
+              <span className="text-xs" style={{ color: "#5b21b6", opacity: 0.7 }}>
+                {voiceStats?.totalCalls
+                  ? `${voiceStats.conversionRate}% booked · avg ${Math.floor((voiceStats.avgDurationSeconds ?? 0) / 60)}:${String((voiceStats.avgDurationSeconds ?? 0) % 60).padStart(2, "0")}`
+                  : "no calls yet"}
+              </span>
+              <Sparkline data={voiceStats?.dailyTrend?.map(d => d.count) ?? Array(7).fill(0)} color="#7c3aed" />
             </div>
           </div>
         )}

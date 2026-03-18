@@ -218,6 +218,13 @@
       "when": 1773779971469,
       "tag": "0030_long_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1773796779219,
+      "tag": "0031_secret_shaman",
+      "breakpoints": true
     }
   ]
 }

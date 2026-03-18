@@ -12,4 +12,6 @@ export const ENV = {
   openPhoneFromNumber: process.env.OPENPHONE_FROM_NUMBER ?? "",
   launch27BearerToken: process.env.LAUNCH27_BEARER_TOKEN ?? "",
   launch27Subdomain: process.env.LAUNCH27_TENANT ?? process.env.LAUNCH27_SUBDOMAIN ?? "maidsinblack",
+  vapiPrivateKey: process.env.VAPI_PRIVATE_KEY ?? "",
+  vapiPublicKey: process.env.VAPI_PUBLIC_KEY ?? "",
 };

@@ -996,3 +996,19 @@
 ## Remove Stage Funnel Cards
 
 - [x] Remove the FunnelStats stage breakdown grid from the admin dashboard
+
+## Voice AI Agent (Vapi Integration)
+
+- [x] Validate Vapi API keys with a lightweight API call test
+- [x] Database: add voice_calls table (vapiCallId, leadId, sessionId, callerPhone, duration, transcript, summary, recordingUrl, outcome, structuredData, createdAt)
+- [x] Backend: Vapi assistant bootstrap on server start (create or update assistant in Vapi API)
+- [x] Backend: POST /api/webhooks/vapi — handle end-of-call-report and tool-calls
+- [x] Backend: tool endpoint — getQuote(bedrooms, bathrooms, cleaningType) → price
+- [x] Backend: tool endpoint — createLead(name, phone, address, quote, preferredDate) → leadId
+- [x] Backend: tool endpoint — sendSms(phone, message) → via OpenPhone API
+- [x] Backend: on call end → create/update lead record, set stage, send SMS summary, notify agent
+- [x] Frontend: "Source: Voice" badge on leads that came via call
+- [x] Frontend: Call log tab in lead drawer (transcript, recording player, AI summary)
+- [x] Frontend: Voice stats on summary cards (calls answered, avg duration, voice conversion)
+- [x] Frontend: Vapi settings page in admin (toggle agent on/off, edit greeting, FAQ knowledge base)
+- [x] Write vitest tests for webhook handler and tool endpoints

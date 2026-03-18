@@ -669,3 +669,50 @@ export const activityLog = mysqlTable("activity_log", {
 
 export type ActivityLog = typeof activityLog.$inferSelect;
 export type InsertActivityLog = typeof activityLog.$inferInsert;
+
+// ── Voice Calls (Vapi) ────────────────────────────────────────────────────────
+
+/**
+ * voiceCalls — one row per inbound call handled by the Vapi AI agent.
+ * Linked to a conversationSession when a lead was created or matched mid-call.
+ */
+export const voiceCallOutcomes = [
+  "booked",
+  "quote_given",
+  "faq_answered",
+  "transferred",
+  "no_action",
+  "callback_requested",
+] as const;
+
+export type VoiceCallOutcome = (typeof voiceCallOutcomes)[number];
+
+export const voiceCalls = mysqlTable("voice_calls", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Vapi call ID (unique per call) */
+  vapiCallId: varchar("vapiCallId", { length: 128 }).notNull().unique(),
+  /** Linked conversation session (null if no lead was created/matched) */
+  sessionId: int("sessionId"),
+  /** Caller's E.164 phone number */
+  callerPhone: varchar("callerPhone", { length: 30 }).notNull(),
+  /** Call duration in seconds */
+  durationSeconds: int("durationSeconds").default(0).notNull(),
+  /** Full call transcript */
+  transcript: text("transcript"),
+  /** AI-generated summary of the call */
+  summary: text("summary"),
+  /** URL to the call recording audio file */
+  recordingUrl: varchar("recordingUrl", { length: 512 }),
+  /** Call outcome extracted from structured data */
+  outcome: varchar("outcome", { length: 50 }).default("no_action").notNull(),
+  /** Full structured data JSON from Vapi analysis */
+  structuredData: text("structuredData"),
+  /** Why the call ended (e.g. "customer-ended-call", "assistant-ended-call", "silence-timed-out") */
+  endedReason: varchar("endedReason", { length: 100 }),
+  /** Vapi's success evaluation ("true" | "false") */
+  successEvaluation: varchar("successEvaluation", { length: 10 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VoiceCall = typeof voiceCalls.$inferSelect;
+export type InsertVoiceCall = typeof voiceCalls.$inferInsert;

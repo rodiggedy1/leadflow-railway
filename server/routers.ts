@@ -21,6 +21,7 @@ import { launch27Router } from "./launch27Router";
 import { alwaysOnRouter } from "./alwaysOnRouter";
 import { syncHealthRouter } from "./syncHealthRouter";
 import { activityRouter } from "./activityRouter";
+import { voiceRouter } from "./voiceRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
@@ -1208,6 +1209,7 @@ export const appRouter = router({
   alwaysOn: alwaysOnRouter,
   syncHealth: syncHealthRouter,
   activity: activityRouter,
+  voice: voiceRouter,
 
   simulator: router({
     chat: publicProcedure
