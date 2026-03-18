@@ -1614,25 +1614,33 @@ function AgentManagement() {
   return (
     <div className="py-2">
 
-      {/* Leaderboard */}
+      {/* Agent Performance Stats */}
       {leaderboard.length > 0 && (
         <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-base font-semibold text-gray-900">This Week's Leaderboard</h2>
-            <span className="text-xs text-gray-400">(Mon – today)</span>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-base font-semibold text-gray-900">Agent Performance</h2>
           </div>
+          <p className="text-xs text-gray-400 mb-4">All-time stats · Response time = avg minutes from lead in to first call · Color: green &lt;1h, amber &lt;4h, red &gt;4h</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {leaderboard.map((agent, idx) => {
               const medal = medalColors[idx];
               const convColor =
                 agent.conversionRate >= 50 ? "#16a34a" :
                 agent.conversionRate >= 25 ? "#d97706" : "#6b7280";
+
+              const rt = (agent as any).avgResponseTimeMinutes as number | null;
+              const rtLabel = rt === null ? "—" : rt < 60 ? `${rt}m` : `${Math.floor(rt / 60)}h ${rt % 60}m`;
+              const rtColor = rt === null ? "#9ca3af" : rt < 60 ? "#16a34a" : rt < 240 ? "#d97706" : "#dc2626";
+              const rtBg = rt === null ? "bg-gray-50" : rt < 60 ? "bg-green-50" : rt < 240 ? "bg-amber-50" : "bg-red-50";
+              const revenue = (agent as any).revenueBooked as number ?? 0;
+
               return (
                 <div
                   key={agent.id}
                   className="bg-white rounded-2xl border p-4 shadow-sm relative overflow-hidden"
                   style={{ borderColor: idx === 0 ? "#FFD700" : "#F0D8D0" }}
                 >
+                  {/* Rank badge */}
                   <div
                     className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                     style={{
@@ -1643,24 +1651,39 @@ function AgentManagement() {
                   >
                     #{idx + 1}
                   </div>
+
                   <p className="font-semibold text-gray-900 pr-8 truncate">{agent.name}</p>
                   <p className="text-xs text-gray-400 mb-3 truncate">{agent.email}</p>
-                  <div className="grid grid-cols-3 gap-2 text-center">
+
+                  {/* Primary metrics */}
+                  <div className="grid grid-cols-2 gap-2 text-center mb-2">
                     <div className="bg-gray-50 rounded-xl py-2">
-                      <p className="text-lg font-bold text-gray-900">{agent.callsThisWeek}</p>
-                      <p className="text-xs text-gray-500">Calls</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl py-2">
-                      <p className="text-lg font-bold" style={{ color: "#E8603C" }}>{agent.bookingsThisWeek}</p>
-                      <p className="text-xs text-gray-500">Booked</p>
+                      <p className="text-lg font-bold text-gray-900">{agent.totalAssigned}</p>
+                      <p className="text-xs text-gray-500">Leads Handled</p>
                     </div>
                     <div className="bg-gray-50 rounded-xl py-2">
                       <p className="text-lg font-bold" style={{ color: convColor }}>{agent.conversionRate}%</p>
-                      <p className="text-xs text-gray-500">Conv.</p>
+                      <p className="text-xs text-gray-500">Conv. Rate</p>
                     </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
-                    <span>{agent.totalAssigned} assigned</span>
+
+                  {/* Coaching metrics */}
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className={`${rtBg} rounded-xl py-2`}>
+                      <p className="text-lg font-bold" style={{ color: rtColor }}>{rtLabel}</p>
+                      <p className="text-xs text-gray-500">Avg Response</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl py-2">
+                      <p className="text-lg font-bold" style={{ color: "#16a34a" }}>
+                        {revenue > 0 ? `$${revenue.toLocaleString()}` : "—"}
+                      </p>
+                      <p className="text-xs text-gray-500">Revenue Closed</p>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+                    <span>{agent.callsThisWeek} calls this week</span>
                     <span>{agent.bookingsAllTime} booked all-time</span>
                   </div>
                 </div>

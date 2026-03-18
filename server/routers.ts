@@ -1026,10 +1026,42 @@ export const appRouter = router({
         .where(eq(conversationSessions.isBooked, 1))
         .groupBy(conversationSessions.bookedByAgentId);
 
+      // Revenue closed per agent: sum of bookedAmount ?? quotedPrice for booked sessions
+      const revenuePerAgent = await db
+        .select({
+          agentId: conversationSessions.bookedByAgentId,
+          revenue: sql<number>`SUM(COALESCE(${conversationSessions.bookedAmount}, CAST(${conversationSessions.quotedPrice} AS UNSIGNED), 0))`.as("revenue"),
+        })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.isBooked, 1))
+        .groupBy(conversationSessions.bookedByAgentId);
+
+      // Avg response time per agent: avg minutes from session.createdAt to agent's first call
+      // Uses a raw SQL subquery to avoid Drizzle join chain limitations in test mocks
+      const responseTimeRows = await db.execute(
+        sql`SELECT cl.agentId,
+               ROUND(AVG(TIMESTAMPDIFF(MINUTE, cs.createdAt, cl.calledAt))) AS avgMinutes
+            FROM lead_call_logs cl
+            INNER JOIN conversation_sessions cs ON cs.id = cl.sessionId
+            WHERE cl.calledAt = (
+              SELECT MIN(cl2.calledAt) FROM lead_call_logs cl2
+              WHERE cl2.sessionId = cl.sessionId AND cl2.agentId = cl.agentId
+            )
+            GROUP BY cl.agentId`
+);
+      // MySQL2 execute() returns [rows, fields]; rows is the first element
+      const rtRows = (Array.isArray(responseTimeRows) ? responseTimeRows[0] : []) as Array<{ agentId: number; avgMinutes: number | null }>;
+
       const callsMap = new Map(callsThisWeek.map(r => [r.agentId, Number(r.count)]));
       const bookingsWeekMap = new Map(bookingsThisWeek.map(r => [r.agentId, Number(r.count)]));
       const assignedMap = new Map(totalAssigned.map(r => [r.agentId, Number(r.count)]));
       const bookingsAllTimeMap = new Map(bookingsAllTime.map(r => [r.agentId, Number(r.count)]));
+      const revenueMap = new Map(revenuePerAgent.map(r => [r.agentId, Number(r.revenue)]));
+      const responseTimeMap = new Map(
+        rtRows.map((r) =>
+          [Number(r.agentId), r.avgMinutes !== null ? Math.round(Number(r.avgMinutes)) : null]
+        )
+      );
 
       return allAgents.map(agent => {
         const assigned = assignedMap.get(agent.id) ?? 0;
@@ -1044,6 +1076,8 @@ export const appRouter = router({
           totalAssigned: assigned,
           bookingsAllTime: bookedAllTime,
           conversionRate,
+          revenueBooked: revenueMap.get(agent.id) ?? 0,
+          avgResponseTimeMinutes: responseTimeMap.get(agent.id) ?? null,
         };
       });
     }),
