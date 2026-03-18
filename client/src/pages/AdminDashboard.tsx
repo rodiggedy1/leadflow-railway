@@ -2340,7 +2340,6 @@ export default function AdminDashboard() {
                     <TableHead className="font-semibold text-gray-700 w-32">Booking</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-48">Last Activity</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Updated</TableHead>
-                    <TableHead className="w-16"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2490,21 +2489,6 @@ export default function AdminDashboard() {
                         </span>
                       </TableCell>
 
-                      {/* Action */}
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs hover:bg-orange-50"
-                          style={{ color: "#E8603C" }}
-                          onClick={e => {
-                            e.stopPropagation();
-                            setSelectedSession(session);
-                          }}
-                        >
-                          View
-                        </Button>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
