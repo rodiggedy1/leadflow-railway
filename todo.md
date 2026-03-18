@@ -1012,3 +1012,9 @@
 - [x] Frontend: Voice stats on summary cards (calls answered, avg duration, voice conversion)
 - [x] Frontend: Vapi settings page in admin (toggle agent on/off, edit greeting, FAQ knowledge base)
 - [x] Write vitest tests for webhook handler and tool endpoints
+
+## Voice Agent Troubleshooting
+
+- [x] Diagnose: getQuote tool call failing during live call
+- [x] Diagnose: lead not created in dashboard after call
+- [x] Fix root cause and verify end-to-end — tools were pointing to dev sandbox URL, fixed to always use quote.maidinblack.com

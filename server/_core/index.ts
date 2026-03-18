@@ -104,7 +104,9 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     // Bootstrap Vapi assistant after server is ready
-    const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? `https://${process.env.VITE_APP_ID ?? "app"}.manus.computer/api/webhooks/vapi`;
+    // Always use the production domain so Vapi tool calls reach the live server.
+    // VAPI_WEBHOOK_URL env var can override for local dev/testing.
+    const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
     bootstrapVapiAssistant(webhookUrl).catch(console.error);
   });
 }
