@@ -333,17 +333,40 @@ function buildToolDefinitions(webhookUrl: string) {
     },
     {
       type: "transferCall" as const,
-      function: {
-        name: "transferCall",
-        description:
-          "Transfer the live call to the Maids in Black customer service team at 202-888-5362. Only use this during business hours (8am–5pm ET) when a caller insists on speaking to a human right now.",
-      },
       destinations: [
         {
           type: "number" as const,
           number: "+12028885362",
           message: "Please hold for one moment while I connect you with our team.",
-          description: "Maids in Black customer service line",
+        },
+      ],
+      function: {
+        name: "transferCall",
+        description:
+          "Transfer the live call to the Maids in Black customer service team. Only use this during business hours (8am–5pm ET) when a caller explicitly asks to speak to a human right now.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            destination: {
+              type: "string" as const,
+              enum: ["+12028885362"],
+              description: "The phone number to transfer the call to. Always use +12028885362.",
+            },
+          },
+          required: ["destination"],
+        },
+      },
+      messages: [
+        {
+          type: "request-start" as const,
+          content: "Please hold for just a moment while I connect you with our team.",
+          conditions: [
+            {
+              param: "destination",
+              operator: "eq" as const,
+              value: "+12028885362",
+            },
+          ],
         },
       ],
     },

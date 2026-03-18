@@ -1264,3 +1264,7 @@
 - [x] Madison offers live transfer during business hours (8am–5pm ET) when caller asks for a human
 - [x] If transfer fails or nobody answers, Madison falls back to scheduling a callback
 - [x] Outside business hours, goes straight to callback scheduling (9am or 10am next morning)
+
+## Bug: Live Transfer Went Silent and Dropped
+- [x] Root cause: missing function.parameters (destination enum) and messages array in transferCall tool definition
+- [x] Fixed: added destination enum, required parameters, and request-start message with conditions per Vapi docs
