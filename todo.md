@@ -1186,3 +1186,7 @@
 - [x] All Calls: add outcome filter dropdown (booked, callback_requested, faq_answered, etc.)
 - [x] All Calls: join conversationSessions to show caller name when available
 - [x] Missed call auto-SMS: detect no-answer end reason, send "Sorry we missed you" SMS with quote link
+
+## Double post-call SMS fix
+
+- [x] Fix double SMS: end-of-call SMS now skipped when leadCreated=true (mid-call sendSms tool already ran during booking flow)
