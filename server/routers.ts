@@ -679,6 +679,37 @@ export const appRouter = router({
     }),
 
     /**
+     * agents.previewAsAgent — admin-only: set an agent session cookie using the admin's
+     * own identity so they can preview the /agent workspace without a separate login.
+     * The session is valid for 2 hours.
+     */
+    previewAsAgent: adminAgentProcedure.mutation(async ({ ctx }) => {
+      // Read the admin's current agent session to get their identity
+      const cookieHeader = ctx.req.headers.cookie;
+      const adminToken = cookieHeader ? parseCookie(cookieHeader)[AGENT_COOKIE_NAME] ?? null : null;
+      const adminSession = await verifyAgentSession(adminToken);
+      if (!adminSession) throw new TRPCError({ code: "UNAUTHORIZED", message: "No admin session found" });
+
+      // Issue a short-lived agent session (2 hours) with the admin's identity
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const previewToken = await signAgentSession(
+        {
+          agentId: adminSession.agentId,
+          agentName: adminSession.agentName,
+          agentEmail: adminSession.agentEmail,
+          isAdmin: true, // keep admin flag so they can switch back
+        },
+        TWO_HOURS_MS
+      );
+      const cookieOpts = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(AGENT_COOKIE_NAME, previewToken, {
+        ...cookieOpts,
+        maxAge: TWO_HOURS_MS,
+      });
+      return { success: true };
+    }),
+
+    /**
      * agents.me — return the current agent from the session cookie, or null.
      */
     me: publicProcedure.query(async ({ ctx }) => {

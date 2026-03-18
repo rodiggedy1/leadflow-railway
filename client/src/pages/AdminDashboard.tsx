@@ -64,6 +64,7 @@ import {
   MicOff,
   Volume2,
   PlayCircle,
+  Eye,
 } from "lucide-react";
 import {
   Dialog,
@@ -175,6 +176,34 @@ function WidgetHealthBadge() {
       )}
       {data.ok ? `Widget v${data.version ?? '?'}` : 'Widget DOWN'}
     </button>
+  );
+}
+
+// ── Preview Agent View Button ───────────────────────────────────────────────
+function PreviewAgentButton() {
+  const previewMutation = trpc.agents.previewAsAgent.useMutation({
+    onSuccess: () => {
+      window.open("/agent", "_blank");
+    },
+    onError: (err) => toast.error(err.message || "Could not open agent preview"),
+  });
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => previewMutation.mutate()}
+      disabled={previewMutation.isPending}
+      className="gap-2 text-xs"
+      title="Open the agent workspace in a new tab as yourself"
+    >
+      {previewMutation.isPending ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        <Eye className="w-3.5 h-3.5" />
+      )}
+      Agent View
+    </Button>
   );
 }
 
@@ -2018,6 +2047,7 @@ export default function AdminDashboard() {
               </Button>
             )}
             <NotificationBell />
+            <PreviewAgentButton />
           </div>
         </div>
         {/* Tab navigation */}

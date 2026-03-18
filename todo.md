@@ -1120,3 +1120,10 @@
 - [x] Phone icon appears on lead row hover in Leads table
 - [x] Clicking fires tel: link with lead's phone number
 - [x] Icon is visually subtle on hover, doesn't disrupt row layout
+
+## Admin → Agent Preview — IN PROGRESS
+
+- [ ] tRPC procedure: agents.getPreviewToken — issues short-lived agent session token for admin
+- [ ] Preview button in admin dashboard header: "Preview Agent View"
+- [ ] Clicking opens /agent in new tab with admin signed in as agent
+- [ ] Write vitest test for getPreviewToken procedure
