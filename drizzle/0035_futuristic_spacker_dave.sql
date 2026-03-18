@@ -1,0 +1,1 @@
+ALTER TABLE `page_views` ADD CONSTRAINT `page_views_sessionKey_unique` UNIQUE(`sessionKey`);

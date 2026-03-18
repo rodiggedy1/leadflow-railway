@@ -1,0 +1,19 @@
+{
+  "query": "\nSELECT COUNT(*) as total_rows FROM page_views;\nSELECT COUNT(DISTINCT sessionKey) as unique_sessions FROM page_views;\nSELECT sessionKey, COUNT(*) as cnt FROM page_views GROUP BY sessionKey HAVING cnt > 1 LIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT COUNT(*) as total_rows FROM page_views;\nSELECT COUNT(DISTINCT sessionKey) as unique_sessions FROM page_views;\nSELECT sessionKey, COUNT(*) as cnt FROM page_views GROUP BY sessionKey HAVING cnt > 1 LIMIT 5;\n",
+  "rows": [
+    {
+      "total_rows": "135"
+    },
+    {
+      "total_rows": "unique_sessions"
+    },
+    {
+      "total_rows": "135"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\n135\nunique_sessions\n135\n",
+  "stderr": "",
+  "execution_time_ms": 462
+}

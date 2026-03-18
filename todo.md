@@ -1268,3 +1268,10 @@
 ## Bug: Live Transfer Went Silent and Dropped
 - [x] Root cause: missing function.parameters (destination enum) and messages array in transferCall tool definition
 - [x] Fixed: added destination enum, required parameters, and request-start message with conditions per Vapi docs
+
+## Visitor Count Fix
+
+- [x] Fix inflated visitor count: add UNIQUE constraint on page_views.sessionKey
+- [x] Fix visitorStats query to use COUNT(DISTINCT sessionKey) as fallback for historical data
+- [x] Fix dailyTrend query to use COUNT(DISTINCT sessionKey) per day
+- [x] Fix sourceBreakdown query to use COUNT(DISTINCT sessionKey) per source

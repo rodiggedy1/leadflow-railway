@@ -270,7 +270,7 @@ export type InsertAgent = typeof agents.$inferInsert;
 export const pageViews = mysqlTable("page_views", {
   id: int("id").autoincrement().primaryKey(),
   /** Random session key from the browser (sessionStorage) — prevents refresh inflation */
-  sessionKey: varchar("sessionKey", { length: 64 }).notNull(),
+  sessionKey: varchar("sessionKey", { length: 64 }).notNull().unique(),
   /** UTM source at time of visit */
   utmSource: varchar("utmSource", { length: 100 }),
   utmMedium: varchar("utmMedium", { length: 100 }),

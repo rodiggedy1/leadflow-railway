@@ -249,10 +249,12 @@ export const appRouter = router({
           .groupBy(conversationSessions.utmSource);
 
         // Visitor counts per source (from page_views table)
+        // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
+        // the UNIQUE constraint was added to the sessionKey column.
         const visitorRows = await db
           .select({
             utmSource: pageViews.utmSource,
-            count: sql<number>`count(*)`,
+            count: sql<number>`count(distinct ${pageViews.sessionKey})`,
           })
           .from(pageViews)
           .where(
@@ -330,8 +332,10 @@ export const appRouter = router({
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
         // Visitor count from page_views table
+        // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
+        // the UNIQUE constraint was added to the sessionKey column.
         const [visitorRow] = await db
-          .select({ count: sql<number>`count(*)` })
+          .select({ count: sql<number>`count(distinct ${pageViews.sessionKey})` })
           .from(pageViews)
           .where(
             input?.dateFrom || input?.dateTo
@@ -383,10 +387,12 @@ export const appRouter = router({
       sevenDaysAgo.setUTCHours(0, 0, 0, 0);
 
       // Daily visitor counts
+      // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
+      // the UNIQUE constraint was added to the sessionKey column.
       const visitorRows = await db
         .select({
           day: sql<string>`DATE(${pageViews.createdAt})`,
-          count: sql<number>`count(*)`,
+          count: sql<number>`count(distinct ${pageViews.sessionKey})`,
         })
         .from(pageViews)
         .where(gte(pageViews.createdAt, sevenDaysAgo))

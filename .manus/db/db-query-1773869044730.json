@@ -1,0 +1,9 @@
+{
+  "query": "\nDELETE pv FROM page_views pv\nINNER JOIN (\n  SELECT MIN(id) as keep_id, sessionKey\n  FROM page_views\n  GROUP BY sessionKey\n  HAVING COUNT(*) > 1\n) dups ON pv.sessionKey = dups.sessionKey AND pv.id != dups.keep_id;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nDELETE pv FROM page_views pv\nINNER JOIN (\n  SELECT MIN(id) as keep_id, sessionKey\n  FROM page_views\n  GROUP BY sessionKey\n  HAVING COUNT(*) > 1\n) dups ON pv.sessionKey = dups.sessionKey AND pv.id != dups.keep_id;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 376
+}
