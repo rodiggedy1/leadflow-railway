@@ -1207,3 +1207,10 @@
 
 ## Source filter: Voice Call
 - [x] Add "Voice Call" option to source filter dropdown in admin leads list
+
+## Voice: Post-call SMS null-summary root cause fix
+- [x] Root cause confirmed: production code had `if (normalizedPhone && summary && !leadCreated)` — Vapi returns null for analysis.summary on FAQ/short calls, so SMS was silently skipped
+- [x] Fix: `callSummaryForSms = summary ?? transcript.slice(0, 600)` — transcript is always available so SMS now fires for all completed calls
+- [x] Fix: normalizedPhone now falls back to structuredData.callerPhone when call.customer.number is empty
+- [x] Added diagnostic logging to trace phone number resolution in end-of-call webhook
+- [x] Reverted unnecessary FAQ phone-collection prompt (call.customer.number is reliably populated for direct Vapi calls)

@@ -792,10 +792,21 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   const outcome = structuredData?.outcome ?? "no_action";
   const leadCreated = structuredData?.leadCreated ?? false;
 
-  // Normalize caller phone
-  const normalizedPhone = callerPhone.startsWith("+")
-    ? callerPhone
-    : callerPhone ? `+1${callerPhone.replace(/\D/g, "")}` : null;
+  // Normalize caller phone.
+  // For inbound calls forwarded through OpenPhone → Vapi, call.customer.number may be
+  // empty or the forwarding number rather than the actual caller's number.
+  // Fall back to structuredData.callerPhone (extracted by Vapi's analysis LLM from the
+  // transcript) or the phone number Madison collected verbally during the call.
+  const rawPhone = callerPhone ||
+    (((analysis?.structuredData as Record<string, unknown> | null | undefined)?.callerPhone as string | undefined) ?? "");
+  const normalizeRaw = (p: string) => p.startsWith("+") ? p : `+1${p.replace(/\D/g, "")}`;
+  const normalizedPhone = rawPhone ? normalizeRaw(rawPhone) : null;
+  console.log(`[Vapi] callerPhone from call object: "${callerPhone}", rawPhone resolved: "${rawPhone}", normalizedPhone: "${normalizedPhone}"`);
+  // Also check structuredData for callerPhone separately for logging
+  const sdPhone = (analysis?.structuredData as Record<string, unknown> | null | undefined)?.callerPhone as string | undefined;
+  if (!callerPhone && sdPhone) {
+    console.log(`[Vapi] Using structuredData.callerPhone as fallback: "${sdPhone}"`);
+  }
 
   const db = await getDb();
   if (!db) {
