@@ -12,6 +12,7 @@ import CompletedJobs from "./pages/CompletedJobs";
 import AlwaysOnCampaign from "./pages/AlwaysOnCampaign";
 import SyncHealthPage from "./pages/SyncHealthPage";
 import AllCalls from "./pages/AllCalls";
+import RevenueAttribution from "./pages/RevenueAttribution";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -25,6 +26,7 @@ function Router() {
       <Route path={"/admin/always-on"} component={AlwaysOnCampaign} />
       <Route path={"/admin/sync-health"} component={SyncHealthPage} />
       <Route path={"/admin/calls"} component={AllCalls} />
+      <Route path={"/admin/revenue"} component={RevenueAttribution} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

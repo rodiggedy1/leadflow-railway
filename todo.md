@@ -1283,3 +1283,11 @@
 - [x] Raise minimum timer from 2s to 8s before tracking fires
 - [x] Server: store timeOnPage in page_views row
 - [x] Count queries: filter WHERE timeOnPage >= 8 OR timeOnPage IS NULL to exclude instant bot sessions
+
+## Revenue Attribution Dashboard
+
+- [x] Backend: leads.revenueAttribution procedure — monthly revenue, ROI, channel breakdown, trend
+- [x] Backend: include voice call stats (calls handled, avg duration, booked via voice)
+- [x] Frontend: new /admin/revenue page with ROI hero card, channel breakdown, monthly trend chart
+- [x] Frontend: wire Revenue ROI tab in AdminHeader nav
+- [x] Tests for revenueAttribution procedure (17 tests, all passing)

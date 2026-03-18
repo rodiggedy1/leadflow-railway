@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, isNull, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -675,6 +675,158 @@ export const appRouter = router({
           .delete(conversationSessions)
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
+      }),
+
+    /**
+     * leads.revenueAttribution — full revenue attribution report.
+     * Powers the Revenue Attribution Dashboard.
+     * Returns:
+     *  - summary: totalRevenue, totalJobs, avgJobValue, softwareCost, roiMultiple
+     *  - byChannel: revenue + jobs per lead source (form, widget, reactivation, voice)
+     *  - byMonth: last 6 months of revenue + job counts
+     *  - voice: calls handled, avg duration, booked via voice
+     *  - topJobs: top 5 booked jobs by revenue
+     */
+    revenueAttribution: adminAgentProcedure
+      .input(z.object({
+        months: z.number().int().min(1).max(12).default(6),
+        softwareCost: z.number().min(0).default(500),
+      }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        const months = input?.months ?? 6;
+        const softwareCost = input?.softwareCost ?? 500;
+
+        const empty = {
+          summary: { totalRevenue: 0, totalJobs: 0, avgJobValue: 0, softwareCost, roiMultiple: 0, roiDollars: 0 },
+          byChannel: [] as Array<{ channel: string; label: string; revenue: number; jobs: number; avgValue: number }>,
+          byMonth: [] as Array<{ month: string; label: string; revenue: number; jobs: number }>,
+          voice: { totalCalls: 0, bookedViaCalls: 0, avgDurationSeconds: 0, callConversionRate: 0 },
+          topJobs: [] as Array<{ id: number; name: string; phone: string; revenue: number; bookedAt: Date | null; channel: string }>,
+        };
+        if (!db) return empty;
+
+        // ── Date range: start of (now - months) ──────────────────────────────
+        const since = new Date();
+        since.setUTCMonth(since.getUTCMonth() - months);
+        since.setUTCDate(1);
+        since.setUTCHours(0, 0, 0, 0);
+
+        // ── Booked sessions in range ─────────────────────────────────────────
+        const bookedSessions = await db
+          .select({
+            id: conversationSessions.id,
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            leadSource: conversationSessions.leadSource,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+            bookedAmount: conversationSessions.bookedAmount,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+            bookedAt: conversationSessions.bookedAt,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              eq(conversationSessions.stage, "BOOKED"),
+              gte(conversationSessions.createdAt, since),
+            )
+          )
+          .orderBy(desc(conversationSessions.bookedAt));
+
+        // ── Revenue helpers ──────────────────────────────────────────────────
+        const channelLabel: Record<string, string> = {
+          form: "Quote Form",
+          widget: "Embedded Widget",
+          reactivation: "Reactivation",
+          voice: "Voice / Phone",
+        };
+
+        const channelMap = new Map<string, { revenue: number; jobs: number }>();
+        let totalRevenue = 0;
+
+        for (const s of bookedSessions) {
+          const rev = calcBookedRevenue(s);
+          totalRevenue += rev;
+          const ch = s.leadSource ?? "form";
+          const existing = channelMap.get(ch) ?? { revenue: 0, jobs: 0 };
+          channelMap.set(ch, { revenue: existing.revenue + rev, jobs: existing.jobs + 1 });
+        }
+
+        const totalJobs = bookedSessions.length;
+        const avgJobValue = totalJobs > 0 ? Math.round(totalRevenue / totalJobs) : 0;
+        const roiDollars = totalRevenue - softwareCost * months;
+        const roiMultiple = softwareCost > 0 ? parseFloat((totalRevenue / (softwareCost * months)).toFixed(1)) : 0;
+
+        const byChannel = Array.from(channelMap.entries()).map(([channel, { revenue, jobs }]) => ({
+          channel,
+          label: channelLabel[channel] ?? channel,
+          revenue,
+          jobs,
+          avgValue: jobs > 0 ? Math.round(revenue / jobs) : 0,
+        })).sort((a, b) => b.revenue - a.revenue);
+
+        // ── Monthly breakdown ────────────────────────────────────────────────
+        const monthMap = new Map<string, { revenue: number; jobs: number }>();
+        // Pre-fill all months with 0 so empty months still appear
+        for (let i = months - 1; i >= 0; i--) {
+          const d = new Date();
+          d.setUTCMonth(d.getUTCMonth() - i);
+          const key = d.toISOString().slice(0, 7); // "YYYY-MM"
+          monthMap.set(key, { revenue: 0, jobs: 0 });
+        }
+        for (const s of bookedSessions) {
+          const at = s.bookedAt ?? s.bookedAt;
+          if (!at) continue;
+          const key = (at instanceof Date ? at : new Date(at as string)).toISOString().slice(0, 7);
+          if (!monthMap.has(key)) continue;
+          const rev = calcBookedRevenue(s);
+          const existing = monthMap.get(key)!;
+          monthMap.set(key, { revenue: existing.revenue + rev, jobs: existing.jobs + 1 });
+        }
+
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const byMonth = Array.from(monthMap.entries()).map(([month, { revenue, jobs }]) => {
+          const [, mm] = month.split("-");
+          return { month, label: monthNames[parseInt(mm, 10) - 1], revenue, jobs };
+        });
+
+        // ── Voice stats ──────────────────────────────────────────────────────
+        const [voiceTotals] = await db
+          .select({
+            totalCalls: sql<number>`COUNT(*)`,
+            avgDuration: sql<number>`AVG(durationSeconds)`,
+            bookedViaCalls: sql<number>`SUM(CASE WHEN outcome = 'booked' THEN 1 ELSE 0 END)`,
+          })
+          .from(voiceCalls)
+          .where(gte(voiceCalls.createdAt, since));
+
+        const totalCalls = Number(voiceTotals?.totalCalls ?? 0);
+        const bookedViaCalls = Number(voiceTotals?.bookedViaCalls ?? 0);
+        const avgDurationSeconds = Math.round(Number(voiceTotals?.avgDuration ?? 0));
+        const callConversionRate = totalCalls > 0 ? Math.round((bookedViaCalls / totalCalls) * 100) : 0;
+
+        // ── Top 5 jobs by revenue ────────────────────────────────────────────
+        const topJobs = bookedSessions
+          .map(s => ({
+            id: s.id,
+            name: s.leadName ?? "Unknown",
+            phone: s.leadPhone,
+            revenue: calcBookedRevenue(s),
+            bookedAt: s.bookedAt,
+            channel: channelLabel[s.leadSource ?? "form"] ?? s.leadSource ?? "form",
+          }))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5);
+
+        return {
+          summary: { totalRevenue, totalJobs, avgJobValue, softwareCost, roiMultiple, roiDollars },
+          byChannel,
+          byMonth,
+          voice: { totalCalls, bookedViaCalls, avgDurationSeconds, callConversionRate },
+          topJobs,
+        };
       }),
   }),
 

@@ -2145,6 +2145,14 @@ export default function AdminDashboard() {
             <Mic className="w-3.5 h-3.5" />
             All Calls
           </a>
+          <a
+            href="/admin/revenue"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+            style={{ borderColor: "transparent", color: "#059669" }}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            Revenue ROI
+          </a>
         </div>
       </header>
 
