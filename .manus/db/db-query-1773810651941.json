@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT \n  ql.id as leadId, ql.name, ql.phone, ql.createdAt as leadCreatedAt,\n  cs.id as sessionId, cs.isBooked, cs.stage, cs.updatedAt\nFROM quote_leads ql\nLEFT JOIN conversation_sessions cs ON cs.leadPhone = ql.phone\nWHERE ql.phone LIKE '%2022582430%' OR ql.phone = '+12022582430'\nORDER BY ql.createdAt DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT \n  ql.id as leadId, ql.name, ql.phone, ql.createdAt as leadCreatedAt,\n  cs.id as sessionId, cs.isBooked, cs.stage, cs.updatedAt\nFROM quote_leads ql\nLEFT JOIN conversation_sessions cs ON cs.leadPhone = ql.phone\nWHERE ql.phone LIKE '%2022582430%' OR ql.phone = '+12022582430'\nORDER BY ql.createdAt DESC\nLIMIT 5;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 58
+}

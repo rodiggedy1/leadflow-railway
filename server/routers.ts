@@ -422,9 +422,18 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
+        const stageUpdates: Record<string, unknown> = { stage: input.stage };
+        if (input.stage === "BOOKED") {
+          // Always sync isBooked flag when stage is set to BOOKED
+          stageUpdates.isBooked = 1;
+          stageUpdates.bookedAt = new Date();
+        } else {
+          // Moving away from BOOKED — clear the flag
+          stageUpdates.isBooked = 0;
+        }
         await db
           .update(conversationSessions)
-          .set({ stage: input.stage })
+          .set(stageUpdates)
           .where(eq(conversationSessions.id, input.sessionId));
         // If marking as BOOKED, increment campaign bookedCount for reactivation leads
         if (input.stage === "BOOKED") {

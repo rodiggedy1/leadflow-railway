@@ -261,7 +261,7 @@ export function registerWebhookRoutes(app: Express) {
       // Extract engine data (bedrooms, bathrooms, quotedPrice, serviceType) from new engine
       const engineData = (result as typeof result & { _engineData?: Record<string, string | undefined> })._engineData;
 
-      await db
+        await db
         .update(conversationSessions)
         .set({
           stage: result.nextStage,
@@ -271,6 +271,10 @@ export function registerWebhookRoutes(app: Express) {
           messageHistory: JSON.stringify(history),
           lastAiMessageAt: new Date(),
           autoFollowUpSent: isTerminalStage ? session.autoFollowUpSent : 0,
+          // Sync isBooked flag whenever stage transitions to/from BOOKED
+          ...(result.nextStage === "BOOKED" && session.stage !== "BOOKED"
+            ? { isBooked: 1, bookedAt: new Date() }
+            : {}),
           // Persist engine-extracted data (bedrooms, bathrooms, price, service type)
           ...(engineData?.bedrooms    ? { bedrooms:    engineData.bedrooms }    : {}),
           ...(engineData?.bathrooms   ? { bathrooms:   engineData.bathrooms }   : {}),

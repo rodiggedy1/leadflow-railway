@@ -1,0 +1,79 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'conversation_sessions' AND COLUMN_NAME NOT IN ('id','leadPhone','leadName','stage','quotedPrice','serviceType','bedrooms','bathrooms','selectedSlot','address','callPreference','messageHistory','quoteLeadId','createdAt','updatedAt','assignedAgentId','assignedAgentName','lastCalledAt','lastCalledByAgentId','lastCalledByAgentName');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'conversation_sessions' AND COLUMN_NAME NOT IN ('id','leadPhone','leadName','stage','quotedPrice','serviceType','bedrooms','bathrooms','selectedSlot','address','callPreference','messageHistory','quoteLeadId','createdAt','updatedAt','assignedAgentId','assignedAgentName','lastCalledAt','lastCalledByAgentId','lastCalledByAgentName');",
+  "rows": [
+    {
+      "COLUMN_NAME": "isBooked"
+    },
+    {
+      "COLUMN_NAME": "bookedAt"
+    },
+    {
+      "COLUMN_NAME": "bookedByAgentId"
+    },
+    {
+      "COLUMN_NAME": "bookedByAgentName"
+    },
+    {
+      "COLUMN_NAME": "extras"
+    },
+    {
+      "COLUMN_NAME": "internalNotes"
+    },
+    {
+      "COLUMN_NAME": "bookedAmount"
+    },
+    {
+      "COLUMN_NAME": "aiMode"
+    },
+    {
+      "COLUMN_NAME": "utmSource"
+    },
+    {
+      "COLUMN_NAME": "utmMedium"
+    },
+    {
+      "COLUMN_NAME": "utmCampaign"
+    },
+    {
+      "COLUMN_NAME": "utmContent"
+    },
+    {
+      "COLUMN_NAME": "gclid"
+    },
+    {
+      "COLUMN_NAME": "leadSource"
+    },
+    {
+      "COLUMN_NAME": "reactivationLastPrice"
+    },
+    {
+      "COLUMN_NAME": "reactivationDiscountPct"
+    },
+    {
+      "COLUMN_NAME": "lastAiMessageAt"
+    },
+    {
+      "COLUMN_NAME": "autoFollowUpSent"
+    },
+    {
+      "COLUMN_NAME": "followUpDate"
+    },
+    {
+      "COLUMN_NAME": "followUpMessage"
+    },
+    {
+      "COLUMN_NAME": "followUpSent"
+    },
+    {
+      "COLUMN_NAME": "language"
+    },
+    {
+      "COLUMN_NAME": "preLangStage"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nisBooked\nbookedAt\nbookedByAgentId\nbookedByAgentName\nextras\ninternalNotes\nbookedAmount\naiMode\nutmSource\nutmMedium\nutmCampaign\nutmContent\ngclid\nleadSource\nreactivationLastPrice\nreactivationDiscountPct\nlastAiMessageAt\nautoFollowUpSent\nfollowUpDate\nfollowUpMessage\nfollowUpSent\nlanguage\npreLangStage\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}
