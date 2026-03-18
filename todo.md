@@ -1254,3 +1254,7 @@
 ## Bug: All Calls Page Missing Header
 - [x] Replaced minimal breadcrumb header with full admin nav tab header matching other sub-pages (Leads, Campaigns, Completed Jobs, Always-On, Sync Health, All Calls)
 - [x] All Calls tab highlighted as active; NotificationBell and refresh button added to right side
+
+## Shared AdminHeader Component
+- [x] Created AdminHeader component with full logo row, widget badge, notification bell, agent view button, and all nav tabs
+- [x] Used AdminHeader on AllCalls, SyncHealthPage, AlwaysOnCampaign, CompletedJobs, ReactivationCampaigns

@@ -47,6 +47,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import AdminHeader from "@/components/AdminHeader";
 
 // ─── Status badge helpers ─────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<
@@ -294,7 +295,9 @@ export default function CompletedJobs() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <div className="min-h-screen bg-gray-50">
+      <AdminHeader activeTab="completed-jobs" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -615,6 +618,7 @@ export default function CompletedJobs() {
           <MessageFlowPanel flowType="review" />
         </CardContent>
       </Card>
+    </div>
     </div>
   );
 }

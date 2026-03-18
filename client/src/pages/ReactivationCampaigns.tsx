@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { Button } from "@/components/ui/button";
@@ -766,7 +767,9 @@ export default function ReactivationCampaigns() {
   // ── Main render ───────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50">
+      <AdminHeader activeTab="campaigns" />
+      <div className="max-w-5xl mx-auto px-4 py-8">
       {view === "list" && renderCampaignList()}
       {view === "new" && renderNewCampaign()}
       {view === "detail" && renderCampaignDetail()}
@@ -792,6 +795,7 @@ export default function ReactivationCampaigns() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

@@ -40,7 +40,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
-import NotificationBell from "@/components/NotificationBell";
+import AdminHeader from "@/components/AdminHeader";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -415,52 +415,7 @@ export default function SyncHealthPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header nav — same pattern as other admin pages */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            <a
-              href="/admin"
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-              style={{ borderColor: "transparent", color: "#6b7280" }}
-            >
-              Leads
-            </a>
-            <a
-              href="/admin/campaigns"
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-              style={{ borderColor: "transparent", color: "#6b7280" }}
-            >
-              Campaigns
-            </a>
-            <a
-              href="/admin/completed-jobs"
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-              style={{ borderColor: "transparent", color: "#6b7280" }}
-            >
-              Completed Jobs
-            </a>
-            <a
-              href="/admin/always-on"
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-              style={{ borderColor: "transparent", color: "#6b7280" }}
-            >
-              Always-On
-            </a>
-            <a
-              href="/admin/sync-health"
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-              style={{ borderColor: "#E8603C", color: "#E8603C" }}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              Sync Health
-            </a>
-          </div>
-          <NotificationBell />
-          </div>
-        </div>
-      </header>
+      <AdminHeader activeTab="sync-health" />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Page title */}

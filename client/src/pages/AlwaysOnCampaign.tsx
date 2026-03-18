@@ -39,7 +39,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import NotificationBell from "@/components/NotificationBell";
+import AdminHeader from "@/components/AdminHeader";
 import { Zap,
   Users,
   Send,
@@ -745,33 +745,23 @@ export default function AlwaysOnCampaign() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <a href="/admin" className="text-gray-400 hover:text-gray-600 text-sm">← Admin</a>
-            <span className="text-gray-300">/</span>
-            <div className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-500" />
-              <h1 className="text-lg font-semibold text-gray-900">Always-On Campaign</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <Button
-              onClick={() => manualEnroll.mutate()}
-              disabled={manualEnroll.isPending}
-              className="flex items-center gap-2"
-              style={{ backgroundColor: "#E8603C" }}
-            >
-              {manualEnroll.isPending
-                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Enrolling...</>
-                : <><RefreshCw className="w-4 h-4" /> Enroll Now</>
-              }
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AdminHeader
+        activeTab="always-on"
+        rightExtra={
+          <Button
+            onClick={() => manualEnroll.mutate()}
+            disabled={manualEnroll.isPending}
+            size="sm"
+            className="flex items-center gap-1.5 text-xs"
+            style={{ backgroundColor: "#E8603C" }}
+          >
+            {manualEnroll.isPending
+              ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Enrolling...</>
+              : <><RefreshCw className="w-3.5 h-3.5" /> Enroll Now</>
+            }
+          </Button>
+        }
+      />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         {/* Intro banner */}
