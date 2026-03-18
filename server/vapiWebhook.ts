@@ -45,8 +45,13 @@ export function registerVapiWebhookRoute(app: Express): void {
 
       // ── Tool calls (mid-call) ──────────────────────────────────────────────
       if (msgType === "tool-calls") {
+        // Log the raw payload to diagnose structure differences between Vapi versions
+        console.log("[Vapi] tool-calls raw payload:", JSON.stringify(body).slice(0, 2000));
+
         const payload = body as VapiToolCallMessage;
-        const toolCallList = payload.message.toolCallList ?? [];
+        // Vapi sends toolCallList OR toolCalls depending on the API version — handle both
+        const rawMsg = payload.message as unknown as Record<string, unknown>;
+        const toolCallList = (rawMsg.toolCallList ?? rawMsg.toolCalls ?? []) as VapiToolCallMessage["message"]["toolCallList"];
 
         const results: Array<{ toolCallId: string; result: string }> = [];
 

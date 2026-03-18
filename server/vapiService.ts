@@ -351,7 +351,8 @@ export function getAssistantId(): string | null {
 // ─── Tool call handlers ────────────────────────────────────────────────────────
 
 // Normalize bedroom/bathroom values from bare numbers ("3") to full keys ("3 Bedrooms")
-function normalizeBedroomKey(val: string): string {
+function normalizeBedroomKey(val: string | undefined | null): string {
+  if (!val) return "1 Bedroom"; // safe fallback
   const v = val.trim();
   // Already a valid key
   const validBedrooms = ["Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7 Bedrooms", "7+ Bedrooms"];
@@ -380,7 +381,8 @@ function normalizeBedroomKey(val: string): string {
   return v;
 }
 
-function normalizeBathroomKey(val: string): string {
+function normalizeBathroomKey(val: string | undefined | null): string {
+  if (!val) return "1 Bathroom"; // safe fallback
   const v = val.trim();
   const validBathrooms = ["1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"];
   if (validBathrooms.includes(v)) return v;
@@ -619,8 +621,38 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
 
   console.log(`[Vapi] Call recorded: ${vapiCallId}, duration=${durationSeconds}s, outcome=${outcome}`);
 
+  // If a lead was NOT created mid-call but we have enough structured data, create it now
+  // This is the fallback path when mid-call tool calls failed
+  if (!leadCreated && normalizedPhone && structuredData) {
+    const { callerName, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = structuredData;
+    if (callerName && bedrooms && bathrooms && serviceType) {
+      try {
+        const createResult = await handleCreateLead({
+          name: callerName,
+          phone: normalizedPhone,
+          address: address ?? undefined,
+          bedrooms,
+          bathrooms,
+          serviceType,
+          quotedPrice: quotedPrice ?? 0,
+          preferredDate: preferredDate ?? undefined,
+        });
+        if (createResult.success && createResult.sessionId) {
+          sessionId = createResult.sessionId;
+          // Update the voice call record with the new sessionId
+          await db.update(voiceCalls)
+            .set({ sessionId })
+            .where(eq(voiceCalls.vapiCallId, vapiCallId));
+          console.log(`[Vapi] Lead created from end-of-call-report: sessionId=${sessionId}`);
+        }
+      } catch (err) {
+        console.error("[Vapi] Failed to create lead from end-of-call-report:", err);
+      }
+    }
+  }
+
   // If a lead was created mid-call and we have their phone, send a follow-up SMS
-  if (leadCreated && normalizedPhone && summary) {
+  if ((leadCreated || sessionId) && normalizedPhone && summary) {
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;
