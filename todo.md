@@ -1234,3 +1234,19 @@
 - [x] 8am–5pm any day: Madison offers "a few minutes" callback, still creates card in dashboard with time "today, as soon as possible"
 - [x] Outside 8am–5pm: Madison offers 9am or 10am on the next available morning (same day if before 8am, next day if after 5pm)
 - [x] callbackSchedulingInstructions variable injected into system prompt dynamically at call time
+
+## Team SMS on New Lead
+- [x] Send SMS to both CS (+12028885362) and secondary (+13029816191) when a voice lead is created via createLead tool
+- [x] Form lead team SMS already existed; voice lead was the gap
+
+## STOP / Opt-Out Compliance
+- [x] Detect STOP/UNSUBSCRIBE/CANCEL/QUIT/END reply in incoming SMS webhook before LLM processing
+- [x] Set smsOptOut=1 and stage=DONE in DB when STOP received
+- [x] Send TCPA-compliant acknowledgement: "You have been unsubscribed..."
+- [x] Added smsOptOut column to conversationSessions schema and migrated DB
+- [x] Skip post-call SMS in end-of-call handler when smsOptOut=1
+- [x] Skip mid-call sendSms tool when smsOptOut=1
+
+## Voice Call Notification Bell Fix
+- [x] Root cause: status-update handler was in dev code but never published to production
+- [x] Fix is included in this checkpoint — will activate on next Publish

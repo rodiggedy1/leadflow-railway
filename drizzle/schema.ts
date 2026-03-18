@@ -190,6 +190,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
   preLangStage: varchar("preLangStage", { length: 50 }),
 
+  /**
+   * SMS opt-out flag. Set to 1 when the lead replies STOP/UNSUBSCRIBE.
+   * When true, no outbound SMS should be sent to this number.
+   */
+  smsOptOut: int("smsOptOut").default(0).notNull(),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

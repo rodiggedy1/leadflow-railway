@@ -239,6 +239,13 @@
       "when": 1773852493546,
       "tag": "0033_lovely_phalanx",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1773863887183,
+      "tag": "0034_rich_lila_cheney",
+      "breakpoints": true
     }
   ]
 }

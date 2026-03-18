@@ -684,7 +684,19 @@ export async function handleCreateLead(args: {
     const sessionId = (sessionResult as { insertId: number }).insertId;
 
     console.log(`[Vapi] Lead created: sessionId=${sessionId}, phone=${normalizedPhone}, price=$${quotedPrice}`);
-
+    // ── Team alert SMS ────────────────────────────────────────────────────────
+    const extrasLine = selectedExtras && selectedExtras.length > 0
+      ? `\nAdd-ons: ${selectedExtras.join(", ")}`
+      : "";
+    const alertMsg = `New Voice Lead - Maids in Black\n\nName: ${name}\nPhone: ${normalizedPhone}\nService: ${serviceType}\nSize: ${bedrooms} / ${bathrooms}\nQuote: $${quotedPrice}${extrasLine}`;
+    const CS_SUPPORT_NUMBER = "+12028885362";
+    const SECONDARY_ALERT_NUMBER = "+13029816191";
+    sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
+      console.error("[Vapi] CS alert SMS failed:", err)
+    );
+    sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err =>
+      console.error("[Vapi] Secondary alert SMS failed:", err)
+    );
     return {
       success: true,
       sessionId,
@@ -729,6 +741,21 @@ export async function handleSendSms(args: {
   message: string;
   sessionId?: number;
 }): Promise<{ success: boolean; message: string }> {
+  // Check opt-out before sending
+  if (args.sessionId) {
+    const db = await getDb();
+    if (db) {
+      const [optCheck] = await db
+        .select({ smsOptOut: conversationSessions.smsOptOut })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, args.sessionId))
+        .limit(1);
+      if ((optCheck?.smsOptOut ?? 0) === 1) {
+        console.log(`[Vapi] handleSendSms: skipping — session ${args.sessionId} has opted out.`);
+        return { success: false, message: "Caller has opted out of SMS messages." };
+      }
+    }
+  }
   const result = await sendSms({ to: args.to, content: args.message });
   // If we have a session, record the outbound message in the thread
   if (result.success && args.sessionId) {
@@ -992,7 +1019,20 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // NOTE: summary can be null for short calls or when Vapi analysis doesn't fire.
   // Fall back to transcript so we never silently skip the SMS for FAQ/callback calls.
   const callSummaryForSms = summary ?? (transcript && transcript.length > 20 ? transcript.slice(0, 600) : null);
-  if (normalizedPhone && callSummaryForSms && !leadCreated) {
+  // Check if the caller has opted out of SMS (STOP reply) — skip post-call SMS if so
+  let callerOptedOut = false;
+  if (normalizedPhone && sessionId) {
+    const [optOutCheck] = await db
+      .select({ smsOptOut: conversationSessions.smsOptOut })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.id, sessionId))
+      .limit(1);
+    callerOptedOut = (optOutCheck?.smsOptOut ?? 0) === 1;
+    if (callerOptedOut) {
+      console.log(`[Vapi] Skipping post-call SMS for ${normalizedPhone} — caller has opted out.`);
+    }
+  }
+  if (normalizedPhone && callSummaryForSms && !leadCreated && !callerOptedOut) {
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;

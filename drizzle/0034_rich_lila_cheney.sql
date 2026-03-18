@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` ADD `smsOptOut` int DEFAULT 0 NOT NULL;

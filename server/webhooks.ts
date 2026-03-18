@@ -222,6 +222,22 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
+      // ── STOP / opt-out detection (before LLM, TCPA compliance) ────────────────
+      const isStopReply = /^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(inboundText.trim());
+      if (isStopReply) {
+        console.log(`[Webhook] STOP received from ${fromPhone} — marking smsOptOut=1 and ending conversation.`);
+        await db
+          .update(conversationSessions)
+          .set({ smsOptOut: 1, stage: "DONE", messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, session.id));
+        // Send the required STOP acknowledgement (TCPA compliance)
+        await sendSms({
+          to: fromPhone,
+          content: "You have been unsubscribed from Maids in Black SMS messages. You will receive no further texts. Reply START to re-subscribe.",
+        }).catch(() => {});
+        return;
+      }
+
       // Process the reply through the LLM-first AI engine
       const result = await processLeadReplyV2(inboundText, context);
 
