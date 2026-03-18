@@ -224,7 +224,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
         },
       ],
       temperature: 0.4,
-      maxTokens: 250,
+      maxTokens: 380,
       toolIds,
     },
     voice: {
@@ -242,7 +242,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
     },
     endCallFunctionEnabled: true,
     recordingEnabled: true,
-    silenceTimeoutSeconds: 30,
+    silenceTimeoutSeconds: 50,
     maxDurationSeconds: 600,
     backgroundSound: "off",
     backchannelingEnabled: true,
