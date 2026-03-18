@@ -1143,3 +1143,9 @@
 - [x] Single action row: Mark Booked (primary CTA) + Details + Log Call as ghost buttons
 - [x] Not Interested moved to far-right icon-only button
 - [x] Phone number is a tel: link for click-to-call directly from card
+
+## Agent Drawer — Voice Call Sections — IN PROGRESS
+
+- [ ] Add AI call history section to agent drawer (same as admin)
+- [ ] Add call transcript section to agent drawer
+- [ ] Add voice recording playback to agent drawer

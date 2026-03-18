@@ -48,6 +48,8 @@ import {
   Send,
   Bot,
   BotOff,
+  Mic,
+  PlayCircle,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -498,6 +500,9 @@ function ConversationDrawer({
   // Sync notes when data loads
   const { data: callLogs = [] } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
 
+  // Voice calls (Vapi AI)
+  const { data: voiceCalls = [] } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
+
   // Keep local notes in sync with fetched data
   const loadedNotes = notesData?.notes ?? "";
 
@@ -782,6 +787,73 @@ function ConversationDrawer({
                         <p className="text-gray-500">by {log.agentName}</p>
                         {log.notes && <p className="text-gray-700 mt-0.5">{log.notes}</p>}
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* AI Voice Calls (Vapi) */}
+            {voiceCalls.length > 0 && (
+              <div className="px-4 py-3 border-b space-y-2" style={{ borderColor: "#F0D8D0" }}>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+                  <Mic className="w-3.5 h-3.5" /> AI Voice Calls ({voiceCalls.length})
+                </p>
+                {voiceCalls.map((call) => {
+                  const outcomeColors: Record<string, string> = {
+                    booked: "bg-emerald-100 text-emerald-700",
+                    quote_given: "bg-blue-100 text-blue-700",
+                    faq_answered: "bg-violet-100 text-violet-700",
+                    transferred: "bg-orange-100 text-orange-700",
+                    callback_requested: "bg-yellow-100 text-yellow-700",
+                    no_action: "bg-gray-100 text-gray-500",
+                  };
+                  const colorClass = outcomeColors[call.outcome] ?? "bg-gray-100 text-gray-600";
+                  const durationMin = Math.floor((call.durationSeconds ?? 0) / 60);
+                  const durationSec = (call.durationSeconds ?? 0) % 60;
+                  const durationLabel = call.durationSeconds
+                    ? `${durationMin}:${String(durationSec).padStart(2, "0")}`
+                    : null;
+                  return (
+                    <div key={call.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <Mic className="w-3 h-3 text-gray-400" />
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${colorClass}`}>
+                            {call.outcome.replace(/_/g, " ")}
+                          </span>
+                          {durationLabel && (
+                            <span className="text-[10px] text-gray-400">{durationLabel}</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-gray-400 shrink-0">
+                          {new Date(call.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      {call.summary && (
+                        <p className="text-xs text-gray-600 leading-relaxed">{call.summary}</p>
+                      )}
+                      {call.recordingUrl && (
+                        <a
+                          href={call.recordingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          <PlayCircle className="w-3 h-3" />
+                          Listen to recording
+                        </a>
+                      )}
+                      {call.transcript && (
+                        <details className="mt-1">
+                          <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+                            View transcript
+                          </summary>
+                          <p className="mt-1 text-[10px] text-gray-500 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                            {call.transcript}
+                          </p>
+                        </details>
+                      )}
                     </div>
                   );
                 })}
