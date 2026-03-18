@@ -1,0 +1,34 @@
+{
+  "query": "\nSELECT \n  jobDate,\n  SUM(totalCount) as total,\n  SUM(sentCount) as sent,\n  SUM(positiveCount) as positive,\n  SUM(negativeCount) as negative,\n  SUM(reviewConfirmedCount) as confirmed\nFROM completed_job_batches\nGROUP BY jobDate\nORDER BY jobDate DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT \n  jobDate,\n  SUM(totalCount) as total,\n  SUM(sentCount) as sent,\n  SUM(positiveCount) as positive,\n  SUM(negativeCount) as negative,\n  SUM(reviewConfirmedCount) as confirmed\nFROM completed_job_batches\nGROUP BY jobDate\nORDER BY jobDate DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "jobDate": "2026-03-17",
+      "total": "44371",
+      "sent": "0",
+      "positive": "0",
+      "negative": "0",
+      "confirmed": "0"
+    },
+    {
+      "jobDate": "2026-03-16",
+      "total": "7",
+      "sent": "0",
+      "positive": "0",
+      "negative": "0",
+      "confirmed": "0"
+    },
+    {
+      "jobDate": "2026-03-15",
+      "total": "3",
+      "sent": "0",
+      "positive": "0",
+      "negative": "0",
+      "confirmed": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "jobDate\ttotal\tsent\tpositive\tnegative\tconfirmed\n2026-03-17\t44371\t0\t0\t0\t0\n2026-03-16\t7\t0\t0\t0\t0\n2026-03-15\t3\t0\t0\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 372
+}

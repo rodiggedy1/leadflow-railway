@@ -7,7 +7,7 @@
  *  - Auto-create reactivation contact when customer confirms they left a review
  */
 import { z } from "zod";
-import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql, count } from "drizzle-orm";
 import { router, protectedProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import {
@@ -446,8 +446,122 @@ export const reviewRouter = router({
 
   /** Manually trigger sending pending review SMS */
   sendPendingNow: protectedProcedure.mutation(async () => {
-    const count = await sendPendingReviewSms();
-
-    return { sent: count };
+    const sent = await sendPendingReviewSms();
+    return { sent };
   }),
+
+  /**
+   * analytics — Customer happiness metrics for the Reviews Analytics tab.
+   * Accepts a date range (days back from today) and returns:
+   *  - happinessRate: % of replied customers who were positive/confirmed
+   *  - smsSent, responseRate, googleReviews, unhappyCount
+   *  - trend: weekly happiness rate over the period
+   *  - sentimentBreakdown: counts per status
+   *  - serviceTypeBreakdown: happiness rate per service type
+   */
+  analytics: protectedProcedure
+    .input(z.object({
+      daysBack: z.number().int().min(1).max(365).default(30),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      const since = new Date();
+      since.setDate(since.getDate() - input.daysBack);
+      const sinceStr = since.toISOString().split("T")[0]!;
+
+      // ── All jobs in range ────────────────────────────────────────────────
+      const jobs = await db
+        .select({
+          status: completedJobs.status,
+          serviceType: completedJobs.serviceType,
+          jobDate: completedJobs.jobDate,
+        })
+        .from(completedJobs)
+        .where(
+          and(
+            sql`${completedJobs.jobDate} >= ${sinceStr}`,
+            sql`${completedJobs.status} != 'PENDING'`,
+            sql`${completedJobs.status} != 'OPTED_OUT'`,
+          )
+        );
+
+      // ── Aggregate totals ─────────────────────────────────────────────────
+      const smsSent = jobs.length;
+      const replied = jobs.filter(j =>
+        ["REPLIED_POSITIVE", "REPLIED_NEGATIVE", "REVIEW_CONFIRMED"].includes(j.status)
+      ).length;
+      const positive = jobs.filter(j =>
+        ["REPLIED_POSITIVE", "REVIEW_CONFIRMED"].includes(j.status)
+      ).length;
+      const googleReviews = jobs.filter(j => j.status === "REVIEW_CONFIRMED").length;
+      const unhappy = jobs.filter(j => j.status === "REPLIED_NEGATIVE").length;
+      const noReply = jobs.filter(j => j.status === "SENT").length;
+
+      const responseRate = smsSent > 0 ? Math.round((replied / smsSent) * 100) : 0;
+      const happinessRate = replied > 0 ? Math.round((positive / replied) * 100) : 0;
+
+      // ── Sentiment breakdown ──────────────────────────────────────────────
+      const sentimentBreakdown = [
+        { label: "Positive", count: jobs.filter(j => j.status === "REPLIED_POSITIVE").length, color: "#22c55e" },
+        { label: "Review Confirmed", count: googleReviews, color: "#f59e0b" },
+        { label: "Negative", count: unhappy, color: "#ef4444" },
+        { label: "No Reply", count: noReply, color: "#94a3b8" },
+      ];
+
+      // ── Service type breakdown ───────────────────────────────────────────
+      const serviceMap = new Map<string, { positive: number; replied: number }>();
+      for (const j of jobs) {
+        const svc = j.serviceType ?? "Unknown";
+        const entry = serviceMap.get(svc) ?? { positive: 0, replied: 0 };
+        if (["REPLIED_POSITIVE", "REVIEW_CONFIRMED"].includes(j.status)) entry.positive++;
+        if (["REPLIED_POSITIVE", "REPLIED_NEGATIVE", "REVIEW_CONFIRMED"].includes(j.status)) entry.replied++;
+        serviceMap.set(svc, entry);
+      }
+      const serviceTypeBreakdown = Array.from(serviceMap.entries())
+        .map(([serviceType, s]) => ({
+          serviceType,
+          happinessRate: s.replied > 0 ? Math.round((s.positive / s.replied) * 100) : 0,
+          replied: s.replied,
+        }))
+        .sort((a, b) => b.replied - a.replied);
+
+      // ── Weekly trend ─────────────────────────────────────────────────────
+      // Group jobs by ISO week (YYYY-WW) and compute happiness rate per week
+      const weekMap = new Map<string, { positive: number; replied: number; label: string }>();
+      for (const j of jobs) {
+        if (!j.jobDate) continue;
+        const d = new Date(j.jobDate + "T12:00:00Z");
+        const weekStart = new Date(d);
+        weekStart.setUTCDate(d.getUTCDate() - d.getUTCDay()); // Sunday
+        const weekKey = weekStart.toISOString().split("T")[0]!;
+        const label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+        const entry = weekMap.get(weekKey) ?? { positive: 0, replied: 0, label };
+        if (["REPLIED_POSITIVE", "REVIEW_CONFIRMED"].includes(j.status)) entry.positive++;
+        if (["REPLIED_POSITIVE", "REPLIED_NEGATIVE", "REVIEW_CONFIRMED"].includes(j.status)) entry.replied++;
+        weekMap.set(weekKey, entry);
+      }
+      const trend = Array.from(weekMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([week, w]) => ({
+          week,
+          label: w.label,
+          happinessRate: w.replied > 0 ? Math.round((w.positive / w.replied) * 100) : 0,
+          replied: w.replied,
+        }));
+
+      return {
+        happinessRate,
+        smsSent,
+        responseRate,
+        googleReviews,
+        unhappyCount: unhappy,
+        repliedCount: replied,
+        sentimentBreakdown,
+        serviceTypeBreakdown,
+        trend,
+        daysBack: input.daysBack,
+      };
+    }),
 });

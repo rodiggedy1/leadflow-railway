@@ -1298,3 +1298,11 @@
 - [x] Add /api/cron/review-send endpoint (10 AM ET daily, same CRON_SECRET auth)
 - [x] Include review SMS count in owner notification and sync health log
 - [x] Tests for new timing logic (11 tests, all passing)
+
+## Reviews Analytics Tab
+
+- [x] Rename "Completed Jobs" to "Reviews" in nav header
+- [x] Backend: reviewRouter.analytics procedure — happiness score, trend, sentiment breakdown, service type breakdown
+- [x] Frontend: Analytics tab on Reviews page with hero score, 4 stat cards, trend chart, sentiment breakdown, service type breakdown
+- [x] Date range filter: 7d / 30d / 3m / 6m / all time
+- [x] Tests for analytics procedure (10 tests, all passing — 570 total)

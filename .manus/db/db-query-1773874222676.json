@@ -1,0 +1,14 @@
+{
+  "query": "\nSELECT \n  status,\n  COUNT(*) as count\nFROM completed_jobs\nGROUP BY status\nORDER BY count DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT \n  status,\n  COUNT(*) as count\nFROM completed_jobs\nGROUP BY status\nORDER BY count DESC;\n",
+  "rows": [
+    {
+      "status": "PENDING",
+      "count": "44381"
+    }
+  ],
+  "messages": [],
+  "stdout": "status\tcount\nPENDING\t44381\n",
+  "stderr": "",
+  "execution_time_ms": 463
+}
