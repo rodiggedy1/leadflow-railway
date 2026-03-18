@@ -888,7 +888,11 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // When leadCreated=true, Madison called sendSms mid-call (Step 9 in system prompt),
   // so sending again here would result in a duplicate. Only send for FAQ-only calls,
   // callback requests, or calls where the mid-call tool flow didn't complete.
-  if (normalizedPhone && summary && !leadCreated) {
+  //
+  // NOTE: summary can be null for short calls or when Vapi analysis doesn't fire.
+  // Fall back to transcript so we never silently skip the SMS for FAQ/callback calls.
+  const callSummaryForSms = summary ?? (transcript && transcript.length > 20 ? transcript.slice(0, 600) : null);
+  if (normalizedPhone && callSummaryForSms && !leadCreated) {
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;
@@ -898,7 +902,7 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     const callContext = [
       `Caller name: ${callerName}`,
       `Call outcome: ${outcome}`,
-      `Call summary: ${summary}`,
+      `Call summary: ${callSummaryForSms}`,
       price ? `Quoted price: $${price}` : null,
       structuredData?.serviceType ? `Service type: ${structuredData.serviceType}` : null,
       structuredData?.bedrooms ? `Bedrooms: ${structuredData.bedrooms}` : null,

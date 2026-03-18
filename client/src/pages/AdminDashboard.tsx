@@ -1996,6 +1996,7 @@ export default function AdminDashboard() {
         sourceFilter === "all" ||
         (sourceFilter === "reactivation" && s.leadSource === "reactivation") ||
         (sourceFilter === "widget" && s.leadSource === "widget") ||
+        (sourceFilter === "voice" && s.leadSource === "voice") ||
         (sourceFilter === "always-on" && (s.leadSource?.startsWith("always-on:") ?? false)) ||
         (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
       const q = search.toLowerCase();
@@ -2571,6 +2572,7 @@ export default function AdminDashboard() {
               <SelectItem value="all">All sources</SelectItem>
               <SelectItem value="form">Quote Form</SelectItem>
               <SelectItem value="widget">Widget</SelectItem>
+              <SelectItem value="voice">Voice Call</SelectItem>
               <SelectItem value="reactivation">Campaign</SelectItem>
               <SelectItem value="always-on">Always-On</SelectItem>
             </SelectContent>

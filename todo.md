@@ -1201,3 +1201,9 @@
 ## Pipeline + AI Simulator UX
 - [ ] Remove "New" pipeline column (quotes go out automatically, no need for a New stage)
 - [ ] Move AI simulator to robot icon button in admin header next to widget health indicator
+
+## Post-call SMS null-summary fix
+- [x] Fix: post-call SMS silently skipped when Vapi returns null for analysis.summary (FAQ/callback calls) — now falls back to transcript so SMS always fires for non-booking calls
+
+## Source filter: Voice Call
+- [x] Add "Voice Call" option to source filter dropdown in admin leads list
