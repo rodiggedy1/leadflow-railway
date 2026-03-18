@@ -71,7 +71,22 @@ export function registerVapiWebhookRoute(app: Express): void {
               break;
             }
             case "createLead": {
-              result = await handleCreateLead(args as {
+              // Use caller's phone from the call object as fallback if LLM doesn't pass it
+              const callerPhone = payload.message.call?.customer?.number ?? "";
+              const createArgs = args as {
+                name: string;
+                phone?: string;
+                address?: string;
+                bedrooms: string;
+                bathrooms: string;
+                serviceType: string;
+                quotedPrice: number;
+                preferredDate?: string;
+              };
+              if (!createArgs.phone && callerPhone) {
+                createArgs.phone = callerPhone;
+              }
+              result = await handleCreateLead(createArgs as {
                 name: string;
                 phone: string;
                 address?: string;

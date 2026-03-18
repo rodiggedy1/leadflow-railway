@@ -1018,3 +1018,9 @@
 - [x] Diagnose: getQuote tool call failing during live call
 - [x] Diagnose: lead not created in dashboard after call
 - [x] Fix root cause and verify end-to-end — tools were pointing to dev sandbox URL, fixed to always use quote.maidinblack.com
+
+## Voice Agent Bug Fixes (Round 2)
+
+- [x] Bug: getQuote returning wrong price ($179 for 3bed/2bath standard — should be ~$269)
+- [x] Bug: createLead failing mid-call ("issue with saving my service")
+- [x] Fix: Madison should not hang up on tool failure — gracefully continue conversation

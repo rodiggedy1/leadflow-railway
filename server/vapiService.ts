@@ -73,6 +73,14 @@ Once you have all 6 pieces → call the \`createLead\` tool to save the booking.
 After saving → call the \`sendSms\` tool to text them a confirmation summary.
 Then say: "You're all set! Someone from our team will call you shortly to confirm everything. Is there anything else I can help you with?"
 
+## Tool argument format rules (CRITICAL — follow exactly)
+- For \`getQuote\` bedrooms: use EXACTLY one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7+ Bedrooms"
+- For \`getQuote\` bathrooms: use EXACTLY one of: "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"
+- For \`getQuote\` serviceType: use EXACTLY one of: "Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Office Cleaning"
+- For \`createLead\` phone: you already have the caller's phone number from the call — use it directly. Do NOT ask the caller for their phone number.
+- For \`createLead\` bedrooms/bathrooms/serviceType: use the same exact strings as above.
+- If \`createLead\` returns success=false, say: "I've noted your information and someone from our team will follow up with you shortly." Do NOT say there was a technical issue or offer to transfer.
+
 ## Important rules
 - NEVER make up prices. Always use the \`getQuote\` tool to get the real price.
 - NEVER promise a specific cleaner or exact arrival time — say "we'll confirm the exact time when we call you."
@@ -342,12 +350,73 @@ export function getAssistantId(): string | null {
 
 // ─── Tool call handlers ────────────────────────────────────────────────────────
 
+// Normalize bedroom/bathroom values from bare numbers ("3") to full keys ("3 Bedrooms")
+function normalizeBedroomKey(val: string): string {
+  const v = val.trim();
+  // Already a valid key
+  const validBedrooms = ["Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7 Bedrooms", "7+ Bedrooms"];
+  if (validBedrooms.includes(v)) return v;
+  // Map bare numbers
+  const map: Record<string, string> = {
+    "0": "Studio", "studio": "Studio",
+    "1": "1 Bedroom",
+    "2": "2 Bedrooms",
+    "3": "3 Bedrooms",
+    "4": "4 Bedrooms",
+    "5": "5 Bedrooms",
+    "6": "6 Bedrooms",
+    "7": "7 Bedrooms",
+  };
+  const lower = v.toLowerCase();
+  if (map[lower]) return map[lower];
+  // Extract leading digit
+  const match = v.match(/^(\d+)/);
+  if (match) {
+    const n = parseInt(match[1]);
+    if (n <= 1) return "1 Bedroom";
+    if (n >= 7) return "7+ Bedrooms";
+    return `${n} Bedrooms`;
+  }
+  return v;
+}
+
+function normalizeBathroomKey(val: string): string {
+  const v = val.trim();
+  const validBathrooms = ["1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"];
+  if (validBathrooms.includes(v)) return v;
+  const map: Record<string, string> = {
+    "1": "1 Bathroom",
+    "1.5": "1.5 Bathrooms",
+    "2": "2 Bathrooms",
+    "2.5": "2.5 Bathrooms",
+    "3": "3 Bathrooms",
+    "3.5": "3.5 Bathrooms",
+    "4": "4 Bathrooms",
+  };
+  const lower = v.toLowerCase();
+  if (map[lower]) return map[lower];
+  // Extract leading number
+  const match = v.match(/^(\d+\.?\d*)/);
+  if (match) {
+    const n = parseFloat(match[1]);
+    if (n <= 1) return "1 Bathroom";
+    if (n >= 4) return "4+ Bathrooms";
+    if (n === 1.5) return "1.5 Bathrooms";
+    if (n === 2.5) return "2.5 Bathrooms";
+    if (n === 3.5) return "3.5 Bathrooms";
+    return `${Math.floor(n)} Bathrooms`;
+  }
+  return v;
+}
+
 export function handleGetQuote(args: {
   bedrooms: string;
   bathrooms: string;
   serviceType: string;
 }): { price: number; priceFormatted: string; summary: string } {
-  const { bedrooms, bathrooms, serviceType } = args;
+  const bedrooms = normalizeBedroomKey(args.bedrooms);
+  const bathrooms = normalizeBathroomKey(args.bathrooms);
+  const serviceType = args.serviceType;
 
   // Office cleaning uses sqft-based pricing
   if (serviceType === "Office Cleaning") {
