@@ -91,15 +91,16 @@ function buildSystemPrompt(): string {
   // Callback scheduling instructions injected into the prompt
   const callbackSchedulingInstructions = isBusinessHours
     ? `The current time is within business hours (8am–5pm ET). When a caller asks for a human:
-1. Say: "Someone from our team can call you back in just a few minutes — let me get your number."
-2. Confirm their callback number (see "Confirming the SMS/callback number" section).
-3. Call the scheduleCallback tool with:
+1. Say: "Absolutely — let me connect you with someone right now. One moment."
+2. Call the transferCall tool immediately (no need to confirm their number first — they are staying on the line).
+3. If the transfer fails or nobody answers (the call returns to you), say: "I'm sorry, our team is briefly unavailable right now. Let me schedule a callback for you in just a few minutes instead."
+4. Then confirm their callback number (see "Confirming the SMS/callback number" section) and call scheduleCallback with:
    - phone: the confirmed number
    - preferredCallbackTime: "today, as soon as possible"
    - callerName: their name if you have it
    - notes: brief summary of why they called
-4. After scheduleCallback succeeds, say: "Perfect — someone will call you back shortly. Is there anything else I can help you with?"
-5. If they decline a callback, say: "No problem! You can always reach us at 202-888-5362. Have a great day!"`
+5. After scheduleCallback succeeds, say: "Perfect — someone will call you back shortly. Is there anything else I can help you with?"
+6. If they decline both transfer and callback, say: "No problem! You can always reach us directly at 202-888-5362. Have a great day!"`
     : `The current time is outside business hours. When a caller asks for a human:
 1. Say: "Our team can call you back ${nextMorningLabel} — would 9am or 10am work better for you?"
 2. Listen to their preference (accept any time they give).
@@ -128,7 +129,7 @@ Before sending any SMS, you MUST confirm the number with the caller (see "Confir
 ## Your goals (in priority order)
 1. Answer any question the caller has about Maids in Black (hours, pricing, services, area, etc.)
 2. If the caller is interested in booking, collect the information needed to give them a quote and schedule their cleaning.
-3. If the caller needs a human, schedule a callback for the next business morning.
+3. If the caller needs a human: during business hours, transfer them live to the team. Outside business hours, schedule a callback for the next morning.
 
 ## PRICING — calculate this yourself, do not call any tool for the price
 
@@ -226,7 +227,7 @@ Step 12 — Close: Say "You're all set! Someone from our team will call you shor
 ## Important rules
 - NEVER promise a specific cleaner or exact arrival time — say "we'll confirm the exact time when we call you."
 - If someone asks about something not in your knowledge base, say "I want to make sure I give you accurate info — let me have someone from our team follow up with you on that."
-- NEVER offer to transfer the caller. There is no transfer option. Always offer a callback instead.
+- During business hours (8am–5pm ET), offer to transfer the caller live to the team. Outside business hours, offer a scheduled callback instead.
 - Keep responses short. The caller is on a phone call, not reading an email.
 - Do not say "As an AI" or mention that you're an AI unless directly asked.
 
@@ -329,6 +330,22 @@ function buildToolDefinitions(webhookUrl: string) {
         },
       },
       server: { url: webhookUrl },
+    },
+    {
+      type: "transferCall" as const,
+      function: {
+        name: "transferCall",
+        description:
+          "Transfer the live call to the Maids in Black customer service team at 202-888-5362. Only use this during business hours (8am–5pm ET) when a caller insists on speaking to a human right now.",
+      },
+      destinations: [
+        {
+          type: "number" as const,
+          number: "+12028885362",
+          message: "Please hold for one moment while I connect you with our team.",
+          description: "Maids in Black customer service line",
+        },
+      ],
     },
     {
       type: "function" as const,

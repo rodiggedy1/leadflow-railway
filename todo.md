@@ -1258,3 +1258,9 @@
 ## Shared AdminHeader Component
 - [x] Created AdminHeader component with full logo row, widget badge, notification bell, agent view button, and all nav tabs
 - [x] Used AdminHeader on AllCalls, SyncHealthPage, AlwaysOnCampaign, CompletedJobs, ReactivationCampaigns
+
+## Voice: Live Call Transfer (Warm Handoff)
+- [x] Added transferCall tool to Vapi with destination +12028885362 (Maids in Black CS line)
+- [x] Madison offers live transfer during business hours (8am–5pm ET) when caller asks for a human
+- [x] If transfer fails or nobody answers, Madison falls back to scheduling a callback
+- [x] Outside business hours, goes straight to callback scheduling (9am or 10am next morning)
