@@ -906,7 +906,19 @@ function ConversationDrawer({
             </div>
             <div>
               <h2 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? "Unknown Lead"}</h2>
-              <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+                <a
+                  href={`tel:${session.leadPhone}`}
+                  title={`Call ${formatPhone(session.leadPhone)}`}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors"
+                  style={{ backgroundColor: "#E8603C", color: "white" }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <Phone className="w-2.5 h-2.5" />
+                  Call
+                </a>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">

@@ -1127,3 +1127,10 @@
 - [ ] Preview button in admin dashboard header: "Preview Agent View"
 - [ ] Clicking opens /agent in new tab with admin signed in as agent
 - [ ] Write vitest test for getPreviewToken procedure
+
+## UI Polish Batch — IN PROGRESS
+
+- [ ] Click-to-call phone icon on Kanban card hover (tel: link)
+- [ ] Rename "History" tab/label to "Details" in lead drawer
+- [ ] Notification bell widget for agents (/agent page)
+- [ ] Call button inside lead detail drawer (tel: link with lead phone)

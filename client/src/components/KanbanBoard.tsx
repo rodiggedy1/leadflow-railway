@@ -177,6 +177,7 @@ function LeadCard({
   isDragging?: boolean;
   onClick?: () => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: String(lead.id),
     data: { lead },
@@ -197,6 +198,8 @@ function LeadCard({
         isDragging ? "opacity-40" : "hover:shadow-md hover:border-orange-200"
       }`}
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Drag handle + name row */}
       <div className="flex items-start gap-2">
@@ -220,8 +223,24 @@ function LeadCard({
             )}
           </div>
           <div className="flex items-center gap-1 mt-0.5">
-            <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
-            <span className="text-xs text-gray-500 truncate">{lead.leadPhone}</span>
+            {/* Phone number — on hover shows a clickable call button */}
+            {hovered ? (
+              <a
+                href={`tel:${lead.leadPhone}`}
+                onClick={e => e.stopPropagation()}
+                title={`Call ${lead.leadPhone}`}
+                className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full transition-colors"
+                style={{ backgroundColor: "#E8603C", color: "white" }}
+              >
+                <Phone className="w-3 h-3" />
+                Call
+              </a>
+            ) : (
+              <>
+                <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <span className="text-xs text-gray-500 truncate">{lead.leadPhone}</span>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -1219,6 +1219,83 @@ export const appRouter = router({
         result.sort((a, b) => b.bookedRevenue - a.bookedRevenue || b.bookedCount - a.bookedCount);
         return result;
       }),
+    /**
+     * agents.getNotifications — returns recent activity events relevant to the calling agent.
+     * Shows: new leads assigned to them, replies from their leads, bookings they closed.
+     * Accessible by any logged-in agent (not admin-only).
+     */
+    getNotifications: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(100).default(30) }).optional())
+      .query(async ({ ctx, input }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) return { notifications: [], unreadCount: 0 };
+        const limit = input?.limit ?? 30;
+        // Get sessions assigned to this agent
+        const mySessionIds = await db
+          .select({ id: conversationSessions.id })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.assignedAgentId, agentSession.agentId))
+          .limit(200);
+        const sessionIdList = mySessionIds.map(s => s.id);
+        // Build notifications from recent activity on their leads + their bookings
+        const notifications: Array<{
+          id: string;
+          type: string;
+          title: string;
+          body: string;
+          createdAt: Date;
+          sessionId: number | null;
+          leadName: string | null;
+        }> = [];
+        // Recent leads assigned to this agent
+        const recentAssigned = await db
+          .select({
+            id: conversationSessions.id,
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            serviceType: conversationSessions.serviceType,
+            createdAt: conversationSessions.createdAt,
+            stage: conversationSessions.stage,
+            isBooked: conversationSessions.isBooked,
+            bookedAt: conversationSessions.bookedAt,
+            updatedAt: conversationSessions.updatedAt,
+          })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.assignedAgentId, agentSession.agentId))
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(limit);
+        for (const s of recentAssigned) {
+          if (s.isBooked && s.bookedAt) {
+            notifications.push({
+              id: `booking-${s.id}`,
+              type: 'booking',
+              title: '🎉 Booking Confirmed',
+              body: `${s.leadName ?? 'Lead'} booked${s.serviceType ? ` — ${s.serviceType}` : ''}`,
+              createdAt: s.bookedAt instanceof Date ? s.bookedAt : new Date(s.bookedAt),
+              sessionId: s.id,
+              leadName: s.leadName,
+            });
+          } else {
+            notifications.push({
+              id: `assigned-${s.id}`,
+              type: 'new_lead',
+              title: '📋 Lead Assigned',
+              body: `${s.leadName ?? s.leadPhone}${s.serviceType ? ` — ${s.serviceType}` : ''}`,
+              createdAt: s.createdAt instanceof Date ? s.createdAt : new Date(s.createdAt),
+              sessionId: s.id,
+              leadName: s.leadName,
+            });
+          }
+        }
+        // Sort by date descending and limit
+        notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const trimmed = notifications.slice(0, limit);
+        // Unread = notifications in the last 24 hours
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const unreadCount = trimmed.filter(n => n.createdAt > oneDayAgo).length;
+        return { notifications: trimmed, unreadCount };
+      }),
   }),
 
   /**

@@ -4,6 +4,7 @@
  */
 import { useState, useMemo, useEffect, useRef } from "react";
 import SmsComposeBox from "@/components/SmsComposeBox";
+import AgentNotificationBell from "@/components/AgentNotificationBell";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -896,7 +897,7 @@ function LeadCard({
               className="h-7 px-2.5 text-xs gap-1"
               onClick={() => setShowConversation(true)}
             >
-              <MessageSquare className="w-3 h-3" /> History
+              <MessageSquare className="w-3 h-3" /> Details
             </Button>
 
             {!isBooked && (
@@ -1092,6 +1093,7 @@ export default function AgentDashboard() {
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
             </Button>
+            <AgentNotificationBell />
             <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()} className="gap-1.5 text-gray-500">
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </Button>
