@@ -729,10 +729,57 @@ export interface VapiEndOfCallReport {
   };
 }
 
+// Vapi endedReason values that indicate the caller hung up before Madison answered
+const MISSED_CALL_REASONS = new Set([
+  "customer-did-not-answer",
+  "no-answer",
+  "customer-busy",
+  "voicemail",
+  "customer-ended-call-during-greeting",
+]);
+
 export async function processEndOfCallReport(report: VapiEndOfCallReport): Promise<void> {
   const { call, artifact, analysis } = report.message;
   const callerPhone = call.customer?.number ?? "";
   const vapiCallId = call.id;
+  const endedReason = report.message.endedReason;
+
+  // ── Missed call: send auto-SMS if caller hung up before Madison could help ──
+  if (MISSED_CALL_REASONS.has(endedReason) && callerPhone) {
+    const normalizedMissed = callerPhone.startsWith("+")
+      ? callerPhone
+      : `+1${callerPhone.replace(/\D/g, "")}`;
+    const quoteLink = "https://quote.maidsinblack.com";
+    const missedSms = `Hi! You just called Maids in Black but we couldn't connect you to our assistant. Get an instant quote here: ${quoteLink} — or call us back at 202-888-5362. We'd love to help!`;
+    try {
+      await sendSms({ to: normalizedMissed, content: missedSms });
+      console.log(`[Vapi] Missed call SMS sent to ${normalizedMissed} (reason: ${endedReason})`);
+    } catch (err) {
+      console.error("[Vapi] Failed to send missed call SMS:", err);
+    }
+    // Still save a minimal voice call record so it appears in All Calls
+    const db = await getDb();
+    if (db) {
+      await db.insert(voiceCalls).values({
+        vapiCallId,
+        sessionId: null,
+        callerPhone: normalizedMissed,
+        durationSeconds: 0,
+        transcript: null,
+        summary: "Missed call — caller hung up before connecting.",
+        recordingUrl: null,
+        outcome: "missed",
+        structuredData: null,
+        endedReason,
+        successEvaluation: null,
+      }).catch(() => {}); // ignore duplicate key if already inserted
+    }
+    await notifyOwner({
+      title: `📵 Missed call from ${normalizedMissed}`,
+      content: `Caller hung up before Madison could answer (reason: ${endedReason}). Auto-SMS sent with quote link.`,
+    }).catch(() => {});
+    return;
+  }
 
   const startedAt = call.startedAt ? new Date(call.startedAt).getTime() : Date.now();
   const endedAt = call.endedAt ? new Date(call.endedAt).getTime() : Date.now();

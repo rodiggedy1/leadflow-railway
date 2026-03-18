@@ -1,7 +1,8 @@
 /**
  * AllCalls — /admin/calls
  * Paginated list of every Vapi AI voice call with recording player,
- * transcript expand, call summary, outcome badge, duration, and date filters.
+ * transcript expand, call summary, outcome badge, duration, date filters,
+ * outcome filter, and caller name when available.
  */
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
@@ -15,6 +16,7 @@ import {
   Clock,
   ArrowLeft,
   RefreshCw,
+  Filter,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -25,7 +27,19 @@ const OUTCOME_COLORS: Record<string, string> = {
   transferred: "bg-orange-100 text-orange-700",
   callback_requested: "bg-yellow-100 text-yellow-700",
   no_action: "bg-gray-100 text-gray-500",
+  missed: "bg-red-100 text-red-500",
 };
+
+const OUTCOME_OPTIONS = [
+  { value: "", label: "All outcomes" },
+  { value: "booked", label: "Booked" },
+  { value: "quote_given", label: "Quote given" },
+  { value: "faq_answered", label: "FAQ answered" },
+  { value: "callback_requested", label: "Callback requested" },
+  { value: "transferred", label: "Transferred" },
+  { value: "missed", label: "Missed" },
+  { value: "no_action", label: "No action" },
+];
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -68,6 +82,7 @@ type VoiceCall = {
   id: number;
   vapiCallId: string;
   callerPhone: string;
+  callerName: string | null;
   durationSeconds: number;
   transcript: string | null;
   summary: string | null;
@@ -82,6 +97,8 @@ function CallCard({ call }: { call: VoiceCall }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const durationLabel = call.durationSeconds ? formatDuration(call.durationSeconds) : null;
   const colorClass = OUTCOME_COLORS[call.outcome] ?? "bg-gray-100 text-gray-600";
+  const displayName = call.callerName ?? call.callerPhone;
+  const hasName = !!call.callerName;
 
   return (
     <div className="bg-white rounded-2xl border p-5 space-y-3" style={{ borderColor: "#F0D8D0" }}>
@@ -96,7 +113,10 @@ function CallCard({ call }: { call: VoiceCall }) {
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-gray-900">{call.callerPhone}</span>
+              <span className="font-semibold text-gray-900">{displayName}</span>
+              {hasName && (
+                <span className="text-xs text-gray-400 font-normal">{call.callerPhone}</span>
+              )}
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colorClass}`}>
                 {call.outcome.replace(/_/g, " ")}
               </span>
@@ -150,11 +170,11 @@ function CallCard({ call }: { call: VoiceCall }) {
             href={call.recordingUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm font-medium"
+            className="flex items-center gap-2 text-sm font-medium flex-shrink-0"
             style={{ color: "#E8603C" }}
           >
             <PlayCircle className="w-5 h-5" />
-            Listen to recording
+            Listen
           </a>
           <audio
             src={call.recordingUrl}
@@ -195,6 +215,7 @@ const PAGE_SIZE = 20;
 export default function AllCalls() {
   const [page, setPage] = useState(0);
   const [preset, setPreset] = useState<DatePreset>("30d");
+  const [outcomeFilter, setOutcomeFilter] = useState("");
 
   const dateRange = useMemo(() => getDateRange(preset), [preset]);
 
@@ -202,12 +223,17 @@ export default function AllCalls() {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...dateRange,
+    ...(outcomeFilter ? { outcome: outcomeFilter } : {}),
   });
 
-  // Reset to page 0 when filter changes
   const handlePresetChange = (p: DatePreset) => {
     setPage(0);
     setPreset(p);
+  };
+
+  const handleOutcomeChange = (o: string) => {
+    setPage(0);
+    setOutcomeFilter(o);
   };
 
   const calls = (data as { calls: VoiceCall[]; total: number } | undefined)?.calls ?? [];
@@ -247,22 +273,42 @@ export default function AllCalls() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
-        {/* Date filter presets */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {DATE_PRESETS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => handlePresetChange(p.value)}
-              className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
-              style={
-                preset === p.value
-                  ? { backgroundColor: "#E8603C", color: "#fff" }
-                  : { backgroundColor: "#fff", color: "#6b7280", border: "1px solid #F0D8D0" }
-              }
+        {/* Filters row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Date presets */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {DATE_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => handlePresetChange(p.value)}
+                className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+                style={
+                  preset === p.value
+                    ? { backgroundColor: "#E8603C", color: "#fff" }
+                    : { backgroundColor: "#fff", color: "#6b7280", border: "1px solid #F0D8D0" }
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Outcome filter */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <Filter className="w-3.5 h-3.5 text-gray-400" />
+            <select
+              value={outcomeFilter}
+              onChange={(e) => handleOutcomeChange(e.target.value)}
+              className="text-sm border rounded-full px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1"
+              style={{ borderColor: "#F0D8D0" }}
             >
-              {p.label}
-            </button>
-          ))}
+              {OUTCOME_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {isLoading ? (
@@ -275,9 +321,9 @@ export default function AllCalls() {
             style={{ borderColor: "#F0D8D0" }}
           >
             <Mic className="w-12 h-12 mx-auto mb-3 text-gray-200" />
-            <p className="text-gray-500 font-medium">No calls in this period</p>
+            <p className="text-gray-500 font-medium">No calls match these filters</p>
             <p className="text-sm text-gray-400 mt-1">
-              Try a wider date range or check back after Madison takes some calls.
+              Try a wider date range or a different outcome filter.
             </p>
           </div>
         ) : (

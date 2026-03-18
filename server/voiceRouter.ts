@@ -9,10 +9,10 @@
  */
 
 import { z } from "zod";
-import { desc, eq, gte, lte, and, sql } from "drizzle-orm";
+import { desc, eq, gte, lte, and, sql, inArray } from "drizzle-orm";
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { voiceCalls, callbackTasks } from "../drizzle/schema";
+import { voiceCalls, callbackTasks, conversationSessions } from "../drizzle/schema";
 import { getAssistantId } from "./vapiService";
 
 export const voiceRouter = router({
@@ -28,6 +28,8 @@ export const voiceRouter = router({
         dateFrom: z.string().optional(),
         /** ISO date string — only return calls on or before this date */
         dateTo: z.string().optional(),
+        /** Filter by call outcome, e.g. 'booked', 'callback_requested' */
+        outcome: z.string().optional(),
       })
     )
     .query(async ({ input }) => {
@@ -37,16 +39,33 @@ export const voiceRouter = router({
       const conditions = [];
       if (input.dateFrom) conditions.push(gte(voiceCalls.createdAt, new Date(input.dateFrom)));
       if (input.dateTo) {
-        // Include the full day by setting time to end of day
         const endOfDay = new Date(input.dateTo);
         endOfDay.setHours(23, 59, 59, 999);
         conditions.push(lte(voiceCalls.createdAt, endOfDay));
       }
+      if (input.outcome) conditions.push(eq(voiceCalls.outcome, input.outcome));
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      const calls = await db
-        .select()
+      const rows = await db
+        .select({
+          id: voiceCalls.id,
+          vapiCallId: voiceCalls.vapiCallId,
+          sessionId: voiceCalls.sessionId,
+          callerPhone: voiceCalls.callerPhone,
+          durationSeconds: voiceCalls.durationSeconds,
+          transcript: voiceCalls.transcript,
+          summary: voiceCalls.summary,
+          recordingUrl: voiceCalls.recordingUrl,
+          outcome: voiceCalls.outcome,
+          structuredData: voiceCalls.structuredData,
+          endedReason: voiceCalls.endedReason,
+          successEvaluation: voiceCalls.successEvaluation,
+          createdAt: voiceCalls.createdAt,
+          // Caller name from linked conversation session
+          callerName: conversationSessions.leadName,
+        })
         .from(voiceCalls)
+        .leftJoin(conversationSessions, eq(voiceCalls.sessionId, conversationSessions.id))
         .where(whereClause)
         .orderBy(desc(voiceCalls.createdAt))
         .limit(input.limit)
@@ -57,7 +76,7 @@ export const voiceRouter = router({
         .from(voiceCalls)
         .where(whereClause);
 
-      return { calls, total: Number(count) };
+      return { calls: rows, total: Number(count) };
     }),
 
   /**

@@ -1176,3 +1176,9 @@
 
 - [x] Fix callback cards: voiceCallId not being saved — link callbackTasks to voice_calls at end-of-call
 - [x] Add date filters to All Calls page (Today / Last 7 / Last 30 / All)
+
+## All Calls: Outcome Filter + Caller Name + Missed Call SMS
+
+- [x] All Calls: add outcome filter dropdown (booked, callback_requested, faq_answered, etc.)
+- [x] All Calls: join conversationSessions to show caller name when available
+- [x] Missed call auto-SMS: detect no-answer end reason, send "Sorry we missed you" SMS with quote link
