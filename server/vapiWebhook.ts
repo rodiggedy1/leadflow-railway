@@ -22,6 +22,7 @@ import {
   processEndOfCallReport,
   type VapiEndOfCallReport,
 } from "./vapiService";
+import { notifyOwner } from "./_core/notification";
 
 // Vapi native format
 interface VapiToolCallNative {
@@ -203,7 +204,22 @@ export function registerVapiWebhookRoute(app: Express): void {
         return res.json({ received: true });
       }
 
-      // ── Other message types (status-update, hang, speech-update, etc.) ─────
+      // ── Status update: fire notification bell when call connects ──────────
+      if (msgType === "status-update") {
+        const status = message?.status as string | undefined;
+        if (status === "in-progress") {
+          const callObj = message?.call as Record<string, unknown> | undefined;
+          const callerPhone = (callObj?.customer as Record<string, unknown> | undefined)?.number as string | undefined ?? "";
+          const displayPhone = callerPhone || "unknown number";
+          notifyOwner({
+            title: `📞 Incoming call from ${displayPhone}`,
+            content: `Madison is now speaking with a caller at ${displayPhone}.`,
+          }).catch(() => {});
+        }
+        return res.json({ received: true });
+      }
+
+      // ── Other message types (hang, speech-update, etc.) ──────────────────────
       return res.json({ received: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

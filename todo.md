@@ -1219,3 +1219,6 @@
 - [x] Madison always confirms the SMS/callback number before any tool call — reads back {{customer.number}} digit by digit if available and asks caller to confirm, or asks for the number directly if blank
 - [x] FAQ close flow added: Madison confirms number, sends summary SMS, then closes the call
 - [x] Callback flow updated: confirm number before scheduling callback
+
+## Voice: New Call Notification Bell
+- [x] Fire notifyOwner when call status becomes in-progress (status-update webhook) — immediate bell when call connects, showing caller phone number
