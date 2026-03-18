@@ -14,11 +14,14 @@ import {
   ChevronUp,
   Phone,
   Clock,
-  ArrowLeft,
   RefreshCw,
   Filter,
+  Send,
+  CheckCircle2,
+  Zap,
+  Activity,
 } from "lucide-react";
-import { Link } from "wouter";
+import NotificationBell from "@/components/NotificationBell";
 
 const OUTCOME_COLORS: Record<string, string> = {
   booked: "bg-emerald-100 text-emerald-700",
@@ -242,37 +245,94 @@ export default function AllCalls() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#FDF6F3" }}>
-      {/* Header */}
-      <div
-        className="sticky top-0 z-10 bg-white border-b px-4 py-3 flex items-center gap-3"
-        style={{ borderColor: "#F0D8D0" }}
-      >
-        <Link href="/admin">
-          <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
-            <ArrowLeft className="w-4 h-4" />
-            Admin
-          </button>
-        </Link>
-        <span className="text-gray-300">/</span>
-        <div className="flex items-center gap-2">
-          <Mic className="w-4 h-4" style={{ color: "#E8603C" }} />
-          <span className="font-semibold text-gray-900">All Voice Calls</span>
-          {total > 0 && (
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-              {total} {total === 1 ? "call" : "calls"}
-            </span>
-          )}
+      {/* Full admin nav header — matches other admin sub-pages */}
+      <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#F0D8D0" }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              <a
+                href="/admin"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                style={{ borderColor: "transparent", color: "#6b7280" }}
+              >
+                <Phone className="w-3.5 h-3.5" />
+                Leads
+              </a>
+              <a
+                href="/admin/campaigns"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                style={{ borderColor: "transparent", color: "#6b7280" }}
+              >
+                <Send className="w-3.5 h-3.5" />
+                Campaigns
+              </a>
+              <a
+                href="/admin/completed-jobs"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                style={{ borderColor: "transparent", color: "#6b7280" }}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Completed Jobs
+              </a>
+              <a
+                href="/admin/always-on"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                style={{ borderColor: "transparent", color: "#6b7280" }}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Always-On
+              </a>
+              <a
+                href="/admin/sync-health"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                style={{ borderColor: "transparent", color: "#6b7280" }}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                Sync Health
+              </a>
+              <a
+                href="/admin/calls"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                style={{ borderColor: "#E8603C", color: "#E8603C" }}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                All Calls
+                {total > 0 && (
+                  <span className="ml-1 text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-semibold">
+                    {total}
+                  </span>
+                )}
+              </a>
+            </div>
+            <div className="flex items-center gap-2 pl-4">
+              <button
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+              </button>
+              <NotificationBell />
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="ml-auto text-gray-400 hover:text-gray-600 disabled:opacity-40"
-        >
-          <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
-        </button>
-      </div>
+      </header>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        {/* Page title */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <Mic className="w-5 h-5" style={{ color: "#E8603C" }} />
+              All Voice Calls
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Every AI-handled call — recordings, transcripts, outcomes, and summaries.
+            </p>
+          </div>
+        </div>
+
         {/* Filters row */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* Date presets */}

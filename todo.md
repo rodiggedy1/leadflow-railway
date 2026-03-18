@@ -1250,3 +1250,7 @@
 ## Voice Call Notification Bell Fix
 - [x] Root cause: status-update handler was in dev code but never published to production
 - [x] Fix is included in this checkpoint — will activate on next Publish
+
+## Bug: All Calls Page Missing Header
+- [x] Replaced minimal breadcrumb header with full admin nav tab header matching other sub-pages (Leads, Campaigns, Completed Jobs, Always-On, Sync Health, All Calls)
+- [x] All Calls tab highlighted as active; NotificationBell and refresh button added to right side
