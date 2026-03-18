@@ -46,13 +46,19 @@ When FIRST asking about availability (transitioning from QUOTE_SENT or WIDGET_SI
 
 Do NOT offer specific days upfront. Let them tell you when they want it first.
 
-- If they give a specific day or timeframe → confirm it as selectedSlot, move to SLOT_CHOICE.
-- If they say "as soon as possible" or "this week" → tell them the next available slots (see AVAILABLE SLOTS section above) and ask which works.
+HONOURING THE LEAD'S PREFERENCE (CRITICAL):
+- If the lead's reply already contains a specific day, date, or timeframe (e.g. "tomorrow", "this afternoon", "Thursday", "next Monday", "this week") → resolve it to the actual calendar date using TODAY'S DATE above, set it as selectedSlot, and move to SLOT_CHOICE. Do NOT offer the available slots — the lead already told you when they want it.
+- ONLY offer the available slots (Thursday/Friday etc.) if the lead says something vague like "as soon as possible", "whenever", "this week" with no specific day, or asks you to pick.
+- If they say "tomorrow morning" → resolve "tomorrow" using TODAY'S DATE, set selectedSlot to that date + ", morning" (e.g. "Wednesday, March 19, morning"), move to SLOT_CHOICE.
+  - If they say "this afternoon" → selectedSlot = today's date + ", afternoon", move to SLOT_CHOICE.
+
+- If they say "as soon as possible" or "this week" with no specific day → tell them the next available slots and ask which works.
 - If they ask about recurring pricing → answer with the full recurring price breakdown (weekly/biweekly/monthly), then re-ask when they want to schedule.
 - If they ask any other question → answer it, then re-ask when they want to schedule. Stay on AVAILABILITY.
 - If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
 - If they opt out → acknowledge politely, move to DONE.
 CRITICAL: Do NOT advance to SLOT_CHOICE unless selectedSlot is set.
+CRITICAL: NEVER ignore a specific day/time the lead already stated. Honour their preference immediately.
 `.trim(),
 
   SLOT_CHOICE: `
@@ -140,6 +146,16 @@ export function buildSystemPrompt(ctx: ConversationContext): string {
   const availabilityLine = formatAvailabilityQuestion(slots);
   const slotChoiceLine = formatSlotChoiceQuestion(slots);
 
+  // Inject today's date so the LLM can resolve relative dates like "tomorrow" or "this afternoon"
+  const todayET = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const tomorrowSlot = slots[0]; // first available slot = tomorrow (or next business day)
+
   return `You are Madison, the AI booking assistant for Maids in Black — a professional home cleaning service in the Washington DC Metro Area (DC, MD, VA).
 
 ## YOUR ROLE
@@ -173,7 +189,14 @@ You help convert leads into booked cleaning appointments via SMS. You are warm, 
 ${ctx.extras && ctx.extras.length > 0 ? `- Add-ons selected: ${ctx.extras.join(", ")}` : ""}
 ${ctx.lastPrice ? `- Last service price: $${ctx.lastPrice} (reactivation lead)` : ""}
 
-## AVAILABLE SLOTS (for reference when discussing scheduling)
+## TODAY'S DATE
+Today is ${todayET} (Eastern Time). Use this to resolve relative dates:
+- "tomorrow" = ${tomorrowSlot?.label ?? slots[0]?.label ?? "the next available day"}
+- "this afternoon" = today (${todayET.split(",")[0]})
+- "next week" = approximately 7 days from today
+Always use the actual calendar date when confirming a slot (e.g. "Wednesday, March 19" not just "tomorrow").
+
+## AVAILABLE SLOTS (only offer these if the lead has NOT already stated a preference)
 - Availability question to use: "${availabilityLine}"
 - Slot choice question to use: "${slotChoiceLine}"
 

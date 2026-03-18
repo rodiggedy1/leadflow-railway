@@ -1193,3 +1193,7 @@
 
 ## Manual send double-message fix
 - [x] Fix double manual send: added isPending guard to handleSend in AdminDashboard and AgentDashboard — prevents second mutate() call if button clicked while first request is in flight
+
+## AI Conversation: Slot preference bug
+- [x] Fix: AI ignores client's stated date preference and offers hardcoded Thursday/Friday slots instead
+- [x] Fix: "tomorrow morning preferred" mapped to wrong day (Friday instead of Thursday)
