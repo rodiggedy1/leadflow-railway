@@ -1910,7 +1910,8 @@ export default function AdminDashboard() {
   const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
 
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
-  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "simulator" | "leaderboard" | "callbacks">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "leaderboard" | "callbacks">("leads");
+  const [showSimulator, setShowSimulator] = useState(false);
   const [showCompletedCallbacks, setShowCompletedCallbacks] = useState(false);
   const { data: callbackList, refetch: refetchCallbacks } = trpc.voice.listCallbacks.useQuery(
     { includeCompleted: showCompletedCallbacks },
@@ -2056,6 +2057,18 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             {/* Widget health indicator */}
             <WidgetHealthBadge />
+            {/* AI Simulator shortcut */}
+            <button
+              onClick={() => setShowSimulator(v => !v)}
+              title="AI Simulator"
+              className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-colors ${
+                showSimulator
+                  ? 'bg-orange-100 text-orange-600 border-orange-300'
+                  : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <Bot className="w-4 h-4" />
+            </button>
             {unhandledCount > 0 && activeTab === "leads" && (
               <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-xs font-semibold px-3 py-1.5 rounded-full">
                 ⚠ {unhandledCount} need{unhandledCount === 1 ? "s" : ""} review
@@ -2073,7 +2086,7 @@ export default function AdminDashboard() {
         </div>
         {/* Tab navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#F0D8D0" }}>
-           {(["leads", "pipeline", "agents", "leaderboard", "callbacks", "simulator"] as const).map(tab => (
+           {(["leads", "pipeline", "agents", "leaderboard", "callbacks"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2082,8 +2095,8 @@ export default function AdminDashboard() {
                 ? { borderColor: "#E8603C", color: "#E8603C" }
                 : { borderColor: "transparent", color: "#6b7280" }}
             >
-              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : tab === "callbacks" ? <PhoneIncoming className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-              {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : tab === "callbacks" ? "Callbacks" : "AI Simulator"}
+              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <PhoneIncoming className="w-3.5 h-3.5" />}
+              {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "Callbacks"}
               {tab === "callbacks" && (callbackList?.filter(c => !c.completed).length ?? 0) > 0 && (
                 <span className="ml-1 bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
                   {callbackList?.filter(c => !c.completed).length}
@@ -2137,11 +2150,20 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === "agents" && <AgentManagement />}
         {activeTab === "leaderboard" && <AgentLeaderboard dateRange={dateRange} />}
-        {activeTab === "simulator" && (
+        {showSimulator && (
           <div className="py-4">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">AI Simulator</h2>
-              <p className="text-sm text-gray-500 mt-0.5">Test Madison's responses in real time. Configure the lead context on the left, then type as if you were the lead.</p>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">AI Simulator</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Test Madison's responses in real time. Configure the lead context on the left, then type as if you were the lead.</p>
+              </div>
+              <button
+                onClick={() => setShowSimulator(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                title="Close simulator"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <SmsSimulator />
           </div>

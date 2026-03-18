@@ -1,7 +1,7 @@
 /**
  * KanbanBoard — Pipeline view for the admin dashboard.
  *
- * 6 columns: New → Quote Sent → Follow Up → Availability → Booked → Lost
+ * 5 columns: Quote Sent → Follow Up → Availability → Booked → Lost
  * Each column shows lead count + total pipeline value.
  * Cards are draggable between columns; dropping fires adminUpdateStage.
  */
@@ -55,20 +55,10 @@ type KanbanColumn = {
 
 const KANBAN_COLUMNS: KanbanColumn[] = [
   {
-    id: "new",
-    label: "New",
-    // Fresh leads that haven't received a quote yet
-    stages: ["WIDGET_SIZING", "TIME_PREF"],
-    targetStage: "WIDGET_SIZING",
-    accent: "border-t-slate-400",
-    headerBg: "bg-slate-50",
-    countBg: "bg-slate-200 text-slate-700",
-  },
-  {
     id: "quote_sent",
     label: "Quote Sent",
-    // Quote has been sent, waiting on response
-    stages: ["QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE"],
+    // All leads from initial sizing through active quote conversation
+    stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE"],
     targetStage: "QUOTE_SENT",
     accent: "border-t-blue-400",
     headerBg: "bg-blue-50",

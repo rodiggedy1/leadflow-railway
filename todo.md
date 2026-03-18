@@ -1197,3 +1197,7 @@
 ## AI Conversation: Slot preference bug
 - [x] Fix: AI ignores client's stated date preference and offers hardcoded Thursday/Friday slots instead
 - [x] Fix: "tomorrow morning preferred" mapped to wrong day (Friday instead of Thursday)
+
+## Pipeline + AI Simulator UX
+- [ ] Remove "New" pipeline column (quotes go out automatically, no need for a New stage)
+- [ ] Move AI simulator to robot icon button in admin header next to widget health indicator
