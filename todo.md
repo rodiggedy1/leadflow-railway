@@ -1024,3 +1024,10 @@
 - [x] Bug: getQuote returning wrong price ($179 for 3bed/2bath standard — should be ~$269)
 - [x] Bug: createLead failing mid-call ("issue with saving my service")
 - [x] Fix: Madison should not hang up on tool failure — gracefully continue conversation
+
+## Critical Voice Agent Fix — Webhook Payload Format
+
+- [x] Root cause identified: Vapi sends toolCallList items as { name, parameters } (native format), NOT { function: { name, arguments } } (OpenAI format) — our handler was reading the wrong fields, causing all args to be undefined
+- [x] Fix: vapiWebhook.ts now handles BOTH formats via parseToolCall() — { name, parameters } and { function: { name, arguments } }
+- [x] Verified: getQuote returns $259 for 3bed/2bath in both formats
+- [x] Verified: createLead successfully inserts to DB with all fields populated
