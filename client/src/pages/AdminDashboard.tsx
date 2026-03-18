@@ -495,8 +495,9 @@ function StageBadge({ stage }: { stage: string }) {
   };
   return (
     <span
-      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+      className="inline-flex items-center px-2 py-0.5 rounded-full font-medium border whitespace-nowrap"
       style={{
+        fontSize: '11px',
         backgroundColor: cfg.bgColor,
         borderColor: cfg.borderColor,
         color: cfg.textColor,
@@ -2350,7 +2351,7 @@ export default function AdminDashboard() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map(session => {
-                    const isBooked = session.isBooked === 1;
+                    const isBooked = Number(session.isBooked) === 1;
                     const rowBg = isBooked ? "#f0fdf4" : "";
                     const accentColor = isBooked ? "#16a34a" : "transparent";
                     return (
@@ -2363,7 +2364,7 @@ export default function AdminDashboard() {
                       onMouseLeave={e => { e.currentTarget.style.backgroundColor = rowBg; }}
                     >
                       {/* Lead — name + phone */}
-                      <TableCell className="py-3 pl-4">
+                      <TableCell className="py-2 pl-4">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-sm font-semibold text-gray-900 leading-tight">
                             {session.leadName ?? <span className="text-gray-300 font-normal">Unknown</span>}
@@ -2375,7 +2376,7 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       {/* Source */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-2">
                         <div className="flex flex-col gap-1">
                           {getSourceBadge(session.leadSource)}
                           {getLanguageBadge(session.language)}
@@ -2383,7 +2384,7 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       {/* Service — type + size */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-2">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-sm text-gray-800 leading-tight">
                             {session.serviceType ?? <span className="text-gray-300">—</span>}
@@ -2393,7 +2394,7 @@ export default function AdminDashboard() {
                               {session.serviceType === "Office Cleaning"
                                 ? (session.bedrooms ? `${session.bedrooms} sqft` : null)
                                 : (session.bedrooms && session.bathrooms
-                                    ? `${session.bedrooms} bd · ${session.bathrooms} ba`
+                                    ? `${session.bedrooms.replace(/ Bedrooms?/i, '')} bd · ${session.bathrooms.replace(/ Bathrooms?/i, '')} ba`
                                     : null)
                               }
                             </span>
@@ -2402,7 +2403,7 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       {/* Quote */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-2">
                         {session.quotedPrice ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
                           return (
@@ -2416,12 +2417,12 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       {/* Stage */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-2">
                         <StageBadge stage={session.stage} />
                       </TableCell>
 
                       {/* Agent — avatar initial + name */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-2">
                         {session.assignedAgentName ? (
                           <div className="flex items-center gap-1.5">
                             <span
@@ -2438,9 +2439,9 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       {/* Last Activity — message preview primary, call note secondary */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-2">
                         {session.lastActivityText ? (
-                          <div className="flex items-start gap-1.5 max-w-[200px]">
+                          <div className="flex items-start gap-1.5 max-w-[180px]">
                             {session.lastActivityType === "call" ? (
                               <PhoneCall className="w-3 h-3 text-blue-400 shrink-0 mt-0.5" />
                             ) : (
@@ -2454,11 +2455,15 @@ export default function AdminDashboard() {
                       </TableCell>
 
                       {/* When — single relative timestamp */}
-                      <TableCell className="py-3 pr-4">
+                      <TableCell className="py-2 pr-4">
                         <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap">
-                          {session.lastActivityAt
-                            ? timeAgo(session.lastActivityAt)
-                            : timeAgo(session.updatedAt)}
+                          {(() => {
+                            // Prefer lastActivityAt but cap at session.updatedAt to avoid stale timestamps
+                            const actAt = session.lastActivityAt ? new Date(session.lastActivityAt) : null;
+                            const updAt = session.updatedAt ? new Date(session.updatedAt) : null;
+                            const display = actAt && updAt && actAt > updAt ? updAt : (actAt ?? updAt);
+                            return display ? timeAgo(display) : '—';
+                          })()}
                         </span>
                       </TableCell>
 

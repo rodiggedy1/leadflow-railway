@@ -1094,3 +1094,12 @@
 - [x] Agent column: avatar initial circle (coral) + name — compact and professional
 - [x] Human-readable stage labels throughout (WIDGET_SIZING added to STAGE_CONFIG)
 - [x] Consistent type hierarchy: name bold text-sm, phone text-xs gray-400, service text-sm + size secondary
+
+## Design: Table polish pass
+
+- [x] Fix isBooked green tint: MySQL returns integer as string "1" — fixed with Number(session.isBooked) === 1
+- [x] Fix "3 Bedrooms bd · 2 Bathrooms ba" → "3 bd · 2 ba" using regex replace
+- [x] Tighten row height: py-3 → py-2 on all cells for denser CRM-like feel
+- [x] Fix "365d ago" timestamp: cap lastActivityAt at session.updatedAt to prevent stale message timestamps from showing future/past dates
+- [x] Stage badges: reduced to 11px font, tighter px-2 padding
+- [x] Last Activity column: max-w-[180px] for tighter truncation
