@@ -141,7 +141,7 @@ export const voiceRouter = router({
   }),
 
   /**
-   * List pending (incomplete) callback tasks, newest first.
+   * List callback tasks, newest first, joined with their linked voice call.
    */
   listCallbacks: adminAgentProcedure
     .input(z.object({ includeCompleted: z.boolean().default(false) }))
@@ -149,8 +149,30 @@ export const voiceRouter = router({
       const db = await getDb();
       if (!db) return [];
       const rows = await db
-        .select()
+        .select({
+          // callback task fields
+          id: callbackTasks.id,
+          voiceCallId: callbackTasks.voiceCallId,
+          sessionId: callbackTasks.sessionId,
+          callerPhone: callbackTasks.callerPhone,
+          callerName: callbackTasks.callerName,
+          preferredCallbackTime: callbackTasks.preferredCallbackTime,
+          notes: callbackTasks.notes,
+          completed: callbackTasks.completed,
+          completedByAgentName: callbackTasks.completedByAgentName,
+          completedAt: callbackTasks.completedAt,
+          createdAt: callbackTasks.createdAt,
+          // linked voice call fields
+          callRecordingUrl: voiceCalls.recordingUrl,
+          callTranscript: voiceCalls.transcript,
+          callSummary: voiceCalls.summary,
+          callDurationSeconds: voiceCalls.durationSeconds,
+          callOutcome: voiceCalls.outcome,
+          callEndedReason: voiceCalls.endedReason,
+          vapiCallId: voiceCalls.vapiCallId,
+        })
         .from(callbackTasks)
+        .leftJoin(voiceCalls, eq(callbackTasks.voiceCallId, voiceCalls.id))
         .where(input.includeCompleted ? undefined : eq(callbackTasks.completed, 0))
         .orderBy(desc(callbackTasks.createdAt));
       return rows;

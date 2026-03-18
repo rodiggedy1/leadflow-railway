@@ -2123,6 +2123,14 @@ export default function AdminDashboard() {
             <Activity className="w-3.5 h-3.5" />
             Sync Health
           </a>
+          <a
+            href="/admin/calls"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+            style={{ borderColor: "transparent", color: "#6b7280" }}
+          >
+            <Mic className="w-3.5 h-3.5" />
+            All Calls
+          </a>
         </div>
       </header>
 
@@ -2178,70 +2186,133 @@ export default function AdminDashboard() {
                 <p className="text-sm text-gray-400 mt-1">When callers request a callback, they'll appear here.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {callbackList.map(cb => (
-                  <div
-                    key={cb.id}
-                    className={`bg-white rounded-xl border p-4 flex items-start gap-4 ${
-                      cb.completed ? "opacity-60" : ""
-                    }`}
-                    style={{ borderColor: cb.completed ? "#e5e7eb" : "#F0D8D0" }}
-                  >
+              <div className="space-y-4">
+                {callbackList.map(cb => {
+                  const durationLabel = cb.callDurationSeconds
+                    ? `${Math.floor(cb.callDurationSeconds / 60)}:${String(cb.callDurationSeconds % 60).padStart(2, "0")}`
+                    : null;
+                  const outcomeColors: Record<string, string> = {
+                    booked: "bg-emerald-100 text-emerald-700",
+                    quote_given: "bg-blue-100 text-blue-700",
+                    faq_answered: "bg-violet-100 text-violet-700",
+                    callback_requested: "bg-yellow-100 text-yellow-700",
+                    no_action: "bg-gray-100 text-gray-500",
+                  };
+                  return (
                     <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ backgroundColor: cb.completed ? "#f3f4f6" : "#FFF0EB" }}
+                      key={cb.id}
+                      className={`bg-white rounded-2xl border p-5 space-y-3 ${
+                        cb.completed ? "opacity-60" : ""
+                      }`}
+                      style={{ borderColor: cb.completed ? "#e5e7eb" : "#F0D8D0" }}
                     >
-                      <PhoneIncoming
-                        className="w-5 h-5"
-                        style={{ color: cb.completed ? "#9ca3af" : "#E8603C" }}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-gray-900">
-                          {cb.callerName ?? cb.callerPhone}
-                        </span>
-                        {cb.callerName && (
-                          <span className="text-sm text-gray-400">{cb.callerPhone}</span>
-                        )}
-                        {cb.completed && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                            Completed by {cb.completedByAgentName}
-                          </span>
+                      {/* Header */}
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                          style={{ backgroundColor: cb.completed ? "#f3f4f6" : "#FFF0EB" }}
+                        >
+                          <PhoneIncoming
+                            className="w-5 h-5"
+                            style={{ color: cb.completed ? "#9ca3af" : "#E8603C" }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-gray-900">
+                              {cb.callerName ?? cb.callerPhone}
+                            </span>
+                            {cb.callerName && (
+                              <span className="text-sm text-gray-400">{cb.callerPhone}</span>
+                            )}
+                            {cb.callOutcome && (
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                outcomeColors[cb.callOutcome] ?? "bg-gray-100 text-gray-600"
+                              }`}>
+                                {cb.callOutcome.replace(/_/g, " ")}
+                              </span>
+                            )}
+                            {cb.completed && (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                                Done by {cb.completedByAgentName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Preferred: <strong className="text-gray-600 ml-0.5">{cb.preferredCallbackTime}</strong>
+                            </span>
+                            {durationLabel && (
+                              <span className="flex items-center gap-1">
+                                <Mic className="w-3 h-3" />
+                                {durationLabel} call
+                              </span>
+                            )}
+                            <span>{new Date(cb.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                          </div>
+                        </div>
+                        {!cb.completed && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-shrink-0 gap-1.5 text-xs"
+                            style={{ borderColor: "#E8603C", color: "#E8603C" }}
+                            disabled={completeCallbackMutation.isPending}
+                            onClick={() => {
+                              const agentName = (window as unknown as { __agentName?: string }).__agentName ?? "Admin";
+                              completeCallbackMutation.mutate({ id: cb.id, completedByAgentName: agentName });
+                            }}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Mark Done
+                          </Button>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1 text-sm text-gray-600">
-                        <Clock className="w-3.5 h-3.5 text-gray-400" />
-                        <span>Preferred: <strong>{cb.preferredCallbackTime}</strong></span>
-                      </div>
+
+                      {/* Notes from Madison */}
                       {cb.notes && (
-                        <p className="mt-1.5 text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                        <p className="text-sm text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
                           {cb.notes}
                         </p>
                       )}
-                      <p className="mt-1.5 text-xs text-gray-400">
-                        Requested {new Date(cb.createdAt).toLocaleString()}
-                        {cb.completedAt && ` · Completed ${new Date(cb.completedAt).toLocaleString()}`}
-                      </p>
+
+                      {/* Call summary */}
+                      {cb.callSummary && (
+                        <p className="text-sm text-gray-600 leading-relaxed bg-orange-50 rounded-xl px-4 py-3">
+                          {cb.callSummary}
+                        </p>
+                      )}
+
+                      {/* Recording */}
+                      {cb.callRecordingUrl && (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={cb.callRecordingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800"
+                          >
+                            <PlayCircle className="w-3.5 h-3.5" />
+                            Listen to recording
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Transcript */}
+                      {cb.callTranscript && (
+                        <details>
+                          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+                            View transcript
+                          </summary>
+                          <div className="mt-2 text-xs text-gray-500 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-xl px-4 py-3 max-h-48 overflow-y-auto">
+                            {cb.callTranscript}
+                          </div>
+                        </details>
+                      )}
                     </div>
-                    {!cb.completed && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-shrink-0 gap-1.5 text-xs"
-                        style={{ borderColor: "#E8603C", color: "#E8603C" }}
-                        disabled={completeCallbackMutation.isPending}
-                        onClick={() => {
-                          const agentName = (window as unknown as { __agentName?: string }).__agentName ?? "Admin";
-                          completeCallbackMutation.mutate({ id: cb.id, completedByAgentName: agentName });
-                        }}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Mark Done
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

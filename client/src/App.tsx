@@ -11,6 +11,7 @@ import ReactivationCampaigns from "./pages/ReactivationCampaigns";
 import CompletedJobs from "./pages/CompletedJobs";
 import AlwaysOnCampaign from "./pages/AlwaysOnCampaign";
 import SyncHealthPage from "./pages/SyncHealthPage";
+import AllCalls from "./pages/AllCalls";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -23,6 +24,7 @@ function Router() {
       <Route path={"/admin/completed-jobs"} component={CompletedJobs} />
       <Route path={"/admin/always-on"} component={AlwaysOnCampaign} />
       <Route path={"/admin/sync-health"} component={SyncHealthPage} />
+      <Route path={"/admin/calls"} component={AllCalls} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

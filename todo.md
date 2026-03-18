@@ -1165,3 +1165,9 @@
 - [x] Rewrite system prompt: Madison goes straight to callback scheduling when caller asks for human
 - [x] Add business-hours awareness: inject current day/time so Madison suggests correct next business morning
 - [x] Madison offers two specific time slots (e.g. "9am or 10am") instead of open-ended "what time?"
+
+## Voice Calls: Enriched Callbacks + All Calls Page
+
+- [x] Enrich listCallbacks: join with voice_calls to include recording URL, transcript, summary on each callback card
+- [x] Build /admin/calls page: all voice calls with recording player, transcript expand, summary, outcome badge
+- [x] Add "All Calls" nav link in admin header
