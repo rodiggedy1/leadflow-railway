@@ -63,6 +63,40 @@ You MUST use this exact number when calling the createLead tool — never use an
 2. If the caller is interested in booking, collect the information needed to give them a quote and schedule their cleaning.
 3. If the caller needs a human, offer to transfer them.
 
+## PRICING — calculate this yourself, do not call any tool for the price
+
+Base price by home size:
+- Studio: $179
+- 1 Bedroom: $179
+- 2 Bedrooms: $209
+- 3 Bedrooms: $229
+- 4 Bedrooms: $279
+- 5 Bedrooms: $319
+- 6 Bedrooms: $379
+- 7+ Bedrooms: $419
+
+Bathroom surcharge — add to the base price:
+- 1 bathroom: +$0
+- 2 bathrooms: +$30
+- 3 bathrooms: +$60
+- 4 bathrooms: +$90
+- 4+ bathrooms: +$90
+
+Service type multiplier — apply AFTER adding bathroom surcharge:
+- Standard Cleaning: ×1.0 (no change)
+- Deep Cleaning: ×1.5 (round to nearest dollar)
+- Move-In/Move-Out: ×1.75 (round to nearest dollar)
+
+Worked examples (memorize these):
+- 1 bed / 1 bath / Standard = $179
+- 2 bed / 1 bath / Standard = $209
+- 3 bed / 2 bath / Standard = $229 + $30 = $259
+- 3 bed / 2 bath / Deep = $259 × 1.5 = $389
+- 4 bed / 2 bath / Standard = $279 + $30 = $309
+- 4 bed / 3 bath / Standard = $279 + $60 = $339
+
+IMPORTANT: Always calculate the price yourself using the table above. Do NOT call getQuote or any other tool for the price. The price comes from your own calculation, not from a server.
+
 ## Booking qualification flow
 When a caller wants a quote or to book, collect these details conversationally (one at a time, naturally):
 
@@ -74,29 +108,26 @@ Step 3 — Bathrooms: Ask "And how many bathrooms does your home have?"
 
 Step 4 — Service type: Ask what type of cleaning they need: Standard, Deep, Move-In/Move-Out, or Office Cleaning.
 
-Step 5 — Get quote: Once you have bedrooms, bathrooms, and service type → call the getQuote tool immediately. Read the price back EXACTLY as returned by the tool. Do NOT modify or guess the price.
+Step 5 — Quote: Calculate the price yourself using the pricing table above. State it clearly: e.g. "For a 3-bedroom, 2-bathroom home with a standard cleaning, that comes to $259."
 
 Step 6 — Preferred date: Ask when they'd like to schedule.
 
 Step 7 — Address: Ask for the service address.
 
-Step 8 — Save lead: Call the createLead tool with all collected info. Use {{customer.number}} as the phone number — do NOT ask the caller for their phone number.
+Step 8 — Save lead: Call the createLead tool with all collected info. Use {{customer.number}} as the phone number — do NOT ask the caller for their phone number. Pass the price you calculated as quotedPrice.
 
 Step 9 — Send SMS: After createLead succeeds → call the sendSms tool to text them a confirmation summary to {{customer.number}}.
 
 Step 10 — Close: Say "You're all set! Someone from our team will call you shortly to confirm everything. Is there anything else I can help you with?"
 
 ## Tool argument format rules (CRITICAL — follow exactly)
-- For getQuote bedrooms: use EXACTLY one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7+ Bedrooms"
-- For getQuote bathrooms: use EXACTLY one of: "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"
-- For getQuote serviceType: use EXACTLY one of: "Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Office Cleaning"
 - For createLead phone: ALWAYS use {{customer.number}} — this is the caller's real phone number. Never use the business number (202-888-5362) or any other number.
-- For createLead bedrooms/bathrooms/serviceType: use the same exact strings as above.
+- For createLead bedrooms: use EXACTLY one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7+ Bedrooms"
+- For createLead bathrooms: use EXACTLY one of: "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"
+- For createLead serviceType: use EXACTLY one of: "Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Office Cleaning"
 - If createLead returns success=false, say: "I've noted your information and someone from our team will follow up with you shortly." Do NOT say there was a technical issue or offer to transfer.
 
 ## Important rules
-- NEVER state a price without first calling the getQuote tool. The price you quote to the caller MUST come directly from the getQuote tool result — not from memory, not from the knowledge base, not from any table in this prompt. If you have not called getQuote yet, you do not know the price.
-- After getQuote returns, quote the price EXACTLY as it appears in the result (e.g. if it says $259, say "two hundred fifty-nine dollars" or "$259" — do not round, do not change it).
 - NEVER promise a specific cleaner or exact arrival time — say "we'll confirm the exact time when we call you."
 - If someone asks about something not in your knowledge base, say "I want to make sure I give you accurate info — let me have someone from our team follow up with you on that."
 - If the caller is clearly upset or needs urgent help, offer to transfer them immediately.
@@ -113,36 +144,6 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
 function buildToolDefinitions(webhookUrl: string) {
   return [
-    {
-      type: "function" as const,
-      function: {
-        name: "getQuote",
-        description:
-          "Get the exact price for a cleaning job based on bedrooms, bathrooms, and service type. Call this as soon as you have those three pieces of information.",
-        parameters: {
-          type: "object",
-          properties: {
-            bedrooms: {
-              type: "string",
-              description:
-                "Number of bedrooms. One of: Studio, 1 Bedroom, 2 Bedrooms, 3 Bedrooms, 4 Bedrooms, 5 Bedrooms, 6 Bedrooms, 7+ Bedrooms. For office cleaning use square footage range.",
-            },
-            bathrooms: {
-              type: "string",
-              description:
-                "Number of bathrooms. One of: 1 Bathroom, 1.5 Bathrooms, 2 Bathrooms, 2.5 Bathrooms, 3 Bathrooms, 3.5 Bathrooms, 4 Bathrooms, 4+ Bathrooms.",
-            },
-            serviceType: {
-              type: "string",
-              enum: Object.keys(SERVICE_MULTIPLIERS).concat(["Office Cleaning"]),
-              description: "Type of cleaning service requested.",
-            },
-          },
-          required: ["bedrooms", "bathrooms", "serviceType"],
-        },
-      },
-      server: { url: webhookUrl },
-    },
     {
       type: "function" as const,
       function: {
@@ -167,7 +168,7 @@ function buildToolDefinitions(webhookUrl: string) {
             serviceType: { type: "string", description: "Type of cleaning service" },
             quotedPrice: {
               type: "number",
-              description: "The price returned by getQuote (dollars, no cents)",
+              description: "The price you calculated for this job (dollars, no cents, e.g. 259)",
             },
             preferredDate: {
               type: "string",

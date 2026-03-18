@@ -1051,3 +1051,13 @@
 - [x] Fix $179 pricing bug — root cause: production server running old code during test call; server now returns $259 correctly; added explicit rule: LLM must ONLY quote price from getQuote tool result, never from memory
 - [x] Add name spelling step: after hearing name, ask caller to spell it, then read it back letter by letter to confirm
 - [x] Remove email collection step entirely (will collect on follow-up call)
+
+## Voice Agent Fix Round 5 — Pricing (Definitive Fix)
+
+- [x] Root cause confirmed: getQuote server tool was unreliable due to Vapi webhook routing ambiguity (assistant.server vs tool.server) causing args to arrive as undefined on production
+- [x] Elegant solution: removed getQuote as a server-side tool entirely — pricing is now computed by the LLM directly
+- [x] Full pricing table + bathroom surcharge + service multipliers + worked examples embedded in system prompt
+- [x] LLM (GPT-4o) computes price itself — no HTTP call, no format issues, no deployment lag, no parsing failures
+- [x] getQuote removed from buildToolDefinitions; only createLead and sendSms remain as server tools
+- [x] Vapi assistant updated live: toolIds now [createLead, sendSms] only, system prompt has full pricing table
+- [x] 529/529 tests passing, 0 TS errors
