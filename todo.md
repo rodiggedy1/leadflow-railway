@@ -1080,3 +1080,7 @@
 - [x] Fix: added appendMessageToSession() helper; called after mid-call sendSms tool (with batchSessionId from createLead) and after end-of-call follow-up SMS
 - [x] Backfilled existing session 750002 with the confirmation SMS
 - [x] 529/529 tests passing, 0 TS errors
+
+## UX: Remove Slot/Address column from leads table
+
+- [x] Remove Slot/Address column from AdminDashboard leads table to fix horizontal scrolling

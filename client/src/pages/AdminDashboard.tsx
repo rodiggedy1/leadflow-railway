@@ -2338,7 +2338,6 @@ export default function AdminDashboard() {
                     <TableHead className="font-semibold text-gray-700 w-36">Agent</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-32">Last Called</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-32">Booking</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Slot / Address</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-48">Last Activity</TableHead>
                     <TableHead className="font-semibold text-gray-700 w-28">Updated</TableHead>
                     <TableHead className="w-16"></TableHead>
@@ -2458,27 +2457,6 @@ export default function AdminDashboard() {
                         ) : (
                           <span className="text-xs text-gray-300">—</span>
                         )}
-                      </TableCell>
-
-                      {/* Slot / Address */}
-                      <TableCell>
-                        <div className="flex flex-col gap-0.5 max-w-[200px]">
-                          {session.selectedSlot && (
-                            <span className="text-xs text-gray-700 flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-gray-400 shrink-0" />
-                              {session.selectedSlot}
-                            </span>
-                          )}
-                          {session.address && (
-                            <span className="text-xs text-gray-500 flex items-center gap-1 truncate">
-                              <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
-                              <span className="truncate">{session.address}</span>
-                            </span>
-                          )}
-                          {!session.selectedSlot && !session.address && (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </div>
                       </TableCell>
 
                       {/* Last Activity */}
