@@ -58,6 +58,7 @@ import {
   RotateCcw,
   Zap,
   Activity,
+  Columns,
   MessageSquare,
   Mic,
   MicOff,
@@ -90,6 +91,7 @@ import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
+import KanbanBoard from "@/components/KanbanBoard";
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
 /**
@@ -1843,7 +1845,7 @@ export default function AdminDashboard() {
   const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
 
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
-  const [activeTab, setActiveTab] = useState<"leads" | "agents" | "simulator" | "leaderboard">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "simulator" | "leaderboard">("leads");
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -1997,7 +1999,7 @@ export default function AdminDashboard() {
         </div>
         {/* Tab navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#F0D8D0" }}>
-          {(["leads", "agents", "leaderboard", "simulator"] as const).map(tab => (
+           {(["leads", "pipeline", "agents", "leaderboard", "simulator"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2006,8 +2008,8 @@ export default function AdminDashboard() {
                 ? { borderColor: "#E8603C", color: "#E8603C" }
                 : { borderColor: "transparent", color: "#6b7280" }}
             >
-              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-              {tab === "leads" ? "Leads" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "AI Simulator"}
+              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+              {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "AI Simulator"}
             </button>
           ))}
           <a
@@ -2055,6 +2057,22 @@ export default function AdminDashboard() {
               <p className="text-sm text-gray-500 mt-0.5">Test Madison's responses in real time. Configure the lead context on the left, then type as if you were the lead.</p>
             </div>
             <SmsSimulator />
+          </div>
+        )}
+        {activeTab === "pipeline" && (
+          <div className="py-4">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Pipeline</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Drag cards between columns to update stage. Click any card to open the full lead drawer.</p>
+              </div>
+              <span className="text-xs text-gray-400">{(sessions ?? []).length} leads · drag to move</span>
+            </div>
+            <KanbanBoard
+              leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads']}
+              onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
+              onStageChange={() => refetch()}
+            />
           </div>
         )}
         {activeTab === "leads" && <>

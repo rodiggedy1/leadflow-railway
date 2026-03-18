@@ -1103,3 +1103,14 @@
 - [x] Fix "365d ago" timestamp: cap lastActivityAt at session.updatedAt to prevent stale message timestamps from showing future/past dates
 - [x] Stage badges: reduced to 11px font, tighter px-2 padding
 - [x] Last Activity column: max-w-[180px] for tighter truncation
+
+## Kanban Pipeline Board — COMPLETED
+
+- [x] Install @dnd-kit drag-and-drop library
+- [x] Build KanbanBoard component with 6 columns: New, Quote Sent, Follow Up, Availability, Booked, Lost
+- [x] Lead cards: name, phone, service, quote value, time since last activity, source badge
+- [x] Column headers: stage name, lead count, total pipeline value
+- [x] Drag-and-drop cards between columns to update stage
+- [x] Wire adminUpdateStage tRPC mutation on drop
+- [x] Add Pipeline tab to AdminDashboard alongside Leads tab
+- [x] 531/531 tests passing
