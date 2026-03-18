@@ -85,7 +85,6 @@ import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
-import ConversionFunnelCard from "@/components/ConversionFunnelCard";
 
 // ── Widget Health Badge ─────────────────────────────────────────────────────
 function WidgetHealthBadge() {
@@ -1738,6 +1737,11 @@ export default function AdminDashboard() {
     enabled: isAdmin || isAuthenticated,
   });
 
+  const { data: visitorStats } = trpc.leads.visitorStats.useQuery(dateRange, {
+    refetchInterval: 60000,
+    enabled: isAdmin || isAuthenticated,
+  });
+
   const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
     refetchInterval: 60000,
     enabled: isAdmin || isAuthenticated,
@@ -1975,56 +1979,44 @@ export default function AdminDashboard() {
           />
         )}
 
-        {/* Booking metrics row */}
+        {/* Summary metrics row — Visitors → Leads → Booked → Revenue */}
         {stats && (
-          <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {/* Visitors */}
             <div
               className="rounded-xl border p-4 flex flex-col gap-1"
-              style={{ backgroundColor: "#d1fae5", borderColor: "#6ee7b7" }}
+              style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }}
             >
-              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#065f46" }}>
-                Booked Revenue
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#1e40af" }}>
+                Visitors
               </span>
-              <span className="text-2xl font-bold" style={{ color: "#065f46" }}>
-                ${(stats.bookedRevenue ?? 0).toLocaleString()}
+              <span className="text-2xl font-bold" style={{ color: "#1e40af" }}>
+                {(visitorStats?.visitors ?? 0).toLocaleString()}
               </span>
-              <span className="text-xs" style={{ color: "#065f46", opacity: 0.7 }}>
-                from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? "s" : ""}
+              <span className="text-xs" style={{ color: "#1e40af", opacity: 0.7 }}>
+                page views in range
               </span>
-              {/* Source breakdown bar */}
-              {stats.revenueBySource && stats.bookedRevenue > 0 && (() => {
-                const rbs = stats.revenueBySource as Record<string, number>;
-                const total = stats.bookedRevenue;
-                const sources = [
-                  { key: 'form', label: 'Form', color: '#059669' },
-                  { key: 'widget', label: 'Widget', color: '#0d9488' },
-                  { key: 'reactivation', label: 'Reactivation', color: '#7c3aed' },
-                ];
-                return (
-                  <div className="mt-2 space-y-1">
-                    {/* Stacked bar */}
-                    <div className="flex h-2 rounded-full overflow-hidden gap-px">
-                      {sources.map(s => {
-                        const pct = total > 0 ? ((rbs[s.key] ?? 0) / total) * 100 : 0;
-                        return pct > 0 ? (
-                          <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} />
-                        ) : null;
-                      })}
-                    </div>
-                    {/* Legend */}
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                      {sources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
-                        <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#065f46', opacity: 0.85 }}>
-                          <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
-                          {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
 
+            {/* Leads */}
+            <div
+              className="rounded-xl border p-4 flex flex-col gap-1"
+              style={{ backgroundColor: "#fffbeb", borderColor: "#fde68a" }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#92400e" }}>
+                Leads
+              </span>
+              <span className="text-2xl font-bold" style={{ color: "#92400e" }}>
+                {(stats.total ?? 0).toLocaleString()}
+              </span>
+              <span className="text-xs" style={{ color: "#92400e", opacity: 0.7 }}>
+                {visitorStats?.visitors
+                  ? `${((stats.total / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
+                  : "form submissions"}
+              </span>
+            </div>
+
+            {/* Jobs Booked */}
             <div
               className="rounded-xl border p-4 flex flex-col gap-1"
               style={{ backgroundColor: "#dbeafe", borderColor: "#93c5fd" }}
@@ -2036,31 +2028,61 @@ export default function AdminDashboard() {
                 {stats.bookedCount ?? 0}
               </span>
               <span className="text-xs" style={{ color: "#1e40af", opacity: 0.7 }}>
-                of {stats.total} total leads
+                {stats.total > 0
+                  ? `${stats.conversionRate ?? 0}% lead → booked`
+                  : "no leads yet"}
               </span>
             </div>
 
+            {/* Booked Revenue */}
             <div
               className="rounded-xl border p-4 flex flex-col gap-1"
-              style={{ backgroundColor: "#fef3c7", borderColor: "#fcd34d" }}
+              style={{ backgroundColor: "#d1fae5", borderColor: "#6ee7b7" }}
             >
-              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#92400e" }}>
-                Conversion Rate
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#065f46" }}>
+                Booked Revenue
               </span>
-              <span className="text-2xl font-bold" style={{ color: "#92400e" }}>
-                {stats.conversionRate ?? 0}%
+              <span className="text-2xl font-bold" style={{ color: "#065f46" }}>
+                ${(stats.bookedRevenue ?? 0).toLocaleString()}
               </span>
-              <span className="text-xs" style={{ color: "#92400e", opacity: 0.7 }}>
-                booked ÷ total leads
-              </span>
+              {/* Source breakdown bar */}
+              {stats.revenueBySource && stats.bookedRevenue > 0 && (() => {
+                const rbs = stats.revenueBySource as Record<string, number>;
+                const total = stats.bookedRevenue;
+                const sources = [
+                  { key: 'form', label: 'Form', color: '#059669' },
+                  { key: 'widget', label: 'Widget', color: '#0d9488' },
+                  { key: 'reactivation', label: 'Reactivation', color: '#7c3aed' },
+                ];
+                return (
+                  <div className="mt-1 space-y-1">
+                    <div className="flex h-2 rounded-full overflow-hidden gap-px">
+                      {sources.map(s => {
+                        const pct = total > 0 ? ((rbs[s.key] ?? 0) / total) * 100 : 0;
+                        return pct > 0 ? (
+                          <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} />
+                        ) : null;
+                      })}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                      {sources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
+                        <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#065f46', opacity: 0.85 }}>
+                          <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
+                          {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {!(stats.revenueBySource && stats.bookedRevenue > 0) && (
+                <span className="text-xs" style={{ color: "#065f46", opacity: 0.7 }}>
+                  from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
           </div>
         )}
-
-        {/* Conversion Funnel */}
-        <div className="mb-6">
-          <ConversionFunnelCard dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo} />
-        </div>
 
         {/* Traffic Source Breakdown */}
         <div className="rounded-xl border bg-card p-5 mb-6">

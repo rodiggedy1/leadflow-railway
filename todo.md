@@ -977,3 +977,10 @@
 - [x] Updated QUOTE_SENT: when lead says yes/ready, uses same "Got it..." format
 - [x] Bot no longer offers specific days upfront — asks open-ended "when" first, then offers slots if they say ASAP
 - [x] 493/493 tests passing, 0 TS errors
+
+## Dashboard Redundancy Fix — COMPLETED
+
+- [x] Merged 3-card booking metrics row + separate Conversion Funnel card into one unified 4-card summary row (Visitors → Leads → Jobs Booked → Booked Revenue) with inline conversion rates as sub-labels
+- [x] Removed ConversionFunnelCard component usage from AdminDashboard (no longer needed)
+- [x] Added visitorStats query directly in AdminDashboard so Visitors card is date-range aware
+- [x] 493/493 tests pass, 0 TS errors
