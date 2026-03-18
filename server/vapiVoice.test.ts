@@ -243,20 +243,22 @@ describe("System prompt customer.number injection", () => {
       "utf8"
     );
 
-    // The prompt must instruct Madison to verify the name back to the caller
-    expect(source).toContain("verify it back");
-    expect(source).toContain("did I get that right");
+    // The prompt must instruct Madison to ask the caller to spell their name
+    // and then confirm the spelling back
+    expect(source).toContain("spell that out");
+    expect(source).toContain("is that correct");
   });
 
-  it("system prompt contains email collection step", async () => {
+  it("system prompt does NOT ask for email (removed per product decision)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync(
       new URL("./vapiService.ts", import.meta.url).pathname,
       "utf8"
     );
 
-    expect(source).toContain("email");
-    expect(source).toContain("booking confirmation");
+    // Email collection was removed from the voice flow — it will be collected on follow-up call
+    // The system prompt should NOT contain a step asking for email
+    expect(source).not.toContain("email address for your booking confirmation");
   });
 });
 

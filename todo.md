@@ -1044,3 +1044,10 @@
 - [x] Fix: structuredDataSchema now extracts callerEmail from transcript for end-of-call fallback
 - [x] Vapi assistant system prompt updated live via PATCH API — effective immediately for all new calls
 - [x] 529/529 tests passing, 0 TS errors
+
+## Voice Agent Fix Round 4
+
+- [x] Fix bedroom question wording: "How many bedrooms does your home have?" not "How many bedrooms do you want cleaned?"
+- [x] Fix $179 pricing bug — root cause: production server running old code during test call; server now returns $259 correctly; added explicit rule: LLM must ONLY quote price from getQuote tool result, never from memory
+- [x] Add name spelling step: after hearing name, ask caller to spell it, then read it back letter by letter to confirm
+- [x] Remove email collection step entirely (will collect on follow-up call)
