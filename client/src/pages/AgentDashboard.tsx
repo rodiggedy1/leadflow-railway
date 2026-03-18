@@ -847,130 +847,157 @@ function LeadCard({
   const isBooked = session.isBooked === 1;
   const isNotInterested = session.stage === "NOT_INTERESTED";
 
+  // Stage → left border color
+  const stageBorderColor = (() => {
+    if (isBooked) return "#16a34a";
+    if (isNotInterested) return "#9ca3af";
+    const c = STAGE_COLORS[session.stage];
+    return c ? c.border : "#F0D8D0";
+  })();
+
+  const totalPrice = session.quotedPrice ? computeTotalQuote(session.quotedPrice, session.extras) : null;
+
   return (
     <>
-      <Card
-        className="transition-all hover:shadow-md"
-        style={{
-          borderColor: isBooked ? "#bbf7d0" : isNotInterested ? "#e5e7eb" : isMine ? "#bfdbfe" : "#F0D8D0",
-          backgroundColor: isBooked ? "#f0fdf4" : isNotInterested ? "#f9fafb" : isMine ? "#eff6ff" : "white",
-          opacity: isNotInterested ? 0.75 : 1,
-        }}
+      <div
+        className="relative bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+        style={{ opacity: isNotInterested ? 0.65 : 1 }}
       >
-        <CardContent className="p-4">
-          {/* Top row */}
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-gray-900 text-sm">
-                  {session.leadName ?? "Unknown"}
+        {/* Left stage accent bar */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+          style={{ backgroundColor: stageBorderColor }}
+        />
+
+        <div className="pl-4 pr-4 pt-3.5 pb-3">
+          {/* ── Row 1: Name + Price ── */}
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className="font-bold text-gray-900 text-[15px] leading-tight truncate">
+                {session.leadName ?? "Unknown"}
+              </span>
+              <StageBadge stage={session.stage} />
+              {isBooked && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 border border-green-200">
+                  <CheckCircle2 className="w-3 h-3" /> Booked
                 </span>
-                <span className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</span>
-                <StageBadge stage={session.stage} />
-                {isBooked && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
-                    <CheckCircle2 className="w-3 h-3" /> Booked
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-                {session.serviceType && <span>{session.serviceType}</span>}
-                {session.quotedPrice && (
-                  <span className="font-medium text-gray-700">${computeTotalQuote(session.quotedPrice, session.extras)}</span>
-                )}
-                {session.selectedSlot && <span>📅 {session.selectedSlot}</span>}
-                {session.lastCalledAt && (
-                  <span>📞 Last called {timeAgo(session.lastCalledAt)}
-                    {session.lastCalledByAgentName ? ` by ${session.lastCalledByAgentName}` : ""}
-                  </span>
-                )}
-                {session.assignedAgentName && !isMine && (
-                  <span className="text-blue-600">👤 {session.assignedAgentName}</span>
-                )}
-                {isBooked && session.bookedByAgentName && (
-                  <span className="text-green-700">✓ Booked by {session.bookedByAgentName}</span>
-                )}
-              </div>
-              {/* Notes preview */}
-              {session.internalNotes && (
-                <div className="mt-1.5 flex items-start gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
-                  <span className="shrink-0">📝</span>
-                  <span className="truncate italic">{session.internalNotes}</span>
-                </div>
               )}
             </div>
+            {totalPrice && (
+              <span className="text-base font-bold shrink-0" style={{ color: "#E8603C" }}>
+                ${totalPrice}
+              </span>
+            )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-1.5 flex-wrap mt-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2.5 text-xs gap-1"
-              onClick={() => setShowConversation(true)}
+          {/* ── Row 2: Phone + Meta ── */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 mb-2">
+            <a
+              href={`tel:${session.leadPhone}`}
+              className="inline-flex items-center gap-1 font-medium text-gray-600 hover:text-[#E8603C] transition-colors"
+              onClick={e => e.stopPropagation()}
             >
-              <MessageSquare className="w-3 h-3" /> Details
-            </Button>
-
-            {!isBooked && (
+              <Phone className="w-3 h-3" />
+              {formatPhone(session.leadPhone)}
+            </a>
+            {session.serviceType && <span className="text-gray-400">·</span>}
+            {session.serviceType && <span>{session.serviceType}</span>}
+            {session.selectedSlot && <span className="text-gray-400">·</span>}
+            {session.selectedSlot && <span>📅 {session.selectedSlot}</span>}
+            {session.lastCalledAt && (
               <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2.5 text-xs gap-1"
-                  onClick={() => setShowLogCall(true)}
-                >
-                  <PhoneCall className="w-3 h-3" /> Log Call
-                </Button>
-
-                {isMine ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2.5 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50"
-                    onClick={() => unclaimLead.mutate({ sessionId: session.id })}
-                    disabled={unclaimLead.isPending}
-                  >
-                    <UserX className="w-3 h-3" /> Release
-                  </Button>
-                ) : !session.assignedAgentId ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2.5 text-xs gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
-                    onClick={() => claimLead.mutate({ sessionId: session.id })}
-                    disabled={claimLead.isPending}
-                  >
-                    <UserCheck className="w-3 h-3" /> Claim
-                  </Button>
-                ) : null}
-
-                <Button
-                  size="sm"
-                  className="h-7 px-2.5 text-xs gap-1 text-white"
-                  style={{ backgroundColor: "#16a34a" }}
-                  onClick={() => markBooked.mutate({ sessionId: session.id })}
-                  disabled={markBooked.isPending}
-                >
-                  <CheckCircle2 className="w-3 h-3" /> Mark Booked
-                </Button>
-
-                {!isNotInterested && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2.5 text-xs gap-1 text-gray-500 border-gray-200 hover:bg-gray-50"
-                    onClick={() => markNotInterested.mutate({ sessionId: session.id })}
-                    disabled={markNotInterested.isPending}
-                  >
-                    <XCircle className="w-3 h-3" /> Not Interested
-                  </Button>
-                )}
+                <span className="text-gray-400">·</span>
+                <span>Called {timeAgo(session.lastCalledAt)}{session.lastCalledByAgentName ? ` by ${session.lastCalledByAgentName}` : ""}</span>
+              </>
+            )}
+            {session.assignedAgentName && !isMine && (
+              <>
+                <span className="text-gray-400">·</span>
+                <span className="text-blue-600 font-medium">{session.assignedAgentName}</span>
+              </>
+            )}
+            {isBooked && session.bookedByAgentName && (
+              <>
+                <span className="text-gray-400">·</span>
+                <span className="text-green-700 font-medium">Booked by {session.bookedByAgentName}</span>
               </>
             )}
           </div>
-        </CardContent>
-      </Card>
+
+          {/* ── Notes preview ── */}
+          {session.internalNotes && (
+            <div className="flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mb-2.5">
+              <span className="shrink-0 mt-px">📝</span>
+              <span className="line-clamp-2">{session.internalNotes}</span>
+            </div>
+          )}
+
+          {/* ── Actions ── */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Primary CTA */}
+            {!isBooked && (
+              <button
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity disabled:opacity-60"
+                style={{ backgroundColor: "#16a34a" }}
+                onClick={() => markBooked.mutate({ sessionId: session.id })}
+                disabled={markBooked.isPending}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Mark Booked
+              </button>
+            )}
+
+            {/* Ghost secondaries */}
+            <button
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+              onClick={() => setShowConversation(true)}
+            >
+              <MessageSquare className="w-3 h-3" /> Details
+            </button>
+
+            {!isBooked && (
+              <button
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                onClick={() => setShowLogCall(true)}
+              >
+                <PhoneCall className="w-3 h-3" /> Log Call
+              </button>
+            )}
+
+            {!isBooked && (
+              isMine ? (
+                <button
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-60"
+                  onClick={() => unclaimLead.mutate({ sessionId: session.id })}
+                  disabled={unclaimLead.isPending}
+                >
+                  <UserX className="w-3 h-3" /> Release
+                </button>
+              ) : !session.assignedAgentId ? (
+                <button
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors disabled:opacity-60"
+                  onClick={() => claimLead.mutate({ sessionId: session.id })}
+                  disabled={claimLead.isPending}
+                >
+                  <UserCheck className="w-3 h-3" /> Claim
+                </button>
+              ) : null
+            )}
+
+            {/* Not Interested — far right, muted */}
+            {!isBooked && !isNotInterested && (
+              <button
+                className="ml-auto inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-60"
+                onClick={() => markNotInterested.mutate({ sessionId: session.id })}
+                disabled={markNotInterested.isPending}
+                title="Mark as not interested"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {showLogCall && (
         <LogCallDialog session={session} onClose={() => setShowLogCall(false)} />

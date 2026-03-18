@@ -1134,3 +1134,12 @@
 - [ ] Rename "History" tab/label to "Details" in lead drawer
 - [ ] Notification bell widget for agents (/agent page)
 - [ ] Call button inside lead detail drawer (tel: link with lead phone)
+
+## Agent Lead Card Redesign — COMPLETED
+
+- [x] Color-coded left border accent by stage
+- [x] Name + price as dominant top row, phone secondary
+- [x] Stage badge shows human-readable text (no underscores)
+- [x] Single action row: Mark Booked (primary CTA) + Details + Log Call as ghost buttons
+- [x] Not Interested moved to far-right icon-only button
+- [x] Phone number is a tel: link for click-to-call directly from card
