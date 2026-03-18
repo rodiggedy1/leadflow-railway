@@ -606,29 +606,29 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     ? callerPhone
     : callerPhone ? `+1${callerPhone.replace(/\D/g, "")}` : null;
 
-  // Find the most recent session for this phone (if a lead was created mid-call)
-  let sessionId: number | null = null;
   const db = await getDb();
-  if (db && normalizedPhone) {
+  if (!db) {
+    console.error("[Vapi] Database not available — cannot save call record");
+    return;
+  }
+
+  // Helper: find the most recent session for this phone
+  const findLatestSession = async (): Promise<number | null> => {
+    if (!normalizedPhone) return null;
     const sessions = await db
       .select({ id: conversationSessions.id })
       .from(conversationSessions)
       .where(eq(conversationSessions.leadPhone, normalizedPhone))
       .orderBy(desc(conversationSessions.createdAt))
       .limit(1);
-    if (sessions.length > 0) {
-      sessionId = sessions[0].id;
-    }
-  }
+    return sessions.length > 0 ? sessions[0].id : null;
+  };
 
-  // Save voice call record
-  if (!db) {
-    console.error("[Vapi] Database not available — cannot save call record");
-    return;
-  }
+  // Save voice call record with a null sessionId initially — we'll update it after
+  // any lead creation so we always link to the correct (most recent) session.
   await db.insert(voiceCalls).values({
     vapiCallId,
-    sessionId,
+    sessionId: null,
     callerPhone: normalizedPhone ?? callerPhone,
     durationSeconds,
     transcript,
@@ -641,6 +641,8 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   });
 
   console.log(`[Vapi] Call recorded: ${vapiCallId}, duration=${durationSeconds}s, outcome=${outcome}`);
+
+  let sessionId: number | null = null;
 
   // If a lead was NOT created mid-call but we have enough structured data, create it now
   // This is the fallback path when mid-call tool calls failed
@@ -671,6 +673,24 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
         console.error("[Vapi] Failed to create lead from end-of-call-report:", err);
       }
     }
+  }
+
+  // Always resolve the correct (most recent) session after any lead creation
+  // This ensures the voice call is linked to the session the dashboard shows
+  const resolvedSessionId = await findLatestSession();
+  if (resolvedSessionId && resolvedSessionId !== sessionId) {
+    sessionId = resolvedSessionId;
+    await db.update(voiceCalls)
+      .set({ sessionId })
+      .where(eq(voiceCalls.vapiCallId, vapiCallId));
+    console.log(`[Vapi] Voice call linked to session ${sessionId}`);
+  } else if (resolvedSessionId) {
+    // Already correct, just set it
+    sessionId = resolvedSessionId;
+    await db.update(voiceCalls)
+      .set({ sessionId })
+      .where(eq(voiceCalls.vapiCallId, vapiCallId));
+    console.log(`[Vapi] Voice call linked to session ${sessionId}`);
   }
 
   // If a lead was created mid-call and we have their phone, send a follow-up SMS

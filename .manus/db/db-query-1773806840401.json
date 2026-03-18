@@ -1,0 +1,40 @@
+{
+  "query": "SELECT ql.id as leadId, ql.name, ql.phone, ql.createdAt as leadCreated\nFROM quote_leads ql\nWHERE ql.phone = '+13029816191'\nORDER BY ql.id DESC\nLIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT ql.id as leadId, ql.name, ql.phone, ql.createdAt as leadCreated\nFROM quote_leads ql\nWHERE ql.phone = '+13029816191'\nORDER BY ql.id DESC\nLIMIT 5;",
+  "rows": [
+    {
+      "leadId": "600002",
+      "name": "Rohan Gilkes",
+      "phone": "+13029816191",
+      "leadCreated": "2026-03-18 04:03:07"
+    },
+    {
+      "leadId": "600001",
+      "name": "Rohan Gilkes",
+      "phone": "+13029816191",
+      "leadCreated": "2026-03-18 04:02:51"
+    },
+    {
+      "leadId": "570008",
+      "name": "Rohan Gilkes",
+      "phone": "+13029816191",
+      "leadCreated": "2026-03-18 03:36:45"
+    },
+    {
+      "leadId": "570007",
+      "name": "Rohan Jokes",
+      "phone": "+13029816191",
+      "leadCreated": "2026-03-18 03:25:25"
+    },
+    {
+      "leadId": "570005",
+      "name": "Rohan Test",
+      "phone": "+13029816191",
+      "leadCreated": "2026-03-18 03:08:32"
+    }
+  ],
+  "messages": [],
+  "stdout": "leadId\tname\tphone\tleadCreated\n600002\tRohan Gilkes\t+13029816191\t2026-03-18 04:03:07\n600001\tRohan Gilkes\t+13029816191\t2026-03-18 04:02:51\n570008\tRohan Gilkes\t+13029816191\t2026-03-18 03:36:45\n570007\tRohan Jokes\t+13029816191\t2026-03-18 03:25:25\n570005\tRohan Test\t+13029816191\t2026-03-18 03:08:32\n",
+  "stderr": "",
+  "execution_time_ms": 68
+}

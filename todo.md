@@ -1061,3 +1061,15 @@
 - [x] getQuote removed from buildToolDefinitions; only createLead and sendSms remain as server tools
 - [x] Vapi assistant updated live: toolIds now [createLead, sendSms] only, system prompt has full pricing table
 - [x] 529/529 tests passing, 0 TS errors
+
+## REGRESSION: createLead broken after Round 5
+
+- [x] Diagnose: createLead was working — delay was async Vapi processing (30-60s after call ends)
+- [x] Fix and verify end-to-end lead creation — production server confirmed working, delay was due to async Vapi processing
+
+## Bug: Missing AI notes, summary, recording, transcript on voice leads
+
+- [x] Diagnosed: voice_calls.sessionId was set to the OLD session (from a previous call) before the new lead/session was created mid-call — dashboard queries by sessionId so it found nothing
+- [x] Fix: voice call record now inserted with sessionId=null, then updated AFTER all lead creation to always link to the most recent session for that phone
+- [x] Fix: existing broken record (019cff18) manually corrected in DB to point to session 750002
+- [x] 529/529 tests passing, 0 TS errors

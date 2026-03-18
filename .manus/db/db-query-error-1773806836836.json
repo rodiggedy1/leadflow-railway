@@ -1,0 +1,8 @@
+{
+  "query": "-- Find the most recent real leads (from voice calls)\nSELECT ql.id as leadId, ql.name, ql.phone, ql.sessionId as leadSessionId, ql.createdAt as leadCreated\nFROM quote_leads ql\nWHERE ql.phone = '+13029816191'\nORDER BY ql.id DESC\nLIMIT 5;\n\n-- Find voice_calls and their sessionIds\nSELECT vc.id, vc.vapiCallId, vc.sessionId, vc.outcome, vc.createdAt\nFROM voice_calls vc\nWHERE vc.callerPhone = '+13029816191'\nORDER BY vc.createdAt DESC\nLIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute -- Find the most recent real leads (from voice calls)\nSELECT ql.id as leadId, ql.name, ql.phone, ql.sessionId as leadSessionId, ql.createdAt as leadCreated\nFROM quote_leads ql\nWHERE ql.phone = '+13029816191'\nORDER BY ql.id DESC\nLIMIT 5;\n\n-- Find voice_calls and their sessionIds\nSELECT vc.id, vc.vapiCallId, vc.sessionId, vc.outcome, vc.createdAt\nFROM voice_calls vc\nWHERE vc.callerPhone = '+13029816191'\nORDER BY vc.createdAt DESC\nLIMIT 5;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'ql.sessionid' in 'field list'"
+  ]
+}
