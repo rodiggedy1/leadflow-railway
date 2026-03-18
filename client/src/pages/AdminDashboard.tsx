@@ -2370,15 +2370,26 @@ export default function AdminDashboard() {
                       onMouseEnter={e => { if (!isBooked) e.currentTarget.style.backgroundColor = "#FFF8F5"; }}
                       onMouseLeave={e => { e.currentTarget.style.backgroundColor = rowBg; }}
                     >
-                      {/* Lead — name + phone */}
+                      {/* Lead — name + phone + click-to-call */}
                       <TableCell className="py-2 pl-4">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-semibold text-gray-900 leading-tight">
-                            {session.leadName ?? <span className="text-gray-300 font-normal">Unknown</span>}
-                          </span>
-                          <span className="text-xs text-gray-400 tabular-nums">
-                            {formatPhone(session.leadPhone)}
-                          </span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="text-sm font-semibold text-gray-900 leading-tight">
+                              {session.leadName ?? <span className="text-gray-300 font-normal">Unknown</span>}
+                            </span>
+                            <span className="text-xs text-gray-400 tabular-nums">
+                              {formatPhone(session.leadPhone)}
+                            </span>
+                          </div>
+                          {/* Click-to-call — only visible on row hover */}
+                          <a
+                            href={`tel:${session.leadPhone}`}
+                            onClick={e => e.stopPropagation()}
+                            title={`Call ${formatPhone(session.leadPhone)}`}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0 p-1.5 rounded-full hover:bg-orange-100 text-gray-400 hover:text-orange-600"
+                          >
+                            <PhoneCall className="w-3.5 h-3.5" />
+                          </a>
                         </div>
                       </TableCell>
 

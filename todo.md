@@ -1114,3 +1114,9 @@
 - [x] Wire adminUpdateStage tRPC mutation on drop
 - [x] Add Pipeline tab to AdminDashboard alongside Leads tab
 - [x] 531/531 tests passing
+
+## Click-to-Call — COMPLETED
+
+- [x] Phone icon appears on lead row hover in Leads table
+- [x] Clicking fires tel: link with lead's phone number
+- [x] Icon is visually subtle on hover, doesn't disrupt row layout
