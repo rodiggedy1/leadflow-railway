@@ -273,7 +273,8 @@ type Stage =
   | "BOOKED"
   | "NOT_INTERESTED"
   | "FUTURE_BOOKING"
-  | "FOLLOW_UP_SCHEDULED";
+  | "FOLLOW_UP_SCHEDULED"
+  | "WIDGET_SIZING";
 
 const STAGE_CONFIG: Record<
   Stage,
@@ -362,6 +363,13 @@ const STAGE_CONFIG: Record<
     bgColor: "#f5f3ff",
     borderColor: "#ddd6fe",
     order: 12,
+  },
+  WIDGET_SIZING: {
+    label: "Sizing",
+    textColor: "#0369a1",
+    bgColor: "#e0f2fe",
+    borderColor: "#bae6fd",
+    order: 0,
   },
 };
 
@@ -2329,168 +2337,134 @@ export default function AdminDashboard() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-gray-50 hover:bg-gray-50">
-                    <TableHead className="font-semibold text-gray-700 w-44">Lead</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-20">Source</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Service</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-28">Quote</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-36">Stage</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-36">Agent</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-32">Last Called</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-32">Booking</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-48">Last Activity</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-28">Updated</TableHead>
+                  <TableRow className="border-b" style={{ backgroundColor: "#fafafa" }}>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 pl-4 w-48">Lead</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 w-24">Source</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5">Service</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 w-24">Quote</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 w-36">Stage</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 w-32">Agent</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 w-44">Last Activity</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide py-2.5 w-24 pr-4">When</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map(session => (
+                  {filtered.map(session => {
+                    const isBooked = session.isBooked === 1;
+                    const rowBg = isBooked ? "#f0fdf4" : "";
+                    const accentColor = isBooked ? "#16a34a" : "transparent";
+                    return (
                     <TableRow
                       key={session.id}
-                      className="cursor-pointer transition-colors"
-                      style={{ cursor: "pointer" }}
+                      className="cursor-pointer transition-all duration-100 group"
+                      style={{ backgroundColor: rowBg, borderLeft: `3px solid ${accentColor}` }}
                       onClick={() => setSelectedSession(session)}
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#FFF8F5")}
-                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = "")}
+                      onMouseEnter={e => { if (!isBooked) e.currentTarget.style.backgroundColor = "#FFF8F5"; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = rowBg; }}
                     >
-                      {/* Lead */}
-                      <TableCell>
+                      {/* Lead — name + phone */}
+                      <TableCell className="py-3 pl-4">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
-                            <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            {session.leadName ?? "—"}
+                          <span className="text-sm font-semibold text-gray-900 leading-tight">
+                            {session.leadName ?? <span className="text-gray-300 font-normal">Unknown</span>}
                           </span>
-                          <span className="text-xs text-gray-500 flex items-center gap-1.5">
-                            <Phone className="w-3 h-3 text-gray-300 shrink-0" />
+                          <span className="text-xs text-gray-400 tabular-nums">
                             {formatPhone(session.leadPhone)}
                           </span>
                         </div>
                       </TableCell>
 
                       {/* Source */}
-                      <TableCell>
+                      <TableCell className="py-3">
                         <div className="flex flex-col gap-1">
                           {getSourceBadge(session.leadSource)}
                           {getLanguageBadge(session.language)}
                         </div>
                       </TableCell>
 
-                      {/* Service */}
-                      <TableCell>
+                      {/* Service — type + size */}
+                      <TableCell className="py-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-sm text-gray-800">
-                            {session.serviceType ?? "—"}
+                          <span className="text-sm text-gray-800 leading-tight">
+                            {session.serviceType ?? <span className="text-gray-300">—</span>}
                           </span>
-                          {session.serviceType !== "Office Cleaning" ? (
+                          {session.serviceType && (
                             <span className="text-xs text-gray-400">
-                              {session.bedrooms} bd / {session.bathrooms} ba
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">
-                              {session.bedrooms} sqft
+                              {session.serviceType === "Office Cleaning"
+                                ? (session.bedrooms ? `${session.bedrooms} sqft` : null)
+                                : (session.bedrooms && session.bathrooms
+                                    ? `${session.bedrooms} bd · ${session.bathrooms} ba`
+                                    : null)
+                              }
                             </span>
                           )}
                         </div>
                       </TableCell>
 
                       {/* Quote */}
-                      <TableCell>
+                      <TableCell className="py-3">
                         {session.quotedPrice ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
                           return (
-                            <span className="font-semibold flex items-center gap-1" style={{ color: "#E8603C" }}>
-                              <DollarSign className="w-3.5 h-3.5" />
-                              {total}
+                            <span className="text-sm font-bold tabular-nums" style={{ color: "#E8603C" }}>
+                              ${total}
                             </span>
                           );
                         })() : (
-                          <span className="text-gray-400 text-sm">—</span>
+                          <span className="text-gray-300 text-sm">—</span>
                         )}
                       </TableCell>
 
                       {/* Stage */}
-                      <TableCell>
+                      <TableCell className="py-3">
                         <StageBadge stage={session.stage} />
                       </TableCell>
 
-                      {/* Agent */}
-                      <TableCell>
+                      {/* Agent — avatar initial + name */}
+                      <TableCell className="py-3">
                         {session.assignedAgentName ? (
-                          <span className="text-xs flex items-center gap-1 text-orange-700">
-                            <UserCheck className="w-3 h-3 shrink-0" />
-                            {session.assignedAgentName}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-300">Unassigned</span>
-                        )}
-                      </TableCell>
-
-                      {/* Last Called */}
-                      <TableCell>
-                        {session.lastCalledAt ? (
-                          <span className="text-xs flex items-center gap-1 text-gray-600">
-                            <PhoneCall className="w-3 h-3 text-gray-400 shrink-0" />
-                            <span>
-                              {timeAgo(session.lastCalledAt)}
-                              {session.lastCalledByAgentName && (
-                                <span className="block text-gray-400">{session.lastCalledByAgentName}</span>
-                              )}
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                              style={{ backgroundColor: "#E8603C" }}
+                            >
+                              {session.assignedAgentName.charAt(0).toUpperCase()}
                             </span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-300">—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Booking */}
-                      <TableCell>
-                        {session.isBooked === 1 ? (
-                          <span className="text-xs flex items-center gap-1 text-green-700 font-semibold">
-                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                            <span>
-                              Booked
-                              {session.bookedByAgentName && (
-                                <span className="block font-normal text-green-600">{session.bookedByAgentName}</span>
-                              )}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-300">—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Last Activity */}
-                      <TableCell>
-                        {session.lastActivityText ? (
-                          <div className="flex flex-col gap-0.5 max-w-[180px]">
-                            <span className="text-xs text-gray-700 truncate flex items-center gap-1">
-                              {session.lastActivityType === "call" ? (
-                                <PhoneCall className="w-3 h-3 text-blue-400 shrink-0" />
-                              ) : (
-                                <MessageSquare className="w-3 h-3 text-orange-400 shrink-0" />
-                              )}
-                              <span className="truncate">{session.lastActivityText}</span>
-                            </span>
-                            {session.lastActivityAt && (
-                              <span className="text-[10px] text-gray-400 pl-4">
-                                {timeAgo(session.lastActivityAt)}
-                              </span>
-                            )}
+                            <span className="text-xs text-gray-700 leading-tight">{session.assignedAgentName}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-gray-300">—</span>
                         )}
                       </TableCell>
 
-                      {/* Updated */}
-                      <TableCell>
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {timeAgo(session.updatedAt)}
+                      {/* Last Activity — message preview primary, call note secondary */}
+                      <TableCell className="py-3">
+                        {session.lastActivityText ? (
+                          <div className="flex items-start gap-1.5 max-w-[200px]">
+                            {session.lastActivityType === "call" ? (
+                              <PhoneCall className="w-3 h-3 text-blue-400 shrink-0 mt-0.5" />
+                            ) : (
+                              <MessageSquare className="w-3 h-3 shrink-0 mt-0.5" style={{ color: "#E8603C", opacity: 0.6 }} />
+                            )}
+                            <span className="text-xs text-gray-700 truncate leading-tight">{session.lastActivityText}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* When — single relative timestamp */}
+                      <TableCell className="py-3 pr-4">
+                        <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap">
+                          {session.lastActivityAt
+                            ? timeAgo(session.lastActivityAt)
+                            : timeAgo(session.updatedAt)}
                         </span>
                       </TableCell>
 
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

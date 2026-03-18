@@ -1084,3 +1084,13 @@
 ## UX: Remove Slot/Address column from leads table
 
 - [x] Remove Slot/Address column from AdminDashboard leads table to fix horizontal scrolling
+
+## Design: World-class leads table redesign
+
+- [x] Tight 44px rows, single dominant font size, no visual noise
+- [x] Fix raw enum labels (WIDGET_SIZING → Widget Sizing, bd/ba → clean · separator or clean dash)
+- [x] Status-driven row accents: booked = green left-border + #f0fdf4 tint, hover = warm coral tint
+- [x] Remove Updated column (replaced with single "When" column using lastActivityAt)
+- [x] Agent column: avatar initial circle (coral) + name — compact and professional
+- [x] Human-readable stage labels throughout (WIDGET_SIZING added to STAGE_CONFIG)
+- [x] Consistent type hierarchy: name bold text-sm, phone text-xs gray-400, service text-sm + size secondary
