@@ -20,6 +20,7 @@ import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { sendAlwaysOnBatch } from "./alwaysOnSend";
+import { sendPendingReviewSms } from "./reviewRouter";
 import { logActivity } from "./activityLogger";
 
 /**
@@ -393,6 +394,60 @@ export function registerCronRoutes(app: Express): void {
         startedAt: sendStartedAt,
         durationMs: Date.now() - sendStartedAt.getTime(),
       });
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Review SMS send (10 AM ET daily) ─────────────────────────────────────
+  // Sends the post-cleaning feedback SMS to customers whose job was yesterday.
+  // Customers receive: "How did your cleaning go?" the morning after service.
+  // Positive replies → Google review link + 10% off incentive.
+  app.post("/api/cron/review-send", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+
+    if (!secret) {
+      res.status(503).json({ error: "Cron endpoint is not configured (CRON_SECRET missing)" });
+      return;
+    }
+
+    const provided = req.headers["x-cron-secret"];
+    if (provided !== secret) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const startedAt = new Date();
+    try {
+      const sent = await sendPendingReviewSms();
+
+      // Log activity
+      logActivity({
+        eventType: "review_send",
+        title: sent > 0
+          ? `⭐ Review SMS: ${sent} sent (10 AM daily)`
+          : `Review SMS: no pending jobs`,
+        body: sent > 0
+          ? `Sent post-cleaning feedback SMS to ${sent} customer${sent !== 1 ? "s" : ""} from yesterday's jobs.`
+          : "No jobs with jobDate <= yesterday were pending.",
+        meta: { sent, durationMs: Date.now() - startedAt.getTime() },
+      }).catch(() => {});
+
+      // Notify owner if any were sent
+      if (sent > 0) {
+        try {
+          await notifyOwner({
+            title: `Review SMS — ${sent} sent`,
+            content: `Sent post-cleaning feedback SMS to ${sent} customer${sent !== 1 ? "s" : ""} from yesterday's jobs. Positive replies will receive the Google review link + 10% off incentive automatically.`,
+          });
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      res.json({ ok: true, sent, durationMs: Date.now() - startedAt.getTime() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[ReviewSend] Cron error:", msg);
       res.status(500).json({ ok: false, error: msg });
     }
   });

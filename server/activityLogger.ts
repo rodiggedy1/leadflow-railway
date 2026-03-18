@@ -16,6 +16,7 @@ export type ActivityEventType =
   | "scheduled_followup"
   | "always_on_batch"
   | "nightly_sync"
+  | "review_send"
   | "booking"
   | "new_lead";
 

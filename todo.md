@@ -1291,3 +1291,10 @@
 - [x] Frontend: new /admin/revenue page with ROI hero card, channel breakdown, monthly trend chart
 - [x] Frontend: wire Revenue ROI tab in AdminHeader nav
 - [x] Tests for revenueAttribution procedure (17 tests, all passing)
+
+## Google Review SMS Automation
+
+- [x] Change review SMS timing: send at 10 AM ET the day after service (not 24h after upload)
+- [x] Add /api/cron/review-send endpoint (10 AM ET daily, same CRON_SECRET auth)
+- [x] Include review SMS count in owner notification and sync health log
+- [x] Tests for new timing logic (11 tests, all passing)

@@ -110,15 +110,31 @@ export function parseCompletedJobsCsv(csvText: string): ParsedCompletedJob[] {
 
 // ─── Send pending review SMS ──────────────────────────────────────────────────
 /**
- * Finds completed jobs that are PENDING and whose createdAt was 24h+ ago,
- * sends the initial feedback SMS, and marks them as SENT.
+ * Finds completed jobs that are PENDING and whose jobDate was yesterday or earlier
+ * (i.e., the day after the service has arrived), sends the initial feedback SMS,
+ * and marks them as SENT.
+ *
+ * Designed to be called at 10 AM ET daily — customers receive their review request
+ * the morning after their cleaning, not the evening of.
+ *
  * Returns the number of SMS sent.
  */
 export async function sendPendingReviewSms(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
 
+  // Compute "yesterday" in ET so the cron running at 10 AM ET always targets
+  // jobs from the previous calendar day in Eastern Time.
+  const etNow = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "America/New_York" })
+  );
+  etNow.setDate(etNow.getDate() - 1);
+  const yyyy = etNow.getFullYear();
+  const mm = String(etNow.getMonth() + 1).padStart(2, "0");
+  const dd = String(etNow.getDate()).padStart(2, "0");
+  const yesterday = `${yyyy}-${mm}-${dd}`;
+
+  // Select PENDING jobs whose jobDate is yesterday or earlier (catches any backlog)
   const pending = await db
     .select()
     .from(completedJobs)
@@ -126,7 +142,8 @@ export async function sendPendingReviewSms(): Promise<number> {
       and(
         eq(completedJobs.status, "PENDING"),
         isNull(completedJobs.smsSentAt),
-        lt(completedJobs.createdAt, cutoff)
+        // jobDate <= yesterday (string comparison works for YYYY-MM-DD)
+        sql`${completedJobs.jobDate} <= ${yesterday}`
       )
     )
     .limit(50);
