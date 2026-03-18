@@ -2245,17 +2245,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Traffic Source Breakdown */}
-        <div className="rounded-xl border bg-card p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Traffic Source</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Where your leads are coming from</p>
-            </div>
-          </div>
-          <SourceBreakdownChart data={sourceBreakdown} isLoading={sourceBreakdownLoading} />
-        </div>
-
         {/* Search + stage filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
@@ -2474,6 +2463,17 @@ export default function AdminDashboard() {
               </Table>
             </div>
           )}
+        </div>
+
+        {/* Traffic Source Breakdown */}
+        <div className="rounded-xl border bg-card p-5 mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Traffic Source</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Where your leads are coming from</p>
+            </div>
+          </div>
+          <SourceBreakdownChart data={sourceBreakdown} isLoading={sourceBreakdownLoading} />
         </div>
 
         <p className="text-xs text-gray-400 mt-4 text-center">
