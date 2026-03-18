@@ -699,7 +699,7 @@ function ConversationDrawer({
                       size="sm"
                       variant="outline"
                       className="h-7 px-2.5 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50 bg-white w-full"
-                      onClick={() => unclaimLead.mutate({ sessionId: session.id })}
+                      onClick={e => { e.stopPropagation(); unclaimLead.mutate({ sessionId: session.id }); }}
                       disabled={unclaimLead.isPending}
                     >
                       <UserX className="w-3 h-3" /> Release Lead
@@ -709,7 +709,7 @@ function ConversationDrawer({
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1 text-white w-full"
                       style={{ backgroundColor: "#E8603C" }}
-                      onClick={() => claimLead.mutate({ sessionId: session.id })}
+                      onClick={e => { e.stopPropagation(); claimLead.mutate({ sessionId: session.id }); }}
                       disabled={claimLead.isPending}
                     >
                       <UserCheck className="w-3 h-3" /> Claim Lead
@@ -860,8 +860,9 @@ function LeadCard({
   return (
     <>
       <div
-        className="relative bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+        className="group relative bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer"
         style={{ opacity: isNotInterested ? 0.65 : 1 }}
+        onClick={() => setShowConversation(true)}
       >
         {/* Left stage accent bar */}
         <div
@@ -876,18 +877,32 @@ function LeadCard({
               <span className="font-bold text-gray-900 text-[15px] leading-tight truncate">
                 {session.leadName ?? "Unknown"}
               </span>
-              <StageBadge stage={session.stage} />
+              {/* Show stage badge only if not booked (avoid duplicate with Booked badge below) */}
+              {!isBooked && <StageBadge stage={session.stage} />}
               {isBooked && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 border border-green-200">
                   <CheckCircle2 className="w-3 h-3" /> Booked
                 </span>
               )}
             </div>
-            {totalPrice && (
-              <span className="text-base font-bold shrink-0" style={{ color: "#E8603C" }}>
-                ${totalPrice}
-              </span>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Hover call icon */}
+              {session.leadPhone && (
+                <a
+                  href={`tel:${session.leadPhone}`}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-white bg-[#E8603C] hover:bg-[#d4522f]"
+                  onClick={e => e.stopPropagation()}
+                  title={`Call ${formatPhone(session.leadPhone)}`}
+                >
+                  <Phone className="w-3 h-3" />
+                </a>
+              )}
+              {totalPrice && (
+                <span className="text-base font-bold" style={{ color: "#E8603C" }}>
+                  ${totalPrice}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* ── Row 2: Phone + Meta ── */}
@@ -939,7 +954,7 @@ function LeadCard({
               <button
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity disabled:opacity-60"
                 style={{ backgroundColor: "#16a34a" }}
-                onClick={() => markBooked.mutate({ sessionId: session.id })}
+                onClick={e => { e.stopPropagation(); markBooked.mutate({ sessionId: session.id }); }}
                 disabled={markBooked.isPending}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -958,7 +973,7 @@ function LeadCard({
             {!isBooked && (
               <button
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
-                onClick={() => setShowLogCall(true)}
+                onClick={e => { e.stopPropagation(); setShowLogCall(true); }}
               >
                 <PhoneCall className="w-3 h-3" /> Log Call
               </button>
@@ -968,7 +983,7 @@ function LeadCard({
               isMine ? (
                 <button
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-60"
-                  onClick={() => unclaimLead.mutate({ sessionId: session.id })}
+                  onClick={e => { e.stopPropagation(); unclaimLead.mutate({ sessionId: session.id }); }}
                   disabled={unclaimLead.isPending}
                 >
                   <UserX className="w-3 h-3" /> Release
@@ -976,7 +991,7 @@ function LeadCard({
               ) : !session.assignedAgentId ? (
                 <button
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors disabled:opacity-60"
-                  onClick={() => claimLead.mutate({ sessionId: session.id })}
+                  onClick={e => { e.stopPropagation(); claimLead.mutate({ sessionId: session.id }); }}
                   disabled={claimLead.isPending}
                 >
                   <UserCheck className="w-3 h-3" /> Claim
@@ -988,7 +1003,7 @@ function LeadCard({
             {!isBooked && !isNotInterested && (
               <button
                 className="ml-auto inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-60"
-                onClick={() => markNotInterested.mutate({ sessionId: session.id })}
+                onClick={e => { e.stopPropagation(); markNotInterested.mutate({ sessionId: session.id }); }}
                 disabled={markNotInterested.isPending}
                 title="Mark as not interested"
               >
