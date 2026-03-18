@@ -716,3 +716,32 @@ export const voiceCalls = mysqlTable("voice_calls", {
 
 export type VoiceCall = typeof voiceCalls.$inferSelect;
 export type InsertVoiceCall = typeof voiceCalls.$inferInsert;
+
+// ── Callback Tasks ────────────────────────────────────────────────────────────
+/**
+ * callbackTasks — created when a caller requests a callback during a voice call.
+ * Madison collects their preferred time and this record appears in the admin dashboard.
+ */
+export const callbackTasks = mysqlTable("callback_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Linked voice call (if available) */
+  voiceCallId: int("voiceCallId"),
+  /** Linked conversation session (if lead was created) */
+  sessionId: int("sessionId"),
+  /** Caller's E.164 phone number */
+  callerPhone: varchar("callerPhone", { length: 30 }).notNull(),
+  /** Caller's name as collected by Madison */
+  callerName: varchar("callerName", { length: 128 }),
+  /** Preferred callback time as described by caller (e.g. "tomorrow morning", "Friday after 2pm") */
+  preferredCallbackTime: varchar("preferredCallbackTime", { length: 255 }),
+  /** Brief context note from Madison (e.g. "Interested in 3bd deep clean, wanted to speak to human") */
+  notes: text("notes"),
+  /** Whether an agent has completed this callback */
+  completed: int("completed").default(0).notNull(),
+  /** Agent who completed the callback */
+  completedByAgentName: varchar("completedByAgentName", { length: 128 }),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CallbackTask = typeof callbackTasks.$inferSelect;
+export type InsertCallbackTask = typeof callbackTasks.$inferInsert;

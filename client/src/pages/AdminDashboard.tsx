@@ -65,6 +65,7 @@ import {
   Volume2,
   PlayCircle,
   Eye,
+  PhoneIncoming,
 } from "lucide-react";
 import {
   Dialog,
@@ -1909,7 +1910,15 @@ export default function AdminDashboard() {
   const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
 
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
-  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "simulator" | "leaderboard">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "simulator" | "leaderboard" | "callbacks">("leads");
+  const [showCompletedCallbacks, setShowCompletedCallbacks] = useState(false);
+  const { data: callbackList, refetch: refetchCallbacks } = trpc.voice.listCallbacks.useQuery(
+    { includeCompleted: showCompletedCallbacks },
+    { enabled: activeTab === "callbacks" }
+  );
+  const completeCallbackMutation = trpc.voice.completeCallback.useMutation({
+    onSuccess: () => refetchCallbacks(),
+  });
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -2064,7 +2073,7 @@ export default function AdminDashboard() {
         </div>
         {/* Tab navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#F0D8D0" }}>
-           {(["leads", "pipeline", "agents", "leaderboard", "simulator"] as const).map(tab => (
+           {(["leads", "pipeline", "agents", "leaderboard", "callbacks", "simulator"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2073,8 +2082,13 @@ export default function AdminDashboard() {
                 ? { borderColor: "#E8603C", color: "#E8603C" }
                 : { borderColor: "transparent", color: "#6b7280" }}
             >
-              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-              {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "AI Simulator"}
+              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : tab === "callbacks" ? <PhoneIncoming className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+              {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : tab === "callbacks" ? "Callbacks" : "AI Simulator"}
+              {tab === "callbacks" && (callbackList?.filter(c => !c.completed).length ?? 0) > 0 && (
+                <span className="ml-1 bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                  {callbackList?.filter(c => !c.completed).length}
+                </span>
+              )}
             </button>
           ))}
           <a
@@ -2138,6 +2152,98 @@ export default function AdminDashboard() {
               onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
               onStageChange={() => refetch()}
             />
+          </div>
+        )}
+        {activeTab === "callbacks" && (
+          <div className="py-4">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Callback Requests</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Callers who asked to be called back. Mark as completed after you've reached them.</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showCompletedCallbacks}
+                  onChange={e => setShowCompletedCallbacks(e.target.checked)}
+                  className="rounded"
+                />
+                Show completed
+              </label>
+            </div>
+            {!callbackList || callbackList.length === 0 ? (
+              <div className="bg-white rounded-2xl border p-12 text-center" style={{ borderColor: "#F0D8D0" }}>
+                <PhoneIncoming className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500 font-medium">No pending callbacks</p>
+                <p className="text-sm text-gray-400 mt-1">When callers request a callback, they'll appear here.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {callbackList.map(cb => (
+                  <div
+                    key={cb.id}
+                    className={`bg-white rounded-xl border p-4 flex items-start gap-4 ${
+                      cb.completed ? "opacity-60" : ""
+                    }`}
+                    style={{ borderColor: cb.completed ? "#e5e7eb" : "#F0D8D0" }}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{ backgroundColor: cb.completed ? "#f3f4f6" : "#FFF0EB" }}
+                    >
+                      <PhoneIncoming
+                        className="w-5 h-5"
+                        style={{ color: cb.completed ? "#9ca3af" : "#E8603C" }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-900">
+                          {cb.callerName ?? cb.callerPhone}
+                        </span>
+                        {cb.callerName && (
+                          <span className="text-sm text-gray-400">{cb.callerPhone}</span>
+                        )}
+                        {cb.completed && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                            Completed by {cb.completedByAgentName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 text-sm text-gray-600">
+                        <Clock className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Preferred: <strong>{cb.preferredCallbackTime}</strong></span>
+                      </div>
+                      {cb.notes && (
+                        <p className="mt-1.5 text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                          {cb.notes}
+                        </p>
+                      )}
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        Requested {new Date(cb.createdAt).toLocaleString()}
+                        {cb.completedAt && ` · Completed ${new Date(cb.completedAt).toLocaleString()}`}
+                      </p>
+                    </div>
+                    {!cb.completed && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-shrink-0 gap-1.5 text-xs"
+                        style={{ borderColor: "#E8603C", color: "#E8603C" }}
+                        disabled={completeCallbackMutation.isPending}
+                        onClick={() => {
+                          const agentName = (window as unknown as { __agentName?: string }).__agentName ?? "Admin";
+                          completeCallbackMutation.mutate({ id: cb.id, completedByAgentName: agentName });
+                        }}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Mark Done
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {activeTab === "leads" && <>

@@ -19,9 +19,10 @@ import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { calculatePrice, SERVICE_MULTIPLIERS } from "./engine/pricing";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
-import { voiceCalls, conversationSessions, quoteLeads } from "../drizzle/schema";
+import { voiceCalls, conversationSessions, quoteLeads, callbackTasks } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
+import { invokeLLM } from "./_core/llm";
 
 const VAPI_API_BASE = "https://api.vapi.ai";
 
@@ -134,8 +135,14 @@ Step 10 — Close: Say "You're all set! Someone from our team will call you shor
 - Keep responses short. The caller is on a phone call, not reading an email.
 - Do not say "As an AI" or mention that you're an AI unless directly asked.
 
-## Transfer
-If the caller wants to speak to a human, use the transfer tool to connect them to the main office line.
+## Transfer & Callback Scheduling
+If the caller wants to speak to a human:
+1. First, try to transfer them using the transfer tool.
+2. If the transfer fails or goes to voicemail, say: "It looks like our team is unavailable right now. I can schedule a callback so someone calls you back at a time that works for you — would that help?"
+3. If they say yes, ask: "What's the best time for us to call you back?" Listen to their answer.
+4. Then call the scheduleCallback tool with their phone number ({{customer.number}}), their preferred time, and a brief note about why they called.
+5. After scheduleCallback succeeds, say: "Perfect — I've got you down for a callback [repeat their time back]. Someone from our team will call you then. Is there anything else I can help you with?"
+6. If they decline a callback, say: "No problem! You can always call us back at 202-888-5362 or visit maidsinblack.com. Have a great day!"
 
 ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 }
@@ -177,6 +184,37 @@ function buildToolDefinitions(webhookUrl: string) {
             },
           },
           required: ["name", "phone", "bedrooms", "bathrooms", "serviceType", "quotedPrice"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "scheduleCallback",
+        description:
+          "Schedule a callback for a caller who wants to speak to a human but no one is available. Call this when the caller requests a human and you cannot transfer them, or when they ask to be called back at a specific time.",
+        parameters: {
+          type: "object",
+          properties: {
+            callerName: {
+              type: "string",
+              description: "Caller's name (if collected)",
+            },
+            phone: {
+              type: "string",
+              description: "Caller's phone number — use {{customer.number}}",
+            },
+            preferredCallbackTime: {
+              type: "string",
+              description: "When the caller wants to be called back, in their own words (e.g. 'tomorrow morning', 'Friday after 2pm', 'anytime today')",
+            },
+            notes: {
+              type: "string",
+              description: "Brief context about why they called and what they need (e.g. 'Interested in 3bd deep clean, had pricing questions')",
+            },
+          },
+          required: ["phone", "preferredCallbackTime"],
         },
       },
       server: { url: webhookUrl },
@@ -579,6 +617,45 @@ export async function handleSendSms(args: {
   };
 }
 
+export async function handleScheduleCallback(args: {
+  callerName?: string;
+  phone: string;
+  preferredCallbackTime: string;
+  notes?: string;
+  voiceCallId?: number;
+  sessionId?: number;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const normalizedPhone = args.phone.startsWith("+") ? args.phone : `+1${args.phone.replace(/\D/g, "")}`;
+    await db.insert(callbackTasks).values({
+      voiceCallId: args.voiceCallId ?? null,
+      sessionId: args.sessionId ?? null,
+      callerPhone: normalizedPhone,
+      callerName: args.callerName ?? null,
+      preferredCallbackTime: args.preferredCallbackTime,
+      notes: args.notes ?? null,
+      completed: 0,
+    });
+    console.log(`[Vapi] Callback scheduled: phone=${normalizedPhone}, time=${args.preferredCallbackTime}`);
+    // Notify owner
+    await notifyOwner({
+      title: `📞 Callback requested: ${args.callerName ?? normalizedPhone}`,
+      content: [
+        `Phone: ${normalizedPhone}`,
+        `Preferred time: ${args.preferredCallbackTime}`,
+        args.notes ? `Notes: ${args.notes}` : "",
+      ].filter(Boolean).join("\n"),
+    }).catch(() => {});
+    return { success: true, message: "Callback scheduled successfully" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Vapi] scheduleCallback failed:", msg);
+    return { success: false, message: `Failed to schedule callback: ${msg}` };
+  }
+}
+
 // ─── End-of-call report processor ─────────────────────────────────────────────
 
 export interface VapiEndOfCallReport {
@@ -730,14 +807,58 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;
-    const slot = structuredData?.preferredDate ?? "your preferred time";
+    const slot = structuredData?.preferredDate;
 
-    const smsText = price
-      ? `Hi ${firstName}! Thanks for calling Maids in Black. Here's your booking summary: ${structuredData?.serviceType ?? "Cleaning"} for $${price}, scheduled for ${slot}. Someone from our team will call you shortly to confirm. Questions? Reply here or call 202-888-5362.`
-      : `Hi ${firstName}! Thanks for calling Maids in Black. Someone from our team will follow up with you shortly. Questions? Reply here or call 202-888-5362.`;
+    // Build a context string for the LLM to generate a personalized SMS
+    const callContext = [
+      `Caller name: ${callerName}`,
+      `Call outcome: ${outcome}`,
+      `Call summary: ${summary}`,
+      price ? `Quoted price: $${price}` : null,
+      structuredData?.serviceType ? `Service type: ${structuredData.serviceType}` : null,
+      structuredData?.bedrooms ? `Bedrooms: ${structuredData.bedrooms}` : null,
+      slot ? `Preferred date: ${slot}` : null,
+      structuredData?.intent ? `Caller intent: ${structuredData.intent}` : null,
+    ].filter(Boolean).join("\n");
 
+    let smsText: string;
+    try {
+      const llmResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are writing a post-call follow-up SMS for Maids in Black, a cleaning company in Washington DC.
+Write a SHORT, warm, personalized SMS (max 160 characters) based on the call details below.
+Rules:
+- Address the caller by first name only
+- Match the tone to the outcome: warm/confirmatory for bookings, helpful for FAQs, empathetic for complaints
+- For bookings: include the quoted price and preferred date if available
+- For FAQ-only calls: thank them and offer to help when they're ready
+- For callback requests: confirm someone will call at their preferred time
+- Always end with a way to reach us: "Reply here or call 202-888-5362."
+- Never use emojis
+- Never mention AI or Madison by name
+- Output ONLY the SMS text, nothing else`,
+          },
+          {
+            role: "user",
+            content: callContext,
+          },
+        ],
+      });
+      const raw = (llmResp as { choices?: Array<{ message?: { content?: string } }> })?.choices?.[0]?.message?.content?.trim();
+      smsText = raw && raw.length > 0 && raw.length <= 320
+        ? raw
+        : `Hi ${firstName}! Thanks for calling Maids in Black. Someone from our team will follow up with you shortly. Questions? Reply here or call 202-888-5362.`;
+    } catch (err) {
+      console.error("[Vapi] LLM SMS generation failed, using fallback:", err);
+      smsText = price
+        ? `Hi ${firstName}! Thanks for calling Maids in Black. Your quote for ${structuredData?.serviceType ?? "cleaning"} is $${price}${slot ? ` on ${slot}` : ""}. Someone will call to confirm. Reply here or call 202-888-5362.`
+        : `Hi ${firstName}! Thanks for calling Maids in Black. Someone from our team will follow up with you shortly. Questions? Reply here or call 202-888-5362.`;
+    }
+
+    console.log(`[Vapi] Sending dynamic follow-up SMS to ${normalizedPhone}: "${smsText}"`);
     const smsSent = await sendSms({ to: normalizedPhone, content: smsText });
-    console.log(`[Vapi] Follow-up SMS sent to ${normalizedPhone}`);
     // Log the outbound SMS to the session's message thread so it appears in the dashboard
     if (smsSent.success && sessionId) {
       appendMessageToSession(sessionId, smsText, "assistant").catch(console.error);

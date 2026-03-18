@@ -1153,3 +1153,8 @@
 ## Kanban Drag-and-Drop Fix — IN PROGRESS
 
 - [ ] Fix drag-and-drop so cards can be dragged between columns
+
+## Voice AI Improvements (Round 2)
+
+- [x] Voice: callback scheduling — Madison collects preferred callback time when transfer goes to voicemail, creates a callbackTasks record, shows pending callbacks in admin dashboard
+- [x] Voice: dynamic post-call SMS — replace hardcoded template with LLM-generated message personalized to call outcome and summary

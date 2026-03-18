@@ -12,7 +12,7 @@ import { z } from "zod";
 import { desc, eq, gte, and, sql } from "drizzle-orm";
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { voiceCalls } from "../drizzle/schema";
+import { voiceCalls, callbackTasks } from "../drizzle/schema";
 import { getAssistantId } from "./vapiService";
 
 export const voiceRouter = router({
@@ -139,4 +139,42 @@ export const voiceRouter = router({
   getAssistantId: adminAgentProcedure.query(() => {
     return { assistantId: getAssistantId() };
   }),
+
+  /**
+   * List pending (incomplete) callback tasks, newest first.
+   */
+  listCallbacks: adminAgentProcedure
+    .input(z.object({ includeCompleted: z.boolean().default(false) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(callbackTasks)
+        .where(input.includeCompleted ? undefined : eq(callbackTasks.completed, 0))
+        .orderBy(desc(callbackTasks.createdAt));
+      return rows;
+    }),
+
+  /**
+   * Mark a callback task as completed.
+   */
+  completeCallback: adminAgentProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      completedByAgentName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await db
+        .update(callbackTasks)
+        .set({
+          completed: 1,
+          completedByAgentName: input.completedByAgentName,
+          completedAt: new Date(),
+        })
+        .where(eq(callbackTasks.id, input.id));
+      return { success: true };
+    }),
 });

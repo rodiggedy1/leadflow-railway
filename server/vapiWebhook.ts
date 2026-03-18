@@ -18,6 +18,7 @@ import {
   handleGetQuote,
   handleCreateLead,
   handleSendSms,
+  handleScheduleCallback,
   processEndOfCallReport,
   type VapiEndOfCallReport,
 } from "./vapiService";
@@ -155,6 +156,24 @@ export function registerVapiWebhookRoute(app: Express): void {
             case "sendSms": {
               result = await handleSendSms({
                 ...(args as { to: string; message: string }),
+                sessionId: batchSessionId,
+              });
+              break;
+            }
+            case "scheduleCallback": {
+              const cbArgs = args as {
+                callerName?: string;
+                phone?: string;
+                preferredCallbackTime: string;
+                notes?: string;
+              };
+              // Use caller phone from call object as authoritative source
+              const cbPhone = cbArgs.phone ?? callerPhone;
+              result = await handleScheduleCallback({
+                callerName: cbArgs.callerName,
+                phone: cbPhone,
+                preferredCallbackTime: cbArgs.preferredCallbackTime,
+                notes: cbArgs.notes,
                 sessionId: batchSessionId,
               });
               break;
