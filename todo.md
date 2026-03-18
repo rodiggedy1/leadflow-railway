@@ -1158,3 +1158,10 @@
 
 - [x] Voice: callback scheduling — Madison collects preferred callback time when transfer goes to voicemail, creates a callbackTasks record, shows pending callbacks in admin dashboard
 - [x] Voice: dynamic post-call SMS — replace hardcoded template with LLM-generated message personalized to call outcome and summary
+
+## Voice AI: Proactive Callback (No Transfer)
+
+- [x] Remove transfer tool from Vapi assistant config
+- [x] Rewrite system prompt: Madison goes straight to callback scheduling when caller asks for human
+- [x] Add business-hours awareness: inject current day/time so Madison suggests correct next business morning
+- [x] Madison offers two specific time slots (e.g. "9am or 10am") instead of open-ended "what time?"
