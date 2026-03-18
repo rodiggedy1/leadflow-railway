@@ -142,24 +142,47 @@ Step 4 — Service type: Ask what type of cleaning they need: Standard, Deep, Mo
 
 Step 5 — Quote: Calculate the price yourself using the pricing table above. State it clearly: e.g. "For a 3-bedroom, 2-bathroom home with a standard cleaning, that comes to $259."
 
-Step 6 — Preferred date: Ask when they'd like to schedule.
+Step 6 — Add-ons (IMPORTANT — always do this after quoting): Ask about extras conversationally. Ask these questions one at a time, only if relevant:
+- "Do you have any pets at home?" — if yes, add $15 (key: i_have_pets)
+- "Would you like us to clean inside the oven?" — if yes, add $30 (key: clean_inside_oven)
+- "How about inside the fridge — would you like that cleaned too?" — if yes, ask if it will be empty ($25, key: clean_inside_empty_fridge) or full ($40, key: clean_inside_full_fridge)
+- "Would you prefer eco-friendly, green cleaning products?" — if yes, add $20 (key: green_cleaning)
 
-Step 7 — Address: Ask for the service address.
+After asking about add-ons:
+- If any were selected, say "Great! With those add-ons, your updated total comes to $[new total]." and note the selected extras.
+- If none were selected, move on naturally.
+- Keep this conversational — don't read a list, ask one at a time and stop if the caller seems impatient.
 
-Step 8 — Confirm SMS number: Before saving the lead, confirm the best number to text them.
+Add-on pricing reference (memorize these):
+- Pets: +$15
+- Clean inside oven: +$30
+- Clean inside empty fridge: +$25
+- Clean inside full fridge: +$40
+- Green cleaning: +$20
+- Clean inside cabinets: +$30
+- Clean interior windows: +$40
+- Wipe walls: +$35
+- Load of laundry: +$20
+- Wash dishes: +$20
+
+Step 7 — Preferred date: Ask when they'd like to schedule.
+
+Step 8 — Address: Ask for the service address.
+
+Step 9 — Confirm SMS number: Before saving the lead, confirm the best number to text them.
 - If {{customer.number}} is available (not blank): say "I have [read the number digit by digit, e.g. 'two-oh-two, five-five-five, one-two-three-four'] on file — is that the best number to text you?"
   - If they say yes: use {{customer.number}} for all tool calls.
   - If they give a different number: use the number they provide instead.
 - If {{customer.number}} is blank or unavailable: ask "What's the best number to text you?"
 
-Step 9 — Save lead: Call the createLead tool with all collected info. Use the confirmed phone number from Step 8. Pass the price you calculated as quotedPrice.
+Step 10 — Save lead: Call the createLead tool with all collected info. Use the confirmed phone number from Step 9. Pass the final price (base + add-ons) as quotedPrice. Pass the selected extra keys as the selectedExtras array (e.g. ["i_have_pets", "clean_inside_oven"]).
 
-Step 10 — Send SMS: After createLead succeeds → call the sendSms tool to text them a confirmation summary to the confirmed number.
+Step 11 — Send SMS: After createLead succeeds → call the sendSms tool to text them a confirmation summary (including add-ons if any) to the confirmed number.
 
-Step 11 — Close: Say "You're all set! Someone from our team will call you shortly to confirm everything. Is there anything else I can help you with?"
+Step 12 — Close: Say "You're all set! Someone from our team will call you shortly to confirm everything. Is there anything else I can help you with?"
 
 ## Tool argument format rules (CRITICAL — follow exactly)
-- For createLead phone: Use the number confirmed with the caller in Step 8. If they confirmed {{customer.number}}, use that. If they gave a different number, use that instead. Never use the business number (202-888-5362).
+- For createLead phone: Use the number confirmed with the caller in Step 9. If they confirmed {{customer.number}}, use that. If they gave a different number, use that instead. Never use the business number (202-888-5362).
 - For createLead bedrooms: use EXACTLY one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7+ Bedrooms"
 - For createLead bathrooms: use EXACTLY one of: "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"
 - For createLead serviceType: use EXACTLY one of: "Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Office Cleaning"
@@ -234,12 +257,17 @@ function buildToolDefinitions(webhookUrl: string) {
             serviceType: { type: "string", description: "Type of cleaning service" },
             quotedPrice: {
               type: "number",
-              description: "The price you calculated for this job (dollars, no cents, e.g. 259)",
+              description: "The final price including base price plus any add-ons (dollars, no cents, e.g. 289)",
             },
             preferredDate: {
               type: "string",
               description:
                 "Preferred date/time as described by the caller (e.g. 'Saturday morning', 'March 22nd at 10am')",
+            },
+            selectedExtras: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of extra service keys selected by the caller (e.g. ['i_have_pets', 'clean_inside_oven']). Use exact keys from the add-on pricing reference. Leave empty array if no add-ons selected.",
             },
           },
           required: ["name", "phone", "bedrooms", "bathrooms", "serviceType", "quotedPrice"],
@@ -372,6 +400,11 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
             description: "How the call ended",
           },
           leadCreated: { type: "boolean", description: "Whether a lead was created in the system" },
+          selectedExtras: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of add-on service keys selected by the caller (e.g. ['i_have_pets', 'clean_inside_oven'])",
+          },
         },
         required: ["intent", "outcome"],
       },
@@ -578,9 +611,10 @@ export async function handleCreateLead(args: {
   serviceType: string;
   quotedPrice: number;
   preferredDate?: string;
+  selectedExtras?: string[];
 }): Promise<{ success: boolean; sessionId?: number; message: string }> {
   try {
-    const { name, phone, email, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = args;
+    const { name, phone, email, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate, selectedExtras } = args;
 
     // Normalize phone to E.164
     const normalizedPhone = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
@@ -588,6 +622,10 @@ export async function handleCreateLead(args: {
     // Insert a new quote lead
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    const extrasJson = selectedExtras && selectedExtras.length > 0
+      ? JSON.stringify(selectedExtras)
+      : null;
+
     const [leadResult] = await db.insert(quoteLeads).values({
       name,
       email: email ?? null,
@@ -596,6 +634,7 @@ export async function handleCreateLead(args: {
       bedrooms,
       bathrooms,
       smsSent: 0,
+      extras: extrasJson,
     });
 
     const leadId = (leadResult as { insertId: number }).insertId;
@@ -615,6 +654,7 @@ export async function handleCreateLead(args: {
       quoteLeadId: leadId,
       leadSource: "voice",
       messageHistory: "[]",
+      extras: extrasJson,
     });
 
     const sessionId = (sessionResult as { insertId: number }).insertId;
@@ -886,6 +926,7 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
           serviceType,
           quotedPrice: quotedPrice ?? 0,
           preferredDate: preferredDate ?? undefined,
+          selectedExtras: (structuredData as { selectedExtras?: string[] }).selectedExtras ?? undefined,
         });
         if (createResult.success && createResult.sessionId) {
           sessionId = createResult.sessionId;

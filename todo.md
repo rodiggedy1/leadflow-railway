@@ -1222,3 +1222,10 @@
 
 ## Voice: New Call Notification Bell
 - [x] Fire notifyOwner when call status becomes in-progress (status-update webhook) — immediate bell when call connects, showing caller phone number
+
+## Voice: Add-ons Upsell in Booking Flow
+- [x] After quoting base price, Madison asks about high-value extras (pets, oven, fridge, etc.) conversationally
+- [x] Madison updates the total with any selected add-ons and states the new price
+- [x] createLead tool updated to accept selectedExtras array
+- [x] Extras saved to both quoteLeads and conversationSessions records
+- [x] structuredDataSchema updated to extract selectedExtras from transcript (fallback path)

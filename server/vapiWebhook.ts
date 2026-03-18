@@ -123,6 +123,7 @@ export function registerVapiWebhookRoute(app: Express): void {
                 serviceType: string;
                 quotedPrice: number;
                 preferredDate?: string;
+                selectedExtras?: string[];
               };
               // Use caller's phone from the call object as the authoritative source.
               // The system prompt injects {{customer.number}} which the LLM passes as phone,
@@ -146,6 +147,7 @@ export function registerVapiWebhookRoute(app: Express): void {
                 serviceType: string;
                 quotedPrice: number;
                 preferredDate?: string;
+                selectedExtras?: string[];
               });
               // Capture sessionId so sendSms in this batch can log to the thread
               if (createResult.success && createResult.sessionId) {
