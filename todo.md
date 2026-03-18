@@ -1190,3 +1190,6 @@
 ## Double post-call SMS fix
 
 - [x] Fix double SMS: end-of-call SMS now skipped when leadCreated=true (mid-call sendSms tool already ran during booking flow)
+
+## Manual send double-message fix
+- [x] Fix double manual send: added isPending guard to handleSend in AdminDashboard and AgentDashboard — prevents second mutate() call if button clicked while first request is in flight

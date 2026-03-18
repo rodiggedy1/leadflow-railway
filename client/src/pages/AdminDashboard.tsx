@@ -838,7 +838,7 @@ function ConversationDrawer({
 
   const handleSend = () => {
     const text = replyText.trim();
-    if (!text) return;
+    if (!text || sendMessageMutation.isPending) return;
     sendMessageMutation.mutate({ sessionId: session.id, message: text });
   };
 
