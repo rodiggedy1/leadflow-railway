@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { desc, eq, gte, and, sql } from "drizzle-orm";
+import { desc, eq, gte, lte, and, sql } from "drizzle-orm";
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import { voiceCalls, callbackTasks } from "../drizzle/schema";
@@ -24,22 +24,38 @@ export const voiceRouter = router({
       z.object({
         limit: z.number().min(1).max(100).default(50),
         offset: z.number().min(0).default(0),
+        /** ISO date string — only return calls on or after this date */
+        dateFrom: z.string().optional(),
+        /** ISO date string — only return calls on or before this date */
+        dateTo: z.string().optional(),
       })
     )
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return { calls: [], total: 0 };
 
+      const conditions = [];
+      if (input.dateFrom) conditions.push(gte(voiceCalls.createdAt, new Date(input.dateFrom)));
+      if (input.dateTo) {
+        // Include the full day by setting time to end of day
+        const endOfDay = new Date(input.dateTo);
+        endOfDay.setHours(23, 59, 59, 999);
+        conditions.push(lte(voiceCalls.createdAt, endOfDay));
+      }
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
       const calls = await db
         .select()
         .from(voiceCalls)
+        .where(whereClause)
         .orderBy(desc(voiceCalls.createdAt))
         .limit(input.limit)
         .offset(input.offset);
 
       const [{ count }] = await db
         .select({ count: sql<number>`COUNT(*)` })
-        .from(voiceCalls);
+        .from(voiceCalls)
+        .where(whereClause);
 
       return { calls, total: Number(count) };
     }),

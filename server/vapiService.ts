@@ -900,6 +900,35 @@ Rules:
     }
   }
 
+  // Backfill voiceCallId on callbackTasks created during this call.
+  // scheduleCallback fires mid-call before the voice_calls row exists, so
+  // voiceCallId is null at creation time. We fix it here by matching on
+  // caller phone — any unlinked callback task for this caller gets linked now.
+  if (normalizedPhone) {
+    try {
+      const [insertedCall] = await db
+        .select({ id: voiceCalls.id })
+        .from(voiceCalls)
+        .where(eq(voiceCalls.vapiCallId, vapiCallId))
+        .limit(1);
+      if (insertedCall) {
+        const { sql: sqlFn, and, isNull } = await import("drizzle-orm");
+        await db
+          .update(callbackTasks)
+          .set({ voiceCallId: insertedCall.id })
+          .where(
+            and(
+              eq(callbackTasks.callerPhone, normalizedPhone),
+              isNull(callbackTasks.voiceCallId)
+            )
+          );
+        console.log(`[Vapi] Backfilled voiceCallId=${insertedCall.id} on callbackTasks for ${normalizedPhone}`);
+      }
+    } catch (err) {
+      console.error("[Vapi] Failed to backfill voiceCallId on callbackTasks:", err);
+    }
+  }
+
   // Notify agent/owner of the call
   const notifTitle = leadCreated
     ? `📞 New voice lead: ${structuredData?.callerName ?? callerPhone}`

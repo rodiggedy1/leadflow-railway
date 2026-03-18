@@ -1171,3 +1171,8 @@
 - [x] Enrich listCallbacks: join with voice_calls to include recording URL, transcript, summary on each callback card
 - [x] Build /admin/calls page: all voice calls with recording player, transcript expand, summary, outcome badge
 - [x] Add "All Calls" nav link in admin header
+
+## Voice Calls: Fixes
+
+- [x] Fix callback cards: voiceCallId not being saved — link callbackTasks to voice_calls at end-of-call
+- [x] Add date filters to All Calls page (Today / Last 7 / Last 30 / All)
