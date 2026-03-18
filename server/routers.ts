@@ -96,11 +96,15 @@ export const appRouter = router({
           .select()
           .from(conversationSessions)
           .where(conditions)
-          .orderBy(desc(conversationSessions.updatedAt))
+          // Fetch without a specific order; we'll sort by lastActivityAt below
+          // after deriving it from messageHistory / lastCalledAt. Sorting by
+          // updatedAt here would cause leads to jump around whenever any
+          // background write (cron, notes save, stage update) touches the row.
+          .orderBy(desc(conversationSessions.createdAt))
           .limit(500);
 
         // Derive lastActivity from messageHistory (most recent SMS) or lastCalledAt
-        return sessions.map(s => {
+        const mapped = sessions.map(s => {
           let lastActivityText: string | null = null;
           let lastActivityAt: Date | null = null;
           let lastActivityType: "sms" | "call" | null = null;
@@ -145,6 +149,21 @@ export const appRouter = router({
 
           return { ...s, lastActivityText, lastActivityAt, lastActivityType };
         });
+
+        // Sort by lastActivityAt descending so the most recently active lead
+        // is always at the top. Falls back to createdAt for sessions with no
+        // message history yet.
+        mapped.sort((a, b) => {
+          const aTime = a.lastActivityAt
+            ? (a.lastActivityAt instanceof Date ? a.lastActivityAt.getTime() : new Date(a.lastActivityAt as string).getTime())
+            : (a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt as string).getTime());
+          const bTime = b.lastActivityAt
+            ? (b.lastActivityAt instanceof Date ? b.lastActivityAt.getTime() : new Date(b.lastActivityAt as string).getTime())
+            : (b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt as string).getTime());
+          return bTime - aTime;
+        });
+
+        return mapped;
       }),
     stats: publicProcedure
       .input(

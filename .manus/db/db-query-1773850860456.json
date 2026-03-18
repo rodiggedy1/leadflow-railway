@@ -1,0 +1,21 @@
+{
+  "query": "\nSELECT \n  id, leadName, leadPhone, stage, createdAt, updatedAt,\n  JSON_LENGTH(messageHistory) as msgCount,\n  JSON_EXTRACT(messageHistory, '$[last]') as lastMsg,\n  SUBSTRING(messageHistory, -500) as msgTail\nFROM conversation_sessions\nWHERE leadName LIKE '%Thelma%' OR leadPhone LIKE '%703%843%'\nORDER BY updatedAt DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT \n  id, leadName, leadPhone, stage, createdAt, updatedAt,\n  JSON_LENGTH(messageHistory) as msgCount,\n  JSON_EXTRACT(messageHistory, '$[last]') as lastMsg,\n  SUBSTRING(messageHistory, -500) as msgTail\nFROM conversation_sessions\nWHERE leadName LIKE '%Thelma%' OR leadPhone LIKE '%703%843%'\nORDER BY updatedAt DESC\nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "690003",
+      "leadName": "Thelma",
+      "leadPhone": "+17038431261",
+      "stage": "WIDGET_SIZING",
+      "createdAt": "2026-03-17 20:04:16",
+      "updatedAt": "2026-03-18 16:17:37",
+      "msgCount": "6",
+      "lastMsg": "{\"content\": \"Was there something else you were interested in?\", \"role\": \"assistant\", \"ts\": 1773778999049}",
+      "msgTail": "55390},{\"role\":\"assistant\",\"content\":\"To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)\",\"ts\":1773777955391},{\"role\":\"user\",\"content\":\"Gracias \",\"ts\":1773777956833},{\"role\":\"assistant\",\"content\":\"To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)\",\"ts\":1773777956834},{\"role\":\"assistant\",\"content\":\"Was there something else you were interested in?\",\"ts\":1773778999049}]"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tleadName\tleadPhone\tstage\tcreatedAt\tupdatedAt\tmsgCount\tlastMsg\tmsgTail\n690003\tThelma\t+17038431261\tWIDGET_SIZING\t2026-03-17 20:04:16\t2026-03-18 16:17:37\t6\t{\"content\": \"Was there something else you were interested in?\", \"role\": \"assistant\", \"ts\": 1773778999049}\t55390},{\"role\":\"assistant\",\"content\":\"To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)\",\"ts\":1773777955391},{\"role\":\"user\",\"content\":\"Gracias \",\"ts\":1773777956833},{\"role\":\"assistant\",\"content\":\"To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)\",\"ts\":1773777956834},{\"role\":\"assistant\",\"content\":\"Was there something else you were interested in?\",\"ts\":1773778999049}]\n",
+  "stderr": "",
+  "execution_time_ms": 470
+}
