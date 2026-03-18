@@ -1149,3 +1149,7 @@
 - [ ] Add AI call history section to agent drawer (same as admin)
 - [ ] Add call transcript section to agent drawer
 - [ ] Add voice recording playback to agent drawer
+
+## Kanban Drag-and-Drop Fix — IN PROGRESS
+
+- [ ] Fix drag-and-drop so cards can be dragged between columns

@@ -5,7 +5,8 @@
  * Each column shows lead count + total pipeline value.
  * Cards are draggable between columns; dropping fires adminUpdateStage.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import type React from "react";
 import {
   DndContext,
   DragOverlay,
@@ -178,7 +179,8 @@ function LeadCard({
   onClick?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+  const [didDrag, setDidDrag] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, isDragging: isCurrentlyDragging } = useDraggable({
     id: String(lead.id),
     data: { lead },
   });
@@ -194,21 +196,23 @@ function LeadCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white rounded-xl border shadow-sm p-3 cursor-pointer select-none transition-all ${
+      {...attributes}
+      {...listeners}
+      className={`bg-white rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing select-none transition-all ${
         isDragging ? "opacity-40" : "hover:shadow-md hover:border-orange-200"
       }`}
-      onClick={onClick}
+      onClick={(e) => {
+        // Don't fire click if the user just finished dragging
+        if (isCurrentlyDragging) return;
+        if ((e as unknown as MouseEvent & { _wasDrag?: boolean })._wasDrag) return;
+        onClick?.();
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Drag handle + name row */}
+      {/* Grip icon + name row */}
       <div className="flex items-start gap-2">
-        <div
-          {...attributes}
-          {...listeners}
-          className="mt-0.5 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing flex-shrink-0"
-          onClick={e => e.stopPropagation()}
-        >
+        <div className="mt-0.5 text-gray-300 flex-shrink-0">
           <GripVertical className="w-3.5 h-3.5" />
         </div>
         <div className="flex-1 min-w-0">
@@ -284,11 +288,13 @@ function KanbanColumn({
   leads,
   isOver,
   onCardClick,
+  justDraggedRef,
 }: {
   column: KanbanColumn;
   leads: LeadRow[];
   isOver: boolean;
   onCardClick: (lead: LeadRow) => void;
+  justDraggedRef: React.RefObject<boolean>;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
@@ -328,7 +334,10 @@ function KanbanColumn({
           <LeadCard
             key={lead.id}
             lead={lead}
-            onClick={() => onCardClick(lead)}
+            onClick={() => {
+              if (justDraggedRef.current) return;
+              onCardClick(lead);
+            }}
           />
         ))}
       </div>
@@ -347,6 +356,8 @@ type KanbanBoardProps = {
 export default function KanbanBoard({ leads, onCardClick, onStageChange }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  // Track whether a drag just ended to suppress the spurious click dnd-kit fires after drop
+  const justDraggedRef = useRef(false);
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
   const utils = trpc.useUtils();
@@ -391,6 +402,10 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     const { active, over } = event;
     setActiveId(null);
     setOverId(null);
+
+    // Suppress the spurious click that fires after a drag ends
+    justDraggedRef.current = true;
+    setTimeout(() => { justDraggedRef.current = false; }, 200);
 
     if (!over) return;
     const leadId = Number(active.id);
@@ -444,6 +459,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
               leads={columnLeads[col.id] ?? []}
               isOver={overId === col.id}
               onCardClick={onCardClick}
+              justDraggedRef={justDraggedRef}
             />
           ))}
         </div>
