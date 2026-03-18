@@ -182,7 +182,7 @@ function buildToolDefinitions(webhookUrl: string) {
 
 // ─── Assistant configuration ───────────────────────────────────────────────────
 
-function buildAssistantConfig(toolIds: string[]) {
+function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
   return {
     name: "Madison — Maids in Black",
     firstMessage:
@@ -254,6 +254,9 @@ function buildAssistantConfig(toolIds: string[]) {
         "Did this call result in a positive outcome? A successful call is one where the caller got the information they needed, a booking was made, or the caller was transferred to a human. Rate as 'true' if successful, 'false' if the caller hung up frustrated or their needs were not met.",
       successEvaluationRubric: "PassFail",
     },
+    server: {
+      url: webhookUrl,
+    },
   };
 }
 
@@ -305,8 +308,8 @@ export async function bootstrapVapiAssistant(webhookUrl: string): Promise<string
       toolIds.push(id);
     }
 
-    // Step 2: Build assistant config with toolIds
-    const config = buildAssistantConfig(toolIds);
+    // Step 2: Build assistant config with toolIds and webhook URL
+    const config = buildAssistantConfig(toolIds, webhookUrl);
 
     // Step 3: List existing assistants to find ours
     const list = (await vapiRequest("GET", "/assistant")) as { id: string; name: string }[];
