@@ -588,10 +588,12 @@ export default function QuoteForm() {
     }
     const sk = sessionKey;
     const utms = utmsRef.current;
+    const mountedAt = Date.now();
 
     // Bot-filtering: only count a visit after BOTH conditions are met:
-    // 1. At least 2 seconds have passed (bots load and leave instantly)
+    // 1. At least 8 seconds have passed (bots load and leave instantly)
     // 2. The user has moved their mouse or touched the screen (bots never interact)
+    // We also record the exact elapsed time so the server can apply its own threshold.
     let timerFired = false;
     let interacted = false;
     let fired = false;
@@ -599,18 +601,22 @@ export default function QuoteForm() {
     function maybeTrack() {
       if (fired || !timerFired || !interacted) return;
       fired = true;
+      const timeOnPage = Math.round((Date.now() - mountedAt) / 1000);
       trackPageView.mutate({
         sessionKey: sk,
         utmSource: utms.utmSource,
         utmMedium: utms.utmMedium,
         utmCampaign: utms.utmCampaign,
+        timeOnPage,
       });
     }
 
+    // Raise minimum timer to 8 seconds — real humans read the form before interacting.
+    // Bots that execute JS rarely wait this long.
     const timer = setTimeout(() => {
       timerFired = true;
       maybeTrack();
-    }, 2000);
+    }, 8000);
 
     function onInteract() {
       interacted = true;

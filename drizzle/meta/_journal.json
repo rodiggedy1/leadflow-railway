@@ -253,6 +253,13 @@
       "when": 1773869031921,
       "tag": "0035_futuristic_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1773869405287,
+      "tag": "0036_old_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

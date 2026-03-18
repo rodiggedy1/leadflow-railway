@@ -1275,3 +1275,11 @@
 - [x] Fix visitorStats query to use COUNT(DISTINCT sessionKey) as fallback for historical data
 - [x] Fix dailyTrend query to use COUNT(DISTINCT sessionKey) per day
 - [x] Fix sourceBreakdown query to use COUNT(DISTINCT sessionKey) per source
+
+## Bot Filter for Visitor Tracking
+
+- [x] Add timeOnPage (int, seconds) column to page_views schema
+- [x] Frontend: track elapsed seconds from mount to first interaction, send with trackPageView
+- [x] Raise minimum timer from 2s to 8s before tracking fires
+- [x] Server: store timeOnPage in page_views row
+- [x] Count queries: filter WHERE timeOnPage >= 8 OR timeOnPage IS NULL to exclude instant bot sessions

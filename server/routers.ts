@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, desc, eq, gte, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -251,6 +251,8 @@ export const appRouter = router({
         // Visitor counts per source (from page_views table)
         // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
         // the UNIQUE constraint was added to the sessionKey column.
+        // Bot filter: only count sessions where timeOnPage >= 8s, or NULL (rows before this column was added).
+        const BOT_FILTER_SECONDS = 8;
         const visitorRows = await db
           .select({
             utmSource: pageViews.utmSource,
@@ -261,6 +263,10 @@ export const appRouter = router({
             and(
               input?.dateFrom ? gte(pageViews.createdAt, new Date(input.dateFrom)) : undefined,
               input?.dateTo   ? lte(pageViews.createdAt, new Date(input.dateTo))   : undefined,
+              or(
+                isNull(pageViews.timeOnPage),
+                gte(pageViews.timeOnPage, BOT_FILTER_SECONDS),
+              ),
             )
           )
           .groupBy(pageViews.utmSource);
@@ -298,17 +304,20 @@ export const appRouter = router({
         utmSource: z.string().max(100).optional(),
         utmMedium: z.string().max(100).optional(),
         utmCampaign: z.string().max(255).optional(),
+        /** Seconds from page mount to first real interaction — used as bot filter */
+        timeOnPage: z.number().int().min(0).max(3600).optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) return { ok: false };
-        // Upsert — ignore if this sessionKey already exists
+        // Upsert — ignore if this sessionKey already exists (UNIQUE constraint on sessionKey)
         try {
           await db.insert(pageViews).ignore().values({
             sessionKey: input.sessionKey,
             utmSource: input.utmSource ?? null,
             utmMedium: input.utmMedium ?? null,
             utmCampaign: input.utmCampaign ?? null,
+            timeOnPage: input.timeOnPage ?? null,
           });
         } catch {
           // Silently ignore duplicate key errors
@@ -334,16 +343,20 @@ export const appRouter = router({
         // Visitor count from page_views table
         // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
         // the UNIQUE constraint was added to the sessionKey column.
+        // Bot filter: only count sessions where timeOnPage >= 8s, or NULL (rows before this column was added).
+        const BOT_FILTER_SECONDS = 8;
         const [visitorRow] = await db
           .select({ count: sql<number>`count(distinct ${pageViews.sessionKey})` })
           .from(pageViews)
           .where(
-            input?.dateFrom || input?.dateTo
-              ? and(
-                  input?.dateFrom ? gte(pageViews.createdAt, new Date(input.dateFrom)) : undefined,
-                  input?.dateTo ? lte(pageViews.createdAt, new Date(input.dateTo)) : undefined,
-                )
-              : undefined
+            and(
+              input?.dateFrom ? gte(pageViews.createdAt, new Date(input.dateFrom)) : undefined,
+              input?.dateTo ? lte(pageViews.createdAt, new Date(input.dateTo)) : undefined,
+              or(
+                isNull(pageViews.timeOnPage),
+                gte(pageViews.timeOnPage, BOT_FILTER_SECONDS),
+              ),
+            )
           );
 
         // Lead count from conversation_sessions
@@ -389,13 +402,23 @@ export const appRouter = router({
       // Daily visitor counts
       // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
       // the UNIQUE constraint was added to the sessionKey column.
+      // Bot filter: only count sessions where timeOnPage >= 8s, or NULL (rows before this column was added).
+      const BOT_FILTER_SECONDS = 8;
       const visitorRows = await db
         .select({
           day: sql<string>`DATE(${pageViews.createdAt})`,
           count: sql<number>`count(distinct ${pageViews.sessionKey})`,
         })
         .from(pageViews)
-        .where(gte(pageViews.createdAt, sevenDaysAgo))
+        .where(
+          and(
+            gte(pageViews.createdAt, sevenDaysAgo),
+            or(
+              isNull(pageViews.timeOnPage),
+              gte(pageViews.timeOnPage, BOT_FILTER_SECONDS),
+            ),
+          )
+        )
         .groupBy(sql`DATE(${pageViews.createdAt})`);
 
       // Daily lead counts

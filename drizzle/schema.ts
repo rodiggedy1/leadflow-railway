@@ -275,6 +275,12 @@ export const pageViews = mysqlTable("page_views", {
   utmSource: varchar("utmSource", { length: 100 }),
   utmMedium: varchar("utmMedium", { length: 100 }),
   utmCampaign: varchar("utmCampaign", { length: 255 }),
+  /**
+   * Seconds elapsed from page mount to first real interaction (mouse/touch/key/scroll).
+   * Used as a bot filter: sessions with timeOnPage < 8 are excluded from visitor counts.
+   * NULL means the row was recorded before this column was added (treated as valid).
+   */
+  timeOnPage: int("timeOnPage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
