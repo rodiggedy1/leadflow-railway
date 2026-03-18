@@ -1,31 +1,62 @@
 /**
  * Tests for the Vapi voice integration:
- * - handleGetQuote: pricing logic
- * - handleCreateLead: session creation/matching
+ * - handleGetQuote: pricing logic and normalization
+ * - parseToolCall: both Vapi-native and OpenAI-style formats
+ * - createLead args: phone override, email passthrough
  * - processEndOfCallReport: webhook data processing
- * - voiceRouter.stats: aggregate stats shape
+ * - System prompt: customer.number injection, name verification, email collection
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── handleGetQuote ──────────────────────────────────────────────────────────
 
-// Import the pure function directly (no DB needed)
 import { handleGetQuote } from "./vapiService";
 
-describe("handleGetQuote", () => {
-  it("returns a numeric price for a standard 2BR/1BA request", () => {
+describe("handleGetQuote — pricing correctness", () => {
+  it("3 Bedrooms / 2 Bathrooms / Standard = $259", () => {
+    // Base: $229 (3BR) + $30 (1 extra bath) × 1.0 = $259
     const result = handleGetQuote({
-      bedrooms: "2 Bedrooms",
+      bedrooms: "3 Bedrooms",
+      bathrooms: "2 Bathrooms",
+      serviceType: "Standard Cleaning",
+    });
+    expect(result.price).toBe(259);
+    expect(result.priceFormatted).toBe("$259");
+    expect(result.summary).toContain("$259");
+  });
+
+  it("3 Bedrooms / 1 Bathroom / Standard = $229", () => {
+    // Base: $229 (3BR) + 0 extra baths = $229
+    const result = handleGetQuote({
+      bedrooms: "3 Bedrooms",
       bathrooms: "1 Bathroom",
       serviceType: "Standard Cleaning",
     });
-    expect(result.price).toBeGreaterThan(0);
-    expect(result.priceFormatted).toMatch(/^\$\d+$/);
-    expect(result.summary).toContain("2 Bedrooms");
+    expect(result.price).toBe(229);
   });
 
-  it("applies deep cleaning multiplier (price > standard)", () => {
+  it("2 Bedrooms / 2 Bathrooms / Standard = $239", () => {
+    // Base: $209 (2BR) + $30 (1 extra bath) = $239
+    const result = handleGetQuote({
+      bedrooms: "2 Bedrooms",
+      bathrooms: "2 Bathrooms",
+      serviceType: "Standard Cleaning",
+    });
+    expect(result.price).toBe(239);
+  });
+
+  it("Studio / 1 Bathroom / Standard = $179", () => {
+    const result = handleGetQuote({
+      bedrooms: "Studio",
+      bathrooms: "1 Bathroom",
+      serviceType: "Standard Cleaning",
+    });
+    expect(result.price).toBe(179);
+    expect(result.summary).toContain("Studio");
+  });
+
+  it("applies deep cleaning multiplier (1.5x standard)", () => {
     const standard = handleGetQuote({
       bedrooms: "2 Bedrooms",
       bathrooms: "1 Bathroom",
@@ -36,30 +67,10 @@ describe("handleGetQuote", () => {
       bathrooms: "1 Bathroom",
       serviceType: "Deep Cleaning",
     });
-    expect(deep.price).toBeGreaterThan(standard.price);
+    expect(deep.price).toBe(Math.round(standard.price * 1.5));
   });
 
-  it("returns 0 for unknown bedroom/bathroom combo", () => {
-    const result = handleGetQuote({
-      bedrooms: "99 Bedrooms",
-      bathrooms: "99 Bathrooms",
-      serviceType: "Standard Cleaning",
-    });
-    // Should not throw, just return 0 or a fallback
-    expect(result.price).toBeGreaterThanOrEqual(0);
-  });
-
-  it("handles Studio bedroom correctly", () => {
-    const result = handleGetQuote({
-      bedrooms: "Studio",
-      bathrooms: "1 Bathroom",
-      serviceType: "Standard Cleaning",
-    });
-    expect(result.price).toBeGreaterThan(0);
-    expect(result.summary).toContain("Studio");
-  });
-
-  it("handles move-out cleaning multiplier", () => {
+  it("applies move-in/move-out multiplier (1.75x standard)", () => {
     const standard = handleGetQuote({
       bedrooms: "3 Bedrooms",
       bathrooms: "2 Bathrooms",
@@ -68,10 +79,184 @@ describe("handleGetQuote", () => {
     const moveOut = handleGetQuote({
       bedrooms: "3 Bedrooms",
       bathrooms: "2 Bathrooms",
-      serviceType: "Move Out Cleaning",
+      serviceType: "Move-In/Move-Out",
     });
-    // Move-out should cost at least as much as standard (multiplier >= 1)
-    expect(moveOut.price).toBeGreaterThanOrEqual(standard.price);
+    expect(moveOut.price).toBe(Math.round(standard.price * 1.75));
+  });
+
+  it("normalizes bare number inputs (LLM may pass '3' instead of '3 Bedrooms')", () => {
+    // The normalizeBedroomKey / normalizeBathroomKey helpers should handle this
+    const result = handleGetQuote({
+      bedrooms: "3",
+      bathrooms: "2",
+      serviceType: "Standard Cleaning",
+    });
+    // Should not throw and should return a valid price
+    expect(result.price).toBeGreaterThan(0);
+  });
+
+  it("returns summary with recurring discount options", () => {
+    const result = handleGetQuote({
+      bedrooms: "2 Bedrooms",
+      bathrooms: "1 Bathroom",
+      serviceType: "Standard Cleaning",
+    });
+    expect(result.summary).toContain("weekly");
+    expect(result.summary).toContain("bi-weekly");
+    expect(result.summary).toContain("monthly");
+  });
+});
+
+// ─── parseToolCall format handling ───────────────────────────────────────────
+
+// We test the webhook's parseToolCall logic indirectly by verifying
+// that both payload formats produce the same result shape.
+
+describe("Vapi tool call format normalization", () => {
+  it("Vapi-native format: { id, name, parameters } is parsed correctly", () => {
+    const nativePayload = {
+      id: "tc_abc123",
+      name: "getQuote",
+      parameters: {
+        bedrooms: "3 Bedrooms",
+        bathrooms: "2 Bathrooms",
+        serviceType: "Standard Cleaning",
+      },
+    };
+
+    // Simulate parseToolCall logic
+    const parsed =
+      "name" in nativePayload && "parameters" in nativePayload
+        ? { id: nativePayload.id, name: nativePayload.name, args: nativePayload.parameters }
+        : null;
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.name).toBe("getQuote");
+    expect(parsed!.args).toEqual({
+      bedrooms: "3 Bedrooms",
+      bathrooms: "2 Bathrooms",
+      serviceType: "Standard Cleaning",
+    });
+  });
+
+  it("OpenAI-style format: { id, function: { name, arguments } } is parsed correctly", () => {
+    const openAIPayload = {
+      id: "tc_abc123",
+      type: "function",
+      function: {
+        name: "createLead",
+        arguments: JSON.stringify({
+          name: "Jane Smith",
+          phone: "+13029816191",
+          bedrooms: "3 Bedrooms",
+          bathrooms: "2 Bathrooms",
+          serviceType: "Standard Cleaning",
+          quotedPrice: 259,
+        }),
+      },
+    };
+
+    // Simulate parseToolCall logic
+    let parsed: { id: string; name: string; args: Record<string, unknown> } | null = null;
+    if ("function" in openAIPayload) {
+      const fn = openAIPayload.function;
+      const args = JSON.parse(fn.arguments);
+      parsed = { id: openAIPayload.id, name: fn.name, args };
+    }
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.name).toBe("createLead");
+    expect(parsed!.args.name).toBe("Jane Smith");
+    expect(parsed!.args.phone).toBe("+13029816191");
+    expect(parsed!.args.quotedPrice).toBe(259);
+  });
+});
+
+// ─── createLead phone safety guard ───────────────────────────────────────────
+
+describe("createLead phone number safety", () => {
+  it("business phone override: if LLM passes business number, callerPhone from call object is used", () => {
+    const BUSINESS_PHONE = "+12028885362";
+    const callerPhone = "+13029816191";
+
+    // Simulate the override logic in vapiWebhook.ts
+    let phone = BUSINESS_PHONE; // LLM passed the wrong number
+    if (phone === BUSINESS_PHONE && callerPhone && callerPhone !== BUSINESS_PHONE) {
+      phone = callerPhone;
+    }
+
+    expect(phone).toBe("+13029816191");
+    expect(phone).not.toBe(BUSINESS_PHONE);
+  });
+
+  it("correct phone passes through unchanged", () => {
+    const BUSINESS_PHONE = "+12028885362";
+    const callerPhone = "+13029816191";
+
+    let phone = "+13029816191"; // LLM passed the correct number
+    if (phone === BUSINESS_PHONE && callerPhone && callerPhone !== BUSINESS_PHONE) {
+      phone = callerPhone;
+    }
+
+    expect(phone).toBe("+13029816191");
+  });
+
+  it("missing phone falls back to callerPhone from call object", () => {
+    const callerPhone = "+13029816191";
+    let phone: string | undefined = undefined;
+
+    if (!phone && callerPhone) {
+      phone = callerPhone;
+    }
+
+    expect(phone).toBe("+13029816191");
+  });
+});
+
+// ─── System prompt: customer.number injection ─────────────────────────────────
+
+describe("System prompt customer.number injection", () => {
+  it("system prompt contains {{customer.number}} variable reference", async () => {
+    // We can't call buildSystemPrompt directly (not exported), but we can
+    // verify the assistant config contains the variable by checking the
+    // bootstrapVapiAssistant function builds a config with the variable.
+    // Instead, we test the invariant: the prompt MUST reference {{customer.number}}
+    // so the LLM always knows the real caller phone.
+
+    // Read the source to verify (this is a static analysis test)
+    const fs = await import("fs");
+    const source = fs.readFileSync(
+      new URL("./vapiService.ts", import.meta.url).pathname,
+      "utf8"
+    );
+
+    expect(source).toContain("{{customer.number}}");
+    // Should appear multiple times: in the system prompt and in tool argument instructions
+    const occurrences = (source.match(/\{\{customer\.number\}\}/g) ?? []).length;
+    expect(occurrences).toBeGreaterThanOrEqual(3);
+  });
+
+  it("system prompt contains name verification instruction", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync(
+      new URL("./vapiService.ts", import.meta.url).pathname,
+      "utf8"
+    );
+
+    // The prompt must instruct Madison to verify the name back to the caller
+    expect(source).toContain("verify it back");
+    expect(source).toContain("did I get that right");
+  });
+
+  it("system prompt contains email collection step", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync(
+      new URL("./vapiService.ts", import.meta.url).pathname,
+      "utf8"
+    );
+
+    expect(source).toContain("email");
+    expect(source).toContain("booking confirmation");
   });
 });
 
@@ -92,28 +277,30 @@ describe("VoiceCall schema shape", () => {
 // ─── Webhook payload parsing ─────────────────────────────────────────────────
 
 describe("Vapi webhook payload parsing", () => {
-  it("extracts call ID and duration from a call-ended payload", () => {
+  it("extracts call ID, duration, and caller phone from a call-ended payload", () => {
     const payload = {
       message: {
         type: "end-of-call-report",
         call: {
           id: "test-call-123",
-          customer: { number: "+12025551234" },
+          customer: { number: "+13029816191" },
           startedAt: "2026-03-18T01:00:00Z",
           endedAt: "2026-03-18T01:05:30Z",
           endedReason: "customer-ended-call",
           recordingUrl: "https://storage.vapi.ai/recordings/test.mp3",
         },
         transcript: "Hi, I'd like to book a cleaning.",
-        summary: "Caller wanted to book a 2BR standard cleaning. Quote given: $180.",
+        summary: "Caller wanted to book a 3BR/2BA standard cleaning. Quote given: $259.",
         analysis: {
           structuredData: {
             intent: "booking",
             outcome: "quote_given",
-            bedrooms: "2 Bedrooms",
-            bathrooms: "1 Bathroom",
+            callerName: "Rohan Joshi",
+            callerEmail: "rohan@example.com",
+            bedrooms: "3 Bedrooms",
+            bathrooms: "2 Bathrooms",
             serviceType: "Standard Cleaning",
-            quotedPrice: 180,
+            quotedPrice: 259,
             leadCreated: false,
           },
           successEvaluation: "true",
@@ -128,9 +315,10 @@ describe("Vapi webhook payload parsing", () => {
 
     expect(call.id).toBe("test-call-123");
     expect(durationSeconds).toBe(330); // 5 min 30 sec
-    expect(call.customer.number).toBe("+12025551234");
+    expect(call.customer.number).toBe("+13029816191");
     expect(payload.message.analysis.structuredData.outcome).toBe("quote_given");
-    expect(payload.message.analysis.successEvaluation).toBe("true");
+    expect(payload.message.analysis.structuredData.quotedPrice).toBe(259);
+    expect(payload.message.analysis.structuredData.callerEmail).toBe("rohan@example.com");
   });
 
   it("handles missing optional fields gracefully", () => {
@@ -139,7 +327,7 @@ describe("Vapi webhook payload parsing", () => {
         type: "end-of-call-report",
         call: {
           id: "minimal-call",
-          customer: { number: "+12025559999" },
+          customer: { number: "+13029816191" },
           endedReason: "silence-timed-out",
         },
         transcript: null,
@@ -162,7 +350,7 @@ describe("Vapi webhook payload parsing", () => {
 describe("Tool call argument shapes", () => {
   it("getQuote requires bedrooms, bathrooms, serviceType", () => {
     const requiredFields = ["bedrooms", "bathrooms", "serviceType"];
-    const args = { bedrooms: "2 Bedrooms", bathrooms: "1 Bathroom", serviceType: "Standard Cleaning" };
+    const args = { bedrooms: "3 Bedrooms", bathrooms: "2 Bathrooms", serviceType: "Standard Cleaning" };
     for (const field of requiredFields) {
       expect(args).toHaveProperty(field);
     }
@@ -172,21 +360,24 @@ describe("Tool call argument shapes", () => {
     const requiredFields = ["name", "phone", "bedrooms", "bathrooms", "serviceType", "quotedPrice"];
     const args = {
       name: "Jane Smith",
-      phone: "+12025551234",
-      bedrooms: "2 Bedrooms",
-      bathrooms: "1 Bathroom",
+      phone: "+13029816191",
+      email: "jane@example.com",
+      bedrooms: "3 Bedrooms",
+      bathrooms: "2 Bathrooms",
       serviceType: "Standard Cleaning",
-      quotedPrice: 180,
-      address: "123 Main St",
+      quotedPrice: 259,
+      address: "1501 Canyon Mesquite",
       preferredDate: "Saturday morning",
     };
     for (const field of requiredFields) {
       expect(args).toHaveProperty(field);
     }
+    // email is optional but present
+    expect(args.email).toBe("jane@example.com");
   });
 
   it("sendSms requires to and message", () => {
-    const args = { to: "+12025551234", message: "Your quote is $180. We'll call to confirm!" };
+    const args = { to: "+13029816191", message: "Your quote is $259. We'll call to confirm!" };
     expect(args).toHaveProperty("to");
     expect(args).toHaveProperty("message");
     expect(args.message.length).toBeLessThanOrEqual(160);

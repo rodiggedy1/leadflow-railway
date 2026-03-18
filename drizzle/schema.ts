@@ -29,7 +29,7 @@ export type InsertUser = typeof users.$inferInsert;
 export const quoteLeads = mysqlTable("quote_leads", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 320 }).notNull(),
+  email: varchar("email", { length: 320 }), // nullable — voice leads may not provide email
   phone: varchar("phone", { length: 30 }).notNull(),
   serviceType: varchar("serviceType", { length: 100 }).notNull(),
   bedrooms: varchar("bedrooms", { length: 50 }).notNull(),

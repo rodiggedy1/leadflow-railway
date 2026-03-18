@@ -225,6 +225,13 @@
       "when": 1773796779219,
       "tag": "0031_secret_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1773803706783,
+      "tag": "0032_broad_human_torch",
+      "breakpoints": true
     }
   ]
 }

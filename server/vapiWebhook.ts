@@ -112,6 +112,7 @@ export function registerVapiWebhookRoute(app: Express): void {
               const createArgs = args as {
                 name: string;
                 phone?: string;
+                email?: string;
                 address?: string;
                 bedrooms: string;
                 bathrooms: string;
@@ -119,13 +120,22 @@ export function registerVapiWebhookRoute(app: Express): void {
                 quotedPrice: number;
                 preferredDate?: string;
               };
-              // Use caller's phone from the call object as fallback
+              // Use caller's phone from the call object as the authoritative source.
+              // The system prompt injects {{customer.number}} which the LLM passes as phone,
+              // but we also have it directly from the call object as a safety net.
               if (!createArgs.phone && callerPhone) {
+                createArgs.phone = callerPhone;
+              }
+              // If the LLM passed the business number by mistake, override with real caller phone
+              const BUSINESS_PHONE = "+12028885362";
+              if (createArgs.phone === BUSINESS_PHONE && callerPhone && callerPhone !== BUSINESS_PHONE) {
+                console.warn(`[Vapi] createLead phone was business number — overriding with callerPhone: ${callerPhone}`);
                 createArgs.phone = callerPhone;
               }
               result = await handleCreateLead(createArgs as {
                 name: string;
                 phone: string;
+                email?: string;
                 address?: string;
                 bedrooms: string;
                 bathrooms: string;

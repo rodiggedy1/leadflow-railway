@@ -1031,3 +1031,16 @@
 - [x] Fix: vapiWebhook.ts now handles BOTH formats via parseToolCall() — { name, parameters } and { function: { name, arguments } }
 - [x] Verified: getQuote returns $259 for 3bed/2bath in both formats
 - [x] Verified: createLead successfully inserts to DB with all fields populated
+
+## Voice Agent Behavioral Fixes (Round 3 — Full Diagnostic)
+
+- [x] Root cause analysis: wrong price ($179) and failed lead creation were due to OLD code running before the parseToolCall fix was deployed — production server NOW correctly returns $259
+- [x] Fix: System prompt now injects {{customer.number}} (Vapi built-in variable) so LLM always knows the real caller phone — no more hallucinating the business number
+- [x] Fix: Added name verification step — Madison now reads the name back: "Just to confirm, I have your name as [Name] — did I get that right?"
+- [x] Fix: Added email collection step (optional) — Madison asks for email for booking confirmation
+- [x] Fix: vapiWebhook.ts now has a business-phone safety guard — if LLM passes +12028885362 as phone, it is overridden with the real callerPhone from the call object
+- [x] Fix: createLead tool definition updated on Vapi API to include optional email parameter
+- [x] Fix: handleCreateLead now accepts and stores email (nullable in DB — migration applied)
+- [x] Fix: structuredDataSchema now extracts callerEmail from transcript for end-of-call fallback
+- [x] Vapi assistant system prompt updated live via PATCH API — effective immediately for all new calls
+- [x] 529/529 tests passing, 0 TS errors

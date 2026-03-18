@@ -54,6 +54,10 @@ function buildSystemPrompt(): string {
 
 Your personality: warm, confident, helpful, and concise. You speak naturally and conversationally — not like a robot. You never read out long lists. You keep responses short (1-3 sentences) unless the caller asks for more detail.
 
+## Caller context
+The caller's phone number is: {{customer.number}}
+You MUST use this exact number when calling the createLead tool — never use any other phone number.
+
 ## Your goals (in priority order)
 1. Answer any question the caller has about Maids in Black (hours, pricing, services, area, etc.)
 2. If the caller is interested in booking, collect the information needed to give them a quote and schedule their cleaning.
@@ -61,28 +65,39 @@ Your personality: warm, confident, helpful, and concise. You speak naturally and
 
 ## Booking qualification flow
 When a caller wants a quote or to book, collect these details conversationally (one at a time, naturally):
-1. Their name
-2. Number of bedrooms (or square footage if it's an office)
-3. Number of bathrooms
-4. Type of service: Standard Cleaning, Deep Cleaning, Move-In/Move-Out, or Office Cleaning
-5. Preferred date and time
-6. Their address (for the quote confirmation)
 
-Once you have bedrooms, bathrooms, and service type → call the \`getQuote\` tool to get the exact price.
-Once you have all 6 pieces → call the \`createLead\` tool to save the booking.
-After saving → call the \`sendSms\` tool to text them a confirmation summary.
-Then say: "You're all set! Someone from our team will call you shortly to confirm everything. Is there anything else I can help you with?"
+Step 1 — Name: Ask for their name. Then IMMEDIATELY verify it back: say "Just to confirm, I have your name as [Name] — did I get that right?" Wait for confirmation. If they correct it, repeat the verification with the corrected name.
+
+Step 2 — Email (optional): Ask "And what's a good email address for your booking confirmation?" If they say they don't have one or skip it, that's fine — move on.
+
+Step 3 — Bedrooms: Ask how many bedrooms (or square footage for office cleaning).
+
+Step 4 — Bathrooms: Ask how many bathrooms.
+
+Step 5 — Service type: Ask what type of cleaning: Standard, Deep, Move-In/Move-Out, or Office Cleaning.
+
+Step 6 — Get quote: Once you have bedrooms, bathrooms, and service type → call the getQuote tool immediately. Quote the price to the caller.
+
+Step 7 — Preferred date: Ask when they'd like to schedule.
+
+Step 8 — Address: Ask for the service address.
+
+Step 9 — Save lead: Call the createLead tool with all collected info. Use {{customer.number}} as the phone number — do NOT ask the caller for their phone number.
+
+Step 10 — Send SMS: After createLead succeeds → call the sendSms tool to text them a confirmation summary to {{customer.number}}.
+
+Step 11 — Close: Say "You're all set! Someone from our team will call you shortly to confirm everything. Is there anything else I can help you with?"
 
 ## Tool argument format rules (CRITICAL — follow exactly)
-- For \`getQuote\` bedrooms: use EXACTLY one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7+ Bedrooms"
-- For \`getQuote\` bathrooms: use EXACTLY one of: "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"
-- For \`getQuote\` serviceType: use EXACTLY one of: "Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Office Cleaning"
-- For \`createLead\` phone: you already have the caller's phone number from the call — use it directly. Do NOT ask the caller for their phone number.
-- For \`createLead\` bedrooms/bathrooms/serviceType: use the same exact strings as above.
-- If \`createLead\` returns success=false, say: "I've noted your information and someone from our team will follow up with you shortly." Do NOT say there was a technical issue or offer to transfer.
+- For getQuote bedrooms: use EXACTLY one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7+ Bedrooms"
+- For getQuote bathrooms: use EXACTLY one of: "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms", "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms"
+- For getQuote serviceType: use EXACTLY one of: "Standard Cleaning", "Deep Cleaning", "Move-In/Move-Out", "Office Cleaning"
+- For createLead phone: ALWAYS use {{customer.number}} — this is the caller's real phone number. Never use the business number (202-888-5362) or any other number.
+- For createLead bedrooms/bathrooms/serviceType: use the same exact strings as above.
+- If createLead returns success=false, say: "I've noted your information and someone from our team will follow up with you shortly." Do NOT say there was a technical issue or offer to transfer.
 
 ## Important rules
-- NEVER make up prices. Always use the \`getQuote\` tool to get the real price.
+- NEVER make up prices. Always use the getQuote tool to get the real price.
 - NEVER promise a specific cleaner or exact arrival time — say "we'll confirm the exact time when we call you."
 - If someone asks about something not in your knowledge base, say "I want to make sure I give you accurate info — let me have someone from our team follow up with you on that."
 - If the caller is clearly upset or needs urgent help, offer to transfer them immediately.
@@ -138,10 +153,14 @@ function buildToolDefinitions(webhookUrl: string) {
         parameters: {
           type: "object",
           properties: {
-            name: { type: "string", description: "Caller's full name" },
+            name: { type: "string", description: "Caller's full name (verified with the caller)" },
             phone: {
               type: "string",
-              description: "Caller's phone number in E.164 format (e.g. +12025551234)",
+              description: "Caller's phone number — use {{customer.number}} exactly as injected in the system prompt",
+            },
+            email: {
+              type: "string",
+              description: "Caller's email address if provided (optional)",
             },
             address: { type: "string", description: "Service address" },
             bedrooms: { type: "string", description: "Number of bedrooms" },
@@ -236,8 +255,9 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
       structuredDataSchema: {
         type: "object",
         properties: {
-          callerName: { type: "string", description: "Caller's name if provided" },
+          callerName: { type: "string", description: "Caller's name as verified during the call" },
           callerPhone: { type: "string", description: "Caller's phone number" },
+          callerEmail: { type: "string", description: "Caller's email address if provided" },
           intent: {
             type: "string",
             enum: ["booking", "faq", "complaint", "transfer", "other"],
@@ -454,6 +474,7 @@ export function handleGetQuote(args: {
 export async function handleCreateLead(args: {
   name: string;
   phone: string;
+  email?: string;
   address?: string;
   bedrooms: string;
   bathrooms: string;
@@ -462,7 +483,7 @@ export async function handleCreateLead(args: {
   preferredDate?: string;
 }): Promise<{ success: boolean; sessionId?: number; message: string }> {
   try {
-    const { name, phone, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = args;
+    const { name, phone, email, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = args;
 
     // Normalize phone to E.164
     const normalizedPhone = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
@@ -472,7 +493,7 @@ export async function handleCreateLead(args: {
     if (!db) throw new Error("Database not available");
     const [leadResult] = await db.insert(quoteLeads).values({
       name,
-      email: "",
+      email: email ?? null,
       phone: normalizedPhone,
       serviceType,
       bedrooms,
@@ -624,12 +645,13 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // If a lead was NOT created mid-call but we have enough structured data, create it now
   // This is the fallback path when mid-call tool calls failed
   if (!leadCreated && normalizedPhone && structuredData) {
-    const { callerName, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = structuredData;
+    const { callerName, callerEmail, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = structuredData as typeof structuredData & { callerEmail?: string };
     if (callerName && bedrooms && bathrooms && serviceType) {
       try {
         const createResult = await handleCreateLead({
           name: callerName,
           phone: normalizedPhone,
+          email: callerEmail ?? undefined,
           address: address ?? undefined,
           bedrooms,
           bathrooms,
