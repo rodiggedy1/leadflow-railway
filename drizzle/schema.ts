@@ -660,6 +660,7 @@ export const activityEventTypes = [
   "scheduled_followup",// Manual scheduled follow-up SMS sent
   "always_on_batch",   // Always-On batch SMS send completed
   "nightly_sync",      // Nightly Launch27 sync completed
+  "review_send",       // Review SMS batch sent (10 AM daily)
   "booking",           // Lead reached BOOKED stage
   "new_lead",          // New quote form / widget submission
 ] as const;

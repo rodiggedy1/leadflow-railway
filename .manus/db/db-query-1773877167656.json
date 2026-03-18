@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO completed_jobs (batchId, phone, name, firstName, serviceType, jobDate, status) VALUES (60001, '+13029816191', 'Rohan Gilkes', 'Rohan', 'Standard Cleaning', '2026-03-17', 'PENDING');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute INSERT INTO completed_jobs (batchId, phone, name, firstName, serviceType, jobDate, status) VALUES (60001, '+13029816191', 'Rohan Gilkes', 'Rohan', 'Standard Cleaning', '2026-03-17', 'PENDING');",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 397
+}

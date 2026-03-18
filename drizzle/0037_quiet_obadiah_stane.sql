@@ -1,0 +1,1 @@
+ALTER TABLE `activity_log` MODIFY COLUMN `eventType` enum('lead_reply','ai_sms_sent','silence_nudge','scheduled_followup','always_on_batch','nightly_sync','review_send','booking','new_lead') NOT NULL;

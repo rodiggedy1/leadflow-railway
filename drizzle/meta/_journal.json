@@ -260,6 +260,13 @@
       "when": 1773869405287,
       "tag": "0036_old_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1773878360250,
+      "tag": "0037_quiet_obadiah_stane",
+      "breakpoints": true
     }
   ]
 }
