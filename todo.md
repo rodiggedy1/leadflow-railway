@@ -1354,3 +1354,4 @@
 - [x] Fix double SMS when sending from admin drawer (server-side dedup guard: same message within 10s is rejected)
 - [x] Real-time typing indicator in conversation drawers (see who is typing)
 - [x] Show sender name on outbound message bubbles in conversation drawers
+- [x] Show "AI" badge on AI-generated outbound message bubbles

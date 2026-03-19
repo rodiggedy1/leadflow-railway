@@ -988,6 +988,9 @@ function ConversationDrawer({
                           {isOutbound && senderName && (
                             <span className="text-[10px] font-medium text-orange-500">{senderName}</span>
                           )}
+                          {isOutbound && !senderName && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#f0f9ff", color: "#0284c7", border: "1px solid #bae6fd" }}>✦ AI</span>
+                          )}
                           {timeLabel && (
                             <span className="text-[10px] text-gray-400">{timeLabel}</span>
                           )}
