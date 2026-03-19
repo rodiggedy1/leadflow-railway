@@ -225,14 +225,14 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
     onError: (err) => toast.error(err.message || "Login failed"),
   });
   return (
-    <div className="jade-theme min-h-screen flex items-center justify-center">
-      <div className="jade-card p-8 max-w-sm w-full mx-4">
+    <div className="hj-theme min-h-screen flex items-center justify-center">
+      <div className="hj-card p-8 max-w-sm w-full mx-4">
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: 'var(--jade-green)', color: '#000' }}>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: 'var(--hj-green)', color: '#000' }}>
             <Lock className="w-7 h-7" />
           </div>
-          <h1 className="text-xl font-bold" style={{ color: '#f0f0f0' }}>Admin Access</h1>
-          <p className="text-sm mt-1" style={{ color: '#888' }}>Sign in with your admin credentials</p>
+          <h1 className="text-xl font-bold" style={{ color: '#0D0D0D' }}>Admin Access</h1>
+          <p className="text-sm mt-1" style={{ color: '#888888' }}>Sign in with your admin credentials</p>
         </div>
         <form
           onSubmit={(e) => {
@@ -271,7 +271,7 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
             type="submit"
             className="w-full"
             disabled={loginMutation.isPending || !email || !password}
-            style={{ backgroundColor: 'var(--jade-green)', color: '#000', fontWeight: 700 }}
+            style={{ backgroundColor: 'var(--hj-green)', color: '#000', fontWeight: 700 }}
           >
             {loginMutation.isPending ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in…</>
@@ -280,12 +280,12 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
             )}
           </Button>
         </form>
-        <p className="text-center text-xs mt-4" style={{ color: '#555' }}>
+        <p className="text-center text-xs mt-4" style={{ color: '#555555' }}>
           This area is restricted to admin users only.
         </p>
-        <p className="text-center text-xs mt-2" style={{ color: '#666' }}>
+        <p className="text-center text-xs mt-2" style={{ color: '#666666' }}>
           Are you an agent?{" "}
-          <a href="/agent" className="underline font-medium" style={{ color: 'var(--jade-green)' }}>Go to Agent Workspace →</a>
+          <a href="/agent" className="underline font-medium" style={{ color: 'var(--hj-green)' }}>Go to Agent Workspace →</a>
         </p>
       </div>
     </div>
@@ -2082,9 +2082,9 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen jade-theme">
+    <div className="min-h-screen hj-theme">
       {/* Top bar */}
-      <header className="jade-header sticky top-0 z-40">
+      <header className="hj-header sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -2094,10 +2094,10 @@ export default function AdminDashboard() {
               <span className="text-black text-sm font-bold">J</span>
             </div>
             <div>
-              <h1 className="font-bold text-lg leading-tight" style={{ color: '#f0f0f0', fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.02em' }}>
+              <h1 className="font-bold text-lg leading-tight" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.02em' }}>
                 HeyJade
               </h1>
-              <p className="text-xs" style={{ color: '#888' }}>Leads Dashboard</p>
+              <p className="text-xs" style={{ color: '#888888' }}>Leads Dashboard</p>
             </div>
           </div>
 
@@ -2110,10 +2110,9 @@ export default function AdminDashboard() {
               title="AI Simulator"
               className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-colors ${
                 showSimulator
-                  ? 'border-[#c8ff00] text-[#c8ff00]'
-                  : 'text-[#888] border-[#2a2a2a] hover:border-[#444] hover:text-[#f0f0f0]'
+                  ? 'border-black text-black bg-[#AAFF00]'
+                  : 'text-gray-500 border-gray-300 hover:border-gray-500 hover:text-gray-800'
               }`}
-              style={{ backgroundColor: 'transparent' }}
             >
               <Bot className="w-4 h-4" />
             </button>
@@ -2133,15 +2132,15 @@ export default function AdminDashboard() {
           </div>
         </div>
         {/* Tab navigation */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: '#2a2a2a' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: '#E5E5E5' }}>
            {(["leads", "pipeline", "agents", "leaderboard", "callbacks"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
               style={activeTab === tab
-                ? { borderColor: "#c8ff00", color: "#c8ff00" }
-                : { borderColor: "transparent", color: "#888" }}
+                ? { borderColor: "#000000", color: "#000000", fontWeight: 700 }
+                : { borderColor: "transparent", color: "#888888" }}
             >
               {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <PhoneIncoming className="w-3.5 h-3.5" />}
               {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "Callbacks"}
@@ -2153,7 +2152,7 @@ export default function AdminDashboard() {
             </button>
           ))}
           {[{href:'/admin/campaigns',icon:<Send className="w-3.5 h-3.5"/>,label:'Campaigns'},{href:'/admin/completed-jobs',icon:<Star className="w-3.5 h-3.5"/>,label:'Reviews'},{href:'/admin/always-on',icon:<Zap className="w-3.5 h-3.5"/>,label:'Always-On'},{href:'/admin/sync-health',icon:<Activity className="w-3.5 h-3.5"/>,label:'Sync Health'},{href:'/admin/calls',icon:<Mic className="w-3.5 h-3.5"/>,label:'All Calls'},{href:'/admin/revenue',icon:<TrendingUp className="w-3.5 h-3.5"/>,label:'Revenue ROI'}].map(({href,icon,label})=>(
-            <a key={href} href={href} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors" style={{ borderColor: 'transparent', color: '#888' }}>
+            <a key={href} href={href} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors" style={{ borderColor: 'transparent', color: '#888888' }}>
               {icon}{label}
             </a>
           ))}
@@ -2356,8 +2355,8 @@ export default function AdminDashboard() {
         {/* Summary + date filter row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold" style={{ color: '#f0f0f0', fontFamily: 'Space Grotesk, sans-serif' }}>{stats?.total ?? 0}</span>
-            <span className="text-sm" style={{ color: '#888' }}>leads</span>
+            <span className="text-2xl font-bold" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif' }}>{stats?.total ?? 0}</span>
+            <span className="text-sm" style={{ color: '#888888' }}>leads</span>
           </div>
           {/* Date preset selector */}
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -2365,8 +2364,8 @@ export default function AdminDashboard() {
               <button
                 key={p.value}
                 onClick={() => setDatePreset(p.value)}
-                className="jade-date-btn"
-                style={datePreset === p.value ? { backgroundColor: '#c8ff00', borderColor: '#c8ff00', color: '#000', fontWeight: 600 } : {}}
+                className="hj-date-btn"
+                style={datePreset === p.value ? { backgroundColor: '#000000', borderColor: '#000000', color: '#FFFFFF', fontWeight: 600 } : {}}
               >
                 {p.label}
               </button>
@@ -2376,7 +2375,7 @@ export default function AdminDashboard() {
 
         {/* Custom date range inputs */}
         {datePreset === "custom" && (
-          <div className="flex items-center gap-3 mb-5 rounded-xl border p-3" style={{ backgroundColor: '#161616', borderColor: '#2a2a2a' }}>
+          <div className="flex items-center gap-3 mb-5 rounded-xl border p-3" style={{ backgroundColor: '#F7F7F7', borderColor: '#E5E5E5' }}>
             <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
             <div className="flex items-center gap-2 flex-wrap">
               <label className="text-sm text-gray-600">From</label>
@@ -2411,17 +2410,17 @@ export default function AdminDashboard() {
         {stats && (
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
             {/* Visitors */}
-            <div className="jade-stat-card">
-              <span className="jade-stat-label">Visitors</span>
-              <span className="jade-stat-value">{(visitorStats?.visitors ?? 0).toLocaleString()}</span>
-              <span className="jade-stat-sub">page views in range</span>
+            <div className="hj-metric-card">
+              <span className="hj-metric-label">Visitors</span>
+              <span className="hj-metric-value">{(visitorStats?.visitors ?? 0).toLocaleString()}</span>
+              <span className="hj-metric-sub">page views in range</span>
               <Sparkline data={dailyTrend.map(d => d.visitors)} color="#c8ff00" />
             </div>
             {/* Leads */}
-            <div className="jade-stat-card jade-stat-card--accent">
-              <span className="jade-stat-label">Leads</span>
-              <span className="jade-stat-value jade-stat-value--accent">{(stats.total ?? 0).toLocaleString()}</span>
-              <span className="jade-stat-sub">
+            <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
+              <span className="hj-metric-label">Leads</span>
+              <span className="hj-metric-value hj-metric-value--accent">{(stats.total ?? 0).toLocaleString()}</span>
+              <span className="hj-metric-sub">
                 {visitorStats?.visitors
                   ? `${((stats.total / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
                   : "form submissions"}
@@ -2430,17 +2429,17 @@ export default function AdminDashboard() {
             </div>
 
             {/* Jobs Booked */}
-            <div className="jade-stat-card">
-              <span className="jade-stat-label">Jobs Booked</span>
-              <span className="jade-stat-value">{stats.bookedCount ?? 0}</span>
-              <span className="jade-stat-sub">{stats.total > 0 ? `${stats.conversionRate ?? 0}% lead → booked` : 'no leads yet'}</span>
+            <div className="hj-metric-card">
+              <span className="hj-metric-label">Jobs Booked</span>
+              <span className="hj-metric-value">{stats.bookedCount ?? 0}</span>
+              <span className="hj-metric-sub">{stats.total > 0 ? `${stats.conversionRate ?? 0}% lead → booked` : 'no leads yet'}</span>
               <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
             </div>
 
             {/* Booked Revenue */}
-            <div className="jade-stat-card jade-stat-card--accent">
-              <span className="jade-stat-label">Booked Revenue</span>
-              <span className="jade-stat-value jade-stat-value--accent">${(stats.bookedRevenue ?? 0).toLocaleString()}</span>
+            <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
+              <span className="hj-metric-label">Booked Revenue</span>
+              <span className="hj-metric-value hj-metric-value--accent">${(stats.bookedRevenue ?? 0).toLocaleString()}</span>
               {/* Source breakdown bar */}
               {stats.revenueBySource && stats.bookedRevenue > 0 && (() => {
                 const rbs = stats.revenueBySource as Record<string, number>;
@@ -2462,7 +2461,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                       {sources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
-                        <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#065f46', opacity: 0.85 }}>
+                        <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#059669', opacity: 0.85 }}>
                           <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
                           {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
                         </span>
@@ -2472,15 +2471,15 @@ export default function AdminDashboard() {
                 );
               })()}
                {!(stats.revenueBySource && stats.bookedRevenue > 0) && (
-                <span className="jade-stat-sub">from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? 's' : ''}</span>
+                <span className="hj-metric-sub">from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? 's' : ''}</span>
               )}
               <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
             </div>
             {/* Voice Calls */}
-            <div className="jade-stat-card">
-              <span className="jade-stat-label">AI Voice Calls</span>
-              <span className="jade-stat-value">{(voiceStats?.totalCalls ?? 0).toLocaleString()}</span>
-              <span className="jade-stat-sub">{voiceStats?.totalCalls ? `${voiceStats.conversionRate}% booked · avg ${Math.floor((voiceStats.avgDurationSeconds ?? 0) / 60)}:${String((voiceStats.avgDurationSeconds ?? 0) % 60).padStart(2, '0')}` : 'no calls yet'}</span>
+            <div className="hj-metric-card">
+              <span className="hj-metric-label">AI Voice Calls</span>
+              <span className="hj-metric-value">{(voiceStats?.totalCalls ?? 0).toLocaleString()}</span>
+              <span className="hj-metric-sub">{voiceStats?.totalCalls ? `${voiceStats.conversionRate}% booked · avg ${Math.floor((voiceStats.avgDurationSeconds ?? 0) / 60)}:${String((voiceStats.avgDurationSeconds ?? 0) % 60).padStart(2, '0')}` : 'no calls yet'}</span>
               <Sparkline data={voiceStats?.dailyTrend?.map(d => d.count) ?? Array(7).fill(0)} color="#c8ff00" />
             </div>
           </div>
@@ -2489,16 +2488,16 @@ export default function AdminDashboard() {
         {/* Search + stage filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#888' }} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#888888' }} />
             <Input
               placeholder="Search name, phone, service…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-9 jade-input"
+              className="pl-9 hj-input"
             />
           </div>
           <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-44 jade-select">
+            <SelectTrigger className="w-44 hj-select">
               <SelectValue placeholder="All stages" />
             </SelectTrigger>
             <SelectContent>
@@ -2511,7 +2510,7 @@ export default function AdminDashboard() {
             </SelectContent>
           </Select>
           <Select value={agentFilter} onValueChange={setAgentFilter}>
-            <SelectTrigger className="w-44 jade-select">
+            <SelectTrigger className="w-44 hj-select">
               <SelectValue placeholder="All agents" />
             </SelectTrigger>
             <SelectContent>
@@ -2523,7 +2522,7 @@ export default function AdminDashboard() {
             </SelectContent>
           </Select>
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-40 jade-select">
+            <SelectTrigger className="w-40 hj-select">
               <SelectValue placeholder="All sources" />
             </SelectTrigger>
             <SelectContent>
@@ -2539,27 +2538,27 @@ export default function AdminDashboard() {
             <button
               onClick={() => { setStageFilter("all"); setAgentFilter("all"); setSourceFilter("all"); }}
               className="text-xs flex items-center gap-1 self-center"
-              style={{ color: '#888' }}
+              style={{ color: '#888888' }}
             >
               <X className="w-3 h-3" /> Clear filters
             </button>
           )}
-          <span className="text-sm self-center" style={{ color: '#888' }}>
+          <span className="text-sm self-center" style={{ color: '#888888' }}>
             {filtered.length} result{filtered.length !== 1 ? 's' : ''}
           </span>
         </div>
 
         {/* Table */}
-        <div className="jade-table-wrap">
+        <div className="hj-table-wrap">
           {sessionsLoading ? (
-            <div className="py-20 text-center" style={{ color: '#888' }}>
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" style={{ color: 'var(--jade-accent)' }} />
+            <div className="py-20 text-center" style={{ color: '#888888' }}>
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" style={{ color: '#AAFF00' }} />
               Loading leads…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-20 text-center" style={{ color: '#888' }}>
+            <div className="py-20 text-center" style={{ color: '#888888' }}>
               <div className="text-4xl mb-3">📋</div>
-              <p className="font-medium" style={{ color: '#aaa' }}>No leads found</p>
+              <p className="font-medium" style={{ color: '#888888' }}>No leads found</p>
               <p className="text-sm mt-1">
                 {sessions.length === 0
                   ? "Leads will appear here once the form is submitted."
@@ -2570,26 +2569,26 @@ export default function AdminDashboard() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="jade-table-header">
-                    <TableHead className="jade-th pl-4 w-48">Lead</TableHead>
-                    <TableHead className="jade-th w-24">Source</TableHead>
-                    <TableHead className="jade-th">Service</TableHead>
-                    <TableHead className="jade-th w-24">Quote</TableHead>
-                    <TableHead className="jade-th w-36">Stage</TableHead>
-                    <TableHead className="jade-th w-32">Agent</TableHead>
-                    <TableHead className="jade-th w-44">Last Activity</TableHead>
-                    <TableHead className="jade-th w-24 pr-4">When</TableHead>
+                  <TableRow className="hj-table-header">
+                    <TableHead className="hj-th pl-4 w-48">Lead</TableHead>
+                    <TableHead className="hj-th w-24">Source</TableHead>
+                    <TableHead className="hj-th">Service</TableHead>
+                    <TableHead className="hj-th w-24">Quote</TableHead>
+                    <TableHead className="hj-th w-36">Stage</TableHead>
+                    <TableHead className="hj-th w-32">Agent</TableHead>
+                    <TableHead className="hj-th w-44">Last Activity</TableHead>
+                    <TableHead className="hj-th w-24 pr-4">When</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map(session => {
                     const isBooked = Number(session.isBooked) === 1;
                     const rowBg = isBooked ? 'rgba(191,255,0,0.06)' : '';
-                    const accentColor = isBooked ? 'var(--jade-accent)' : 'transparent';
+                    const accentColor = isBooked ? '#AAFF00' : 'transparent';
                     return (
                     <TableRow
                       key={session.id}
-                      className="cursor-pointer transition-all duration-100 group jade-table-row"
+                      className="cursor-pointer transition-all duration-100 group hj-table-row"
                       style={{ backgroundColor: rowBg, borderLeft: `3px solid ${accentColor}` }}
                       onClick={() => setSelectedSession(session)}
                       onMouseEnter={e => { if (!isBooked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
@@ -2600,7 +2599,7 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-2">
                           <div className="flex flex-col gap-0.5 min-w-0">
                             <span className="text-sm font-semibold leading-tight" style={{ color: '#e8e8e8' }}>
-                              {session.leadName ?? <span style={{ color: '#555', fontWeight: 400 }}>Unknown</span>}
+                              {session.leadName ?? <span style={{ color: '#555555', fontWeight: 400 }}>Unknown</span>}
                             </span>
                             <span className="text-xs tabular-nums" style={{ color: '#777' }}>
                               {formatPhone(session.leadPhone)}
@@ -2612,7 +2611,7 @@ export default function AdminDashboard() {
                             onClick={e => e.stopPropagation()}
                             title={`Call ${formatPhone(session.leadPhone)}`}
                             className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0 p-1.5 rounded-full text-gray-500"
-                            style={{ '--tw-ring-color': 'var(--jade-accent)' } as React.CSSProperties}
+                            style={{ '--tw-ring-color': '#AAFF00' } as React.CSSProperties}
                           >
                             <PhoneCall className="w-3.5 h-3.5" />
                           </a>
@@ -2630,8 +2629,8 @@ export default function AdminDashboard() {
                       {/* Service — type + size */}
                       <TableCell className="py-2">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-sm leading-tight" style={{ color: '#ccc' }}>
-                            {session.serviceType ?? <span style={{ color: '#555' }}>—</span>}
+                          <span className="text-sm leading-tight" style={{ color: '#555555' }}>
+                            {session.serviceType ?? <span style={{ color: '#555555' }}>—</span>}
                           </span>
                           {session.serviceType && (
                             <span className="text-xs" style={{ color: '#777' }}>
@@ -2651,12 +2650,12 @@ export default function AdminDashboard() {
                         {session.quotedPrice ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
                           return (
-                            <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--jade-accent)' }}>
+                            <span className="text-sm font-bold tabular-nums" style={{ color: '#AAFF00' }}>
                               ${total}
                             </span>
                           );
                         })() : (
-                          <span className="text-sm" style={{ color: '#555' }}>—</span>
+                          <span className="text-sm" style={{ color: '#555555' }}>—</span>
                         )}
                       </TableCell>
 
@@ -2671,14 +2670,14 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-1.5">
                             <span
                               className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                              style={{ backgroundColor: 'var(--jade-accent)', color: '#0a0a0a' }}
+                              style={{ backgroundColor: '#AAFF00', color: '#000000' }}
                             >
                               {session.assignedAgentName.charAt(0).toUpperCase()}
                             </span>
-                            <span className="text-xs leading-tight" style={{ color: '#bbb' }}>{session.assignedAgentName}</span>
+                            <span className="text-xs leading-tight" style={{ color: '#666666' }}>{session.assignedAgentName}</span>
                           </div>
                         ) : (
-                          <span className="text-xs" style={{ color: '#555' }}>—</span>
+                          <span className="text-xs" style={{ color: '#555555' }}>—</span>
                         )}
                       </TableCell>
 
@@ -2689,12 +2688,12 @@ export default function AdminDashboard() {
                             {session.lastActivityType === "call" ? (
                               <PhoneCall className="w-3 h-3 text-blue-400 shrink-0 mt-0.5" />
                             ) : (
-                              <MessageSquare className="w-3 h-3 shrink-0 mt-0.5" style={{ color: 'var(--jade-accent)', opacity: 0.6 }} />
+                              <MessageSquare className="w-3 h-3 shrink-0 mt-0.5" style={{ color: '#AAFF00', opacity: 0.6 }} />
                             )}
-                            <span className="text-xs truncate leading-tight" style={{ color: '#bbb' }}>{session.lastActivityText}</span>
+                            <span className="text-xs truncate leading-tight" style={{ color: '#666666' }}>{session.lastActivityText}</span>
                           </div>
                         ) : (
-                          <span className="text-xs" style={{ color: '#555' }}>—</span>
+                          <span className="text-xs" style={{ color: '#555555' }}>—</span>
                         )}
                       </TableCell>
 
@@ -2721,17 +2720,17 @@ export default function AdminDashboard() {
         </div>
 
         {/* Traffic Source Breakdown */}
-        <div className="jade-card mt-6">
+        <div className="hj-card mt-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold" style={{ color: '#e8e8e8' }}>Traffic Source</h3>
-              <p className="text-xs mt-0.5" style={{ color: '#888' }}>Where your leads are coming from</p>
+              <p className="text-xs mt-0.5" style={{ color: '#888888' }}>Where your leads are coming from</p>
             </div>
           </div>
           <SourceBreakdownChart data={sourceBreakdown} isLoading={sourceBreakdownLoading} />
         </div>
 
-        <p className="text-xs mt-4 text-center" style={{ color: '#555' }}>
+        <p className="text-xs mt-4 text-center" style={{ color: '#555555' }}>
           Auto-refreshes every 30 seconds · Click any row or stage card to filter · Click a stage card again to clear
         </p>
         </>}

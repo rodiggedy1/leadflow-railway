@@ -1359,7 +1359,11 @@
 - [x] Move robot icon to left of bubble instead of below it
 
 ## HeyJade Brand Redesign (Admin/Agent Dashboard)
-- [x] HeyJade brand mockup on AdminDashboard home (dark + lime green theme)
+- [x] HeyJade brand mockup on AdminDashboard home (dark + lime green theme) — SUPERSEDED
+- [x] Retheme AdminDashboard to match heyjade.co light theme (white bg, black text, lime green accent)
+- [x] New hj-theme CSS system: --hj-green, --hj-bg, --hj-text, --hj-border, hj-card, hj-header, hj-tab, hj-metric-card, hj-table-wrap, hj-input, hj-btn-primary, hj-date-btn
+- [x] Active tab underline changed to black; active date button changed to black fill
+- [x] Login screen updated to white card with lime green icon and black Sign In button
 - [x] Apply jade theme to AdminLoginScreen (dark card, lime green button/icon)
 - [x] Apply jade theme to all AdminDashboard components: header, tabs, funnel stats, metric cards, search/filter bar, lead table, traffic source card
 - [x] Add jade CSS utility classes: jade-input, jade-select, jade-table-wrap, jade-table-header, jade-th, jade-stat-label, jade-stat-value, jade-stat-sub, jade-stat-card--accent, --jade-accent variable

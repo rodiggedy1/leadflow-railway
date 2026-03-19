@@ -734,3 +734,307 @@
   margin-top: 2px;
   display: block;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   HEYJADE LIGHT THEME — matches heyjade.co visual identity
+   White-dominant, black text, lime-green accent (#AAFF00)
+   Applied via .hj-theme wrapper class on admin pages
+   ══════════════════════════════════════════════════════════════════ */
+
+.hj-theme {
+  /* Backgrounds */
+  --hj-bg: #FFFFFF;
+  --hj-bg-subtle: #F7F7F7;
+  --hj-bg-muted: #F0F0F0;
+  --hj-surface: #FFFFFF;
+  --hj-surface-2: #F7F7F7;
+
+  /* Text */
+  --hj-text: #0D0D0D;
+  --hj-text-secondary: #555555;
+  --hj-text-muted: #888888;
+  --hj-text-dim: #AAAAAA;
+
+  /* Borders */
+  --hj-border: #E5E5E5;
+  --hj-border-strong: #CCCCCC;
+
+  /* Accent — lime green */
+  --hj-green: #AAFF00;
+  --hj-green-dark: #88CC00;
+  --hj-green-light: #EEFF99;
+  --hj-green-bg: #F4FFD9;
+
+  /* Status colors */
+  --hj-blue: #3B82F6;
+  --hj-blue-bg: #EFF6FF;
+  --hj-amber: #F59E0B;
+  --hj-amber-bg: #FFFBEB;
+  --hj-red: #EF4444;
+  --hj-red-bg: #FEF2F2;
+  --hj-purple: #8B5CF6;
+  --hj-purple-bg: #F5F3FF;
+  --hj-teal: #14B8A6;
+  --hj-teal-bg: #F0FDFA;
+
+  /* Shadows */
+  --hj-shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --hj-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  --hj-shadow-lg: 0 8px 24px rgba(0,0,0,0.10);
+
+  background-color: var(--hj-bg);
+  color: var(--hj-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Base overrides inside hj-theme ─────────────────────────────── */
+.hj-theme .bg-white { background-color: #FFFFFF !important; }
+.hj-theme .bg-gray-50 { background-color: var(--hj-bg-subtle) !important; }
+.hj-theme .bg-gray-100 { background-color: var(--hj-bg-muted) !important; }
+
+.hj-theme .border,
+.hj-theme .border-b,
+.hj-theme .border-t,
+.hj-theme .border-r,
+.hj-theme .border-l { border-color: var(--hj-border) !important; }
+
+.hj-theme .text-gray-900,
+.hj-theme .text-gray-800 { color: var(--hj-text) !important; }
+
+.hj-theme .text-gray-700,
+.hj-theme .text-gray-600 { color: var(--hj-text-secondary) !important; }
+
+.hj-theme .text-gray-500,
+.hj-theme .text-gray-400 { color: var(--hj-text-muted) !important; }
+
+.hj-theme .text-gray-300 { color: var(--hj-text-dim) !important; }
+
+/* ── Card ────────────────────────────────────────────────────────── */
+.hj-card {
+  background: var(--hj-surface);
+  border: 1px solid var(--hj-border);
+  border-radius: 12px;
+  box-shadow: var(--hj-shadow-sm);
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+.hj-header {
+  background: #FFFFFF;
+  border-bottom: 1px solid var(--hj-border);
+  box-shadow: none;
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────── */
+.hj-tab {
+  color: var(--hj-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.hj-tab:hover {
+  color: var(--hj-text);
+  background: var(--hj-bg-subtle);
+}
+
+.hj-tab--active {
+  color: var(--hj-text) !important;
+  background: var(--hj-bg-muted) !important;
+  font-weight: 600;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+.hj-btn-primary {
+  background: #000000;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.hj-btn-primary:hover { background: #222222; }
+
+.hj-btn-accent {
+  background: var(--hj-green);
+  color: #000000;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.hj-btn-accent:hover { background: var(--hj-green-dark); }
+
+.hj-btn-ghost {
+  background: transparent;
+  color: var(--hj-text-secondary);
+  border: 1px solid var(--hj-border);
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hj-btn-ghost:hover {
+  border-color: var(--hj-border-strong);
+  color: var(--hj-text);
+  background: var(--hj-bg-subtle);
+}
+
+/* ── Input / Select ──────────────────────────────────────────────── */
+.hj-input {
+  background: #FFFFFF !important;
+  border: 1px solid var(--hj-border) !important;
+  color: var(--hj-text) !important;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.hj-input::placeholder { color: var(--hj-text-dim) !important; }
+
+.hj-input:focus {
+  border-color: #000000 !important;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.08) !important;
+  outline: none;
+}
+
+.hj-select {
+  background: #FFFFFF !important;
+  border: 1px solid var(--hj-border) !important;
+  color: var(--hj-text) !important;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* ── Table ───────────────────────────────────────────────────────── */
+.hj-table-wrap {
+  background: #FFFFFF;
+  border: 1px solid var(--hj-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--hj-shadow-sm);
+}
+
+.hj-table-header {
+  background: var(--hj-bg-subtle) !important;
+  border-bottom: 1px solid var(--hj-border) !important;
+}
+
+.hj-th {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--hj-text-muted) !important;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.hj-tr:hover { background: var(--hj-bg-subtle) !important; }
+
+/* ── Metric cards ────────────────────────────────────────────────── */
+.hj-metric-card {
+  background: #FFFFFF;
+  border: 1px solid var(--hj-border);
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: var(--hj-shadow-sm);
+}
+
+.hj-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--hj-text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.hj-metric-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--hj-text);
+  line-height: 1;
+}
+
+.hj-metric-value--accent {
+  color: #000000 !important;
+}
+
+.hj-metric-sub {
+  font-size: 11px;
+  color: var(--hj-text-muted);
+  margin-top: 2px;
+  display: block;
+}
+
+/* ── Accent badge (lime green pill) ──────────────────────────────── */
+.hj-badge-green {
+  background: var(--hj-green);
+  color: #000000;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.hj-badge-black {
+  background: #000000;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ── Scrollbar (light) ───────────────────────────────────────────── */
+.hj-theme ::-webkit-scrollbar { width: 6px; height: 6px; }
+.hj-theme ::-webkit-scrollbar-track { background: var(--hj-bg-subtle); }
+.hj-theme ::-webkit-scrollbar-thumb { background: #CCCCCC; border-radius: 3px; }
+.hj-theme ::-webkit-scrollbar-thumb:hover { background: #AAAAAA; }
+
+/* ── Date range button ───────────────────────────────────────────── */
+.hj-date-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--hj-border);
+  background: transparent;
+  color: var(--hj-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hj-date-btn:hover {
+  background: var(--hj-bg-subtle);
+  color: var(--hj-text);
+}
+
+.hj-date-btn--active {
+  background: #000000 !important;
+  color: #FFFFFF !important;
+  border-color: #000000 !important;
+}
+
+/* ── Metric card accent variant ──────────────────────────────────── */
+.hj-metric-card--accent {
+  border-color: #AAFF00 !important;
+  background: #F9FFE0 !important;
+}
+
+.hj-metric-card--accent .hj-metric-value {
+  color: #000000 !important;
+}
