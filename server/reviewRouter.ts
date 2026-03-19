@@ -292,7 +292,7 @@ export async function handleReviewReplyForJob(
       title: "⚠️ Unhappy Customer — Review Flow",
       content: `${job?.name ?? fromPhone} replied negatively to the post-cleaning review SMS. Switch to manual mode and follow up personally.`,
     }).catch(() => {});
-    const negativeReply = await getTemplate("review_negative", { "[Name]": firstName });
+    const negativeReply = await getTemplate("review_negative_response", { "[Name]": firstName });
     return {
       responseText: negativeReply,
       newStage: "REVIEW_DONE",
@@ -349,7 +349,7 @@ export async function handleReviewReplyForJob(
       }
     }
 
-    const confirmedReply = await getTemplate("review_confirmed", { "[Name]": firstName });
+    const confirmedReply = await getTemplate("review_confirmed_response", { "[Name]": firstName });
     return {
       responseText: confirmedReply,
       newStage: "REVIEW_DONE",
@@ -368,7 +368,7 @@ export async function handleReviewReplyForJob(
         .set({ positiveCount: sql`${completedJobBatches.positiveCount} + 1` })
         .where(eq(completedJobBatches.id, job.batchId));
     }
-    const positiveReply = await getTemplate("review_positive", {
+    const positiveReply = await getTemplate("review_positive_response", {
       "[Name]": firstName,
       "[GoogleReviewUrl]": GOOGLE_REVIEW_URL,
     });

@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, stage, messageHistory, updatedAt FROM conversation_sessions WHERE id = 870004;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, stage, messageHistory, updatedAt FROM conversation_sessions WHERE id = 870004;",
+  "rows": [
+    {
+      "id": "870004",
+      "stage": "REVIEW_REQUESTED",
+      "messageHistory": "[{\"role\":\"assistant\",\"content\":\"Hi rohan! 🏠 How did your cleaning go today? We'd love to hear your feedback — just reply and let us know!\",\"ts\":1773883360299},{\"role\":\"user\",\"content\":\"It was great thank you\",\"ts\":1773883375415},{\"role\":\"assistant\",\"content\":\"\",\"ts\":1773883375466},{\"role\":\"user\",\"content\":\"great\",\"ts\":1773883473858},{\"role\":\"assistant\",\"content\":\"\",\"ts\":1773883473908}]",
+      "updatedAt": "2026-03-19 01:24:33"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstage\tmessageHistory\tupdatedAt\n870004\tREVIEW_REQUESTED\t[{\"role\":\"assistant\",\"content\":\"Hi rohan! 🏠 How did your cleaning go today? We'd love to hear your feedback — just reply and let us know!\",\"ts\":1773883360299},{\"role\":\"user\",\"content\":\"It was great thank you\",\"ts\":1773883375415},{\"role\":\"assistant\",\"content\":\"\",\"ts\":1773883375466},{\"role\":\"user\",\"content\":\"great\",\"ts\":1773883473858},{\"role\":\"assistant\",\"content\":\"\",\"ts\":1773883473908}]\t2026-03-19 01:24:33\n",
+  "stderr": "",
+  "execution_time_ms": 350
+}
