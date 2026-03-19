@@ -28,7 +28,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc";
-import { Phone, Clock, GripVertical, ArrowDownToLine } from "lucide-react";
+import { Phone, Clock, GripVertical, ArrowDownToLine, CheckCircle2, TrendingUp, DollarSign } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -156,12 +156,15 @@ function LeadCard({
   lead,
   isDragging = false,
   onClick,
+  onMoveToBooked,
 }: {
   lead: LeadRow;
   isDragging?: boolean;
   onClick?: () => void;
+  onMoveToBooked?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const isAvailability = lead.stage === "AVAILABILITY";
   const { attributes, listeners, setNodeRef, transform, isDragging: isCurrentlyDragging } = useDraggable({
     id: String(lead.id),
     data: { lead },
@@ -209,7 +212,7 @@ function LeadCard({
           </div>
 
           {/* Phone / call button */}
-          <div className="flex items-center gap-1 mt-0.5">
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {hovered ? (
               <a
                 href={`tel:${lead.leadPhone}`}
@@ -222,6 +225,17 @@ function LeadCard({
               </a>
             ) : (
               <span className="text-xs text-gray-400 truncate">{lead.leadPhone}</span>
+            )}
+            {/* Move to Booked — only for Availability leads, only on hover */}
+            {hovered && isAvailability && onMoveToBooked && (
+              <button
+                onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                title="Mark as Booked"
+              >
+                <CheckCircle2 className="w-2.5 h-2.5" />
+                Book
+              </button>
             )}
           </div>
         </div>
@@ -263,12 +277,14 @@ function KanbanColumn({
   isOver,
   onCardClick,
   justDraggedRef,
+  onMoveToBooked,
 }: {
   column: KanbanColumn;
   leads: LeadRow[];
   isOver: boolean;
   onCardClick: (lead: LeadRow) => void;
   justDraggedRef: React.RefObject<boolean>;
+  onMoveToBooked?: (lead: LeadRow) => void;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
@@ -323,6 +339,7 @@ function KanbanColumn({
               if (justDraggedRef.current) return;
               onCardClick(lead);
             }}
+            onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
           />
         ))}
 
@@ -345,13 +362,80 @@ type KanbanBoardProps = {
   onStageChange?: (id: number, newStage: string) => void;
 };
 
+// ── Pipeline summary bar ──────────────────────────────────────────────────────
+
+function PipelineSummary({ leads }: { leads: LeadRow[] }) {
+  const totalLeads = leads.length;
+  const totalPipeline = leads.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
+  const bookedLeads = leads.filter(l => STAGE_TO_COLUMN[l.stage] === "booked");
+  const bookedRevenue = bookedLeads.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
+  const availabilityCount = leads.filter(l => STAGE_TO_COLUMN[l.stage] === "availability").length;
+
+  return (
+    <div className="flex items-center gap-4 px-1 pb-3 flex-wrap">
+      <div className="flex items-center gap-1.5 text-sm text-gray-600">
+        <TrendingUp className="w-4 h-4 text-gray-400" />
+        <span className="font-semibold text-gray-900">{totalLeads}</span>
+        <span>leads</span>
+      </div>
+      <span className="text-gray-200">·</span>
+      <div className="flex items-center gap-1.5 text-sm text-gray-600">
+        <DollarSign className="w-4 h-4 text-gray-400" />
+        <span className="font-semibold text-gray-900">${totalPipeline.toLocaleString()}</span>
+        <span>total pipeline</span>
+      </div>
+      {bookedRevenue > 0 && (
+        <>
+          <span className="text-gray-200">·</span>
+          <div className="flex items-center gap-1.5 text-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span className="font-semibold text-emerald-700">${bookedRevenue.toLocaleString()}</span>
+            <span className="text-gray-500">booked</span>
+          </div>
+        </>
+      )}
+      {availabilityCount > 0 && (
+        <>
+          <span className="text-gray-200">·</span>
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold">{availabilityCount}</span>
+            <span className="text-gray-500">checking availability</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function KanbanBoard({ leads, onCardClick, onStageChange }: KanbanBoardProps) {
+  const updateStageQuick = trpc.leads.adminUpdateStage.useMutation();
+  const utilsQuick = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const justDraggedRef = useRef(false);
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
   const utils = trpc.useUtils();
+
+  function handleMoveToBooked(lead: LeadRow) {
+    setLocalStages(prev => ({ ...prev, [lead.id]: "BOOKED" }));
+    updateStageQuick.mutate(
+      { sessionId: lead.id, stage: "BOOKED" },
+      {
+        onSuccess: () => {
+          utils.leads.list.invalidate();
+          onStageChange?.(lead.id, "BOOKED");
+        },
+        onError: () => {
+          setLocalStages(prev => {
+            const next = { ...prev };
+            delete next[lead.id];
+            return next;
+          });
+        },
+      }
+    );
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -427,6 +511,8 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
   }
 
   return (
+    <>
+    <PipelineSummary leads={effectiveLeads} />
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
@@ -444,6 +530,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
               isOver={overId === col.id}
               onCardClick={onCardClick}
               justDraggedRef={justDraggedRef}
+              onMoveToBooked={col.id === "availability" ? handleMoveToBooked : undefined}
             />
           ))}
         </div>
@@ -458,5 +545,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
         ) : null}
       </DragOverlay>
     </DndContext>
+    </>
   );
 }

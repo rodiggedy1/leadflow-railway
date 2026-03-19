@@ -1396,3 +1396,7 @@
 - [x] Add colored top border to each column matching its stage color
 - [x] Improve card visual hierarchy — larger/bolder price, cleaner metadata row
 - [x] Fix orange card border (drag-over state) to use gray/neutral instead of coral
+
+## Kanban Board — New Features
+- [x] Add total pipeline summary bar above board (X leads · $Y total pipeline · $Z booked)
+- [x] Add "Move to Booked" quick-action button on Availability cards (hover only)
