@@ -87,11 +87,15 @@ export function registerWebhookRoutes(app: Express) {
         .orderBy(conversationSessions.createdAt)
         .limit(50);
 
-      // Find the most recently created session that is not yet DONE
-      const activeSession = sessions
-        .slice() // copy to avoid mutating
-        .reverse()
-        .find(s => s.stage !== "DONE");
+      // Prioritize review sessions (REVIEW_REQUESTED / REVIEW_DONE) so that a
+      // customer who has both a lead session and a review session gets their reply
+      // routed to the review flow, not the lead AI engine.
+      const reversedSessions = sessions.slice().reverse();
+      const reviewSession = reversedSessions.find(
+        s => s.stage === "REVIEW_REQUESTED" || s.stage === "REVIEW_DONE"
+      );
+      const activeSession = reviewSession ??
+        reversedSessions.find(s => s.stage !== "DONE");
 
       const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent
 

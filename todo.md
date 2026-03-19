@@ -1332,3 +1332,12 @@
 
 - [x] Fix "Completed Jobs" label on lead page nav — should say "Reviews" (star icon added)
 - [x] Investigate 3 SMS: were the 3 legitimate March 15th jobs picked up by the cron before the 7-day guard was added; March 18th jobs still PENDING awaiting manual approval
+
+## Review Reply Bug
+
+- [ ] Debug why review-test session replies are not getting AI responses
+
+## OpenPhone Webhook Bootstrap
+
+- [ ] Build bootstrapOpenPhoneWebhook function — auto-registers message.received webhook with OpenPhone API on server start
+- [ ] Call it in server/_core/index.ts after server starts (same pattern as bootstrapVapiAssistant)
