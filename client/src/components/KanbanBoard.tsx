@@ -189,7 +189,7 @@ function LeadCard({
       {...attributes}
       {...listeners}
       className={`bg-white rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing select-none transition-all ${
-        isDragging ? "opacity-40" : "hover:shadow-md hover:border-orange-200"
+        isDragging ? "opacity-40" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
         // Don't fire click if the user just finished dragging
@@ -211,7 +211,7 @@ function LeadCard({
               {lead.leadName ?? "Unknown"}
             </span>
             {total > 0 && (
-              <span className="text-sm font-bold text-orange-600 flex-shrink-0">
+              <span className="text-sm font-bold text-gray-900 flex-shrink-0">
                 ${total}
               </span>
             )}
@@ -224,7 +224,7 @@ function LeadCard({
                 onClick={e => e.stopPropagation()}
                 title={`Call ${lead.leadPhone}`}
                 className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full transition-colors"
-                style={{ backgroundColor: "#E8603C", color: "white" }}
+                style={{ backgroundColor: "#000000", color: "white" }}
               >
                 <Phone className="w-3 h-3" />
                 Call
@@ -312,7 +312,7 @@ function KanbanColumn({
       <div
         ref={setNodeRef}
         className={`flex-1 rounded-b-xl border border-t-0 p-2 flex flex-col gap-2 min-h-[400px] transition-colors ${
-          isOver ? "bg-orange-50 border-orange-300" : "bg-gray-50 border-gray-200"
+          isOver ? "bg-[#f0ffe0] border-[#AAFF00]" : "bg-gray-50 border-gray-200"
         }`}
       >
         {leads.length === 0 && (

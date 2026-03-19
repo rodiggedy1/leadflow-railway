@@ -1376,3 +1376,6 @@
 - [x] Apply hj-theme to All Calls page (AllCalls.tsx)
 - [x] Apply hj-theme to Revenue ROI page (RevenueAttribution.tsx)
 - [x] Update AdminHeader shared component to HeyJade branding (lime green J logo, black active tab underline)
+
+## HeyJade Light Theme — Pipeline Page
+- [x] Apply hj-theme to KanbanBoard component: black Call button, gray card hover border, lime-green drop zone highlight, black price values
