@@ -17,6 +17,7 @@ interface SmsComposeBoxProps {
   onSend: () => void;
   isSending?: boolean;
   placeholder?: string;
+  onTypingChange?: (isTyping: boolean) => void;
 }
 
 export default function SmsComposeBox({
@@ -25,7 +26,10 @@ export default function SmsComposeBox({
   onSend,
   isSending = false,
   placeholder = "Write a message...",
+  onTypingChange,
 }: SmsComposeBoxProps) {
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -107,8 +111,31 @@ export default function SmsComposeBox({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => {
+            onChange(e.target.value);
+            // Fire typing start
+            if (onTypingChange && !isTypingRef.current) {
+              isTypingRef.current = true;
+              onTypingChange(true);
+            }
+            // Reset the stop-typing timer
+            if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+            typingTimerRef.current = setTimeout(() => {
+              if (isTypingRef.current) {
+                isTypingRef.current = false;
+                onTypingChange?.(false);
+              }
+            }, 3000);
+          }}
           onKeyDown={handleKeyDown}
+          onBlur={() => {
+            // Stop typing when focus leaves
+            if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+            if (isTypingRef.current) {
+              isTypingRef.current = false;
+              onTypingChange?.(false);
+            }
+          }}
           onFocus={() => {}}
           placeholder={placeholder}
           rows={2}

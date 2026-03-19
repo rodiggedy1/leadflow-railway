@@ -1352,3 +1352,4 @@
 - [x] Fix sentiment filter pill counts (all showing as No Reply instead of correct categories)
 - [x] Fix Customer Happiness Score card centering
 - [x] Fix double SMS when sending from admin drawer (server-side dedup guard: same message within 10s is rejected)
+- [x] Real-time typing indicator in conversation drawers (see who is typing)

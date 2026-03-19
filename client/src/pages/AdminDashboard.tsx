@@ -843,6 +843,18 @@ function ConversationDrawer({
     sendMessageMutation.mutate({ sessionId: session.id, message: text });
   };
 
+  // Typing presence — signal to server when this agent is typing
+  const setTypingMutation = trpc.leads.setTyping.useMutation();
+  const handleTypingChange = (isTyping: boolean) => {
+    setTypingMutation.mutate({ sessionId: session.id, isTyping });
+  };
+
+  // Poll for other agents typing in this conversation (every 2s)
+  const { data: typingData } = trpc.leads.getTyping.useQuery(
+    { sessionId: session.id },
+    { refetchInterval: 2000 }
+  );
+
   // Delete lead
   const deleteLeadMutation = trpc.leads.deleteLead.useMutation({
     onSuccess: () => {
@@ -1004,12 +1016,28 @@ function ConversationDrawer({
                   {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
                 </button>
               </div>
+              {/* Typing indicator — shown when another agent is composing */}
+              {typingData?.typingAgentName && (
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </span>
+                  </div>
+                  <span className="text-xs text-orange-600 font-medium">
+                    {typingData.typingAgentName} is typing...
+                  </span>
+                </div>
+              )}
               <SmsComposeBox
                 value={replyText}
                 onChange={setReplyText}
                 onSend={handleSend}
                 isSending={sendMessageMutation.isPending}
                 placeholder="Write a message..."
+                onTypingChange={handleTypingChange}
               />
             </div>
           </div>

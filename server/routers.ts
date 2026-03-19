@@ -24,6 +24,10 @@ import { activityRouter } from "./activityRouter";
 import { voiceRouter } from "./voiceRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
+
+// In-memory typing presence store: sessionId -> { agentName, agentId, expiresAt }
+// Ephemeral — cleared on server restart. No DB needed for real-time typing indicators.
+const typingPresence = new Map<string, { agentName: string; agentId: number; expiresAt: number }>();
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
 const SECONDARY_ALERT_NUMBER = "+13029816191";
 
@@ -657,6 +661,55 @@ export const appRouter = router({
 
         console.log(`[sendMessage] Agent ${agentSession.agentName} sent to ${session.leadPhone}: "${input.message}"`);
         return { success: true, smsSent: smsResult.success };
+      }),
+
+    /**
+     * leads.setTyping — agent signals they are typing (or stopped) in a conversation.
+     * Uses an in-memory store with 5-second TTL. No DB needed — ephemeral state.
+     */
+    setTyping: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        isTyping: z.boolean(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const key = `${input.sessionId}`;
+        if (input.isTyping) {
+          typingPresence.set(key, {
+            agentName: agentSession.agentName,
+            agentId: agentSession.agentId,
+            expiresAt: Date.now() + 5_000,
+          });
+        } else {
+          // Only clear if this agent set it
+          const existing = typingPresence.get(key);
+          if (existing?.agentId === agentSession.agentId) {
+            typingPresence.delete(key);
+          }
+        }
+        return { success: true };
+      }),
+
+    /**
+     * leads.getTyping — returns who (if anyone) is currently typing in a session.
+     * Polled every 2s by the drawer. Expired entries are cleaned up on read.
+     */
+    getTyping: publicProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const key = `${input.sessionId}`;
+        const entry = typingPresence.get(key);
+        if (!entry) return { typingAgentName: null };
+        // Expired?
+        if (Date.now() > entry.expiresAt) {
+          typingPresence.delete(key);
+          return { typingAgentName: null };
+        }
+        // Don't show your own typing indicator back to yourself
+        if (entry.agentId === agentSession.agentId) return { typingAgentName: null };
+        return { typingAgentName: entry.agentName };
       }),
 
     /**
