@@ -627,7 +627,19 @@ export const appRouter = router({
         // Parse and update history
         let history: Array<{ role: string; content: string; ts?: number }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
-        history.push({ role: "assistant", content: input.message, ts: Date.now() });
+
+        // Deduplication guard: reject if the exact same message was sent within the last 10 seconds.
+        // This prevents double-sends caused by rapid re-renders or accidental double-clicks.
+        const now = Date.now();
+        const recentDuplicate = history.find(
+          m => m.role === "assistant" && m.content === input.message && m.ts && (now - m.ts) < 10_000
+        );
+        if (recentDuplicate) {
+          console.warn(`[sendMessage] Duplicate detected for session ${input.sessionId} — skipping SMS send.`);
+          return { success: true, smsSent: false, duplicate: true };
+        }
+
+        history.push({ role: "assistant", content: input.message, ts: now });
         if (history.length > 20) history = history.slice(-20);
 
         // Save to DB

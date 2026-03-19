@@ -1351,3 +1351,4 @@
 - [x] conversations tRPC procedure includes review-test sessions and full message history
 - [x] Fix sentiment filter pill counts (all showing as No Reply instead of correct categories)
 - [x] Fix Customer Happiness Score card centering
+- [x] Fix double SMS when sending from admin drawer (server-side dedup guard: same message within 10s is rejected)
