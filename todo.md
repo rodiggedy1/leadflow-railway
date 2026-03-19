@@ -1355,3 +1355,5 @@
 - [x] Real-time typing indicator in conversation drawers (see who is typing)
 - [x] Show sender name on outbound message bubbles in conversation drawers
 - [x] Show "AI" badge on AI-generated outbound message bubbles
+- [x] Fix AI badge wrongly showing on manually-sent messages (senderName not stored)
+- [x] Move robot icon to left of bubble instead of below it

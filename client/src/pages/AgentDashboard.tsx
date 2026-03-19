@@ -383,10 +383,12 @@ function ConversationDrawer({
   session,
   onClose,
   currentAgentId,
+  currentAgentName,
 }: {
   session: Session;
   onClose: () => void;
   currentAgentId: number;
+  currentAgentName?: string;
 }) {
   let messages: { role: string; content: string }[] = [];
   try { messages = JSON.parse(session.messageHistory || "[]"); } catch { messages = []; }
@@ -438,7 +440,7 @@ function ConversationDrawer({
 
   const sendMessageMutation = trpc.leads.sendMessage.useMutation({
     onSuccess: (_, vars) => {
-      setLocalMessages(prev => [...prev, { role: "assistant", content: vars.message, ts: Date.now() }]);
+      setLocalMessages(prev => [...prev, { role: "assistant", content: vars.message, ts: Date.now(), senderName: currentAgentName ?? "Agent" } as any]);
       setReplyText("");
     },
     onError: (err) => toast.error(err.message),
@@ -578,32 +580,38 @@ function ConversationDrawer({
                     ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
                     : null;
                   const senderName = (msg as any).senderName as string | undefined;
+                  const isAiMessage = isOutbound && !senderName;
                   return (
                     <div key={i}>
                       {showSeparator && curTs != null && (
                         <MessageDateSeparator label={formatMsgDate(curTs)} />
                       )}
-                      <div className={`flex flex-col mb-3 ${isOutbound ? "items-end" : "items-start"}`}>
-                        <div
-                          className="max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                          style={
-                            isOutbound
-                              ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: "4px" }
-                              : { backgroundColor: "#ffffff", color: "#111827", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
-                          }
-                        >
-                          {msg.content}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-0.5 px-1">
-                          {isOutbound && senderName && (
-                            <span className="text-[10px] font-medium text-orange-500">{senderName}</span>
-                          )}
-                          {isOutbound && !senderName && (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#f0f9ff", color: "#0284c7", border: "1px solid #bae6fd" }}>✦ AI</span>
-                          )}
-                          {timeLabel && (
-                            <span className="text-[10px] text-gray-400">{timeLabel}</span>
-                          )}
+                      <div className={`flex mb-3 ${isOutbound ? "justify-end" : "justify-start"}`}>
+                        {/* Robot icon on left for AI messages */}
+                        {isAiMessage && (
+                          <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-1.5 mt-0.5" style={{ backgroundColor: "#e0f2fe", border: "1px solid #bae6fd" }}>
+                            <span className="text-[11px]">🤖</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col" style={{ maxWidth: "78%" }}>
+                          <div
+                            className="rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                            style={
+                              isOutbound
+                                ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: isAiMessage ? "12px" : "4px", borderBottomLeftRadius: isAiMessage ? "4px" : "12px" }
+                                : { backgroundColor: "#ffffff", color: "#111827", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
+                            }
+                          >
+                            {msg.content}
+                          </div>
+                          <div className={`flex items-center gap-1.5 mt-0.5 px-1 ${isOutbound ? (isAiMessage ? "justify-start" : "justify-end") : "justify-start"}`}>
+                            {isOutbound && senderName && (
+                              <span className="text-[10px] font-medium text-orange-500">{senderName}</span>
+                            )}
+                            {timeLabel && (
+                              <span className="text-[10px] text-gray-400">{timeLabel}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -921,10 +929,12 @@ function ConversationDrawer({
 function LeadCard({
   session,
   currentAgentId,
+  currentAgentName,
   onRefresh,
 }: {
   session: Session;
   currentAgentId: number;
+  currentAgentName?: string;
   onRefresh: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -1123,7 +1133,7 @@ function LeadCard({
         <LogCallDialog session={session} onClose={() => setShowLogCall(false)} />
       )}
       {showConversation && (
-        <ConversationDrawer session={session} onClose={() => setShowConversation(false)} currentAgentId={currentAgentId} />
+        <ConversationDrawer session={session} onClose={() => setShowConversation(false)} currentAgentId={currentAgentId} currentAgentName={currentAgentName} />
       )}
     </>
   );
@@ -1407,6 +1417,7 @@ export default function AgentDashboard() {
                 key={session.id}
                 session={session as Session}
                 currentAgentId={agentMe.id}
+                currentAgentName={agentMe.name}
                 onRefresh={() => refetch()}
               />
             ))}
