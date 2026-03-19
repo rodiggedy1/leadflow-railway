@@ -1327,3 +1327,8 @@
 
 - [x] Backend: reviewRouter.sendTest procedure — sends a real review SMS to a provided phone number with a fake job, creates a proper conversation session
 - [x] Frontend: Test Send card on Reviews Batches tab — phone input + first name input + Send Test button with preview of sent message
+
+## Nav + SMS Investigation (Mar 18)
+
+- [x] Fix "Completed Jobs" label on lead page nav — should say "Reviews" (star icon added)
+- [x] Investigate 3 SMS: were the 3 legitimate March 15th jobs picked up by the cron before the 7-day guard was added; March 18th jobs still PENDING awaiting manual approval
