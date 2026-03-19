@@ -1341,3 +1341,11 @@
 
 - [ ] Build bootstrapOpenPhoneWebhook function — auto-registers message.received webhook with OpenPhone API on server start
 - [ ] Call it in server/_core/index.ts after server starts (same pattern as bootstrapVapiAssistant)
+
+## Review Responses UI
+- [x] Fix review SMS reply routing (webhook session priority bug)
+- [x] Fix empty review AI replies (wrong template step keys)
+- [x] Add OpenPhone webhook health badge to admin header
+- [x] Test sends create real completed_jobs rows for full analytics flow
+- [x] Redesign Conversations tab: expandable SMS thread cards, sentiment filter pills, search, TEST badge
+- [x] conversations tRPC procedure includes review-test sessions and full message history

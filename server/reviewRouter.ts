@@ -592,10 +592,14 @@ export const reviewRouter = router({
         stage: conversationSessions.stage,
         messageHistory: conversationSessions.messageHistory,
         createdAt: conversationSessions.createdAt,
+        updatedAt: conversationSessions.updatedAt,
         aiMode: conversationSessions.aiMode,
+        leadSource: conversationSessions.leadSource,
       })
       .from(conversationSessions)
-      .where(eq(conversationSessions.leadSource, "review"))
+      .where(
+        sql`${conversationSessions.leadSource} IN ('review', 'review-test')`
+      )
       .orderBy(desc(conversationSessions.createdAt))
       .limit(200);
 
@@ -621,6 +625,17 @@ export const reviewRouter = router({
         s.stage === "REVIEW_DONE" && s.aiMode === 0 ? "negative" :
         s.stage === "REVIEW_REQUESTED" ? "pending" : "pending";
 
+      // Parse full message history for the thread view
+      let messages: Array<{ role: string; content: string; ts: number }> = [];
+      try {
+        const raw = JSON.parse(s.messageHistory ?? "[]") as Array<{ role: string; content: string; ts?: number }>;
+        messages = raw
+          .filter(m => m.content && m.content.trim() !== "")
+          .map((m, i) => ({ role: m.role, content: m.content, ts: m.ts ?? Date.now() + i }));
+      } catch {}
+
+      const replyCount = messages.filter(m => m.role === "user").length;
+
       return {
         id: s.id,
         leadPhone: s.leadPhone,
@@ -630,6 +645,10 @@ export const reviewRouter = router({
         lastCustomerReply,
         lastReplyAt,
         createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+        isTest: s.leadSource === "review-test",
+        messages,
+        replyCount,
       };
     });
   }),

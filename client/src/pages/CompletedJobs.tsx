@@ -852,76 +852,224 @@ function BatchesTab() {
 }
 
 // ─── Conversations tab ───────────────────────────────────────────────────────
-const SENTIMENT_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  confirmed: { label: "Review Left", color: "text-green-600", icon: <Award className="w-3.5 h-3.5" /> },
-  positive: { label: "Positive", color: "text-blue-600", icon: <ThumbsUp className="w-3.5 h-3.5" /> },
-  negative: { label: "Unhappy", color: "text-red-500", icon: <ThumbsDown className="w-3.5 h-3.5" /> },
-  pending: { label: "Awaiting Reply", color: "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
+const SENTIMENT_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; icon: React.ReactNode }> = {
+  confirmed: { label: "Review Left", bg: "bg-green-50", text: "text-green-700", border: "border-green-200", icon: <Award className="w-3.5 h-3.5" /> },
+  positive:  { label: "Happy",       bg: "bg-blue-50",  text: "text-blue-700",  border: "border-blue-200",  icon: <ThumbsUp className="w-3.5 h-3.5" /> },
+  negative:  { label: "Unhappy",     bg: "bg-red-50",   text: "text-red-600",   border: "border-red-200",   icon: <ThumbsDown className="w-3.5 h-3.5" /> },
+  pending:   { label: "No Reply",    bg: "bg-gray-50",  text: "text-gray-500",  border: "border-gray-200",  icon: <Clock className="w-3.5 h-3.5" /> },
 };
 
+type Conversation = {
+  id: number;
+  leadPhone: string;
+  leadName: string;
+  stage: string;
+  sentiment: string;
+  lastCustomerReply: string | null;
+  lastReplyAt: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  isTest: boolean;
+  messages: Array<{ role: string; content: string; ts: number }>;
+  replyCount: number;
+};
+
+function SmsThread({ messages }: { messages: Array<{ role: string; content: string; ts: number }> }) {
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3 bg-gray-50 rounded-b-xl border-t" style={{ borderColor: "#F0D8D0" }}>
+      {messages.map((m, i) => (
+        <div key={i} className={`flex ${m.role === "assistant" ? "justify-start" : "justify-end"}`}>
+          <div
+            className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+              m.role === "assistant"
+                ? "bg-white border text-gray-800 rounded-tl-sm"
+                : "text-white rounded-tr-sm"
+            }`}
+            style={m.role === "user" ? { backgroundColor: "#E8603C" } : { borderColor: "#F0D8D0" }}
+          >
+            {m.content}
+            <div className={`text-[10px] mt-1 ${m.role === "assistant" ? "text-gray-400" : "text-orange-100"}`}>
+              {new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ConversationCard({ c }: { c: Conversation }) {
+  const [expanded, setExpanded] = useState(false);
+  const sentCfg = SENTIMENT_CONFIG[c.sentiment] ?? SENTIMENT_CONFIG.pending;
+  const hasReplies = c.replyCount > 0;
+
+  return (
+    <div className="rounded-xl border bg-white overflow-hidden transition-shadow hover:shadow-sm" style={{ borderColor: "#F0D8D0" }}>
+      {/* Header row */}
+      <button
+        className="w-full text-left px-4 py-3.5 flex items-center gap-3"
+        onClick={() => hasReplies && setExpanded(e => !e)}
+        style={{ cursor: hasReplies ? "pointer" : "default" }}
+      >
+        {/* Avatar */}
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
+          style={{ backgroundColor: "#E8603C" }}
+        >
+          {(c.leadName?.[0] ?? "?").toUpperCase()}
+        </div>
+
+        {/* Name + preview */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900 text-sm">{c.leadName}</span>
+            {c.isTest && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">TEST</span>
+            )}
+            <span className="text-xs text-gray-400">{c.leadPhone}</span>
+          </div>
+          <p className="text-xs text-gray-500 truncate mt-0.5">
+            {c.lastCustomerReply
+              ? <span className="text-gray-700">"{c.lastCustomerReply}"</span>
+              : <span className="italic text-gray-400">No reply yet</span>}
+          </p>
+        </div>
+
+        {/* Right side: sentiment + meta */}
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${sentCfg.bg} ${sentCfg.text} ${sentCfg.border}`}>
+            {sentCfg.icon}
+            {sentCfg.label}
+          </span>
+          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+            {hasReplies && (
+              <span className="flex items-center gap-0.5">
+                <MessageCircle className="w-3 h-3" />
+                {c.replyCount} {c.replyCount === 1 ? "reply" : "replies"}
+              </span>
+            )}
+            <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+            {hasReplies && (
+              <ChevronLeft
+                className={`w-3.5 h-3.5 transition-transform ${expanded ? "-rotate-90" : "rotate-180"}`}
+              />
+            )}
+          </div>
+        </div>
+      </button>
+
+      {/* Expandable SMS thread */}
+      {expanded && hasReplies && <SmsThread messages={c.messages} />}
+    </div>
+  );
+}
+
 function ConversationsTab() {
-  const { data: conversations, isLoading } = trpc.completedJobs.conversations.useQuery();
+  const { data: conversations, isLoading, refetch } = trpc.completedJobs.conversations.useQuery();
+  const [filter, setFilter] = useState<"all" | "confirmed" | "positive" | "negative" | "pending">("all");
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!conversations) return [];
+    return conversations.filter(c => {
+      const matchFilter = filter === "all" || c.sentiment === filter;
+      const matchSearch = !search ||
+        c.leadName.toLowerCase().includes(search.toLowerCase()) ||
+        c.leadPhone.includes(search) ||
+        (c.lastCustomerReply ?? "").toLowerCase().includes(search.toLowerCase());
+      return matchFilter && matchSearch;
+    });
+  }, [conversations, filter, search]);
+
+  // Count by sentiment
+  const counts = useMemo(() => {
+    if (!conversations) return { all: 0, confirmed: 0, positive: 0, negative: 0, pending: 0 };
+    return {
+      all: conversations.length,
+      confirmed: conversations.filter(c => c.sentiment === "confirmed").length,
+      positive: conversations.filter(c => c.sentiment === "positive").length,
+      negative: conversations.filter(c => c.sentiment === "negative").length,
+      pending: conversations.filter(c => c.sentiment === "pending").length,
+    };
+  }, [conversations]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-400">
         <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-        Loading conversations…
-      </div>
-    );
-  }
-
-  if (!conversations?.length) {
-    return (
-      <div className="text-center py-20 text-gray-400">
-        <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">No review conversations yet.</p>
-        <p className="text-xs mt-1">Conversations will appear here after the first review SMS batch is approved and sent.</p>
+        Loading responses…
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-500">{conversations.length} review conversation{conversations.length !== 1 ? "s" : ""}</p>
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Sent</TableHead>
-                <TableHead>Sentiment</TableHead>
-                <TableHead>Last Reply</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {conversations.map((c) => {
-                const sentCfg = SENTIMENT_CONFIG[c.sentiment] ?? SENTIMENT_CONFIG.pending;
-                return (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.leadName}</TableCell>
-                    <TableCell className="text-gray-500 text-sm">{c.leadPhone}</TableCell>
-                    <TableCell className="text-gray-500 text-sm">
-                      {new Date(c.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <span className={`flex items-center gap-1 text-xs font-medium ${sentCfg.color}`}>
-                        {sentCfg.icon}
-                        {sentCfg.label}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-gray-500 text-sm max-w-xs truncate">
-                      {c.lastCustomerReply ?? <span className="text-gray-300 italic">No reply yet</span>}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        {/* Sentiment filter pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {(["all", "confirmed", "positive", "negative", "pending"] as const).map(f => {
+            const cfg = f === "all" ? null : SENTIMENT_CONFIG[f];
+            const count = counts[f];
+            return (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${
+                  filter === f
+                    ? cfg ? `${cfg.bg} ${cfg.text} ${cfg.border}` : "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {cfg?.icon}
+                {f === "all" ? "All" : cfg?.label}
+                <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                  filter === f ? "bg-white/30" : "bg-gray-100 text-gray-500"
+                }`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search + refresh */}
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Search name, phone, reply…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="text-sm border rounded-lg px-3 py-1.5 w-52 focus:outline-none focus:ring-1"
+            style={{ borderColor: "#F0D8D0", focusRingColor: "#E8603C" } as React.CSSProperties}
+          />
+          <button
+            onClick={() => refetch()}
+            className="p-1.5 rounded-lg border text-gray-400 hover:text-gray-600 transition-colors"
+            style={{ borderColor: "#F0D8D0" }}
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Conversation cards */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          {conversations?.length === 0 ? (
+            <>
+              <p className="text-sm">No review conversations yet.</p>
+              <p className="text-xs mt-1">Use Test Send in the Batches tab to try the full flow.</p>
+            </>
+          ) : (
+            <p className="text-sm">No conversations match your filter.</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(c => <ConversationCard key={c.id} c={c as Conversation} />)}
+        </div>
+      )}
     </div>
   );
 }
