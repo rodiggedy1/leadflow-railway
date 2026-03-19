@@ -134,7 +134,17 @@ export async function sendPendingReviewSms(): Promise<number> {
   const dd = String(etNow.getDate()).padStart(2, "0");
   const yesterday = `${yyyy}-${mm}-${dd}`;
 
-  // Select PENDING jobs whose jobDate is yesterday or earlier (catches any backlog)
+  // Lookback window: only send to jobs within the last 7 days.
+  // This prevents old test/placeholder data (e.g. 2020-01-02) from being picked up.
+  const lookbackDate = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "America/New_York" })
+  );
+  lookbackDate.setDate(lookbackDate.getDate() - 7);
+  const lookback = `${lookbackDate.getFullYear()}-${String(lookbackDate.getMonth() + 1).padStart(2, "0")}-${String(lookbackDate.getDate()).padStart(2, "0")}`;
+
+  // Select PENDING jobs whose jobDate is between 7 days ago and yesterday (inclusive).
+  // Lower bound prevents old test data from being sent; upper bound ensures we only
+  // send the day AFTER the cleaning (not same-day).
   const pending = await db
     .select()
     .from(completedJobs)
@@ -142,8 +152,8 @@ export async function sendPendingReviewSms(): Promise<number> {
       and(
         eq(completedJobs.status, "PENDING"),
         isNull(completedJobs.smsSentAt),
-        // jobDate <= yesterday (string comparison works for YYYY-MM-DD)
-        sql`${completedJobs.jobDate} <= ${yesterday}`
+        sql`${completedJobs.jobDate} <= ${yesterday}`,
+        sql`${completedJobs.jobDate} >= ${lookback}`
       )
     )
     .limit(50);

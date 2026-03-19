@@ -1306,3 +1306,7 @@
 - [x] Frontend: Analytics tab on Reviews page with hero score, 4 stat cards, trend chart, sentiment breakdown, service type breakdown
 - [x] Date range filter: 7d / 30d / 3m / 6m / all time
 - [x] Tests for analytics procedure (10 tests, all passing — 570 total)
+
+## Critical Fixes (Mar 18) — Review Cron Over-Send- [x] Disable review-send cron until timing is verified
+- [x] Filter review sessions (leadSource = 'review') out of admin lead list — also filtered from funnel stats
+- [x] Investigate 49 SMS over-send: root cause = 46 jobs had placeholder date 2020-01-02 from old CSV imports; fixed by adding 7-day lookback window to sendPendingReviewSmsntion

@@ -78,13 +78,19 @@ export const appRouter = router({
         //   (a) NOT from always-on campaigns (form leads, reactivation CSV, widget, etc.)
         //   (b) FROM always-on campaigns but have progressed past REACTIVATION stage
         //       (meaning the customer replied and entered the booking flow)
-        const sourceFilter = or(
-          // Non-always-on sources
-          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT LIKE 'always-on%')`,
-          // Always-on but replied (stage advanced past REACTIVATION)
-          and(
-            sql`${conversationSessions.leadSource} LIKE 'always-on%'`,
-            ne(conversationSessions.stage, "REACTIVATION")
+        // Explicitly exclude:
+        //   - review sessions (leadSource = 'review') — these belong in the Reviews tab
+        const sourceFilter = and(
+          // Never show review-flow sessions in the lead list
+          ne(conversationSessions.leadSource, "review"),
+          or(
+            // Non-always-on sources
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT LIKE 'always-on%')`,
+            // Always-on but replied (stage advanced past REACTIVATION)
+            and(
+              sql`${conversationSessions.leadSource} LIKE 'always-on%'`,
+              ne(conversationSessions.stage, "REACTIVATION")
+            )
           )
         );
 
@@ -177,14 +183,19 @@ export const appRouter = router({
         if (!db) return { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        // Stage breakdown
+        // Stage breakdown — exclude review sessions (they belong in the Reviews tab)
+        const reviewExclude = ne(conversationSessions.leadSource, "review");
+        const statsConditions = conditions
+          ? and(conditions, reviewExclude)
+          : reviewExclude;
+
         const rows = await db
           .select({
             stage: conversationSessions.stage,
             count: sql<number>`count(*)`,
           })
           .from(conversationSessions)
-          .where(conditions)
+          .where(statsConditions)
           .groupBy(conversationSessions.stage);
         const byStage: Record<string, number> = {};
         let total = 0;
