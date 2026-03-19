@@ -1,0 +1,8 @@
+{
+  "query": "SELECT DATE(`createdAt`), count(distinct `sessionKey`) FROM `page_views` WHERE (`page_views`.`createdAt` >= '2026-03-13 00:00:00.000' AND (`page_views`.`timeOnPage` IS NULL OR `page_views`.`timeOnPage` >= 8)) GROUP BY DATE(`page_views`.`createdAt`);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT DATE(`createdAt`), count(distinct `sessionKey`) FROM `page_views` WHERE (`page_views`.`createdAt` >= '2026-03-13 00:00:00.000' AND (`page_views`.`timeOnPage` IS NULL OR `page_views`.`timeOnPage` >= 8)) GROUP BY DATE(`page_views`.`createdAt`);",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1055 (42000) at line 1: Expression #1 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'CAeRhAUjAZoEuxNGm5QbPr.page_views.createdAt' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by"
+  ]
+}

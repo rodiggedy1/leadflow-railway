@@ -1413,3 +1413,6 @@
 - [x] Use lime green (#AAFF00) as accent color for key stats and highlights
 - [x] Make "Yesterday" label large and prominent (lime green pill at top)
 - [x] Match overall hj-theme aesthetic (white card, clean borders, black text)
+
+## Bug Fixes
+- [x] Fix page_views DATE() grouping query error — changed GROUP BY to use alias (only_full_group_by mode)

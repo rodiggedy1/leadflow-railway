@@ -434,7 +434,7 @@ export const appRouter = router({
             ),
           )
         )
-        .groupBy(sql`DATE(${pageViews.createdAt})`);
+        .groupBy(sql`day`);
 
       // Daily lead counts
       const leadRows = await db
@@ -444,7 +444,7 @@ export const appRouter = router({
         })
         .from(conversationSessions)
         .where(gte(conversationSessions.createdAt, sevenDaysAgo))
-        .groupBy(sql`DATE(${conversationSessions.createdAt})`);
+        .groupBy(sql`day`);
 
       // Daily booked counts
       const bookedRows = await db
@@ -459,7 +459,7 @@ export const appRouter = router({
             eq(conversationSessions.isBooked, 1)
           )
         )
-        .groupBy(sql`DATE(${conversationSessions.bookedAt})`);
+        .groupBy(sql`day`);
 
       // Build lookup maps
       const visitorMap = new Map(visitorRows.map(r => [r.day, Number(r.count)]));
