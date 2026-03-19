@@ -228,13 +228,15 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
     >
       {/* Modal card */}
       <div
-        className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden"
+        className="daily-recap-modal relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden"
         style={{
           animation: "recapSlideUp 0.35s cubic-bezier(0.34,1.56,0.64,1) both",
           maxHeight: "90vh",
           overflowY: "auto",
           border: "1px solid #e5e7eb",
-        }}
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        } as React.CSSProperties}
       >
         {/* Top accent bar */}
         <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, #AAFF00 0%, #7dcc00 100%)" }} />

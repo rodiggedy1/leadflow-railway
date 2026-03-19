@@ -1416,3 +1416,4 @@
 
 ## Bug Fixes
 - [x] Fix page_views DATE() grouping query error — changed GROUP BY to use alias (only_full_group_by mode)
+- [x] Fix DATE() GROUP BY alias error — use full expression GROUP BY DATE(col) instead of alias

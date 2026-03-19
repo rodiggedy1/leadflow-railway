@@ -1,0 +1,30 @@
+{
+  "query": "SELECT DATE(createdAt) as day, count(distinct sessionKey) as cnt FROM page_views WHERE createdAt >= '2026-03-13 00:00:00' AND (timeOnPage IS NULL OR timeOnPage >= 8) GROUP BY DATE(createdAt) LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT DATE(createdAt) as day, count(distinct sessionKey) as cnt FROM page_views WHERE createdAt >= '2026-03-13 00:00:00' AND (timeOnPage IS NULL OR timeOnPage >= 8) GROUP BY DATE(createdAt) LIMIT 5;",
+  "rows": [
+    {
+      "day": "2026-03-14",
+      "cnt": "4"
+    },
+    {
+      "day": "2026-03-17",
+      "cnt": "18"
+    },
+    {
+      "day": "2026-03-15",
+      "cnt": "25"
+    },
+    {
+      "day": "2026-03-13",
+      "cnt": "17"
+    },
+    {
+      "day": "2026-03-16",
+      "cnt": "23"
+    }
+  ],
+  "messages": [],
+  "stdout": "day\tcnt\n2026-03-14\t4\n2026-03-17\t18\n2026-03-15\t25\n2026-03-13\t17\n2026-03-16\t23\n",
+  "stderr": "",
+  "execution_time_ms": 359
+}

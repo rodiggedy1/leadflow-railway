@@ -1038,3 +1038,6 @@
 .hj-metric-card--accent .hj-metric-value {
   color: #000000 !important;
 }
+
+/* Hide scrollbar in Daily Recap modal (Webkit/Chrome/Safari) */
+.daily-recap-modal::-webkit-scrollbar { display: none; }

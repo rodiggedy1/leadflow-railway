@@ -2124,6 +2124,14 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             {/* Widget health indicator */}
             <WidgetHealthBadge />
+            {/* TEMP: Daily Recap preview trigger — remove after review */}
+            <button
+              onClick={() => { localStorage.removeItem(`recap_shown_${new Date().toISOString().slice(0,10)}`); setShowRecap(true); }}
+              title="Preview yesterday's recap"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-[#AAFF00] hover:text-gray-700 transition-colors"
+            >
+              <span className="text-xs font-bold">☀</span>
+            </button>
             {/* AI Simulator shortcut */}
             <button
               onClick={() => setShowSimulator(v => !v)}
