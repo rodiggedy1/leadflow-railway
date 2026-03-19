@@ -414,7 +414,7 @@ export default function SyncHealthPage() {
   const isLoading = summaryLoading || runsLoading;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader activeTab="sync-health" />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -422,7 +422,7 @@ export default function SyncHealthPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-[#E8603C]" />
+              <Activity className="w-5 h-5 text-[#000000]" />
               Sync Health
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -474,7 +474,7 @@ export default function SyncHealthPage() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
-                <Play className="w-4 h-4 text-[#E8603C]" />
+                <Play className="w-4 h-4 text-[#000000]" />
                 Manual Sync Trigger
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
@@ -486,14 +486,14 @@ export default function SyncHealthPage() {
                 type="date"
                 value={triggerDate}
                 onChange={(e) => setTriggerDate(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E8603C]/30 focus:border-[#E8603C]"
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#000000]/30 focus:border-[#000000]"
                 max={new Date().toISOString().slice(0, 10)}
               />
               <Button
                 size="sm"
                 onClick={() => triggerSync.mutate({ date: triggerDate || undefined })}
                 disabled={triggerSync.isPending}
-                className="gap-1.5 bg-[#E8603C] hover:bg-[#d4522f] text-white"
+                className="gap-1.5 bg-[#000000] hover:bg-[#333333] text-white"
               >
                 {triggerSync.isPending ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -520,7 +520,7 @@ export default function SyncHealthPage() {
                   onClick={() => setHistoryFilter(f)}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     historyFilter === f
-                      ? "bg-[#E8603C] text-white"
+                      ? "bg-[#000000] text-white"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >

@@ -744,7 +744,7 @@ export default function AlwaysOnCampaign() {
   const activeGroups = groups?.filter(g => g.isActive).length ?? 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader
         activeTab="always-on"
         rightExtra={
@@ -753,7 +753,7 @@ export default function AlwaysOnCampaign() {
             disabled={manualEnroll.isPending}
             size="sm"
             className="flex items-center gap-1.5 text-xs"
-            style={{ backgroundColor: "#E8603C" }}
+            style={{ backgroundColor: "#000000" }}
           >
             {manualEnroll.isPending
               ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Enrolling...</>
@@ -785,7 +785,7 @@ export default function AlwaysOnCampaign() {
             { label: "Active Groups", value: `${activeGroups}/4`, color: "#16a34a" },
             { label: "Total Enrolled", value: totalEnrolled.toLocaleString(), color: "#2563eb" },
             { label: "Total Sent", value: totalSent.toLocaleString(), color: "#7c3aed" },
-            { label: "Total Booked", value: totalBooked.toLocaleString(), color: "#E8603C" },
+            { label: "Total Booked", value: totalBooked.toLocaleString(), color: "#000000" },
           ].map(stat => (
             <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
               <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</div>

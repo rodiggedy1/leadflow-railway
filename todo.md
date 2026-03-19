@@ -1367,3 +1367,12 @@
 - [x] Apply jade theme to AdminLoginScreen (dark card, lime green button/icon)
 - [x] Apply jade theme to all AdminDashboard components: header, tabs, funnel stats, metric cards, search/filter bar, lead table, traffic source card
 - [x] Add jade CSS utility classes: jade-input, jade-select, jade-table-wrap, jade-table-header, jade-th, jade-stat-label, jade-stat-value, jade-stat-sub, jade-stat-card--accent, --jade-accent variable
+
+## HeyJade Light Theme — All Admin Pages
+- [x] Apply hj-theme to Campaigns page (ReactivationCampaigns.tsx)
+- [x] Apply hj-theme to Reviews page (CompletedJobs.tsx)
+- [x] Apply hj-theme to Always-On page (AlwaysOnCampaign.tsx)
+- [x] Apply hj-theme to Sync Health page (SyncHealthPage.tsx)
+- [x] Apply hj-theme to All Calls page (AllCalls.tsx)
+- [x] Apply hj-theme to Revenue ROI page (RevenueAttribution.tsx)
+- [x] Update AdminHeader shared component to HeyJade branding (lime green J logo, black active tab underline)

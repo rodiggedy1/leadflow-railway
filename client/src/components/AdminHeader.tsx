@@ -1,6 +1,6 @@
 /**
  * AdminHeader — shared header for all admin sub-pages.
- * Renders the full "Maids in Black" logo row + all nav tabs,
+ * Renders the full "HeyJade" logo row + all nav tabs,
  * matching the AdminDashboard header exactly.
  *
  * Usage:
@@ -19,7 +19,6 @@ import {
   WifiOff,
   RotateCcw,
   Loader2,
-  Bot,
   Eye,
   Phone,
   Columns,
@@ -27,7 +26,6 @@ import {
   Trophy,
   PhoneIncoming,
   Send,
-  CheckCircle2,
   Star,
   Zap,
   Activity,
@@ -35,7 +33,7 @@ import {
   Webhook,
 } from "lucide-react";
 
-// ── Widget health badge (same as AdminDashboard) ──────────────────────────
+// ── Widget health badge ───────────────────────────────────────────────────
 function WidgetHealthBadge() {
   const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
@@ -117,7 +115,7 @@ function WebhookHealthBadge() {
   );
 }
 
-// ── Preview Agent View Button (same as AdminDashboard) ────────────────────
+// ── Preview Agent View Button ─────────────────────────────────────────────
 function PreviewAgentButton() {
   const previewMutation = trpc.agents.previewAsAgent.useMutation({
     onSuccess: () => {
@@ -185,18 +183,20 @@ interface AdminHeaderProps {
 
 export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps) {
   return (
-    <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#F0D8D0" }}>
+    <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#E5E5E5" }}>
       {/* Logo row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
         <a href="/admin" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: "#E8603C" }}
+            style={{ backgroundColor: "#AAFF00" }}
           >
-            <span className="text-white text-sm font-bold">M</span>
+            <span className="text-black text-sm font-bold">J</span>
           </div>
           <div>
-            <h1 className="font-semibold text-gray-900 text-lg leading-tight">Maids in Black</h1>
+            <h1 className="font-bold text-gray-900 text-lg leading-tight" style={{ letterSpacing: "-0.02em" }}>
+              HeyJade
+            </h1>
             <p className="text-xs text-gray-500">Leads Dashboard</p>
           </div>
         </a>
@@ -212,7 +212,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
       {/* Tab navigation */}
       <div
         className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t overflow-x-auto"
-        style={{ borderColor: "#F0D8D0" }}
+        style={{ borderColor: "#E5E5E5" }}
       >
         {NAV_TABS.map((tab) => {
           const isActive = tab.id === activeTab;
@@ -223,8 +223,8 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
               className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
               style={
                 isActive
-                  ? { borderColor: "#E8603C", color: "#E8603C" }
-                  : { borderColor: "transparent", color: "#6b7280" }
+                  ? { borderColor: "#000000", color: "#000000", fontWeight: 700 }
+                  : { borderColor: "transparent", color: "#888888" }
               }
             >
               {tab.icon}

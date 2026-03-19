@@ -115,7 +115,7 @@ function BatchDetail({ batchId, onBack }: { batchId: number; onBack: () => void 
       <button
         onClick={onBack}
         className="flex items-center gap-1 text-sm font-medium mb-4 hover:underline"
-        style={{ color: "#E8603C" }}
+        style={{ color: "#000000" }}
       >
         <ChevronLeft className="w-4 h-4" />
         Back to Reviews
@@ -281,7 +281,7 @@ function AnalyticsTab() {
                 ? "text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
-            style={daysBack === r.days ? { background: "#E8603C" } : {}}
+            style={daysBack === r.days ? { background: "#000000" } : {}}
           >
             {r.label}
           </button>
@@ -302,7 +302,7 @@ function AnalyticsTab() {
             <Card className="lg:col-span-2 flex flex-col items-center justify-center py-8">
               <CardHeader className="pb-2 text-center w-full">
                 <CardTitle className="text-base font-semibold text-gray-700 flex items-center justify-center gap-2">
-                  <Smile className="w-4 h-4" style={{ color: "#E8603C" }} />
+                  <Smile className="w-4 h-4" style={{ color: "#000000" }} />
                   Customer Happiness Score
                 </CardTitle>
                 <CardDescription className="text-xs text-center">
@@ -338,7 +338,7 @@ function AnalyticsTab() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold text-gray-700 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" style={{ color: "#E8603C" }} />
+                  <TrendingUp className="w-4 h-4" style={{ color: "#000000" }} />
                   Happiness Trend
                 </CardTitle>
                 <CardDescription className="text-xs">Weekly happiness rate over the selected period</CardDescription>
@@ -367,9 +367,9 @@ function AnalyticsTab() {
                     <Line
                       type="monotone"
                       dataKey="happinessRate"
-                      stroke="#E8603C"
+                      stroke="#000000"
                       strokeWidth={2.5}
-                      dot={{ fill: "#E8603C", r: 4 }}
+                      dot={{ fill: "#000000", r: 4 }}
                       activeDot={{ r: 6 }}
                     />
                   </LineChart>
@@ -384,7 +384,7 @@ function AnalyticsTab() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold text-gray-700 flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4" style={{ color: "#E8603C" }} />
+                  <BarChart2 className="w-4 h-4" style={{ color: "#000000" }} />
                   Sentiment Breakdown
                 </CardTitle>
                 <CardDescription className="text-xs">How customers responded to the review SMS</CardDescription>
@@ -415,7 +415,7 @@ function AnalyticsTab() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-semibold text-gray-700 flex items-center gap-2">
-                    <Award className="w-4 h-4" style={{ color: "#E8603C" }} />
+                    <Award className="w-4 h-4" style={{ color: "#000000" }} />
                     Happiness by Service Type
                   </CardTitle>
                   <CardDescription className="text-xs">Which service types generate the happiest customers</CardDescription>
@@ -574,7 +574,7 @@ function BatchesTab() {
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
           className="gap-1.5"
-          style={{ background: "#E8603C" }}
+          style={{ background: "#000000" }}
         >
           {uploading ? (
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -593,7 +593,7 @@ function BatchesTab() {
       </div>
 
       {/* Launch27 Auto-Sync Card */}
-      <Card className="border-2" style={{ borderColor: "#E8603C20" }}>
+      <Card className="border-2" style={{ borderColor: "#00000020" }}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -601,7 +601,7 @@ function BatchesTab() {
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
                 style={{ background: "#FFF0EC" }}
               >
-                <CloudDownload className="w-4 h-4" style={{ color: "#E8603C" }} />
+                <CloudDownload className="w-4 h-4" style={{ color: "#000000" }} />
               </div>
               <div>
                 <CardTitle className="text-base font-semibold text-gray-900">
@@ -634,7 +634,7 @@ function BatchesTab() {
                 onClick={() => syncMutation.mutate({ date: syncDate })}
                 disabled={syncMutation.isPending}
                 className="gap-1.5"
-                style={{ background: "#E8603C" }}
+                style={{ background: "#000000" }}
               >
                 {syncMutation.isPending ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -681,7 +681,7 @@ function BatchesTab() {
       {/* Info banner */}
       <div
         className="rounded-lg border p-4 text-sm"
-        style={{ background: "#FFF8F6", borderColor: "#F0D8D0", color: "#7c3a2a" }}
+        style={{ background: "#F7F7F7", borderColor: "#E5E5E5", color: "#0D0D0D" }}
       >
         <strong>How it works:</strong> Completed jobs are synced nightly from Launch27 (or uploaded via CSV). Review request SMS are sent at <strong>10 AM the day after each cleaning</strong>. Positive replies receive a Google review link with a 10% discount offer. Negative replies are flagged for manual follow-up.
       </div>
@@ -716,9 +716,9 @@ function BatchesTab() {
         <div className="text-center py-16">
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ background: "#FFF8F6" }}
+            style={{ background: "#F7F7F7" }}
           >
-            <CheckCircle2 className="w-8 h-8" style={{ color: "#E8603C" }} />
+            <CheckCircle2 className="w-8 h-8" style={{ color: "#000000" }} />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-1">No batches yet</h3>
           <p className="text-sm text-gray-500 mb-4">
@@ -726,7 +726,7 @@ function BatchesTab() {
           </p>
           <Button
             onClick={() => fileInputRef.current?.click()}
-            style={{ background: "#E8603C" }}
+            style={{ background: "#000000" }}
             className="gap-1.5"
           >
             <Upload className="w-4 h-4" />
@@ -770,7 +770,7 @@ function BatchesTab() {
                       variant="ghost"
                       size="sm"
                       className="text-xs gap-1"
-                      style={{ color: "#E8603C" }}
+                      style={{ color: "#000000" }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedBatchId(batch.id);
@@ -805,7 +805,7 @@ function BatchesTab() {
                       <div className="text-xs text-gray-500 mt-0.5">Reviews</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold" style={{ color: "#E8603C" }}>
+                      <div className="text-2xl font-bold" style={{ color: "#000000" }}>
                         {reviewRate}%
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">Review Rate</div>
@@ -820,7 +820,7 @@ function BatchesTab() {
                       <div className="w-full bg-gray-100 rounded-full h-1.5">
                         <div
                           className="h-1.5 rounded-full"
-                          style={{ width: `${responseRate}%`, background: "#E8603C" }}
+                          style={{ width: `${responseRate}%`, background: "#000000" }}
                         />
                       </div>
                     </div>
@@ -876,7 +876,7 @@ type Conversation = {
 
 function SmsThread({ messages }: { messages: Array<{ role: string; content: string; ts: number }> }) {
   return (
-    <div className="flex flex-col gap-2 px-4 py-3 bg-gray-50 rounded-b-xl border-t" style={{ borderColor: "#F0D8D0" }}>
+    <div className="flex flex-col gap-2 px-4 py-3 bg-gray-50 rounded-b-xl border-t" style={{ borderColor: "#E5E5E5" }}>
       {messages.map((m, i) => (
         <div key={i} className={`flex ${m.role === "assistant" ? "justify-start" : "justify-end"}`}>
           <div
@@ -885,7 +885,7 @@ function SmsThread({ messages }: { messages: Array<{ role: string; content: stri
                 ? "bg-white border text-gray-800 rounded-tl-sm"
                 : "text-white rounded-tr-sm"
             }`}
-            style={m.role === "user" ? { backgroundColor: "#E8603C" } : { borderColor: "#F0D8D0" }}
+            style={m.role === "user" ? { backgroundColor: "#000000" } : { borderColor: "#E5E5E5" }}
           >
             {m.content}
             <div className={`text-[10px] mt-1 ${m.role === "assistant" ? "text-gray-400" : "text-orange-100"}`}>
@@ -904,7 +904,7 @@ function ConversationCard({ c }: { c: Conversation }) {
   const hasReplies = c.replyCount > 0;
 
   return (
-    <div className="rounded-xl border bg-white overflow-hidden transition-shadow hover:shadow-sm" style={{ borderColor: "#F0D8D0" }}>
+    <div className="rounded-xl border bg-white overflow-hidden transition-shadow hover:shadow-sm" style={{ borderColor: "#E5E5E5" }}>
       {/* Header row */}
       <button
         className="w-full text-left px-4 py-3.5 flex items-center gap-3"
@@ -914,7 +914,7 @@ function ConversationCard({ c }: { c: Conversation }) {
         {/* Avatar */}
         <div
           className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
-          style={{ backgroundColor: "#E8603C" }}
+          style={{ backgroundColor: "#000000" }}
         >
           {(c.leadName?.[0] ?? "?").toUpperCase()}
         </div>
@@ -1042,12 +1042,12 @@ function ConversationsTab() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="text-sm border rounded-lg px-3 py-1.5 w-52 focus:outline-none focus:ring-1"
-            style={{ borderColor: "#F0D8D0", focusRingColor: "#E8603C" } as React.CSSProperties}
+            style={{ borderColor: "#E5E5E5", focusRingColor: "#000000" } as React.CSSProperties}
           />
           <button
             onClick={() => refetch()}
             className="p-1.5 rounded-lg border text-gray-400 hover:text-gray-600 transition-colors"
-            style={{ borderColor: "#F0D8D0" }}
+            style={{ borderColor: "#E5E5E5" }}
             title="Refresh"
           >
             <RefreshCw className="w-4 h-4" />
@@ -1210,12 +1210,12 @@ function ApprovalCard() {
   return (
     <div
       className="rounded-lg border p-5 space-y-4"
-      style={{ background: "#FFF8F6", borderColor: "#F0D8D0" }}
+      style={{ background: "#F7F7F7", borderColor: "#E5E5E5" }}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Send className="w-4 h-4" style={{ color: "#E8603C" }} />
+            <Send className="w-4 h-4" style={{ color: "#000000" }} />
             Review SMS Ready for Approval
           </h3>
           <p className="text-sm text-gray-600 mt-1">
@@ -1226,7 +1226,7 @@ function ApprovalCard() {
         {!showConfirm ? (
           <Button
             onClick={() => setShowConfirm(true)}
-            style={{ background: "#E8603C" }}
+            style={{ background: "#000000" }}
             className="flex-shrink-0"
           >
             <Send className="w-4 h-4 mr-1.5" />
@@ -1238,7 +1238,7 @@ function ApprovalCard() {
             <Button
               onClick={() => approveMutation.mutate()}
               disabled={approveMutation.isPending}
-              style={{ background: "#E8603C" }}
+              style={{ background: "#000000" }}
               size="sm"
             >
               {approveMutation.isPending ? (
@@ -1262,7 +1262,7 @@ function ApprovalCard() {
 
       {/* Preview list */}
       {pending?.jobs && pending.jobs.length > 0 && (
-        <div className="rounded border overflow-hidden" style={{ borderColor: "#F0D8D0" }}>
+        <div className="rounded border overflow-hidden" style={{ borderColor: "#E5E5E5" }}>
           <Table>
             <TableHeader>
               <TableRow style={{ background: "#FFF0EB" }}>
@@ -1301,7 +1301,7 @@ export default function CompletedJobs() {
   const [activeTab, setActiveTab] = useState<ReviewTab>("analytics");
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader activeTab="completed-jobs" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Page header */}
@@ -1310,13 +1310,13 @@ export default function CompletedJobs() {
             <a
               href="/admin"
               className="text-sm font-medium hover:underline"
-              style={{ color: "#E8603C" }}
+              style={{ color: "#000000" }}
             >
               ← Back to Admin
             </a>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Star className="w-6 h-6" style={{ color: "#E8603C" }} />
+            <Star className="w-6 h-6" style={{ color: "#000000" }} />
             Reviews
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -1325,7 +1325,7 @@ export default function CompletedJobs() {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-1 mb-6 border-b" style={{ borderColor: "#F0D8D0" }}>
+        <div className="flex gap-1 mb-6 border-b" style={{ borderColor: "#E5E5E5" }}>
           {(["analytics", "conversations", "batches"] as ReviewTab[]).map((tab) => (
             <button
               key={tab}
@@ -1333,7 +1333,7 @@ export default function CompletedJobs() {
               className="px-5 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize"
               style={
                 activeTab === tab
-                  ? { borderColor: "#E8603C", color: "#E8603C" }
+                  ? { borderColor: "#000000", color: "#000000" }
                   : { borderColor: "transparent", color: "#6b7280" }
               }
             >

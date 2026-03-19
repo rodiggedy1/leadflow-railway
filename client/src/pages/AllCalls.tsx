@@ -100,7 +100,7 @@ function CallCard({ call }: { call: VoiceCall }) {
   const hasName = !!call.callerName;
 
   return (
-    <div className="bg-white rounded-2xl border p-5 space-y-3" style={{ borderColor: "#F0D8D0" }}>
+    <div className="bg-white rounded-2xl border p-5 space-y-3" style={{ borderColor: "#E5E5E5" }}>
       {/* Header row */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -108,7 +108,7 @@ function CallCard({ call }: { call: VoiceCall }) {
             className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: "#FFF0EB" }}
           >
-            <Mic className="w-5 h-5" style={{ color: "#E8603C" }} />
+            <Mic className="w-5 h-5" style={{ color: "#000000" }} />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -164,13 +164,13 @@ function CallCard({ call }: { call: VoiceCall }) {
 
       {/* Recording player */}
       {call.recordingUrl && (
-        <div className="flex items-center gap-3 bg-orange-50 rounded-xl px-4 py-2.5">
+        <div className="flex items-center gap-3 rounded-xl px-4 py-2.5" style={{ backgroundColor: '#F7F7F7', border: '1px solid #E5E5E5' }}>
           <a
             href={call.recordingUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm font-medium flex-shrink-0"
-            style={{ color: "#E8603C" }}
+            style={{ color: "#000000" }}
           >
             <PlayCircle className="w-5 h-5" />
             Listen
@@ -179,7 +179,7 @@ function CallCard({ call }: { call: VoiceCall }) {
             src={call.recordingUrl}
             controls
             className="flex-1 h-8 min-w-0"
-            style={{ accentColor: "#E8603C" }}
+            style={{ accentColor: "#000000" }}
           />
         </div>
       )}
@@ -240,7 +240,7 @@ export default function AllCalls() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#FDF6F3" }}>
+    <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader
         activeTab="calls"
         rightExtra={
@@ -260,7 +260,7 @@ export default function AllCalls() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Mic className="w-5 h-5" style={{ color: "#E8603C" }} />
+              <Mic className="w-5 h-5" style={{ color: "#000000" }} />
               All Voice Calls
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -280,8 +280,8 @@ export default function AllCalls() {
                 className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
                 style={
                   preset === p.value
-                    ? { backgroundColor: "#E8603C", color: "#fff" }
-                    : { backgroundColor: "#fff", color: "#6b7280", border: "1px solid #F0D8D0" }
+                    ? { backgroundColor: "#000000", color: "#fff" }
+                    : { backgroundColor: "#fff", color: "#6b7280", border: "1px solid #E5E5E5" }
                 }
               >
                 {p.label}
@@ -296,7 +296,7 @@ export default function AllCalls() {
               value={outcomeFilter}
               onChange={(e) => handleOutcomeChange(e.target.value)}
               className="text-sm border rounded-full px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1"
-              style={{ borderColor: "#F0D8D0" }}
+              style={{ borderColor: "#E5E5E5" }}
             >
               {OUTCOME_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -314,7 +314,7 @@ export default function AllCalls() {
         ) : calls.length === 0 ? (
           <div
             className="bg-white rounded-2xl border p-16 text-center"
-            style={{ borderColor: "#F0D8D0" }}
+            style={{ borderColor: "#E5E5E5" }}
           >
             <Mic className="w-12 h-12 mx-auto mb-3 text-gray-200" />
             <p className="text-gray-500 font-medium">No calls match these filters</p>
