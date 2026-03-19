@@ -574,4 +574,107 @@ export const reviewRouter = router({
         daysBack: input.daysBack,
       };
     }),
+
+  /**
+   * conversations — list all review conversation sessions for the Reviews tab.
+   * These are sessions with leadSource = 'review', sorted by most recent first.
+   */
+  conversations: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+
+    const sessions = await db
+      .select({
+        id: conversationSessions.id,
+        leadPhone: conversationSessions.leadPhone,
+        leadName: conversationSessions.leadName,
+        stage: conversationSessions.stage,
+        messageHistory: conversationSessions.messageHistory,
+        createdAt: conversationSessions.createdAt,
+        aiMode: conversationSessions.aiMode,
+      })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadSource, "review"))
+      .orderBy(desc(conversationSessions.createdAt))
+      .limit(200);
+
+    return sessions.map((s) => {
+      // Extract last customer reply from message history
+      let lastCustomerReply: string | null = null;
+      let lastReplyAt: number | null = null;
+      try {
+        const history = JSON.parse(s.messageHistory ?? "[]") as Array<{ role: string; content: string; ts?: number }>;
+        const customerMsgs = history.filter((m) => m.role === "user");
+        if (customerMsgs.length > 0) {
+          const last = customerMsgs[customerMsgs.length - 1];
+          lastCustomerReply = last.content;
+          lastReplyAt = last.ts ?? null;
+        }
+      } catch {}
+
+      // Derive sentiment from stage
+      const sentiment =
+        s.stage === "REVIEW_CONFIRMED" ? "confirmed" :
+        s.stage === "REVIEW_POSITIVE" ? "positive" :
+        s.stage === "REVIEW_NEGATIVE" ? "negative" :
+        s.stage === "REVIEW_DONE" && s.aiMode === 0 ? "negative" :
+        s.stage === "REVIEW_REQUESTED" ? "pending" : "pending";
+
+      return {
+        id: s.id,
+        leadPhone: s.leadPhone,
+        leadName: s.leadName ?? "Unknown",
+        stage: s.stage,
+        sentiment,
+        lastCustomerReply,
+        lastReplyAt,
+        createdAt: s.createdAt,
+      };
+    });
+  }),
+
+  /**
+   * pendingApproval — returns jobs eligible for today's review send (yesterday's jobs,
+   * not skipped, not yet sent). Used to show the approval card before sending.
+   */
+  pendingApproval: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { count: 0, jobs: [] };
+
+    // Yesterday in ET
+    const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    etNow.setDate(etNow.getDate() - 1);
+    const yesterday = `${etNow.getFullYear()}-${String(etNow.getMonth() + 1).padStart(2, "0")}-${String(etNow.getDate()).padStart(2, "0")}`;
+
+    const jobs = await db
+      .select({
+        id: completedJobs.id,
+        name: completedJobs.name,
+        firstName: completedJobs.firstName,
+        phone: completedJobs.phone,
+        serviceType: completedJobs.serviceType,
+        jobDate: completedJobs.jobDate,
+      })
+      .from(completedJobs)
+      .where(
+        and(
+          eq(completedJobs.status, "PENDING"),
+          isNull(completedJobs.smsSentAt),
+          eq(completedJobs.reviewSkipped, 0),
+          sql`${completedJobs.jobDate} = ${yesterday}`
+        )
+      )
+      .limit(100);
+
+    return { count: jobs.length, jobs, date: yesterday };
+  }),
+
+  /**
+   * approveDailyBatch — admin manually approves and sends today's review SMS batch.
+   * Only sends to yesterday's jobs that are PENDING, not skipped, not yet sent.
+   */
+  approveDailyBatch: protectedProcedure.mutation(async () => {
+    const sent = await sendPendingReviewSms();
+    return { sent };
+  }),
 });

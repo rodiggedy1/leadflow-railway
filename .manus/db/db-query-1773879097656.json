@@ -1,0 +1,14 @@
+{
+  "query": "SELECT reviewSkipped, COUNT(*) as count FROM completed_jobs GROUP BY reviewSkipped; SELECT jobDate, COUNT(*) as count, reviewSkipped FROM completed_jobs WHERE jobDate >= '2026-03-18' GROUP BY jobDate, reviewSkipped ORDER BY jobDate DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT reviewSkipped, COUNT(*) as count FROM completed_jobs GROUP BY reviewSkipped; SELECT jobDate, COUNT(*) as count, reviewSkipped FROM completed_jobs WHERE jobDate >= '2026-03-18' GROUP BY jobDate, reviewSkipped ORDER BY jobDate DESC LIMIT 5;",
+  "rows": [
+    {
+      "reviewSkipped": "1",
+      "count": "44333"
+    }
+  ],
+  "messages": [],
+  "stdout": "reviewSkipped\tcount\n1\t44333\n",
+  "stderr": "",
+  "execution_time_ms": 468
+}

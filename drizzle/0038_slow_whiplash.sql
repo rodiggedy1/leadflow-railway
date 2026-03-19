@@ -1,0 +1,1 @@
+ALTER TABLE `completed_jobs` ADD `reviewSkipped` int DEFAULT 0 NOT NULL;

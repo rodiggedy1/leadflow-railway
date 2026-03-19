@@ -851,8 +851,210 @@ function BatchesTab() {
   );
 }
 
+// ─── Conversations tab ───────────────────────────────────────────────────────
+const SENTIMENT_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  confirmed: { label: "Review Left", color: "text-green-600", icon: <Award className="w-3.5 h-3.5" /> },
+  positive: { label: "Positive", color: "text-blue-600", icon: <ThumbsUp className="w-3.5 h-3.5" /> },
+  negative: { label: "Unhappy", color: "text-red-500", icon: <ThumbsDown className="w-3.5 h-3.5" /> },
+  pending: { label: "Awaiting Reply", color: "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
+};
+
+function ConversationsTab() {
+  const { data: conversations, isLoading } = trpc.completedJobs.conversations.useQuery();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-gray-400">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+        Loading conversations…
+      </div>
+    );
+  }
+
+  if (!conversations?.length) {
+    return (
+      <div className="text-center py-20 text-gray-400">
+        <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-30" />
+        <p className="text-sm">No review conversations yet.</p>
+        <p className="text-xs mt-1">Conversations will appear here after the first review SMS batch is approved and sent.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500">{conversations.length} review conversation{conversations.length !== 1 ? "s" : ""}</p>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Sent</TableHead>
+                <TableHead>Sentiment</TableHead>
+                <TableHead>Last Reply</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {conversations.map((c) => {
+                const sentCfg = SENTIMENT_CONFIG[c.sentiment] ?? SENTIMENT_CONFIG.pending;
+                return (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium">{c.leadName}</TableCell>
+                    <TableCell className="text-gray-500 text-sm">{c.leadPhone}</TableCell>
+                    <TableCell className="text-gray-500 text-sm">
+                      {new Date(c.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`flex items-center gap-1 text-xs font-medium ${sentCfg.color}`}>
+                        {sentCfg.icon}
+                        {sentCfg.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-gray-500 text-sm max-w-xs truncate">
+                      {c.lastCustomerReply ?? <span className="text-gray-300 italic">No reply yet</span>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Approval card ────────────────────────────────────────────────────────────
+function ApprovalCard() {
+  const utils = trpc.useUtils();
+  const { data: pending, isLoading } = trpc.completedJobs.pendingApproval.useQuery();
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const approveMutation = trpc.completedJobs.approveDailyBatch.useMutation({
+    onSuccess: (result) => {
+      if (result.sent > 0) {
+        toast.success(`✅ Sent ${result.sent} review SMS for ${pending?.date ?? "yesterday"}'s jobs.`);
+      } else {
+        toast.info("No eligible jobs to send for yesterday.");
+      }
+      setShowConfirm(false);
+      utils.completedJobs.pendingApproval.invalidate();
+      utils.completedJobs.conversations.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+      setShowConfirm(false);
+    },
+  });
+
+  if (isLoading) return null;
+
+  const count = pending?.count ?? 0;
+  const date = pending?.date ?? "";
+
+  if (count === 0) {
+    return (
+      <div
+        className="rounded-lg border p-4 text-sm flex items-center gap-3"
+        style={{ background: "#F9FFF9", borderColor: "#BBF7D0", color: "#166534" }}
+      >
+        <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+        <span>No review SMS pending for today. Yesterday's batch has already been sent or there were no jobs.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-5 space-y-4"
+      style={{ background: "#FFF8F6", borderColor: "#F0D8D0" }}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <Send className="w-4 h-4" style={{ color: "#E8603C" }} />
+            Review SMS Ready for Approval
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">
+            <strong>{count} customers</strong> from <strong>{date}</strong>'s jobs are ready to receive a review request SMS.
+            Review the list below and click <strong>Approve & Send</strong> to send them.
+          </p>
+        </div>
+        {!showConfirm ? (
+          <Button
+            onClick={() => setShowConfirm(true)}
+            style={{ background: "#E8603C" }}
+            className="flex-shrink-0"
+          >
+            <Send className="w-4 h-4 mr-1.5" />
+            Approve & Send
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-sm text-gray-600">Send to {count} customers?</span>
+            <Button
+              onClick={() => approveMutation.mutate()}
+              disabled={approveMutation.isPending}
+              style={{ background: "#E8603C" }}
+              size="sm"
+            >
+              {approveMutation.isPending ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+              )}
+              Confirm
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfirm(false)}
+              disabled={approveMutation.isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Preview list */}
+      {pending?.jobs && pending.jobs.length > 0 && (
+        <div className="rounded border overflow-hidden" style={{ borderColor: "#F0D8D0" }}>
+          <Table>
+            <TableHeader>
+              <TableRow style={{ background: "#FFF0EB" }}>
+                <TableHead className="text-xs">Name</TableHead>
+                <TableHead className="text-xs">Phone</TableHead>
+                <TableHead className="text-xs">Service</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pending.jobs.slice(0, 10).map((j) => (
+                <TableRow key={j.id}>
+                  <TableCell className="text-sm">{j.name ?? j.firstName ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-gray-500">{j.phone}</TableCell>
+                  <TableCell className="text-sm text-gray-500">{j.serviceType ?? "—"}</TableCell>
+                </TableRow>
+              ))}
+              {pending.jobs.length > 10 && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-xs text-center text-gray-400 py-2">
+                    + {pending.jobs.length - 10} more customers
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
-type ReviewTab = "analytics" | "batches";
+type ReviewTab = "analytics" | "conversations" | "batches";
 
 export default function CompletedJobs() {
   const [activeTab, setActiveTab] = useState<ReviewTab>("analytics");
@@ -883,7 +1085,7 @@ export default function CompletedJobs() {
 
         {/* Tab switcher */}
         <div className="flex gap-1 mb-6 border-b" style={{ borderColor: "#F0D8D0" }}>
-          {(["analytics", "batches"] as ReviewTab[]).map((tab) => (
+          {(["analytics", "conversations", "batches"] as ReviewTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -894,12 +1096,19 @@ export default function CompletedJobs() {
                   : { borderColor: "transparent", color: "#6b7280" }
               }
             >
-              {tab === "analytics" ? "📊 Analytics" : "📋 Batches"}
+              {tab === "analytics" ? "📊 Analytics" : tab === "conversations" ? "💬 Conversations" : "📋 Batches"}
             </button>
           ))}
         </div>
 
-        {activeTab === "analytics" ? <AnalyticsTab /> : <BatchesTab />}
+        {activeTab === "analytics" && <AnalyticsTab />}
+        {activeTab === "conversations" && <ConversationsTab />}
+        {activeTab === "batches" && (
+          <div className="space-y-6">
+            <ApprovalCard />
+            <BatchesTab />
+          </div>
+        )}
       </div>
     </div>
   );

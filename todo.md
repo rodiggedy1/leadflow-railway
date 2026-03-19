@@ -1310,3 +1310,15 @@
 ## Critical Fixes (Mar 18) — Review Cron Over-Send- [x] Disable review-send cron until timing is verified
 - [x] Filter review sessions (leadSource = 'review') out of admin lead list — also filtered from funnel stats
 - [x] Investigate 49 SMS over-send: root cause = 46 jobs had placeholder date 2020-01-02 from old CSV imports; fixed by adding 7-day lookback window to sendPendingReviewSmsntion
+
+## Review SMS Manual Approval Flow
+
+-- [x] Add reviewSkipped boolean column to completed_jobs schema
+- [x] Mark all completed_jobs with jobDate < 2026-03-18 as reviewSkipped = true (44,333 rows marked)
+- [x] Update sendPendingReviewSms to skip rows where reviewSkipped = true
+- [x] Add pendingApproval tRPC query — count + list of PENDING jobs eligible for today's review send
+- [x] Add approveDailyBatch tRPC mutation — sends the batch after admin confirms
+- [x] Build approval UI on Reviews Batches tab: pending count card + customer list preview + Approve & Send button with confirmation dialog
+- [x] Keep cron endpoint in code but disabled — do not schedule until manually re-enabled
+- [x] Add Conversations tab to Reviews page — shows all review sessions (leadSource='review') with name, phone, date, sentiment, last reply
+- [x] Backend: reviewRouter.conversations query — list all review conversation_sessions with their stage and last message

@@ -467,6 +467,12 @@ export const completedJobs = mysqlTable("completed_jobs", {
   reactivationEligible: int("reactivationEligible").default(0).notNull(),
   /** When reactivation eligibility was set */
   reactivationEligibleAt: timestamp("reactivationEligibleAt"),
+  /**
+   * When true, this job is permanently excluded from the review SMS flow.
+   * Used to skip jobs imported before the review feature was activated (pre-2026-03-18)
+   * without affecting their eligibility for other campaigns (reactivation, etc.).
+   */
+  reviewSkipped: int("reviewSkipped").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
