@@ -1357,3 +1357,9 @@
 - [x] Show "AI" badge on AI-generated outbound message bubbles
 - [x] Fix AI badge wrongly showing on manually-sent messages (senderName not stored)
 - [x] Move robot icon to left of bubble instead of below it
+
+## HeyJade Brand Redesign (Admin/Agent Dashboard)
+- [x] HeyJade brand mockup on AdminDashboard home (dark + lime green theme)
+- [x] Apply jade theme to AdminLoginScreen (dark card, lime green button/icon)
+- [x] Apply jade theme to all AdminDashboard components: header, tabs, funnel stats, metric cards, search/filter bar, lead table, traffic source card
+- [x] Add jade CSS utility classes: jade-input, jade-select, jade-table-wrap, jade-table-header, jade-th, jade-stat-label, jade-stat-value, jade-stat-sub, jade-stat-card--accent, --jade-accent variable

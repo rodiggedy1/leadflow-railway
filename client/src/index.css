@@ -316,3 +316,421 @@
     animation: checkmarkPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   HeyJade Brand Theme — Admin/Agent Dashboard
+   Dark near-black background + lime green accent + Space Grotesk
+   Applied via .jade-theme wrapper class on admin pages
+   ═══════════════════════════════════════════════════════════════════ */
+
+.jade-theme {
+  /* Core palette */
+  --jade-bg: #0e0e0e;
+  --jade-surface: #161616;
+  --jade-surface-2: #1e1e1e;
+  --jade-border: #2a2a2a;
+  --jade-border-subtle: #222222;
+  --jade-text: #f0f0f0;
+  --jade-text-muted: #888888;
+  --jade-text-dim: #555555;
+  --jade-green: #c8ff00;
+  --jade-green-muted: #a8d400;
+  --jade-green-dim: rgba(200, 255, 0, 0.12);
+  --jade-green-glow: rgba(200, 255, 0, 0.25);
+  --jade-red: #ff4444;
+  --jade-red-dim: rgba(255, 68, 68, 0.12);
+  --jade-blue: #4488ff;
+  --jade-blue-dim: rgba(68, 136, 255, 0.12);
+  --jade-amber: #ffaa00;
+  --jade-amber-dim: rgba(255, 170, 0, 0.12);
+  --jade-purple: #aa77ff;
+  --jade-purple-dim: rgba(170, 119, 255, 0.12);
+
+  font-family: 'Space Grotesk', 'DM Sans', sans-serif;
+  background-color: var(--jade-bg);
+  color: var(--jade-text);
+  min-height: 100vh;
+}
+
+/* Override Tailwind bg-white → jade surface */
+.jade-theme .bg-white {
+  background-color: var(--jade-surface) !important;
+  color: var(--jade-text) !important;
+}
+
+.jade-theme .bg-gray-50 {
+  background-color: var(--jade-surface-2) !important;
+}
+
+.jade-theme .bg-gray-100 {
+  background-color: #252525 !important;
+}
+
+/* Border overrides */
+.jade-theme .border,
+.jade-theme .border-b,
+.jade-theme .border-t,
+.jade-theme .border-r,
+.jade-theme .border-l {
+  border-color: var(--jade-border) !important;
+}
+
+/* Text overrides */
+.jade-theme .text-gray-900,
+.jade-theme .text-gray-800 {
+  color: var(--jade-text) !important;
+}
+
+.jade-theme .text-gray-700,
+.jade-theme .text-gray-600 {
+  color: #cccccc !important;
+}
+
+.jade-theme .text-gray-500,
+.jade-theme .text-gray-400 {
+  color: var(--jade-text-muted) !important;
+}
+
+.jade-theme .text-gray-300 {
+  color: var(--jade-text-dim) !important;
+}
+
+/* Input overrides */
+.jade-theme input,
+.jade-theme textarea,
+.jade-theme select {
+  background-color: var(--jade-surface-2) !important;
+  border-color: var(--jade-border) !important;
+  color: var(--jade-text) !important;
+}
+
+.jade-theme input::placeholder,
+.jade-theme textarea::placeholder {
+  color: var(--jade-text-dim) !important;
+}
+
+/* Shadcn button overrides */
+.jade-theme .bg-primary {
+  background-color: var(--jade-green) !important;
+  color: #000 !important;
+}
+
+.jade-theme .hover\:bg-primary\/90:hover {
+  background-color: var(--jade-green-muted) !important;
+}
+
+/* Scrollbar */
+.jade-theme ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.jade-theme ::-webkit-scrollbar-track {
+  background: var(--jade-bg);
+}
+.jade-theme ::-webkit-scrollbar-thumb {
+  background: var(--jade-border);
+  border-radius: 3px;
+}
+.jade-theme ::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+
+/* Jade-specific utility classes */
+.jade-header {
+  background-color: var(--jade-surface);
+  border-bottom: 1px solid var(--jade-border);
+}
+
+.jade-card {
+  background-color: var(--jade-surface);
+  border: 1px solid var(--jade-border);
+  border-radius: 12px;
+}
+
+.jade-card-hover:hover {
+  border-color: var(--jade-border-subtle);
+  background-color: var(--jade-surface-2);
+}
+
+.jade-stat-card {
+  background-color: var(--jade-surface);
+  border: 1px solid var(--jade-border);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.jade-stat-card:hover {
+  border-color: #333;
+}
+
+.jade-tab-active {
+  border-bottom: 2px solid var(--jade-green) !important;
+  color: var(--jade-green) !important;
+}
+
+.jade-tab-inactive {
+  border-bottom: 2px solid transparent;
+  color: var(--jade-text-muted);
+}
+
+.jade-tab-inactive:hover {
+  color: var(--jade-text);
+}
+
+.jade-badge-green {
+  background-color: var(--jade-green-dim);
+  color: var(--jade-green);
+  border: 1px solid rgba(200, 255, 0, 0.3);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.jade-badge-red {
+  background-color: var(--jade-red-dim);
+  color: var(--jade-red);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.jade-badge-amber {
+  background-color: var(--jade-amber-dim);
+  color: var(--jade-amber);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.jade-badge-blue {
+  background-color: var(--jade-blue-dim);
+  color: var(--jade-blue);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.jade-badge-purple {
+  background-color: var(--jade-purple-dim);
+  color: var(--jade-purple);
+  border: 1px solid rgba(170, 119, 255, 0.3);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.jade-funnel-card {
+  background-color: var(--jade-surface);
+  border: 1px solid var(--jade-border);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.jade-funnel-card:hover {
+  border-color: #333;
+  background-color: var(--jade-surface-2);
+}
+
+.jade-funnel-card.active {
+  border-color: var(--jade-green) !important;
+  box-shadow: 0 0 0 1px var(--jade-green);
+}
+
+.jade-funnel-number {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--jade-text);
+}
+
+.jade-funnel-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--jade-text-muted);
+  margin-bottom: 4px;
+}
+
+.jade-table-row {
+  border-top: 1px solid var(--jade-border);
+  transition: background-color 0.1s ease;
+}
+
+.jade-table-row:hover {
+  background-color: var(--jade-surface-2);
+}
+
+.jade-search {
+  background-color: var(--jade-surface-2) !important;
+  border: 1px solid var(--jade-border) !important;
+  color: var(--jade-text) !important;
+  border-radius: 8px;
+}
+
+.jade-date-btn {
+  background-color: var(--jade-surface-2);
+  border: 1px solid var(--jade-border);
+  color: var(--jade-text-muted);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  transition: all 0.15s ease;
+}
+
+.jade-date-btn:hover {
+  border-color: #333;
+  color: var(--jade-text);
+}
+
+.jade-date-btn.active {
+  background-color: var(--jade-green);
+  border-color: var(--jade-green);
+  color: #000;
+  font-weight: 600;
+}
+
+/* Metric cards for the summary row */
+.jade-metric-visitors { --jade-metric-color: var(--jade-blue); --jade-metric-dim: var(--jade-blue-dim); }
+.jade-metric-leads    { --jade-metric-color: var(--jade-amber); --jade-metric-dim: var(--jade-amber-dim); }
+.jade-metric-booked   { --jade-metric-color: var(--jade-green); --jade-metric-dim: var(--jade-green-dim); }
+.jade-metric-revenue  { --jade-metric-color: var(--jade-green); --jade-metric-dim: var(--jade-green-dim); }
+.jade-metric-voice    { --jade-metric-color: var(--jade-purple); --jade-metric-dim: var(--jade-purple-dim); }
+
+.jade-metric-card {
+  background-color: var(--jade-metric-dim, var(--jade-surface));
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.jade-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--jade-metric-color);
+  opacity: 0.85;
+}
+
+.jade-metric-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--jade-metric-color);
+  line-height: 1.1;
+  margin: 4px 0 2px;
+}
+
+.jade-metric-sub {
+  font-size: 11px;
+  color: var(--jade-metric-color);
+  opacity: 0.6;
+}
+
+/* ── Additional jade utility classes ─────────────────────────────── */
+
+/* Expose accent as a CSS variable alias for convenience */
+.jade-theme {
+  --jade-accent: var(--jade-green);
+}
+
+/* Input / textarea styled for jade dark theme */
+.jade-input {
+  background-color: var(--jade-surface-2) !important;
+  border: 1px solid var(--jade-border) !important;
+  color: var(--jade-text) !important;
+  border-radius: 8px;
+}
+
+.jade-input::placeholder {
+  color: var(--jade-text-dim) !important;
+}
+
+.jade-input:focus {
+  border-color: var(--jade-green) !important;
+  box-shadow: 0 0 0 2px var(--jade-green-glow) !important;
+  outline: none;
+}
+
+/* Select trigger styled for jade dark theme */
+.jade-select {
+  background-color: var(--jade-surface-2) !important;
+  border: 1px solid var(--jade-border) !important;
+  color: var(--jade-text) !important;
+  border-radius: 8px;
+}
+
+.jade-select:hover {
+  border-color: #333 !important;
+}
+
+/* Table wrapper */
+.jade-table-wrap {
+  background-color: var(--jade-surface);
+  border: 1px solid var(--jade-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Table header row */
+.jade-table-header {
+  background-color: var(--jade-surface-2) !important;
+  border-bottom: 1px solid var(--jade-border) !important;
+}
+
+/* Table header cell */
+.jade-th {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--jade-text-dim) !important;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* Stat card accent variant (used for Leads card) */
+.jade-stat-card--accent {
+  border-color: rgba(200, 255, 0, 0.2) !important;
+}
+
+/* Stat card label / value / sub */
+.jade-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--jade-text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.jade-stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--jade-text);
+  line-height: 1;
+}
+
+.jade-stat-value--accent {
+  color: var(--jade-green) !important;
+}
+
+.jade-stat-sub {
+  font-size: 11px;
+  color: var(--jade-text-muted);
+  margin-top: 2px;
+  display: block;
+}
