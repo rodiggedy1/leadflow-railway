@@ -32,6 +32,7 @@ import {
   Zap,
   Activity,
   Mic,
+  Webhook,
 } from "lucide-react";
 
 // ── Widget health badge (same as AdminDashboard) ──────────────────────────
@@ -71,6 +72,47 @@ function WidgetHealthBadge() {
         <WifiOff className="w-3 h-3" />
       )}
       {data.ok ? `Widget v${data.version ?? "?"}` : "Widget DOWN"}
+    </button>
+  );
+}
+
+// ── OpenPhone Webhook health badge ───────────────────────────────────────
+function WebhookHealthBadge() {
+  const { data, isFetching, refetch } = trpc.system.webhookHealth.useQuery(undefined, {
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 4 * 60 * 1000,
+  });
+  if (!data && isFetching) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 border border-gray-200 rounded-full px-2.5 py-1">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Webhook…
+      </span>
+    );
+  }
+  if (!data) return null;
+  return (
+    <button
+      onClick={() => refetch()}
+      title={
+        data.ok
+          ? `OpenPhone webhook is enabled. Click to re-check.`
+          : `Webhook issue: ${data.error}. Click to re-check.`
+      }
+      className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-opacity hover:opacity-80 ${
+        data.ok
+          ? "bg-green-50 text-green-700 border-green-200"
+          : "bg-red-50 text-red-700 border-red-200"
+      }`}
+    >
+      {isFetching ? (
+        <RotateCcw className="w-3 h-3 animate-spin" />
+      ) : data.ok ? (
+        <Webhook className="w-3 h-3" />
+      ) : (
+        <WifiOff className="w-3 h-3" />
+      )}
+      {data.ok ? "SMS Webhook" : "Webhook DOWN"}
     </button>
   );
 }
@@ -160,6 +202,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
         </a>
         <div className="flex items-center gap-3">
           <WidgetHealthBadge />
+          <WebhookHealthBadge />
           {rightExtra}
           <NotificationBell />
           <PreviewAgentButton />
