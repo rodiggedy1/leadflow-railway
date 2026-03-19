@@ -681,8 +681,9 @@ export const reviewRouter = router({
 
   /**
    * sendTest — sends a real review SMS to a test phone number and creates a proper
-   * conversation session so the full AI reply flow works end-to-end.
-   * Any existing test review session for that phone is replaced.
+   * conversation session AND a completed_jobs row (in a persistent "test" batch)
+   * so the full flow — analytics, notifications, review confirmed counts — fires
+   * exactly as it would for a real customer send.
    */
   sendTest: protectedProcedure
     .input(
@@ -710,18 +711,70 @@ export const reviewRouter = router({
         });
       }
 
-      // Remove any existing test review session for this phone to avoid duplicates
-      await db
-        .delete(conversationSessions)
+      // ── Upsert the persistent "test" batch ──────────────────────────────────
+      // We use a fixed filename so all test sends share one batch row.
+      const TEST_BATCH_FILENAME = "review-test-sends";
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Try to find an existing test batch
+      const [existingBatch] = await db
+        .select({ id: completedJobBatches.id })
+        .from(completedJobBatches)
+        .where(eq(completedJobBatches.filename, TEST_BATCH_FILENAME))
+        .limit(1);
+
+      let batchId: number;
+      if (existingBatch) {
+        batchId = existingBatch.id;
+        // Increment totalCount and sentCount for this new test send
+        await db
+          .update(completedJobBatches)
+          .set({
+            sentCount: sql`${completedJobBatches.sentCount} + 1`,
+            totalCount: sql`${completedJobBatches.totalCount} + 1`,
+            jobDate: today,
+          })
+          .where(eq(completedJobBatches.id, batchId));
+      } else {
+        const [inserted] = await db
+          .insert(completedJobBatches)
+          .values({
+            filename: TEST_BATCH_FILENAME,
+            jobDate: today,
+            totalCount: 1,
+            sentCount: 1,
+            positiveCount: 0,
+            negativeCount: 0,
+            reviewConfirmedCount: 0,
+          });
+        batchId = (inserted as unknown as { insertId: number }).insertId;
+      }
+
+      // ── Remove any existing test review session + job for this phone ─────────
+      const [existingSession] = await db
+        .select({ id: conversationSessions.id })
+        .from(conversationSessions)
         .where(
           and(
             eq(conversationSessions.leadPhone, e164),
             eq(conversationSessions.leadSource, "review-test")
           )
-        );
+        )
+        .limit(1);
 
-      // Create a real conversation session so AI handles replies
-      await db.insert(conversationSessions).values({
+      if (existingSession) {
+        // Remove the old completed_jobs row for this session
+        await db
+          .delete(completedJobs)
+          .where(eq(completedJobs.sessionId, existingSession.id));
+        // Remove the old session
+        await db
+          .delete(conversationSessions)
+          .where(eq(conversationSessions.id, existingSession.id));
+      }
+
+      // ── Create a real conversation session ───────────────────────────────────
+      const [sessionInsert] = await db.insert(conversationSessions).values({
         leadPhone: e164,
         leadName: input.firstName,
         stage: "REVIEW_REQUESTED",
@@ -731,6 +784,21 @@ export const reviewRouter = router({
         ]),
         aiMode: 1,
         isBooked: 0,
+      });
+      const sessionId = (sessionInsert as unknown as { insertId: number }).insertId;
+
+      // ── Create a completed_jobs row so analytics + notifications fire ─────────
+      await db.insert(completedJobs).values({
+        batchId,
+        phone: e164,
+        name: input.firstName,
+        firstName: input.firstName,
+        jobDate: today,
+        status: "SENT",
+        smsSentAt: new Date(),
+        sessionId,
+        reactivationEligible: 0,
+        reviewSkipped: 0,
       });
 
       return { ok: true, message, sentTo: e164 };

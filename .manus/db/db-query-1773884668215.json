@@ -1,0 +1,43 @@
+{
+  "query": "SELECT id, stage, updatedAt FROM conversation_sessions WHERE id = 870004;\nSELECT * FROM completed_job_batches ORDER BY id DESC LIMIT 5;\nSELECT * FROM completed_jobs WHERE sessionId = 870004 LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, stage, updatedAt FROM conversation_sessions WHERE id = 870004;\nSELECT * FROM completed_job_batches ORDER BY id DESC LIMIT 5;\nSELECT * FROM completed_jobs WHERE sessionId = 870004 LIMIT 5;",
+  "rows": [
+    {
+      "id": "60001",
+      "filename": "launch27-auto-2026-03-16",
+      "jobDate": "2026-03-16",
+      "totalCount": "7",
+      "sentCount": "0",
+      "positiveCount": "0",
+      "negativeCount": "0",
+      "reviewConfirmedCount": "0",
+      "uploadedAt": "2026-03-17 17:54:25"
+    },
+    {
+      "id": "30001",
+      "filename": "csv-import-2026-03-17",
+      "jobDate": "2026-03-17",
+      "totalCount": "44371",
+      "sentCount": "46",
+      "positiveCount": "0",
+      "negativeCount": "0",
+      "reviewConfirmedCount": "0",
+      "uploadedAt": "2026-03-17 00:55:45"
+    },
+    {
+      "id": "1",
+      "filename": "launch27-sync-2026-03-15",
+      "jobDate": "2026-03-15",
+      "totalCount": "3",
+      "sentCount": "3",
+      "positiveCount": "0",
+      "negativeCount": "0",
+      "reviewConfirmedCount": "0",
+      "uploadedAt": "2026-03-16 23:45:31"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfilename\tjobDate\ttotalCount\tsentCount\tpositiveCount\tnegativeCount\treviewConfirmedCount\tuploadedAt\n60001\tlaunch27-auto-2026-03-16\t2026-03-16\t7\t0\t0\t0\t0\t2026-03-17 17:54:25\n30001\tcsv-import-2026-03-17\t2026-03-17\t44371\t46\t0\t0\t0\t2026-03-17 00:55:45\n1\tlaunch27-sync-2026-03-15\t2026-03-15\t3\t3\t0\t0\t0\t2026-03-16 23:45:31\n",
+  "stderr": "",
+  "execution_time_ms": 487
+}

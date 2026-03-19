@@ -1,0 +1,34 @@
+{
+  "query": "SELECT id, stage, leadName, leadPhone, leadSource, updatedAt FROM conversation_sessions WHERE leadPhone = '+13029816191' ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, stage, leadName, leadPhone, leadSource, updatedAt FROM conversation_sessions WHERE leadPhone = '+13029816191' ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "870005",
+      "stage": "REVIEW_DONE",
+      "leadName": "ROHAN",
+      "leadPhone": "+13029816191",
+      "leadSource": "review-test",
+      "updatedAt": "2026-03-19 01:42:56"
+    },
+    {
+      "id": "870003",
+      "stage": "AVAILABILITY",
+      "leadName": "rohan",
+      "leadPhone": "+13029816191",
+      "leadSource": "widget",
+      "updatedAt": "2026-03-19 01:03:23"
+    },
+    {
+      "id": "810004",
+      "stage": "DONE",
+      "leadName": "Rohan Gilkes",
+      "leadPhone": "+13029816191",
+      "leadSource": "voice",
+      "updatedAt": "2026-03-18 23:37:08"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstage\tleadName\tleadPhone\tleadSource\tupdatedAt\n870005\tREVIEW_DONE\tROHAN\t+13029816191\treview-test\t2026-03-19 01:42:56\n870003\tAVAILABILITY\trohan\t+13029816191\twidget\t2026-03-19 01:03:23\n810004\tDONE\tRohan Gilkes\t+13029816191\tvoice\t2026-03-18 23:37:08\n",
+  "stderr": "",
+  "execution_time_ms": 358
+}
