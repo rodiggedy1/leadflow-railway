@@ -1379,3 +1379,7 @@
 
 ## HeyJade Light Theme — Pipeline Page
 - [x] Apply hj-theme to KanbanBoard component: black Call button, gray card hover border, lime-green drop zone highlight, black price values
+
+## Lead Table Fixes
+- [x] Fix lead name color — too muted/light, needs to be darker (gray-900 or black)
+- [x] Fix quote price color — bright lime green (#AAFF00) is too intense on white, change to dark gray or black

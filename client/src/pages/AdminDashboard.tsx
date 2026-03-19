@@ -2552,7 +2552,7 @@ export default function AdminDashboard() {
         <div className="hj-table-wrap">
           {sessionsLoading ? (
             <div className="py-20 text-center" style={{ color: '#888888' }}>
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" style={{ color: '#AAFF00' }} />
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" style={{ color: '#111111' }} />
               Loading leads…
             </div>
           ) : filtered.length === 0 ? (
@@ -2598,7 +2598,7 @@ export default function AdminDashboard() {
                       <TableCell className="py-2 pl-4">
                         <div className="flex items-center gap-2">
                           <div className="flex flex-col gap-0.5 min-w-0">
-                            <span className="text-sm font-semibold leading-tight" style={{ color: '#e8e8e8' }}>
+                            <span className="text-sm font-semibold leading-tight" style={{ color: '#111111' }}>
                               {session.leadName ?? <span style={{ color: '#555555', fontWeight: 400 }}>Unknown</span>}
                             </span>
                             <span className="text-xs tabular-nums" style={{ color: '#777' }}>
@@ -2650,7 +2650,7 @@ export default function AdminDashboard() {
                         {session.quotedPrice ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
                           return (
-                            <span className="text-sm font-bold tabular-nums" style={{ color: '#AAFF00' }}>
+                            <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
                               ${total}
                             </span>
                           );
@@ -2688,7 +2688,7 @@ export default function AdminDashboard() {
                             {session.lastActivityType === "call" ? (
                               <PhoneCall className="w-3 h-3 text-blue-400 shrink-0 mt-0.5" />
                             ) : (
-                              <MessageSquare className="w-3 h-3 shrink-0 mt-0.5" style={{ color: '#AAFF00', opacity: 0.6 }} />
+                              <MessageSquare className="w-3 h-3 shrink-0 mt-0.5" style={{ color: '#888888', opacity: 1 }} />
                             )}
                             <span className="text-xs truncate leading-tight" style={{ color: '#666666' }}>{session.lastActivityText}</span>
                           </div>
@@ -2723,7 +2723,7 @@ export default function AdminDashboard() {
         <div className="hj-card mt-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold" style={{ color: '#e8e8e8' }}>Traffic Source</h3>
+              <h3 className="text-sm font-semibold" style={{ color: '#111111' }}>Traffic Source</h3>
               <p className="text-xs mt-0.5" style={{ color: '#888888' }}>Where your leads are coming from</p>
             </div>
           </div>
