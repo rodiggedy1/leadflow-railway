@@ -629,7 +629,7 @@ export const appRouter = router({
         if (!session) throw new Error("Session not found");
 
         // Parse and update history
-        let history: Array<{ role: string; content: string; ts?: number }> = [];
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
 
         // Deduplication guard: reject if the exact same message was sent within the last 10 seconds.
@@ -643,7 +643,7 @@ export const appRouter = router({
           return { success: true, smsSent: false, duplicate: true };
         }
 
-        history.push({ role: "assistant", content: input.message, ts: now });
+        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
         if (history.length > 20) history = history.slice(-20);
 
         // Save to DB

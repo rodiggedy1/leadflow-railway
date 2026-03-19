@@ -577,6 +577,7 @@ function ConversationDrawer({
                   const timeLabel = curTs != null
                     ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
                     : null;
+                  const senderName = (msg as any).senderName as string | undefined;
                   return (
                     <div key={i}>
                       {showSeparator && curTs != null && (
@@ -593,9 +594,14 @@ function ConversationDrawer({
                         >
                           {msg.content}
                         </div>
-                        {timeLabel && (
-                          <span className="text-[10px] text-gray-400 mt-0.5 px-1">{timeLabel}</span>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5 px-1">
+                          {isOutbound && senderName && (
+                            <span className="text-[10px] font-medium text-orange-500">{senderName}</span>
+                          )}
+                          {timeLabel && (
+                            <span className="text-[10px] text-gray-400">{timeLabel}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
