@@ -4,6 +4,13 @@
  * 5 columns: Quote Sent → Follow Up → Availability → Booked → Lost
  * Each column shows lead count + total pipeline value.
  * Cards are draggable between columns; dropping fires adminUpdateStage.
+ *
+ * World-class polish:
+ * - Drag handle hidden until card hover
+ * - Empty state centered vertically with dashed border drop zone
+ * - Colored top border per column (already present, kept)
+ * - Improved card visual hierarchy: price is prominent, metadata is subtle
+ * - Drop zone uses a neutral highlight (no coral)
  */
 import { useState, useMemo, useRef } from "react";
 import type React from "react";
@@ -21,7 +28,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc";
-import { Phone, Clock, DollarSign, User, GripVertical } from "lucide-react";
+import { Phone, Clock, GripVertical, ArrowDownToLine } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,9 +53,10 @@ type LeadRow = {
 type KanbanColumn = {
   id: string;
   label: string;
-  stages: string[];          // DB stage values that map to this column
-  targetStage: string;       // Stage to set when a card is dropped here
-  accent: string;            // Tailwind border-top color class
+  stages: string[];
+  targetStage: string;
+  accentClass: string;       // Tailwind border-top color class
+  accentHex: string;         // Hex for drop zone tint
   headerBg: string;
   countBg: string;
 };
@@ -57,31 +65,31 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
   {
     id: "quote_sent",
     label: "Quote Sent",
-    // All leads from initial sizing through active quote conversation
     stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE"],
     targetStage: "QUOTE_SENT",
-    accent: "border-t-blue-400",
-    headerBg: "bg-blue-50",
+    accentClass: "border-t-blue-400",
+    accentHex: "#eff6ff",
+    headerBg: "bg-blue-50/60",
     countBg: "bg-blue-100 text-blue-700",
   },
   {
     id: "follow_up",
     label: "Follow Up",
-    // Active conversation, needs human nurturing
     stages: ["CALL_SCHEDULED", "DONE", "UNHANDLED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"],
     targetStage: "FOLLOW_UP_SCHEDULED",
-    accent: "border-t-amber-400",
-    headerBg: "bg-amber-50",
+    accentClass: "border-t-amber-400",
+    accentHex: "#fffbeb",
+    headerBg: "bg-amber-50/60",
     countBg: "bg-amber-100 text-amber-700",
   },
   {
     id: "availability",
     label: "Availability",
-    // Hot — asking about dates/times, ready to schedule
     stages: ["AVAILABILITY"],
     targetStage: "AVAILABILITY",
-    accent: "border-t-orange-400",
-    headerBg: "bg-orange-50",
+    accentClass: "border-t-orange-400",
+    accentHex: "#fff7ed",
+    headerBg: "bg-orange-50/60",
     countBg: "bg-orange-100 text-orange-700",
   },
   {
@@ -89,8 +97,9 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     label: "Booked",
     stages: ["BOOKED"],
     targetStage: "BOOKED",
-    accent: "border-t-emerald-500",
-    headerBg: "bg-emerald-50",
+    accentClass: "border-t-emerald-500",
+    accentHex: "#f0fdf4",
+    headerBg: "bg-emerald-50/60",
     countBg: "bg-emerald-100 text-emerald-700",
   },
   {
@@ -98,18 +107,16 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     label: "Lost",
     stages: ["NOT_INTERESTED"],
     targetStage: "NOT_INTERESTED",
-    accent: "border-t-gray-400",
-    headerBg: "bg-gray-50",
+    accentClass: "border-t-gray-400",
+    accentHex: "#f9fafb",
+    headerBg: "bg-gray-50/60",
     countBg: "bg-gray-200 text-gray-600",
   },
 ];
 
-// Map every DB stage to a column id for quick lookup
 const STAGE_TO_COLUMN: Record<string, string> = {};
 KANBAN_COLUMNS.forEach(col => {
-  col.stages.forEach(s => {
-    STAGE_TO_COLUMN[s] = col.id;
-  });
+  col.stages.forEach(s => { STAGE_TO_COLUMN[s] = col.id; });
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,24 +135,10 @@ function timeAgo(date: Date | string | null): string {
   return `${diffDays}d`;
 }
 
-function computeTotal(quotedPrice: string | null, extras: string | null): number {
+function computeTotal(quotedPrice: string | null, _extras: string | null): number {
   if (!quotedPrice) return 0;
   const base = parseInt(quotedPrice, 10);
-  if (isNaN(base)) return 0;
-  if (!extras) return base;
-  try {
-    const keys: string[] = JSON.parse(extras);
-    // Simple sum: each extra is $20 (matches the app's EXTRAS_LIST pricing)
-    // The real calculateExtrasTotal is server-side; we approximate here for display
-    return base;
-  } catch {
-    return base;
-  }
-}
-
-function formatMoney(cents: number): string {
-  if (cents === 0) return "—";
-  return `$${cents.toLocaleString()}`;
+  return isNaN(base) ? 0 : base;
 }
 
 function sourceBadge(source: string | null): string {
@@ -169,16 +162,12 @@ function LeadCard({
   onClick?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const [didDrag, setDidDrag] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isCurrentlyDragging } = useDraggable({
     id: String(lead.id),
     data: { lead },
   });
 
-  const style = transform
-    ? { transform: CSS.Translate.toString(transform) }
-    : undefined;
-
+  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const total = computeTotal(lead.quotedPrice, lead.extras);
   const src = sourceBadge(lead.leadSource);
 
@@ -188,11 +177,10 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`bg-white rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing select-none transition-all ${
-        isDragging ? "opacity-40" : "hover:shadow-md hover:border-gray-300"
+      className={`group bg-white rounded-xl border border-gray-200 p-3 cursor-grab active:cursor-grabbing select-none transition-all ${
+        isDragging ? "opacity-40 shadow-md" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
-        // Don't fire click if the user just finished dragging
         if (isCurrentlyDragging) return;
         if ((e as unknown as MouseEvent & { _wasDrag?: boolean })._wasDrag) return;
         onClick?.();
@@ -200,40 +188,40 @@ function LeadCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Grip icon + name row */}
-      <div className="flex items-start gap-2">
-        <div className="mt-0.5 text-gray-300 flex-shrink-0">
-          <GripVertical className="w-3.5 h-3.5" />
+      {/* Top row: grip (hover only) + name + price */}
+      <div className="flex items-start gap-1.5">
+        {/* Drag handle — only visible on hover */}
+        <div className={`mt-0.5 flex-shrink-0 transition-opacity duration-150 ${hovered ? "opacity-40" : "opacity-0"}`}>
+          <GripVertical className="w-3.5 h-3.5 text-gray-400" />
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-sm font-semibold text-gray-900 truncate">
+          {/* Name + price */}
+          <div className="flex items-baseline justify-between gap-1">
+            <span className="text-sm font-semibold text-gray-900 truncate leading-tight">
               {lead.leadName ?? "Unknown"}
             </span>
             {total > 0 && (
-              <span className="text-sm font-bold text-gray-900 flex-shrink-0">
+              <span className="text-base font-bold text-gray-900 flex-shrink-0 tabular-nums">
                 ${total}
               </span>
             )}
           </div>
+
+          {/* Phone / call button */}
           <div className="flex items-center gap-1 mt-0.5">
-            {/* Phone number — on hover shows a clickable call button */}
             {hovered ? (
               <a
                 href={`tel:${lead.leadPhone}`}
                 onClick={e => e.stopPropagation()}
                 title={`Call ${lead.leadPhone}`}
-                className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full transition-colors"
-                style={{ backgroundColor: "#000000", color: "white" }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-900 text-white hover:bg-gray-700 transition-colors"
               >
-                <Phone className="w-3 h-3" />
+                <Phone className="w-2.5 h-2.5" />
                 Call
               </a>
             ) : (
-              <>
-                <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                <span className="text-xs text-gray-500 truncate">{lead.leadPhone}</span>
-              </>
+              <span className="text-xs text-gray-400 truncate">{lead.leadPhone}</span>
             )}
           </div>
         </div>
@@ -246,22 +234,18 @@ function LeadCard({
 
       {/* Footer row */}
       <div className="flex items-center justify-between mt-2 pl-5">
-        <div className="flex items-center gap-2">
-          {/* Source badge */}
+        <div className="flex items-center gap-1.5">
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
             {src}
           </span>
-          {/* Agent */}
           {lead.assignedAgentName && (
-            <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-              <User className="w-2.5 h-2.5" />
+            <span className="text-[10px] text-gray-400 truncate max-w-[60px]">
               {lead.assignedAgentName.split(" ")[0]}
             </span>
           )}
         </div>
-        {/* Time ago */}
         {lead.lastActivityAt && (
-          <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+          <span className="text-[10px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
             <Clock className="w-2.5 h-2.5" />
             {timeAgo(lead.lastActivityAt)}
           </span>
@@ -289,37 +273,48 @@ function KanbanColumn({
   const { setNodeRef } = useDroppable({ id: column.id });
 
   const totalValue = leads.reduce((sum, l) => sum + computeTotal(l.quotedPrice, l.extras), 0);
+  const isEmpty = leads.length === 0;
 
   return (
-    <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
+    <div className="flex flex-col min-w-[230px] w-[230px] flex-shrink-0">
       {/* Column header */}
-      <div className={`rounded-t-xl border border-b-0 px-3 py-2.5 ${column.headerBg} border-t-4 ${column.accent}`}>
+      <div
+        className={`rounded-t-xl border border-b-0 px-3 py-2.5 ${column.headerBg} border-t-4 ${column.accentClass}`}
+      >
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-800">{column.label}</span>
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${column.countBg}`}>
             {leads.length}
           </span>
         </div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <DollarSign className="w-3 h-3 text-gray-400" />
-          <span className="text-xs text-gray-500 font-medium">
-            {totalValue > 0 ? `$${totalValue.toLocaleString()} pipeline` : "no quotes yet"}
-          </span>
-        </div>
+        <p className="text-xs text-gray-400 font-medium mt-0.5">
+          {totalValue > 0 ? `$${totalValue.toLocaleString()} pipeline` : "no quotes yet"}
+        </p>
       </div>
 
       {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className={`flex-1 rounded-b-xl border border-t-0 p-2 flex flex-col gap-2 min-h-[400px] transition-colors ${
-          isOver ? "bg-[#f0ffe0] border-[#AAFF00]" : "bg-gray-50 border-gray-200"
-        }`}
+        className="flex-1 rounded-b-xl border border-t-0 p-2 flex flex-col gap-2 min-h-[420px] transition-colors duration-150"
+        style={{
+          backgroundColor: isOver ? column.accentHex : "#f9fafb",
+          borderColor: isOver ? "#d1d5db" : "#e5e7eb",
+          borderStyle: isEmpty && !isOver ? "dashed" : "solid",
+        }}
       >
-        {leads.length === 0 && (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-xs text-gray-300 text-center">Drop leads here</p>
+        {/* Empty state — centered vertically */}
+        {isEmpty && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-8">
+            <ArrowDownToLine
+              className={`w-5 h-5 transition-opacity ${isOver ? "opacity-60 text-gray-500" : "opacity-20 text-gray-400"}`}
+            />
+            <p className={`text-xs text-center transition-opacity ${isOver ? "opacity-70 text-gray-600 font-medium" : "opacity-40 text-gray-400"}`}>
+              {isOver ? "Release to move here" : "No leads yet"}
+            </p>
           </div>
         )}
+
+        {/* Cards */}
         {leads.map(lead => (
           <LeadCard
             key={lead.id}
@@ -330,6 +325,13 @@ function KanbanColumn({
             }}
           />
         ))}
+
+        {/* Drop hint at bottom when column has cards and is being hovered */}
+        {!isEmpty && isOver && (
+          <div className="flex items-center justify-center py-2 rounded-lg border border-dashed border-gray-300">
+            <p className="text-xs text-gray-400 font-medium">Drop here</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -346,7 +348,6 @@ type KanbanBoardProps = {
 export default function KanbanBoard({ leads, onCardClick, onStageChange }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  // Track whether a drag just ended to suppress the spurious click dnd-kit fires after drop
   const justDraggedRef = useRef(false);
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
@@ -356,7 +357,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Optimistically track local stage overrides so the board updates instantly
   const [localStages, setLocalStages] = useState<Record<number, string>>({});
 
   const effectiveLeads = useMemo(() =>
@@ -364,7 +364,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     [leads, localStages]
   );
 
-  // Group leads by column
   const columnLeads = useMemo(() => {
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
@@ -393,7 +392,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     setActiveId(null);
     setOverId(null);
 
-    // Suppress the spurious click that fires after a drag ends
     justDraggedRef.current = true;
     setTimeout(() => { justDraggedRef.current = false; }, 200);
 
@@ -405,11 +403,9 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     const currentLead = effectiveLeads.find(l => l.id === leadId);
     if (!currentLead) return;
 
-    // Don't update if already in the right column
     const currentColId = STAGE_TO_COLUMN[currentLead.stage] ?? "follow_up";
     if (currentColId === targetCol.id) return;
 
-    // Optimistic update
     setLocalStages(prev => ({ ...prev, [leadId]: targetCol.targetStage }));
 
     updateStage.mutate(
@@ -420,7 +416,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
           onStageChange?.(leadId, targetCol.targetStage);
         },
         onError: () => {
-          // Roll back optimistic update
           setLocalStages(prev => {
             const next = { ...prev };
             delete next[leadId];
@@ -439,7 +434,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
       onDragOver={handleDragOver as never}
       onDragEnd={handleDragEnd}
     >
-      {/* Horizontal scroll container */}
       <div className="overflow-x-auto pb-4">
         <div className="flex gap-3 min-w-max">
           {KANBAN_COLUMNS.map(col => (
@@ -458,7 +452,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
       {/* Drag overlay — ghost card while dragging */}
       <DragOverlay>
         {activeLead ? (
-          <div className="rotate-2 opacity-95 shadow-xl">
+          <div className="rotate-1 opacity-95 shadow-2xl scale-105">
             <LeadCard lead={activeLead} />
           </div>
         ) : null}

@@ -1389,3 +1389,10 @@
 - [x] Add color-coded conversion rate pills (green >40%, amber 20-40%, gray <20%)
 - [x] Add best-source highlight callout card at top
 - [x] Clean up typography and spacing
+
+## Kanban Board Polish
+- [x] Fix "Drop leads here" empty state — center vertically with dashed border drop zone
+- [x] Hide drag handle (⋮⋮) until card hover
+- [x] Add colored top border to each column matching its stage color
+- [x] Improve card visual hierarchy — larger/bolder price, cleaner metadata row
+- [x] Fix orange card border (drag-over state) to use gray/neutral instead of coral
