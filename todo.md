@@ -1383,3 +1383,9 @@
 ## Lead Table Fixes
 - [x] Fix lead name color — too muted/light, needs to be darker (gray-900 or black)
 - [x] Fix quote price color — bright lime green (#AAFF00) is too intense on white, change to dark gray or black
+
+## Traffic Source Section Redesign
+- [x] Remove bar chart, replace with unified table + inline progress bars
+- [x] Add color-coded conversion rate pills (green >40%, amber 20-40%, gray <20%)
+- [x] Add best-source highlight callout card at top
+- [x] Clean up typography and spacing
