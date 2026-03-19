@@ -95,6 +95,7 @@ import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
+import DailyRecapModal, { hasShownToday, markShownToday } from "@/components/DailyRecapModal";
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
 /**
@@ -1955,6 +1956,22 @@ export default function AdminDashboard() {
   const authChecked = !meQuery.isLoading;
   const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
 
+  // ── Daily recap modal ────────────────────────────────────────────────────────
+  const [showRecap, setShowRecap] = useState(false);
+  // Show recap once per day — fires when user logs in via form OR when already-authed page loads
+  const isLoggedIn = isAuthenticated || (!!meQuery.data?.isAdmin && !meQuery.isLoading);
+  useEffect(() => {
+    if (isLoggedIn && !hasShownToday()) {
+      // Small delay so the dashboard renders first
+      const t = setTimeout(() => setShowRecap(true), 800);
+      return () => clearTimeout(t);
+    }
+  }, [isLoggedIn]);
+  const handleCloseRecap = useCallback(() => {
+    markShownToday();
+    setShowRecap(false);
+  }, []);
+
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
   const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "leaderboard" | "callbacks">("leads");
   const [showSimulator, setShowSimulator] = useState(false);
@@ -2083,6 +2100,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen hj-theme">
+      {/* Daily recap modal — shows once per day after login */}
+      {showRecap && <DailyRecapModal onClose={handleCloseRecap} />}
+
       {/* Top bar */}
       <header className="hj-header sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">

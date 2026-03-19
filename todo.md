@@ -1400,3 +1400,10 @@
 ## Kanban Board — New Features
 - [x] Add total pipeline summary bar above board (X leads · $Y total pipeline · $Z booked)
 - [x] Add "Move to Booked" quick-action button on Availability cards (hover only)
+
+## Daily Recap Popup
+- [x] Add yesterdayRecap tRPC procedure returning leads, bookings, revenue, agent stats, source stats, pending follow-ups
+- [x] Build DailyRecapModal component: headline stat, funnel snapshot, agent leaderboard, best source, pending action items
+- [x] Wire modal into AdminDashboard with once-per-day localStorage gate (key: recap_shown_YYYY-MM-DD)
+- [x] Close only on explicit user action (X button or "Let's go" CTA)
+- [x] Fix: trigger also fires when already-authed page loads (not just after login form)

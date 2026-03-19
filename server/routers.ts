@@ -904,6 +904,111 @@ export const appRouter = router({
           topJobs,
         };
       }),
+
+    /**
+     * leads.yesterdayRecap — returns a summary of yesterday's lead activity.
+     * Used by the DailyRecapModal on the admin dashboard.
+     */
+    yesterdayRecap: adminAgentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return null;
+
+      // Yesterday's date range in UTC
+      const now = new Date();
+      const yesterdayStart = new Date(now);
+      yesterdayStart.setUTCDate(now.getUTCDate() - 1);
+      yesterdayStart.setUTCHours(0, 0, 0, 0);
+      const yesterdayEnd = new Date(yesterdayStart);
+      yesterdayEnd.setUTCHours(23, 59, 59, 999);
+
+      // All sessions created yesterday (excluding review sessions)
+      const sessions = await db
+        .select()
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, yesterdayStart),
+            lte(conversationSessions.createdAt, yesterdayEnd),
+            ne(conversationSessions.leadSource, "review")
+          )
+        );
+
+      const totalLeads = sessions.length;
+
+      // Booked sessions
+      const booked = sessions.filter(s => s.stage === "BOOKED");
+      const bookedCount = booked.length;
+
+      // Revenue from booked sessions
+      const bookedRevenue = booked.reduce((sum, s) => {
+        const base = parseFloat(String(s.quotedPrice ?? 0));
+        let extras = 0;
+        try {
+          const e = JSON.parse(s.extras ?? "[]");
+          extras = Array.isArray(e) ? calculateExtrasTotal(e) : 0;
+        } catch { /* ignore */ }
+        return sum + base + extras;
+      }, 0);
+
+      // Stage breakdown
+      const stageCounts: Record<string, number> = {};
+      for (const s of sessions) {
+        stageCounts[s.stage] = (stageCounts[s.stage] ?? 0) + 1;
+      }
+
+      // Source breakdown
+      const sourceCounts: Record<string, number> = {};
+      for (const s of sessions) {
+        const src = s.utmSource ?? s.leadSource ?? "Direct";
+        sourceCounts[src] = (sourceCounts[src] ?? 0) + 1;
+      }
+      const topSource = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+      // Agent leaderboard — who booked the most yesterday
+      const agentBookings: Record<string, { name: string; count: number; revenue: number }> = {};
+      for (const s of booked) {
+        if (!s.lastCalledByAgentName) continue;
+        const name = s.lastCalledByAgentName;
+        if (!agentBookings[name]) agentBookings[name] = { name, count: 0, revenue: 0 };
+        agentBookings[name].count++;
+        const base = parseFloat(String(s.quotedPrice ?? 0));
+        let extras = 0;
+        try {
+          const e = JSON.parse(s.extras ?? "[]");
+          extras = Array.isArray(e) ? calculateExtrasTotal(e) : 0;
+        } catch { /* ignore */ }
+        agentBookings[name].revenue += base + extras;
+      }
+      const agentLeaderboard = Object.values(agentBookings).sort((a, b) => b.count - a.count).slice(0, 5);
+
+      // Pending follow-ups from yesterday still needing action
+      const pendingFollowUps = sessions
+        .filter(s => ["FOLLOW_UP", "AVAILABILITY", "QUOTE_SENT"].includes(s.stage))
+        .slice(0, 5)
+        .map(s => ({
+          id: s.id,
+          name: s.leadName ?? "Unknown",
+          phone: s.leadPhone ?? "",
+          stage: s.stage,
+          service: s.serviceType ?? null,
+          quotedPrice: s.quotedPrice ? parseFloat(String(s.quotedPrice)) : null,
+        }));
+
+      // Conversion rate
+      const conversionRate = totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0;
+
+      return {
+        date: yesterdayStart.toISOString().split("T")[0],
+        totalLeads,
+        bookedCount,
+        bookedRevenue: Math.round(bookedRevenue),
+        conversionRate,
+        stageCounts,
+        topSource,
+        agentLeaderboard,
+        pendingFollowUps,
+      };
+    }),
   }),
 
   /**
