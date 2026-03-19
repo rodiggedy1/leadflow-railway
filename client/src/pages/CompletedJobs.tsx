@@ -972,7 +972,9 @@ function ConversationsTab() {
   const filtered = useMemo(() => {
     if (!conversations) return [];
     return conversations.filter(c => {
-      const matchFilter = filter === "all" || c.sentiment === filter;
+      // "Happy" filter shows both positive and confirmed — both are happy customers
+      const matchFilter = filter === "all" ||
+        (filter === "positive" ? (c.sentiment === "positive" || c.sentiment === "confirmed") : c.sentiment === filter);
       const matchSearch = !search ||
         c.leadName.toLowerCase().includes(search.toLowerCase()) ||
         c.leadPhone.includes(search) ||
@@ -982,12 +984,13 @@ function ConversationsTab() {
   }, [conversations, filter, search]);
 
   // Count by sentiment
+  // "Happy" includes both positive (sent Google link) AND confirmed (left a review) — both are happy customers
   const counts = useMemo(() => {
     if (!conversations) return { all: 0, confirmed: 0, positive: 0, negative: 0, pending: 0 };
     return {
       all: conversations.length,
       confirmed: conversations.filter(c => c.sentiment === "confirmed").length,
-      positive: conversations.filter(c => c.sentiment === "positive").length,
+      positive: conversations.filter(c => c.sentiment === "positive" || c.sentiment === "confirmed").length,
       negative: conversations.filter(c => c.sentiment === "negative").length,
       pending: conversations.filter(c => c.sentiment === "pending").length,
     };

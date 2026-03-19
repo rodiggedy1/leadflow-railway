@@ -1,0 +1,38 @@
+{
+  "query": "SELECT cj.id, cj.status, cj.sessionId, cs.stage, cs.leadSource \nFROM completed_jobs cj \nJOIN conversation_sessions cs ON cs.id = cj.sessionId \nWHERE cs.leadSource IN ('review', 'review-test') \nORDER BY cj.id DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT cj.id, cj.status, cj.sessionId, cs.stage, cs.leadSource \nFROM completed_jobs cj \nJOIN conversation_sessions cs ON cs.id = cj.sessionId \nWHERE cs.leadSource IN ('review', 'review-test') \nORDER BY cj.id DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "249241",
+      "status": "REVIEW_CONFIRMED",
+      "sessionId": "870006",
+      "stage": "REVIEW_DONE",
+      "leadSource": "review-test"
+    },
+    {
+      "id": "3",
+      "status": "SENT",
+      "sessionId": "840003",
+      "stage": "REVIEW_REQUESTED",
+      "leadSource": "review"
+    },
+    {
+      "id": "2",
+      "status": "SENT",
+      "sessionId": "840002",
+      "stage": "REVIEW_REQUESTED",
+      "leadSource": "review"
+    },
+    {
+      "id": "1",
+      "status": "SENT",
+      "sessionId": "840001",
+      "stage": "REVIEW_REQUESTED",
+      "leadSource": "review"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\tsessionId\tstage\tleadSource\n249241\tREVIEW_CONFIRMED\t870006\tREVIEW_DONE\treview-test\n3\tSENT\t840003\tREVIEW_REQUESTED\treview\n2\tSENT\t840002\tREVIEW_REQUESTED\treview\n1\tSENT\t840001\tREVIEW_REQUESTED\treview\n",
+  "stderr": "",
+  "execution_time_ms": 468
+}

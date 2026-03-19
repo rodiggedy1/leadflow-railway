@@ -620,13 +620,15 @@ export const reviewRouter = router({
       } catch {}
 
       // Derive sentiment from completed_jobs.status (source of truth)
-      // Stage values in conversationSessions don't map 1:1 to sentiment
+      // REVIEW_CONFIRMED = customer left a Google review → counts as "confirmed" (most positive outcome)
+      // REPLIED_POSITIVE = customer was happy but hasn't confirmed review yet → counts as "positive"
+      // Both are happy customers — confirmed is a superset of positive
       const sentiment =
         s.jobStatus === "REVIEW_CONFIRMED" ? "confirmed" :
         s.jobStatus === "REPLIED_POSITIVE" ? "positive" :
         s.jobStatus === "REPLIED_NEGATIVE" ? "negative" :
         s.jobStatus === "SENT" ? "pending" :
-        // Fallback: no job row (shouldn't happen for new sessions, but handle gracefully)
+        // Fallback: no job row
         s.stage === "REVIEW_DONE" && s.aiMode === 0 ? "negative" :
         "pending";
 
