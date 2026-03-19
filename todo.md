@@ -1407,3 +1407,9 @@
 - [x] Wire modal into AdminDashboard with once-per-day localStorage gate (key: recap_shown_YYYY-MM-DD)
 - [x] Close only on explicit user action (X button or "Let's go" CTA)
 - [x] Fix: trigger also fires when already-authed page loads (not just after login form)
+
+## Daily Recap Modal Redesign
+- [x] Switch from dark header to white/light background throughout
+- [x] Use lime green (#AAFF00) as accent color for key stats and highlights
+- [x] Make "Yesterday" label large and prominent (lime green pill at top)
+- [x] Match overall hj-theme aesthetic (white card, clean borders, black text)

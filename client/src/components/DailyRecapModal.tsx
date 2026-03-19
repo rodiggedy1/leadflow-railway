@@ -4,16 +4,12 @@
  * Shows once per calendar day (keyed in localStorage as recap_shown_YYYY-MM-DD).
  * Closes only on explicit user action (X button or "Let's go" CTA).
  *
- * Sections:
- *  1. Personalized greeting + headline stat
- *  2. Mini funnel: Leads → Quoted → Availability → Booked
- *  3. Agent leaderboard (who booked the most)
- *  4. Best source callout
- *  5. Pending action items (leads still in Follow Up / Availability)
+ * Design: HeyJade light theme — white card, lime green (#AAFF00) accents,
+ * "Yesterday" label large and prominent throughout.
  */
 
 import { useEffect, useRef } from "react";
-import { X, TrendingUp, DollarSign, Users, Zap, Phone, ChevronRight, Trophy, Star } from "lucide-react";
+import { X, TrendingUp, DollarSign, Phone, ChevronRight, Trophy, Zap } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -68,12 +64,12 @@ function FunnelStep({
     <div className="flex items-center gap-2">
       <div className="flex flex-col items-center">
         <div
-          className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-sm"
-          style={{ backgroundColor: color }}
+          className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold shadow-sm"
+          style={{ backgroundColor: color, color: color === "#AAFF00" ? "#111" : "#fff" }}
         >
           {count}
         </div>
-        <span className="text-[11px] text-gray-500 mt-1 font-medium text-center leading-tight">{label}</span>
+        <span className="text-[11px] text-gray-500 mt-1.5 font-medium text-center leading-tight">{label}</span>
       </div>
       {!isLast && (
         <ChevronRight className="w-4 h-4 text-gray-300 mb-4 flex-shrink-0" />
@@ -100,14 +96,16 @@ function AgentRow({
   const bg = colors[(rank - 1) % colors.length];
 
   return (
-    <div className="flex items-center gap-3 py-2">
-      <span className="w-5 text-center text-xs font-bold text-gray-400">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`}</span>
-      <div className={`w-7 h-7 rounded-full ${bg} flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0`}>
+    <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
+      <span className="w-6 text-center text-xs font-bold text-gray-400">
+        {rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`}
+      </span>
+      <div className={`w-8 h-8 rounded-full ${bg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
         {initials}
       </div>
-      <span className="flex-1 text-sm font-medium text-gray-800 truncate">{name}</span>
-      <span className="text-xs text-gray-500">{count} booked</span>
-      <span className="text-sm font-semibold text-gray-900 ml-2">${revenue.toLocaleString()}</span>
+      <span className="flex-1 text-sm font-semibold text-gray-900 truncate">{name}</span>
+      <span className="text-xs text-gray-500 mr-1">{count} booked</span>
+      <span className="text-sm font-bold text-gray-900">${revenue.toLocaleString()}</span>
     </div>
   );
 }
@@ -121,31 +119,32 @@ function PendingRow({
 }) {
   const stageColors: Record<string, string> = {
     FOLLOW_UP: "bg-amber-100 text-amber-700",
-    AVAILABILITY: "bg-orange-100 text-orange-700",
+    AVAILABILITY: "bg-green-100 text-green-700",
     QUOTE_SENT: "bg-blue-100 text-blue-700",
   };
   const stageClass = stageColors[lead.stage] ?? "bg-gray-100 text-gray-600";
 
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+    <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-semibold text-gray-900 truncate">{lead.name}</span>
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${stageClass}`}>
             {STAGE_LABELS[lead.stage] ?? lead.stage}
           </span>
         </div>
         {lead.service && (
-          <span className="text-xs text-gray-400 truncate block">{lead.service}</span>
+          <span className="text-xs text-gray-400 truncate block mt-0.5">{lead.service}</span>
         )}
       </div>
       {lead.quotedPrice && (
-        <span className="text-sm font-bold text-gray-800">${lead.quotedPrice.toLocaleString()}</span>
+        <span className="text-sm font-bold text-gray-800 mr-1">${lead.quotedPrice.toLocaleString()}</span>
       )}
       <a
         href={`tel:${lead.phone}`}
         onClick={e => e.stopPropagation()}
-        className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-gray-900 text-white hover:bg-gray-700 transition-colors flex-shrink-0"
+        className="inline-flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors flex-shrink-0"
+        style={{ backgroundColor: "#AAFF00", color: "#111" }}
       >
         <Phone className="w-3 h-3" />
         Call
@@ -158,19 +157,19 @@ function PendingRow({
 
 function buildHeadline(totalLeads: number, bookedCount: number, bookedRevenue: number): string {
   if (totalLeads === 0) {
-    return "No new leads came in yesterday. Let's make today count.";
+    return "No new leads came in. Let's make today count.";
   }
   if (bookedCount === 0) {
-    return `${totalLeads} lead${totalLeads === 1 ? "" : "s"} came in yesterday. None booked yet — time to follow up.`;
+    return `${totalLeads} lead${totalLeads === 1 ? "" : "s"} came in. None booked yet — time to follow up.`;
   }
   const rate = Math.round((bookedCount / totalLeads) * 100);
   if (rate >= 60) {
-    return `${bookedCount} of ${totalLeads} leads booked yesterday — ${rate}% conversion. Outstanding day! 🔥`;
+    return `${bookedCount} of ${totalLeads} leads booked — ${rate}% conversion. Outstanding! 🔥`;
   }
   if (rate >= 40) {
-    return `${bookedCount} of ${totalLeads} leads booked yesterday — $${bookedRevenue.toLocaleString()} in new revenue.`;
+    return `${bookedCount} of ${totalLeads} leads booked — $${bookedRevenue.toLocaleString()} in new revenue.`;
   }
-  return `${totalLeads} leads came in. You booked ${bookedCount}. $${bookedRevenue.toLocaleString()} in new revenue.`;
+  return `${totalLeads} leads came in. ${bookedCount} booked. $${bookedRevenue.toLocaleString()} in new revenue.`;
 }
 
 // ── Main modal ────────────────────────────────────────────────────────────────
@@ -184,7 +183,7 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const { data: recap, isLoading } = trpc.leads.yesterdayRecap.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000, // cache for 5 min
+    staleTime: 5 * 60 * 1000,
   });
 
   // Close on Escape key
@@ -204,13 +203,12 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
 
-  // Funnel data
   const funnelSteps = recap
     ? [
         { label: "Leads", count: recap.totalLeads, color: "#6366f1" },
         { label: "Quoted", count: recap.stageCounts?.QUOTE_SENT ?? 0, color: "#3b82f6" },
         { label: "Availability", count: recap.stageCounts?.AVAILABILITY ?? 0, color: "#f59e0b" },
-        { label: "Booked", count: recap.bookedCount, color: "#10b981" },
+        { label: "Booked", count: recap.bookedCount, color: "#AAFF00" },
       ]
     : [];
 
@@ -226,7 +224,7 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
     <div
       ref={overlayRef}
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.35)", backdropFilter: "blur(6px)" }}
     >
       {/* Modal card */}
       <div
@@ -235,66 +233,79 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
           animation: "recapSlideUp 0.35s cubic-bezier(0.34,1.56,0.64,1) both",
           maxHeight: "90vh",
           overflowY: "auto",
+          border: "1px solid #e5e7eb",
         }}
       >
-        {/* Header gradient strip */}
-        <div
-          className="px-6 pt-6 pb-5"
-          style={{ background: "linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)" }}
-        >
+        {/* Top accent bar */}
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, #AAFF00 0%, #7dcc00 100%)" }} />
+
+        {/* Header — white with lime green accents */}
+        <div className="px-6 pt-5 pb-4">
           <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{dateLabel}</span>
+            <div className="flex-1 min-w-0">
+              {/* YESTERDAY label — large and prominent */}
+              <div
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest mb-3"
+                style={{ backgroundColor: "#AAFF00", color: "#111" }}
+              >
+                <Zap className="w-3 h-3" />
+                Yesterday · {dateLabel}
               </div>
-              <h2 className="text-xl font-bold text-white leading-snug">
+              <h2 className="text-2xl font-bold text-gray-900 leading-snug">
                 Good morning, {firstName} 👋
               </h2>
-              <p className="text-sm text-gray-300 mt-1 leading-relaxed">{isLoading ? "Loading your recap…" : headline}</p>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                {isLoading ? "Loading your recap…" : headline}
+              </p>
             </div>
             <button
               onClick={onClose}
-              className="ml-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors flex-shrink-0 mt-0.5"
+              className="ml-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors flex-shrink-0 mt-1"
               aria-label="Close recap"
             >
-              <X className="w-4 h-4 text-white" />
+              <X className="w-4 h-4 text-gray-600" />
             </button>
           </div>
 
           {/* Key stats row */}
           {recap && (
-            <div className="flex gap-3 mt-4">
-              <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-blue-300" />
+            <div className="grid grid-cols-4 gap-2 mt-4">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                <div className="flex items-center gap-1 mb-1">
+                  <TrendingUp className="w-3 h-3 text-gray-400" />
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Leads</span>
                 </div>
-                <span className="text-2xl font-bold text-white">{recap.totalLeads}</span>
+                <span className="text-2xl font-bold text-gray-900">{recap.totalLeads}</span>
               </div>
-              <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <Star className="w-3.5 h-3.5 text-emerald-300" />
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-[10px]">✓</span>
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Booked</span>
                 </div>
-                <span className="text-2xl font-bold text-white">{recap.bookedCount}</span>
+                <span className="text-2xl font-bold text-gray-900">{recap.bookedCount}</span>
               </div>
-              <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <DollarSign className="w-3.5 h-3.5 text-yellow-300" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Revenue</span>
+              <div
+                className="rounded-2xl px-3 py-2.5 col-span-1"
+                style={{ backgroundColor: "#AAFF00" }}
+              >
+                <div className="flex items-center gap-1 mb-1">
+                  <DollarSign className="w-3 h-3 text-black/60" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-black/60">Revenue</span>
                 </div>
-                <span className="text-2xl font-bold text-white">${recap.bookedRevenue.toLocaleString()}</span>
+                <span className="text-2xl font-bold text-black">${recap.bookedRevenue.toLocaleString()}</span>
               </div>
-              <div className="flex-1 bg-white/10 rounded-2xl px-3 py-2.5">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <Zap className="w-3.5 h-3.5 text-purple-300" />
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                <div className="flex items-center gap-1 mb-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Conv.</span>
                 </div>
-                <span className="text-2xl font-bold text-white">{recap.conversionRate}%</span>
+                <span className="text-2xl font-bold text-gray-900">{recap.conversionRate}%</span>
               </div>
             </div>
           )}
         </div>
+
+        {/* Divider */}
+        <div className="h-px bg-gray-100 mx-6" />
 
         {/* Body */}
         <div className="px-6 py-5 space-y-5">
@@ -309,7 +320,9 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
           {/* Funnel */}
           {recap && recap.totalLeads > 0 && (
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Yesterday's Funnel</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">
+                Yesterday's Funnel
+              </h3>
               <div className="flex items-start gap-1 flex-wrap">
                 {funnelSteps.map((step, i) => (
                   <FunnelStep
@@ -329,9 +342,9 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1 flex items-center gap-1.5">
                 <Trophy className="w-3.5 h-3.5" />
-                Agent Leaderboard
+                Agent Leaderboard — Yesterday
               </h3>
-              <div className="divide-y divide-gray-50">
+              <div>
                 {recap.agentLeaderboard.map((agent, i) => (
                   <AgentRow
                     key={agent.name}
@@ -347,12 +360,18 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
 
           {/* Best source */}
           {recap && recap.topSource && (
-            <div className="bg-gray-50 rounded-2xl px-4 py-3 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                <Users className="w-4 h-4 text-indigo-600" />
+            <div
+              className="rounded-2xl px-4 py-3 flex items-center gap-3"
+              style={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb" }}
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+                style={{ backgroundColor: "#AAFF00" }}
+              >
+                🌐
               </div>
               <div>
-                <div className="text-xs text-gray-500 font-medium">Top traffic source yesterday</div>
+                <div className="text-xs text-gray-400 font-medium">Top traffic source yesterday</div>
                 <div className="text-sm font-bold text-gray-900">{recap.topSource}</div>
               </div>
             </div>
@@ -365,7 +384,10 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
                 <Phone className="w-3.5 h-3.5" />
                 Still needs attention ({recap.pendingFollowUps.length})
               </h3>
-              <div className="bg-amber-50 rounded-2xl px-4 py-1">
+              <div
+                className="rounded-2xl px-4 py-1"
+                style={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb" }}
+              >
                 {recap.pendingFollowUps.map(lead => (
                   <PendingRow key={lead.id} lead={lead} />
                 ))}
@@ -378,7 +400,7 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
             <div className="text-center py-6">
               <div className="text-4xl mb-2">😴</div>
               <p className="text-sm text-gray-500">No leads came in yesterday.</p>
-              <p className="text-sm font-medium text-gray-700 mt-1">Let's make today a great one.</p>
+              <p className="text-sm font-semibold text-gray-700 mt-1">Let's make today a great one.</p>
             </div>
           )}
         </div>
@@ -387,7 +409,8 @@ export default function DailyRecapModal({ onClose }: DailyRecapModalProps) {
         <div className="px-6 pb-6">
           <button
             onClick={onClose}
-            className="w-full py-3 rounded-2xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-700 transition-colors"
+            className="w-full py-3 rounded-2xl text-sm font-bold transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "#111", color: "#fff" }}
           >
             Let's go →
           </button>
