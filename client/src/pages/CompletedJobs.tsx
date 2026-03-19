@@ -300,16 +300,16 @@ function AnalyticsTab() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Happiness ring */}
             <Card className="lg:col-span-2 flex flex-col items-center justify-center py-8">
-              <CardHeader className="pb-2 text-center">
+              <CardHeader className="pb-2 text-center w-full">
                 <CardTitle className="text-base font-semibold text-gray-700 flex items-center justify-center gap-2">
                   <Smile className="w-4 h-4" style={{ color: "#E8603C" }} />
                   Customer Happiness Score
                 </CardTitle>
-                <CardDescription className="text-xs">
+                <CardDescription className="text-xs text-center">
                   % of replied customers who were positive
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col items-center relative">
+              <CardContent className="flex flex-col items-center w-full relative">
                 <HappinessRing score={data.happinessRate} />
                 <p className="text-xs text-gray-500 mt-3 text-center">
                   Based on {data.repliedCount} replies out of {data.smsSent} SMS sent

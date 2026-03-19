@@ -595,8 +595,10 @@ export const reviewRouter = router({
         updatedAt: conversationSessions.updatedAt,
         aiMode: conversationSessions.aiMode,
         leadSource: conversationSessions.leadSource,
+        jobStatus: completedJobs.status,
       })
       .from(conversationSessions)
+      .leftJoin(completedJobs, eq(completedJobs.sessionId, conversationSessions.id))
       .where(
         sql`${conversationSessions.leadSource} IN ('review', 'review-test')`
       )
@@ -617,13 +619,16 @@ export const reviewRouter = router({
         }
       } catch {}
 
-      // Derive sentiment from stage
+      // Derive sentiment from completed_jobs.status (source of truth)
+      // Stage values in conversationSessions don't map 1:1 to sentiment
       const sentiment =
-        s.stage === "REVIEW_CONFIRMED" ? "confirmed" :
-        s.stage === "REVIEW_POSITIVE" ? "positive" :
-        s.stage === "REVIEW_NEGATIVE" ? "negative" :
+        s.jobStatus === "REVIEW_CONFIRMED" ? "confirmed" :
+        s.jobStatus === "REPLIED_POSITIVE" ? "positive" :
+        s.jobStatus === "REPLIED_NEGATIVE" ? "negative" :
+        s.jobStatus === "SENT" ? "pending" :
+        // Fallback: no job row (shouldn't happen for new sessions, but handle gracefully)
         s.stage === "REVIEW_DONE" && s.aiMode === 0 ? "negative" :
-        s.stage === "REVIEW_REQUESTED" ? "pending" : "pending";
+        "pending";
 
       // Parse full message history for the thread view
       let messages: Array<{ role: string; content: string; ts: number }> = [];
