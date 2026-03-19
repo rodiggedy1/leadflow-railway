@@ -1322,3 +1322,8 @@
 - [x] Keep cron endpoint in code but disabled — do not schedule until manually re-enabled
 - [x] Add Conversations tab to Reviews page — shows all review sessions (leadSource='review') with name, phone, date, sentiment, last reply
 - [x] Backend: reviewRouter.conversations query — list all review conversation_sessions with their stage and last message
+
+## Test Review SMS Send
+
+- [x] Backend: reviewRouter.sendTest procedure — sends a real review SMS to a provided phone number with a fake job, creates a proper conversation session
+- [x] Frontend: Test Send card on Reviews Batches tab — phone input + first name input + Send Test button with preview of sent message

@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { and, desc, eq, gte, isNull, lt, sql, count } from "drizzle-orm";
 import { router, protectedProcedure } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
   completedJobBatches,
@@ -677,4 +678,61 @@ export const reviewRouter = router({
     const sent = await sendPendingReviewSms();
     return { sent };
   }),
+
+  /**
+   * sendTest — sends a real review SMS to a test phone number and creates a proper
+   * conversation session so the full AI reply flow works end-to-end.
+   * Any existing test review session for that phone is replaced.
+   */
+  sendTest: protectedProcedure
+    .input(
+      z.object({
+        testPhone: z.string().min(10).max(20),
+        firstName: z.string().min(1).max(50).default("there"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Normalize to E.164
+      const digits = input.testPhone.replace(/\D/g, "");
+      const e164 = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
+
+      const message = REVIEW_INITIAL_MESSAGE(input.firstName);
+
+      // Send the SMS
+      const result = await sendSms({ to: e164, content: message });
+      if (!result.success) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: result.error ?? "Failed to send test SMS",
+        });
+      }
+
+      // Remove any existing test review session for this phone to avoid duplicates
+      await db
+        .delete(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.leadPhone, e164),
+            eq(conversationSessions.leadSource, "review-test")
+          )
+        );
+
+      // Create a real conversation session so AI handles replies
+      await db.insert(conversationSessions).values({
+        leadPhone: e164,
+        leadName: input.firstName,
+        stage: "REVIEW_REQUESTED",
+        leadSource: "review-test",
+        messageHistory: JSON.stringify([
+          { role: "assistant", content: message, ts: Date.now() },
+        ]),
+        aiMode: 1,
+        isBooked: 0,
+      });
+
+      return { ok: true, message, sentTo: e164 };
+    }),
 });

@@ -926,6 +926,96 @@ function ConversationsTab() {
   );
 }
 
+// ─── Test Send card ─────────────────────────────────────────────────────────
+function TestSendCard() {
+  const [phone, setPhone] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [sent, setSent] = useState<{ message: string; sentTo: string } | null>(null);
+
+  const sendTest = trpc.completedJobs.sendTest.useMutation({
+    onSuccess: (result) => {
+      setSent({ message: result.message, sentTo: result.sentTo });
+      toast.success(`✅ Test review SMS sent to ${result.sentTo}`);
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  const handleSend = () => {
+    if (!phone.trim()) {
+      toast.error("Please enter a phone number.");
+      return;
+    }
+    setSent(null);
+    sendTest.mutate({ testPhone: phone.trim(), firstName: firstName.trim() || "there" });
+  };
+
+  return (
+    <Card style={{ borderColor: "#E8E0F0", background: "#FDFCFF" }}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MessageCircle className="w-4 h-4" style={{ color: "#7C3AED" }} />
+          Send a Test Review SMS
+        </CardTitle>
+        <CardDescription>
+          Send yourself a real review request SMS to experience the full AI conversation flow end-to-end.
+          Reply to the SMS and the AI will respond exactly as it would for a real customer.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="tel"
+            placeholder="Phone number (e.g. 202-555-1234)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: "#D8D0E8" }}
+          />
+          <input
+            type="text"
+            placeholder="First name (optional)"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="w-40 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: "#D8D0E8" }}
+          />
+          <Button
+            onClick={handleSend}
+            disabled={sendTest.isPending || !phone.trim()}
+            style={{ background: "#7C3AED" }}
+            className="flex-shrink-0"
+          >
+            {sendTest.isPending ? (
+              <RefreshCw className="w-4 h-4 animate-spin mr-1.5" />
+            ) : (
+              <Send className="w-4 h-4 mr-1.5" />
+            )}
+            {sendTest.isPending ? "Sending…" : "Send Test"}
+          </Button>
+        </div>
+
+        {sent && (
+          <div
+            className="rounded-lg border p-4 space-y-2"
+            style={{ background: "#F5F0FF", borderColor: "#C4B5FD" }}
+          >
+            <p className="text-xs font-semibold text-purple-700 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Sent to {sent.sentTo}
+            </p>
+            <p className="text-sm text-gray-700 italic">"…{sent.message.slice(0, 120)}{sent.message.length > 120 ? "…" : ""}"</p>
+            <p className="text-xs text-gray-500">
+              Reply to the SMS on your phone — the AI will respond in real time. Check the <strong>Conversations</strong> tab to see the session.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Approval card ────────────────────────────────────────────────────────────
 function ApprovalCard() {
   const utils = trpc.useUtils();
@@ -1105,6 +1195,7 @@ export default function CompletedJobs() {
         {activeTab === "conversations" && <ConversationsTab />}
         {activeTab === "batches" && (
           <div className="space-y-6">
+            <TestSendCard />
             <ApprovalCard />
             <BatchesTab />
           </div>
