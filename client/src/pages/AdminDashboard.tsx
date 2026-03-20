@@ -67,6 +67,7 @@ import {
   Eye,
   PhoneIncoming,
   Star,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -207,6 +208,29 @@ function PreviewAgentButton() {
       )}
       Agent View
     </Button>
+  );
+}
+
+// ── Quality Widget ─────────────────────────────────────────────────────────────
+function QualityWidget() {
+  const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 55_000,
+  });
+  const hasPending = data && data.pending > 0;
+  return (
+    <a
+      href="/admin/quality"
+      title="Cleaner Quality Dashboard"
+      className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-all hover:opacity-80 ${
+        hasPending
+          ? 'bg-amber-50 text-amber-700 border-amber-300 animate-pulse'
+          : 'bg-gray-50 text-gray-600 border-gray-200'
+      }`}
+    >
+      <ClipboardCheck className="w-3 h-3" />
+      {hasPending ? <span>{data!.pending} SMS pending</span> : <span>Quality</span>}
+    </a>
   );
 }
 
@@ -2136,6 +2160,7 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             {/* Widget health indicator */}
             <WidgetHealthBadge />
+            <QualityWidget />
             {/* TEMP: Daily Recap preview trigger — remove after review */}
             <button
               onClick={() => { localStorage.removeItem(`recap_shown_${new Date().toISOString().slice(0,10)}`); setShowRecap(true); }}
@@ -2191,7 +2216,7 @@ export default function AdminDashboard() {
               )}
             </button>
           ))}
-          {[{href:'/admin/campaigns',icon:<Send className="w-3.5 h-3.5"/>,label:'Campaigns'},{href:'/admin/completed-jobs',icon:<Star className="w-3.5 h-3.5"/>,label:'Reviews'},{href:'/admin/always-on',icon:<Zap className="w-3.5 h-3.5"/>,label:'Always-On'},{href:'/admin/sync-health',icon:<Activity className="w-3.5 h-3.5"/>,label:'Sync Health'},{href:'/admin/calls',icon:<Mic className="w-3.5 h-3.5"/>,label:'All Calls'},{href:'/admin/revenue',icon:<TrendingUp className="w-3.5 h-3.5"/>,label:'Revenue ROI'}].map(({href,icon,label})=>(
+          {[{href:'/admin/campaigns',icon:<Send className="w-3.5 h-3.5"/>,label:'Campaigns'},{href:'/admin/completed-jobs',icon:<Star className="w-3.5 h-3.5"/>,label:'Reviews'},{href:'/admin/always-on',icon:<Zap className="w-3.5 h-3.5"/>,label:'Always-On'},{href:'/admin/sync-health',icon:<Activity className="w-3.5 h-3.5"/>,label:'Sync Health'},{href:'/admin/calls',icon:<Mic className="w-3.5 h-3.5"/>,label:'All Calls'},{href:'/admin/revenue',icon:<TrendingUp className="w-3.5 h-3.5"/>,label:'Revenue ROI'},{href:'/admin/quality',icon:<ClipboardCheck className="w-3.5 h-3.5"/>,label:'Quality'}].map(({href,icon,label})=>(
             <a key={href} href={href} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors" style={{ borderColor: 'transparent', color: '#888888' }}>
               {icon}{label}
             </a>

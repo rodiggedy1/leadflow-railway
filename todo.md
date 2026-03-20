@@ -1454,3 +1454,7 @@
 - [x] Auto-populate basePay from job price x cleaner % on sync
 - [x] Auto-create cleaner_profiles from Launch27 team data on first sync
 - [x] getJobsForDay procedure for quality dashboard date browsing
+
+## Bug Fix: Quality Widget Missing from Main Admin Header
+- [x] Add Quality widget to AdminDashboard inline header (the /admin page has its own header, not using AdminHeader component)
+- [x] Add Quality tab link to AdminDashboard tab nav row
