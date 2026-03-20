@@ -164,7 +164,6 @@ const JOB_STATUSES = [
   { key: "in_progress",      label: "In Progress",      color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
   { key: "running_late",     label: "Running Late",     color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
   { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
-  { key: "completed",        label: "Completed",        color: "bg-emerald-600/30 text-emerald-300 border-emerald-600/40", activeColor: "bg-emerald-600 text-white" },
 ] as const;
 
 function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {

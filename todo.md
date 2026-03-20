@@ -1588,3 +1588,7 @@
 - [x] Show manual adjustment line in admin quality pay breakdown
 - [x] Show manual adjustment line in cleaner portal pay breakdown (visible to cleaner)
 - [x] Include manualAdjustment in finalPay calculation (cleaner portal today + week views)
+
+## UX: Remove Redundant "Completed" Status Button
+- [x] Remove "completed" from JOB_STATUSES in CleanerPortal.tsx (redundant with Mark Complete button)
+- [x] Keep "completed" badge in admin quality view (still useful to show the state was reached)
