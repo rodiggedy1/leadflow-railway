@@ -1562,3 +1562,7 @@
 ## Cleaner Portal: Photos in This Week View
 - [x] Show photo thumbnails on each job row in the This Week tab
 - [x] Click thumbnail opens lightbox (reuse same pattern as Today view)
+
+## Bug Fix: Photo Thumbnails Too Large
+- [x] Fix admin quality view: thumbnails should be small fixed-size squares (48px), not full-width
+- [x] Fix cleaner portal This Week view: same small thumbnail treatment

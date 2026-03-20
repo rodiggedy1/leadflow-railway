@@ -496,16 +496,16 @@ function WeekJobRow({
 
       {/* Photo thumbnails */}
       {photos.length > 0 && (
-        <div className={`grid gap-1.5 ${photos.length === 1 ? "grid-cols-1" : photos.length === 2 ? "grid-cols-2" : "grid-cols-3"} max-w-[200px]`}>
+        <div className="flex flex-wrap gap-1.5 mt-1">
           {photos.map((p, i) => (
             <button
               key={p.id}
               onClick={() => setLightboxIdx(i)}
-              className="relative aspect-square rounded overflow-hidden bg-slate-700 group"
+              className="relative w-10 h-10 rounded overflow-hidden bg-slate-700 group flex-shrink-0 border border-slate-600 hover:border-blue-400 transition-all"
             >
               <img src={p.photoUrl} alt={p.filename ?? `Photo ${i + 1}`} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <ImageIcon className="w-4 h-4 text-white" />
+                <ImageIcon className="w-3 h-3 text-white" />
               </div>
             </button>
           ))}
