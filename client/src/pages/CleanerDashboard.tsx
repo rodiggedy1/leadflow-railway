@@ -18,13 +18,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
-  CalendarDays, TrendingUp, RefreshCw, List, Users
+  CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -392,7 +393,7 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
 
 // ── Pay Summary Card ──────────────────────────────────────────────────────────
 
-function PaySummarySection({ date }: { date: string }) {
+function PaySummarySection({ date, onSetPassword }: { date: string; onSetPassword: (id: number, name: string) => void }) {
   const [y, m, d] = date.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   const dow = dt.getDay();
@@ -437,24 +438,45 @@ function PaySummarySection({ date }: { date: string }) {
       <CardContent>
         <div className="space-y-3">
           {stats.map((s) => (
-            <div key={s.cleanerProfileId} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border">
-              <div>
-                <p className="font-medium text-sm">{s.cleanerName}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {s.totalJobs} job{s.totalJobs !== 1 ? "s" : ""} · avg rating{" "}
-                  {s.avgRating !== null ? `${s.avgRating.toFixed(1)}★` : "N/A"} ·{" "}
-                  {Math.round((s.photoSubmissionRate ?? 0) * s.totalJobs)}/{s.totalJobs} photos
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-base text-primary">
-                  ${(s.totalFinalPay ?? 0).toFixed(2)}
-                </p>
-                {(s.totalAdjustments ?? 0) !== 0 && (
-                  <p className={`text-xs ${(s.totalAdjustments ?? 0) > 0 ? "text-emerald-600" : "text-red-500"}`}>
-                    {(s.totalAdjustments ?? 0) > 0 ? "+" : ""}${(s.totalAdjustments ?? 0).toFixed(2)} adj
+            <div key={s.cleanerProfileId} className="p-3 rounded-lg bg-muted/40 border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">{s.cleanerName}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {s.totalJobs} job{s.totalJobs !== 1 ? "s" : ""} · avg rating{" "}
+                    {s.avgRating !== null ? `${s.avgRating.toFixed(1)}★` : "N/A"} ·{" "}
+                    {Math.round((s.photoSubmissionRate ?? 0) * s.totalJobs)}/{s.totalJobs} photos
                   </p>
-                )}
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-base text-primary">
+                    ${(s.totalFinalPay ?? 0).toFixed(2)}
+                  </p>
+                  {(s.totalAdjustments ?? 0) !== 0 && (
+                    <p className={`text-xs ${(s.totalAdjustments ?? 0) > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                      {(s.totalAdjustments ?? 0) > 0 ? "+" : ""}${(s.totalAdjustments ?? 0).toFixed(2)} adj
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs gap-1"
+                  onClick={() => onSetPassword(s.cleanerProfileId, s.cleanerName)}
+                >
+                  <KeyRound className="w-3 h-3" /> Set PW
+                </Button>
+                <a
+                  href="/cleaner"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Portal
+                </a>
               </div>
             </div>
           ))}
@@ -465,12 +487,22 @@ function PaySummarySection({ date }: { date: string }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-
 type ViewMode = "by-time" | "by-cleaner";
 
 export default function CleanerDashboard() {
   const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>("by-time");
+  const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
+  const [resetPw, setResetPw] = useState("");
+
+  const resetPasswordMutation = trpc.cleaner.setPassword.useMutation({
+    onSuccess: () => {
+      toast.success(`Password set for ${resetTarget?.name}`);
+      setResetTarget(null);
+      setResetPw("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const { data: jobs, isLoading, refetch } = trpc.quality.getJobsForDate.useQuery(
     { date: selectedDate },
@@ -562,6 +594,7 @@ export default function CleanerDashboard() {
   const totalJobs = jobs?.length ?? 0;
 
   return (
+    <>
     <div className="min-h-screen bg-background">
       <AdminHeader activeTab="quality" />
 
@@ -826,8 +859,37 @@ export default function CleanerDashboard() {
         </div>
 
         {/* Weekly Pay Summary */}
-        <PaySummarySection date={selectedDate} />
+        <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); }} />
       </div>
     </div>
+
+    {/* Set Password Dialog */}
+    <Dialog open={!!resetTarget} onOpenChange={() => setResetTarget(null)}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Set Password — {resetTarget?.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            Cleaner logs in at <code className="text-xs bg-muted px-1 rounded">/cleaner</code> with their phone number and this password.
+          </p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium block">New Password</label>
+            <Input type="password" placeholder="Min 6 characters" value={resetPw} onChange={e => setResetPw(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+          <Button
+            onClick={() => resetTarget && resetPasswordMutation.mutate({ cleanerProfileId: resetTarget.id, password: resetPw })}
+            disabled={resetPasswordMutation.isPending || resetPw.length < 6}
+          >
+            {resetPasswordMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+            Save Password
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

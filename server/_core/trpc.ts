@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { getAgentFromRequest } from "./agentAuth";
+import { getCleanerFromRequest } from "./cleanerAuth";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -83,6 +84,26 @@ export const adminAgentProcedure = t.procedure.use(
       ctx: {
         ...ctx,
         agent,
+      },
+    });
+  }),
+);
+
+/**
+ * cleanerProcedure — validates the cleaner cookie session.
+ * Use this for all cleaner portal procedures.
+ */
+export const cleanerProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    const cleaner = await getCleanerFromRequest(ctx.req);
+    if (!cleaner) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Cleaner login required" });
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        cleaner,
       },
     });
   }),

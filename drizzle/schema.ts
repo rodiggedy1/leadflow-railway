@@ -800,6 +800,8 @@ export const cleanerProfiles = mysqlTable("cleaner_profiles", {
   payPercent: varchar("payPercent", { length: 10 }),
   /** Whether this cleaner is currently active */
   isActive: int("isActive").default(1).notNull(),
+  /** Bcrypt hash of the cleaner's portal password (null = no portal access yet) */
+  passwordHash: varchar("passwordHash", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

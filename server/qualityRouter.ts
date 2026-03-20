@@ -885,12 +885,21 @@ export const qualityRouter = router({
         )
         .orderBy(cleanerJobs.jobDate);
 
+      // Fetch cleaner phones for the portal access dialog
+      const profileIds = Array.from(new Set(jobs.map(j => j.cleanerProfileId).filter((id): id is number => id != null)));
+      const profileRows = profileIds.length > 0
+        ? await db.select({ id: cleanerProfiles.id, phone: cleanerProfiles.phone })
+            .from(cleanerProfiles)
+        : [];
+      const phoneByProfileId = new Map(profileRows.map(p => [p.id, p.phone]));
+
       // Group by cleaner
       const byCleanerMap = new Map<
         number,
         {
           cleanerProfileId: number;
           cleanerName: string;
+          cleanerPhone: string | null;
           jobs: typeof jobs;
         }
       >();
@@ -901,6 +910,7 @@ export const qualityRouter = router({
           byCleanerMap.set(key, {
             cleanerProfileId: key,
             cleanerName: job.cleanerName,
+            cleanerPhone: phoneByProfileId.get(key) ?? null,
             jobs: [],
           });
         }
@@ -937,6 +947,7 @@ export const qualityRouter = router({
         return {
           cleanerProfileId: c.cleanerProfileId,
           cleanerName: c.cleanerName,
+          cleanerPhone: c.cleanerPhone,
           totalJobs: c.jobs.length,
           ratedJobs: ratedJobs.length,
           avgRating: avgRating !== null ? Math.round(avgRating * 10) / 10 : null,

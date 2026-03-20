@@ -309,6 +309,13 @@
       "when": 1773988314790,
       "tag": "0043_complex_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1773989923538,
+      "tag": "0044_premium_banshee",
+      "breakpoints": true
     }
   ]
 }

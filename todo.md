@@ -1504,3 +1504,21 @@
 - [x] Fix: added QUALITY_RATING_DONE to conversationStages enum in schema.ts, ran db:push (migration 0043)
 - [x] Defensive fix: moved sendSms call BEFORE DB update in webhook handler so SMS fires even if DB update fails
 - [x] Verified end-to-end: webhook now logs "[OpenPhone] SMS sent successfully" after customer replies "5"
+
+## Cleaner Portal (/cleaner)
+- [x] Add passwordHash column to cleaner_profiles schema, run db:push
+- [x] Add cleanerAuth.ts: signCleanerSession / verifyCleanerSession (JWT cookie, CLEANER_COOKIE_NAME)
+- [x] Add cleanerProcedure middleware to trpc.ts
+- [x] Add cleaner router: login (phone+password), logout, me, myJobs (by date range), uploadPhoto, markComplete
+- [x] Add admin procedures: setCleanerPassword, listCleaners (for admin to manage portal access)
+- [x] Build CleanerPortal page (/cleaner): login form + authenticated job view
+- [x] Job list: date picker, today default, date range browsing
+- [x] Job cards: address, service type, time, customer name, status
+- [x] Pay breakdown per job: base pay, rating adjustment, streak bonus, final pay
+- [x] Customer rating display on job card (stars)
+- [x] Photo upload per job (camera/file, S3 upload)
+- [x] Mark job complete button
+- [x] Earnings summary: total for selected day, week total
+- [x] Admin: add Set Password button on cleaner profile in quality dashboard
+- [x] Wire /cleaner route in App.tsx
+- [ ] Write vitest tests for cleaner auth and job query procedures (pending)
