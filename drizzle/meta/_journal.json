@@ -316,6 +316,13 @@
       "when": 1773989923538,
       "tag": "0044_premium_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1773992823154,
+      "tag": "0045_known_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

@@ -1542,3 +1542,10 @@
 - [x] Streak: +$50 if 10 clean jobs no issues
 - [x] Show each line with label, amount (green/red), and reason
 - [x] Show final total prominently at bottom
+
+## Pay Adjustments: DB as Source of Truth + Weekly View
+- [x] Audit admin quality dashboard: how/when ratingAdjustment is written to DB
+- [x] Add photoAdjustment column to cleaner_jobs schema, run db:push (migration 0045)
+- [x] Admin writes ratingAdjustment (+10/-20) and photoAdjustment (+5/-10) to DB when rating webhook fires; recalculates when photo uploaded
+- [x] Cleaner portal reads ratingAdjustment and photoAdjustment from DB; falls back to client-side preview before rating
+- [x] Add This Week tab to cleaner portal: Mon-Sun jobs, daily subtotals, weekly grand total

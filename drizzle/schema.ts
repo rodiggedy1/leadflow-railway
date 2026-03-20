@@ -858,9 +858,11 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   photoSubmitted: int("photoSubmitted").default(0).notNull(),
   /** Rating adjustment applied (+10 for 5-star, -20 for ≤3 or complaint) */
   ratingAdjustment: varchar("ratingAdjustment", { length: 20 }),
+  /** Photo adjustment: +5 if photo submitted, -10 if not (set when pay is finalized) */
+  photoAdjustment: varchar("photoAdjustment", { length: 20 }),
   /** Streak bonus applied this job (0 or positive amount) */
   streakBonus: varchar("streakBonus", { length: 20 }),
-  /** Final pay = basePay + ratingAdjustment + streakBonus */
+  /** Final pay = basePay + ratingAdjustment + photoAdjustment + streakBonus */
   finalPay: varchar("finalPay", { length: 20 }),
   /** Whether this job has been flagged for admin review */
   flagged: int("flagged").default(0).notNull(),

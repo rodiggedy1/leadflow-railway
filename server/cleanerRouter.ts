@@ -219,6 +219,27 @@ export const cleanerRouter = router({
         .set({ photoSubmitted: 1 })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
+      // If the rating is already set, recalculate pay to apply the photo bonus
+      const job = jobRows[0]!;
+      if (job.customerRating !== null && job.basePay && job.payPercent) {
+        const { calculatePayAdjustments } = await import("./qualityRouter");
+        const adj = calculatePayAdjustments({
+          jobRevenue: parseFloat(job.jobRevenue ?? "0"),
+          payPercent: parseFloat(job.payPercent ?? "0"),
+          customerRating: job.customerRating,
+          missedSomething: job.missedSomething === 1,
+          currentStreakAfterJob: 0, // streak already applied at rating time; don't re-apply
+          photoSubmitted: true,
+        });
+        await db
+          .update(cleanerJobs)
+          .set({
+            photoAdjustment: String(adj.photoAdjustment),
+            finalPay: String(adj.finalPay),
+          })
+          .where(eq(cleanerJobs.id, input.cleanerJobId));
+      }
+
       return { success: true, url };
     }),
 

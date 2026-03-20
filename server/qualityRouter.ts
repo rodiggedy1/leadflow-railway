@@ -41,6 +41,8 @@ import { logActivity } from "./activityLogger";
 /** Pay adjustments */
 export const PAY_FIVE_STAR_BONUS = 10;      // +$10 for 5-star rating
 export const PAY_LOW_RATING_DEDUCTION = 20; // -$20 for ≤3 star or complaint
+export const PAY_PHOTO_BONUS = 5;           // +$5 for submitting a completion photo
+export const PAY_NO_PHOTO_PENALTY = 10;     // -$10 if no photo submitted
 export const PAY_STREAK_BONUS = 50;         // +$50 for completing a 10-job streak
 export const STREAK_TARGET = 10;            // Jobs needed to earn streak bonus
 
@@ -103,9 +105,11 @@ export function calculatePayAdjustments(params: {
   customerRating: number | null;
   missedSomething: boolean | null;
   currentStreakAfterJob: number;
+  photoSubmitted: boolean;
 }): {
   basePay: number;
   ratingAdjustment: number;
+  photoAdjustment: number;
   streakBonus: number;
   finalPay: number;
 } {
@@ -121,6 +125,9 @@ export function calculatePayAdjustments(params: {
     ratingAdjustment = -PAY_LOW_RATING_DEDUCTION;
   }
 
+  // Photo bonus/penalty — always applied once rating is received
+  const photoAdjustment = params.photoSubmitted ? PAY_PHOTO_BONUS : -PAY_NO_PHOTO_PENALTY;
+
   // Streak bonus fires when streak hits exactly the target (10, 20, 30, ...)
   const streakBonus =
     params.currentStreakAfterJob > 0 &&
@@ -128,8 +135,8 @@ export function calculatePayAdjustments(params: {
       ? PAY_STREAK_BONUS
       : 0;
 
-  const finalPay = Math.round((basePay + ratingAdjustment + streakBonus) * 100) / 100;
-  return { basePay, ratingAdjustment, streakBonus, finalPay };
+  const finalPay = Math.round((basePay + ratingAdjustment + photoAdjustment + streakBonus) * 100) / 100;
+  return { basePay, ratingAdjustment, photoAdjustment, streakBonus, finalPay };
 }
 
 /**
@@ -441,11 +448,13 @@ export async function handleRatingReply(
                 customerRating: cj.customerRating,
                 missedSomething: missed,
                 currentStreakAfterJob: newStreak,
+                photoSubmitted: cj.photoSubmitted === 1,
               });
               await db
                 .update(cleanerJobs)
                 .set({
                   ratingAdjustment: String(adj.ratingAdjustment),
+                  photoAdjustment: String(adj.photoAdjustment),
                   streakBonus: String(adj.streakBonus),
                   finalPay: String(adj.finalPay),
                 })

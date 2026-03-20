@@ -4,7 +4,7 @@
  * Individual cleaner portal. Login with phone + password.
  * Shows today's jobs (with date browsing), pay breakdown, ratings, photo upload, mark complete.
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -145,6 +145,7 @@ type Job = {
   jobRevenue: string | null;
   basePay: string | null;
   ratingAdjustment: string | null;
+  photoAdjustment: string | null;
   streakBonus: string | null;
   finalPay: string | null;
   customerRating: number | null;
@@ -209,8 +210,18 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
   const isComplete = job.bookingStatus === "completed";
   const basePay = parseFloat(job.basePay ?? "0") || 0;
   const ratingAdj = parseFloat(job.ratingAdjustment ?? "0") || 0;
+  // photoAdjustment is written to DB by the server when rating is finalized or photo is uploaded
+  // If not yet in DB (job not yet rated), calculate client-side for preview
+  const hasPhoto = job.photoSubmitted === 1 || (job.photos?.length ?? 0) > 0;
+  const photoAdj = job.photoAdjustment != null
+    ? parseFloat(job.photoAdjustment)
+    : (hasPhoto ? 5 : -10);
   const streakBonus = parseFloat(job.streakBonus ?? "0") || 0;
-  const finalPay = parseFloat(job.finalPay ?? "0") || (basePay + ratingAdj + streakBonus);
+  // finalPay from DB is authoritative once rating is set; otherwise preview client-side
+  const finalPay = job.finalPay != null
+    ? parseFloat(job.finalPay)
+    : (basePay + ratingAdj + photoAdj + streakBonus);
+  const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   return (
     <Card className={`bg-slate-800 border-slate-700 overflow-hidden transition-all ${isComplete ? "opacity-80" : ""}`}>
@@ -325,25 +336,19 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
           })()}
 
           {/* Photo bonus/penalty */}
-          {(() => {
-            const hasPhoto = job.photoSubmitted === 1 || job.photos.length > 0;
-            const photoAdj = hasPhoto ? 5 : -10;
-            return (
-              <div className="flex justify-between items-start py-2 border-b border-slate-800">
-                <div>
-                  <p className={`text-sm font-medium ${hasPhoto ? "text-emerald-300" : "text-red-300"}`}>
-                    {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
-                  </p>
-                  <p className="text-slate-500 text-xs mt-0.5">
-                    {hasPhoto ? "Completion photo uploaded" : "Upload a photo to earn +$5 and avoid -$10"}
-                  </p>
-                </div>
-                <span className={`font-semibold text-sm ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>
-                  {hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}
-                </span>
-              </div>
-            );
-          })()}
+          <div className="flex justify-between items-start py-2 border-b border-slate-800">
+            <div>
+              <p className={`text-sm font-medium ${hasPhoto ? "text-emerald-300" : "text-red-300"}`}>
+                {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
+              </p>
+              <p className="text-slate-500 text-xs mt-0.5">
+                {hasPhoto ? "Completion photo uploaded" : "Upload a photo to earn +$5 and avoid -$10"}
+              </p>
+            </div>
+            <span className={`font-semibold text-sm ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>
+              {hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}
+            </span>
+          </div>
 
           {/* Streak bonus */}
           {streakBonus > 0 ? (
@@ -365,19 +370,17 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
           )}
 
           {/* Final total */}
-          {(() => {
-            const hasPhoto = job.photoSubmitted === 1 || job.photos.length > 0;
-            const photoAdj = hasPhoto ? 5 : -10;
-            const total = basePay + ratingAdj + photoAdj + streakBonus;
-            return (
-              <div className="flex justify-between items-center pt-3 mt-1">
-                <span className="text-white font-bold text-base">Total Pay</span>
-                <span className={`font-bold text-xl ${total >= basePay ? "text-emerald-400" : "text-red-400"}`}>
-                  {formatCurrency(total.toFixed(2))}
-                </span>
-              </div>
-            );
-          })()}
+          <div className="flex justify-between items-center pt-3 mt-1">
+            <div>
+              <span className="text-white font-bold text-base">Total Pay</span>
+              {!isPayFinalized && (
+                <p className="text-slate-500 text-xs mt-0.5">Preview — final once rated</p>
+              )}
+            </div>
+            <span className={`font-bold text-xl ${finalPay >= basePay ? "text-emerald-400" : "text-red-400"}`}>
+              {formatCurrency(finalPay.toFixed(2))}
+            </span>
+          </div>
         </div>
 
         {/* Rating */}
@@ -458,6 +461,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
 
 export default function CleanerPortal() {
   const [date, setDate] = useState(getTodayET);
+  const [activeTab, setActiveTab] = useState<"today" | "week">("today");
   const utils = trpc.useUtils();
 
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false });
@@ -491,6 +495,17 @@ export default function CleanerPortal() {
     utils.cleaner.myJobsRange.invalidate();
   };
 
+  // weekDays must be computed before any early returns (hooks rule)
+  const weekJobs0 = weekQuery.data ?? [];
+  const weekDays = useMemo(() => {
+    const days: { date: string; jobs: typeof weekJobs0 }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      days.push({ date: d, jobs: weekJobs0.filter(j => j.jobDate === d) });
+    }
+    return days;
+  }, [weekJobs0, weekStart]);
+
   // Not yet loaded
   if (meQuery.isLoading) {
     return (
@@ -507,7 +522,7 @@ export default function CleanerPortal() {
 
   const cleaner = meQuery.data;
   const jobs = (jobsQuery.data ?? []) as Job[];
-  const weekJobs = weekQuery.data ?? [];
+  const weekJobs = weekJobs0;
 
   // Earnings summary
   const todayEarnings = jobs.reduce((sum, j) => {
@@ -576,6 +591,112 @@ export default function CleanerPortal() {
           </div>
         )}
 
+        {/* Tab switcher */}
+        <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700">
+          <button
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "today" ? "bg-slate-700 text-white" : "text-slate-400 hover:text-slate-200"
+            }`}
+            onClick={() => setActiveTab("today")}
+          >
+            Today
+          </button>
+          <button
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "week" ? "bg-slate-700 text-white" : "text-slate-400 hover:text-slate-200"
+            }`}
+            onClick={() => setActiveTab("week")}
+          >
+            This Week
+          </button>
+        </div>
+
+        {activeTab === "week" ? (
+          /* ── This Week View ── */
+          <div className="space-y-4">
+            {/* Weekly grand total */}
+            <div className="bg-gradient-to-r from-blue-900/40 to-slate-800 rounded-xl p-4 border border-blue-700/30">
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-1">Week Total</p>
+              <p className="text-blue-400 text-3xl font-bold">${weekEarnings.toFixed(2)}</p>
+              <p className="text-slate-500 text-xs mt-1">
+                {formatDate(weekStart)} – {formatDate(weekEnd)}
+              </p>
+            </div>
+
+            {/* Daily rows */}
+            {weekDays.map(({ date: d, jobs: dayJobs }) => {
+              const dayTotal = dayJobs.reduce((sum, j) => {
+                const fp = parseFloat(j.finalPay ?? "0") || (parseFloat(j.basePay ?? "0") + parseFloat(j.ratingAdjustment ?? "0") + parseFloat(j.streakBonus ?? "0"));
+                return sum + (isNaN(fp) ? 0 : fp);
+              }, 0);
+              const dayName = new Date(...(d.split("-").map((v, i) => i === 1 ? Number(v) - 1 : Number(v)) as [number, number, number])).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+              const isCurrentDay = d === getTodayET();
+              return (
+                <div
+                  key={d}
+                  className={`rounded-xl border ${
+                    isCurrentDay ? "bg-slate-800 border-emerald-700/40" : "bg-slate-800/60 border-slate-700/50"
+                  }`}
+                >
+                  {/* Day header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${isCurrentDay ? "text-emerald-300" : "text-slate-200"}`}>
+                        {dayName}
+                      </span>
+                      {isCurrentDay && (
+                        <span className="text-xs bg-emerald-900/40 text-emerald-400 border border-emerald-700/30 px-1.5 py-0.5 rounded-full">Today</span>
+                      )}
+                    </div>
+                    <span className={`font-bold text-sm ${dayTotal > 0 ? "text-emerald-400" : "text-slate-500"}`}>
+                      {dayJobs.length > 0 ? `$${dayTotal.toFixed(2)}` : "—"}
+                    </span>
+                  </div>
+
+                  {/* Job rows */}
+                  {dayJobs.length === 0 ? (
+                    <p className="text-slate-600 text-xs px-4 py-3">No jobs</p>
+                  ) : (
+                    <div className="divide-y divide-slate-700/30">
+                      {dayJobs.map(j => {
+                        const fp = parseFloat(j.finalPay ?? "0") || (parseFloat(j.basePay ?? "0") + parseFloat(j.ratingAdjustment ?? "0") + parseFloat(j.streakBonus ?? "0"));
+                        const isFinalized = j.ratingAdjustment != null;
+                        return (
+                          <div key={j.id} className="flex items-center justify-between px-4 py-2.5">
+                            <div>
+                              <p className="text-slate-200 text-sm">{j.customerName ?? "Customer"}</p>
+                              <p className="text-slate-500 text-xs">
+                                {j.serviceDateTime ? formatTime(j.serviceDateTime) : ""}
+                                {j.serviceType ? ` · ${j.serviceType}` : ""}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-sm font-semibold ${fp >= parseFloat(j.basePay ?? "0") ? "text-emerald-400" : "text-red-400"}`}>
+                                ${fp.toFixed(2)}
+                              </p>
+                              {!isFinalized && (
+                                <p className="text-slate-600 text-xs">Preview</p>
+                              )}
+                              {j.customerRating && (
+                                <div className="flex items-center gap-0.5 justify-end mt-0.5">
+                                  {[1,2,3,4,5].map(i => (
+                                    <Star key={i} className={`w-3 h-3 ${i <= (j.customerRating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-600"}`} />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ── Today View ── */
+          <>
         {/* Date navigation */}
         <div className="flex items-center gap-3">
           <Button
@@ -635,6 +756,8 @@ export default function CleanerPortal() {
               />
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

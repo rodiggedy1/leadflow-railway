@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_jobs` ADD `photoAdjustment` varchar(20);
