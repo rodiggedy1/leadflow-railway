@@ -418,48 +418,36 @@ export const appRouter = router({
       // Use COUNT(DISTINCT sessionKey) to deduplicate any rows that slipped in before
       // the UNIQUE constraint was added to the sessionKey column.
       // Bot filter: only count sessions where timeOnPage >= 8s, or NULL (rows before this column was added).
+      // NOTE: Raw SQL with explicit table.column names to avoid TiDB only_full_group_by error
+      // (Drizzle interpolates column refs differently in SELECT vs GROUP BY)
       const BOT_FILTER_SECONDS = 8;
-      const visitorRows = await db
-        .select({
-          day: sql<string>`LEFT(${pageViews.createdAt}, 10)`,
-          count: sql<number>`count(distinct ${pageViews.sessionKey})`,
-        })
-        .from(pageViews)
-        .where(
-          and(
-            gte(pageViews.createdAt, sevenDaysAgo),
-            or(
-              isNull(pageViews.timeOnPage),
-              gte(pageViews.timeOnPage, BOT_FILTER_SECONDS),
-            ),
-          )
-        )
-        .groupBy(sql`LEFT(${pageViews.createdAt}, 10)`);
+      const visitorRaw = await db.execute(
+        sql`SELECT LEFT(page_views.createdAt, 10) as day, COUNT(DISTINCT page_views.sessionKey) as count
+            FROM page_views
+            WHERE page_views.createdAt >= ${sevenDaysAgo}
+              AND (page_views.timeOnPage IS NULL OR page_views.timeOnPage >= ${BOT_FILTER_SECONDS})
+            GROUP BY LEFT(page_views.createdAt, 10)`
+      );
+      const visitorRows = ((visitorRaw as unknown as Array<unknown>)[0] as Array<{day: string; count: number}>);
 
       // Daily lead counts
-      const leadRows = await db
-        .select({
-          day: sql<string>`LEFT(${conversationSessions.createdAt}, 10)`,
-          count: sql<number>`count(*)`,
-        })
-        .from(conversationSessions)
-        .where(gte(conversationSessions.createdAt, sevenDaysAgo))
-        .groupBy(sql`LEFT(${conversationSessions.createdAt}, 10)`);
+      const leadRaw = await db.execute(
+        sql`SELECT LEFT(conversation_sessions.createdAt, 10) as day, COUNT(*) as count
+            FROM conversation_sessions
+            WHERE conversation_sessions.createdAt >= ${sevenDaysAgo}
+            GROUP BY LEFT(conversation_sessions.createdAt, 10)`
+      );
+      const leadRows = ((leadRaw as unknown as Array<unknown>)[0] as Array<{day: string; count: number}>);
 
       // Daily booked counts
-      const bookedRows = await db
-        .select({
-          day: sql<string>`LEFT(${conversationSessions.bookedAt}, 10)`,
-          count: sql<number>`count(*)`,
-        })
-        .from(conversationSessions)
-        .where(
-          and(
-            gte(conversationSessions.bookedAt, sevenDaysAgo),
-            eq(conversationSessions.isBooked, 1)
-          )
-        )
-        .groupBy(sql`LEFT(${conversationSessions.bookedAt}, 10)`);
+      const bookedRaw = await db.execute(
+        sql`SELECT LEFT(conversation_sessions.bookedAt, 10) as day, COUNT(*) as count
+            FROM conversation_sessions
+            WHERE conversation_sessions.bookedAt >= ${sevenDaysAgo}
+              AND conversation_sessions.isBooked = 1
+            GROUP BY LEFT(conversation_sessions.bookedAt, 10)`
+      );
+      const bookedRows = ((bookedRaw as unknown as Array<unknown>)[0] as Array<{day: string; count: number}>);
 
       // Build lookup maps
       const visitorMap = new Map(visitorRows.map(r => [r.day, Number(r.count)]));

@@ -1422,3 +1422,4 @@
 ## Agent Workspace Bug Fixes
 - [x] Fix Claim button not visible/accessible to agents
 - [x] Fix agents cannot change a Booked lead's stage to another stage
+- [x] Fix TiDB only_full_group_by error: LEFT() in SELECT vs GROUP BY uses different column refs when Drizzle interpolates — fixed by using db.execute(sql\`...\`) with explicit table.column names in dailyTrend (routers.ts) and voice.stats (voiceRouter.ts)

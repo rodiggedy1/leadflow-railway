@@ -135,16 +135,17 @@ export const voiceRouter = router({
       const conversionRate = totalCalls > 0 ? Math.round((bookedCount / totalCalls) * 100) : 0;
 
       // 7-day daily trend
+      // Use raw SQL with explicit table.column to avoid TiDB only_full_group_by error
+      // (Drizzle interpolates column refs differently in SELECT vs GROUP BY)
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const dailyRows = await db
-        .select({
-          date: sql<string>`LEFT(${voiceCalls.createdAt}, 10)`,
-          count: sql<number>`COUNT(*)`,
-        })
-        .from(voiceCalls)
-        .where(gte(voiceCalls.createdAt, sevenDaysAgo))
-        .groupBy(sql`LEFT(${voiceCalls.createdAt}, 10)`)
-        .orderBy(sql`LEFT(${voiceCalls.createdAt}, 10)`);
+      const dailyRawResult = await db.execute(
+        sql`SELECT LEFT(voice_calls.createdAt, 10) as date, COUNT(*) as count
+            FROM voice_calls
+            WHERE voice_calls.createdAt >= ${sevenDaysAgo}
+            GROUP BY LEFT(voice_calls.createdAt, 10)
+            ORDER BY LEFT(voice_calls.createdAt, 10)`
+      );
+      const dailyRows = (dailyRawResult as unknown as Array<Array<{date: string; count: number}>>)[0] as Array<{date: string; count: number}>;
 
       // Fill in missing days with 0
       const dailyMap = new Map<string, number>();
