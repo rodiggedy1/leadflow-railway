@@ -10,6 +10,7 @@ import { registerCronRoutes } from "../cronSync";
 import { registerFollowUpCronRoutes } from "../followUpCron";
 import { registerVapiWebhookRoute } from "../vapiWebhook";
 import { bootstrapVapiAssistant } from "../vapiService";
+import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -108,6 +109,8 @@ async function startServer() {
     // VAPI_WEBHOOK_URL env var can override for local dev/testing.
     const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
     bootstrapVapiAssistant(webhookUrl).catch(console.error);
+    // Start internal cron scheduler (nightly sync, follow-ups, always-on)
+    startInternalCron();
   });
 }
 

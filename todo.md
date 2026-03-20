@@ -1673,3 +1673,7 @@
 - [ ] Redesign admin nav: 7 tabs with 3 dropdowns (Voice, Staff, Campaigns), rename Reviews→Happiness, Quality→Jobs, remove Quality header pill
 - [x] Add pending callback count badge on Voice dropdown tab in AdminHeader
 - [x] Fix Staff/Campaigns dropdown clipped by overflow-x-auto on nav tab row in AdminHeader
+
+- [x] Re-register all 4 cron jobs with Manus scheduler (nightly-sync, always-on-send, silence-followup, scheduled-followup)
+- [x] Shift nightly-sync from 10 PM ET to noon ET so Launch27 has time to mark jobs complete
+- [x] Ensure always-on-send remains gated - no campaign messages sent without manual approval
