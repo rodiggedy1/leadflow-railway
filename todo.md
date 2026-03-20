@@ -1496,3 +1496,11 @@
 - [x] Requeue now clears customerRating, missedSomething, flagged on the linked cleanerJob
 - [x] Requeue now resets the conversation session back to QUALITY_RATING_REQUESTED (removes old reply from history)
 - [x] Thank-you SMS: webhook code is correct - published site was running old version, new checkpoint forces fresh publish
+
+## CRITICAL BUG FIX: Thank-you SMS Root Cause Found & Fixed
+- [x] Root cause identified: QUALITY_RATING_DONE was missing from conversationStages enum in schema.ts
+- [x] When webhook tried to set stage='QUALITY_RATING_DONE', MySQL threw "Data truncated" error
+- [x] The DB update error was caught by outer try/catch, preventing sendSms from ever executing
+- [x] Fix: added QUALITY_RATING_DONE to conversationStages enum in schema.ts, ran db:push (migration 0043)
+- [x] Defensive fix: moved sendSms call BEFORE DB update in webhook handler so SMS fires even if DB update fails
+- [x] Verified end-to-end: webhook now logs "[OpenPhone] SMS sent successfully" after customer replies "5"

@@ -302,6 +302,13 @@
       "when": 1773983083565,
       "tag": "0042_dry_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1773988314790,
+      "tag": "0043_complex_stone_men",
+      "breakpoints": true
     }
   ]
 }

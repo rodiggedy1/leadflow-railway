@@ -218,6 +218,11 @@ export function registerWebhookRoutes(app: Express) {
       if (session.stage === "QUALITY_RATING_REQUESTED" || session.stage === "QUALITY_MISSED_FOLLOWUP") {
         const ratingResult = await handleRatingReply(session.id, fromPhone, inboundText, session.stage);
         console.log(`[Webhook] Quality rating stage: ${session.stage} → ${ratingResult.newStage}. Reply: "${ratingResult.responseText}"`);
+        // Send SMS FIRST — before DB update — so a DB error never blocks the thank-you message
+        const ratingSmsResult = await sendSms({ to: fromPhone, content: ratingResult.responseText });
+        if (!ratingSmsResult.success) {
+          console.error(`[Webhook] Failed to send rating reply to ${fromPhone}:`, ratingSmsResult.error);
+        }
         history.push({ role: "assistant", content: ratingResult.responseText, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
         await db
@@ -227,10 +232,6 @@ export function registerWebhookRoutes(app: Express) {
             messageHistory: JSON.stringify(history),
           })
           .where(eq(conversationSessions.id, session.id));
-        const ratingSmsResult = await sendSms({ to: fromPhone, content: ratingResult.responseText });
-        if (!ratingSmsResult.success) {
-          console.error(`[Webhook] Failed to send rating reply to ${fromPhone}:`, ratingSmsResult.error);
-        }
         return;
       }
       // ── REVIEW_REQUESTED / REVIEW_DONE: Post-cleaning review flow ───────────────

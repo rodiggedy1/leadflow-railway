@@ -97,6 +97,10 @@ export const conversationStages = [
    */
   "QUALITY_RATING_REQUESTED",
   "QUALITY_MISSED_FOLLOWUP",
+  /**
+   * QUALITY_RATING_DONE → Rating flow complete (thank-you sent, conversation closed).
+   */
+  "QUALITY_RATING_DONE",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
