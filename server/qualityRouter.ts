@@ -557,15 +557,11 @@ export const qualityRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const today = getTodayET();
+    // Return ALL of today's rows (pending, approved, sent, skipped) so Re-queue is always reachable
     return db
       .select()
       .from(ratingSmsPending)
-      .where(
-        and(
-          eq(ratingSmsPending.status, "pending"),
-          eq(ratingSmsPending.jobDate, today)
-        )
-      )
+      .where(eq(ratingSmsPending.jobDate, today))
       .orderBy(ratingSmsPending.createdAt);
   }),
 

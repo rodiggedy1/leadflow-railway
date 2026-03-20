@@ -1,0 +1,22 @@
+{
+  "query": "\nSELECT id, stage, updatedAt, LEFT(messageHistory, 600) as history\nFROM conversation_sessions \nWHERE leadPhone = '+13029816191'\nORDER BY id DESC LIMIT 3;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT id, stage, updatedAt, LEFT(messageHistory, 600) as history\nFROM conversation_sessions \nWHERE leadPhone = '+13029816191'\nORDER BY id DESC LIMIT 3;\n",
+  "rows": [
+    {
+      "id": "990003",
+      "stage": "QUALITY_RATING_REQUESTED",
+      "updatedAt": "2026-03-20 06:10:19",
+      "history": "[{\"role\":\"assistant\",\"content\":\"Hi Jane! 🏠 How was your cleaning today? Please rate us 1–5 ⭐ (just reply with a number). Your feedback helps us improve!\",\"ts\":1773987019573}]"
+    },
+    {
+      "id": "990002",
+      "stage": "QUALITY_RATING_REQUESTED",
+      "updatedAt": "2026-03-20 06:07:38",
+      "history": "[{\"role\":\"assistant\",\"content\":\"Hi Jane! 🏠 How was your cleaning today? Please rate us 1–5 ⭐ (just reply with a number). Your feedback helps us improve!\",\"ts\":1773986186727}]"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstage\tupdatedAt\thistory\n990003\tQUALITY_RATING_REQUESTED\t2026-03-20 06:10:19\t[{\"role\":\"assistant\",\"content\":\"Hi Jane! 🏠 How was your cleaning today? Please rate us 1–5 ⭐ (just reply with a number). Your feedback helps us improve!\",\"ts\":1773987019573}]\n990002\tQUALITY_RATING_REQUESTED\t2026-03-20 06:07:38\t[{\"role\":\"assistant\",\"content\":\"Hi Jane! 🏠 How was your cleaning today? Please rate us 1–5 ⭐ (just reply with a number). Your feedback helps us improve!\",\"ts\":1773986186727}]\n",
+  "stderr": "",
+  "execution_time_ms": 401
+}

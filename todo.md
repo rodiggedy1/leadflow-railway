@@ -1487,4 +1487,7 @@
 - [x] Fix complaint notification to include customer name, address, service date, rating, and cleaner name
 
 ## Bug Fix: Thank-you SMS Not Sent After Customer Rating Reply
-- [ ] Trace working webhook->sendSms path and fix quality reply to use same pattern
+- [x] Root cause: listPendingRatingSms only returned status=pending rows - sent items disappeared from Review dialog
+- [x] Fix: listPendingRatingSms now returns ALL of today's rows (pending/approved/sent/skipped)
+- [x] Fix: Review button + banner now always visible when any items exist today (not just when pending/approved)
+- [x] Fix: Re-queue button always reachable after Send Now fires

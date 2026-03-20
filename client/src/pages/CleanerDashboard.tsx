@@ -629,21 +629,24 @@ export default function CleanerDashboard() {
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
-        {/* Rating SMS Approval Banner — shown when pending OR approved-but-unsent */}
-        {pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) && (
-          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+        {/* Rating SMS Queue — always shown when there are any items today (pending, approved, sent, skipped) */}
+        {pendingList && pendingList.length > 0 && (
+          <Card className={`border-amber-200 ${pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) ? 'bg-amber-50 dark:bg-amber-950/20' : 'bg-muted/30'}`}>
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                  <AlertTriangle className={`w-5 h-5 shrink-0 ${pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) ? 'text-amber-500' : 'text-muted-foreground'}`} />
                   <div>
                     <p className="font-medium text-sm">
-                      {pendingSms.pending > 0 && (
+                      {pendingSms && pendingSms.pending > 0 && (
                         <span>{pendingSms.pending} rating SMS{pendingSms.pending !== 1 ? "es" : ""} pending approval</span>
                       )}
-                      {pendingSms.pending > 0 && pendingSms.approved > 0 && " · "}
-                      {pendingSms.approved > 0 && (
+                      {pendingSms && pendingSms.pending > 0 && pendingSms.approved > 0 && " · "}
+                      {pendingSms && pendingSms.approved > 0 && (
                         <span className="text-emerald-700">{pendingSms.approved} approved, ready to send</span>
+                      )}
+                      {pendingSms && pendingSms.pending === 0 && pendingSms.approved === 0 && (
+                        <span className="text-muted-foreground">Rating SMS sent today — re-queue to resend</span>
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -708,7 +711,7 @@ export default function CleanerDashboard() {
                       </div>
                     </DialogContent>
                   </Dialog>
-                  {pendingSms.pending > 0 && (
+                  {(pendingSms?.pending ?? 0) > 0 && (
                     <Button
                       size="sm"
                       className="bg-amber-500 hover:bg-amber-600 text-white"
@@ -718,7 +721,7 @@ export default function CleanerDashboard() {
                       {approveAll.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Approve All"}
                     </Button>
                   )}
-                  {pendingSms.approved > 0 && (
+                  {(pendingSms?.approved ?? 0) > 0 && (
                     <Button
                       size="sm"
                       className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
@@ -726,7 +729,7 @@ export default function CleanerDashboard() {
                       disabled={sendNow.isPending}
                     >
                       {sendNow.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      {sendNow.isPending ? "Sending…" : `Send Now (${pendingSms.approved})`}
+                      {sendNow.isPending ? "Sending…" : `Send Now (${pendingSms?.approved ?? 0})`}
                     </Button>
                   )}
                 </div>
