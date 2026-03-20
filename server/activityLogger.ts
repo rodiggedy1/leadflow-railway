@@ -17,6 +17,7 @@ export type ActivityEventType =
   | "always_on_batch"
   | "nightly_sync"
   | "review_send"
+  | "rating_sms_send"
   | "booking"
   | "new_lead";
 

@@ -22,6 +22,7 @@ import { alwaysOnRouter } from "./alwaysOnRouter";
 import { syncHealthRouter } from "./syncHealthRouter";
 import { activityRouter } from "./activityRouter";
 import { voiceRouter } from "./voiceRouter";
+import { qualityRouter } from "./qualityRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -1769,6 +1770,7 @@ export const appRouter = router({
   syncHealth: syncHealthRouter,
   activity: activityRouter,
   voice: voiceRouter,
+  quality: qualityRouter,
 
   simulator: router({
     chat: publicProcedure

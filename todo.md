@@ -1431,3 +1431,18 @@
 - [x] Pipeline UI: Bark badge (green) + Q&A summary on lead cards
 - [x] Pipeline filter: add "bark" to source filter dropdown
 - [x] Tests: 16 bark webhook handler unit tests (all passing)
+
+## Cleaner Quality Management System
+- [x] Schema: cleaner_profiles, cleaner_jobs, job_photos, rating_sms_pending, cleaner_streaks tables
+- [x] Replace completed-job SMS flow with new rating SMS queue (no duplicate)
+- [x] Cron: queue rating SMS for each completed job (7pm EST same day), status=pending
+- [x] Admin: Rating SMS approval queue UI (review + approve/skip before 7pm send)
+- [x] Cron: at 7pm EST send all approved pending rating SMS via OpenPhone
+- [x] Inbound handler: parse 1-5 rating reply, store in cleanerJobs, send follow-up for 1-3
+- [x] Inbound handler: parse YES/NO "was anything missed?" reply, store missedSomething
+- [x] Cleaner job dashboard (/admin/quality): daily job list from Launch27 (time, address, service, revenue)
+- [x] Cleaner job dashboard: show customer rating per job (once received)
+- [x] Cleaner job dashboard: photo upload per job (completion photo → S3)
+- [x] Pay calculation: base pay = revenue × cleaner% + $10 for 5-star + -$20 for ≤3-star or complaint + $50 streak bonus at 10 consecutive clean jobs
+- [x] Admin quality view: per-cleaner stats, flagged jobs, weekly pay summary, streak leaderboard
+- [x] Tests: 21 pay calculation, rating reply parsing, and streak logic tests (all passing)

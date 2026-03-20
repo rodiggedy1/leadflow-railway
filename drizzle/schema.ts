@@ -770,3 +770,148 @@ export const callbackTasks = mysqlTable("callback_tasks", {
 });
 export type CallbackTask = typeof callbackTasks.$inferSelect;
 export type InsertCallbackTask = typeof callbackTasks.$inferInsert;
+
+// ── Cleaner Quality Management ────────────────────────────────────────────────
+
+/**
+ * cleanerProfiles — one row per cleaner.
+ * Populated from Launch27 staff data or manually by admin.
+ * Stores the cleaner's pay percentage used for base pay calculation.
+ */
+export const cleanerProfiles = mysqlTable("cleaner_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Cleaner's full name as it appears in Launch27 */
+  name: varchar("name", { length: 255 }).notNull(),
+  /** E.164 phone number for the cleaner (used for dashboard login later) */
+  phone: varchar("phone", { length: 20 }),
+  /** Email address */
+  email: varchar("email", { length: 320 }),
+  /** Pay percentage of job revenue (e.g. 0.45 = 45%) */
+  payPercent: varchar("payPercent", { length: 10 }),
+  /** Whether this cleaner is currently active */
+  isActive: int("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CleanerProfile = typeof cleanerProfiles.$inferSelect;
+export type InsertCleanerProfile = typeof cleanerProfiles.$inferInsert;
+
+/**
+ * cleanerJobs — one row per cleaner assignment to a completed job.
+ * Links a completedJob to a cleanerProfile and stores quality metrics.
+ */
+export const cleanerJobs = mysqlTable("cleaner_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to completedJobs.id */
+  completedJobId: int("completedJobId").notNull(),
+  /** Link to cleanerProfiles.id */
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  /** Cleaner name (denormalized for display) */
+  cleanerName: varchar("cleanerName", { length: 255 }).notNull(),
+  /** Job date (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }).notNull(),
+  /** Total job revenue from Launch27 */
+  jobRevenue: varchar("jobRevenue", { length: 20 }),
+  /** Cleaner pay percentage at time of job */
+  payPercent: varchar("payPercent", { length: 10 }),
+  /** Calculated base pay = jobRevenue * payPercent */
+  basePay: varchar("basePay", { length: 20 }),
+  /** Customer star rating (1–5), null until received */
+  customerRating: int("customerRating"),
+  /** Whether customer said something was missed (1=yes, 0=no, null=not asked) */
+  missedSomething: int("missedSomething"),
+  /** Whether the cleaner submitted a completion photo */
+  photoSubmitted: int("photoSubmitted").default(0).notNull(),
+  /** Rating adjustment applied (+10 for 5-star, -20 for ≤3 or complaint) */
+  ratingAdjustment: varchar("ratingAdjustment", { length: 20 }),
+  /** Streak bonus applied this job (0 or positive amount) */
+  streakBonus: varchar("streakBonus", { length: 20 }),
+  /** Final pay = basePay + ratingAdjustment + streakBonus */
+  finalPay: varchar("finalPay", { length: 20 }),
+  /** Whether this job has been flagged for admin review */
+  flagged: int("flagged").default(0).notNull(),
+  /** Admin notes on this job */
+  adminNotes: text("adminNotes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CleanerJob = typeof cleanerJobs.$inferSelect;
+export type InsertCleanerJob = typeof cleanerJobs.$inferInsert;
+
+/**
+ * jobPhotos — completion photos uploaded by cleaners for a specific job.
+ */
+export const jobPhotos = mysqlTable("job_photos", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to cleanerJobs.id */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Link to completedJobs.id (denormalized for easy querying) */
+  completedJobId: int("completedJobId").notNull(),
+  /** Cleaner profile ID */
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  /** S3 URL of the uploaded photo */
+  photoUrl: varchar("photoUrl", { length: 1024 }).notNull(),
+  /** S3 key for the photo */
+  photoKey: varchar("photoKey", { length: 512 }).notNull(),
+  /** Original filename */
+  filename: varchar("filename", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type JobPhoto = typeof jobPhotos.$inferSelect;
+export type InsertJobPhoto = typeof jobPhotos.$inferInsert;
+
+/**
+ * ratingSmsPending — queue of post-job rating SMS messages awaiting admin approval.
+ * Admin reviews and approves before 7pm EST; cron sends all approved at 7pm.
+ */
+export const ratingSmsPendingStatuses = ["pending", "approved", "sent", "skipped"] as const;
+export type RatingSmsStatus = (typeof ratingSmsPendingStatuses)[number];
+
+export const ratingSmsPending = mysqlTable("rating_sms_pending", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to completedJobs.id */
+  completedJobId: int("completedJobId").notNull(),
+  /** Link to cleanerJobs.id (may be null if cleaner not yet assigned) */
+  cleanerJobId: int("cleanerJobId"),
+  /** Customer E.164 phone */
+  customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
+  /** Customer first name for SMS greeting */
+  customerFirstName: varchar("customerFirstName", { length: 100 }),
+  /** Cleaner name for admin display */
+  cleanerName: varchar("cleanerName", { length: 255 }),
+  /** Job date (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }).notNull(),
+  /** The SMS message text to be sent */
+  smsText: text("smsText").notNull(),
+  /** Queue status */
+  status: mysqlEnum("status", ratingSmsPendingStatuses as unknown as [string, ...string[]]).default("pending").notNull(),
+  /** When admin approved this SMS */
+  approvedAt: timestamp("approvedAt"),
+  /** When the SMS was actually sent */
+  sentAt: timestamp("sentAt"),
+  /** Admin who approved (user name) */
+  approvedBy: varchar("approvedBy", { length: 255 }),
+  /** Reason for skipping (optional) */
+  skipReason: varchar("skipReason", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type RatingSmsPending = typeof ratingSmsPending.$inferSelect;
+export type InsertRatingSmsPending = typeof ratingSmsPending.$inferInsert;
+
+/**
+ * cleanerStreaks — tracks consecutive clean jobs per cleaner for streak bonus.
+ */
+export const cleanerStreaks = mysqlTable("cleaner_streaks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to cleanerProfiles.id */
+  cleanerProfileId: int("cleanerProfileId").notNull().unique(),
+  /** Current streak count (consecutive jobs with rating ≥4 and no complaint) */
+  currentStreak: int("currentStreak").default(0).notNull(),
+  /** All-time best streak */
+  bestStreak: int("bestStreak").default(0).notNull(),
+  /** Total streak bonuses earned (count of times streak hit 10) */
+  streakBonusCount: int("streakBonusCount").default(0).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CleanerStreak = typeof cleanerStreaks.$inferSelect;
+export type InsertCleanerStreak = typeof cleanerStreaks.$inferInsert;

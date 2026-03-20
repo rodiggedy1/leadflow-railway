@@ -31,6 +31,7 @@ import {
   Activity,
   Mic,
   Webhook,
+  ClipboardCheck,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -153,7 +154,8 @@ type AdminTab =
   | "completed-jobs"
   | "always-on"
   | "sync-health"
-  | "calls";
+  | "calls"
+  | "quality";
 
 const NAV_TABS: {
   id: AdminTab;
@@ -171,6 +173,7 @@ const NAV_TABS: {
   { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
   { id: "sync-health", label: "Sync Health", href: "/admin/sync-health", icon: <Activity className="w-3.5 h-3.5" /> },
   { id: "calls", label: "All Calls", href: "/admin/calls", icon: <Mic className="w-3.5 h-3.5" /> },
+  { id: "quality", label: "Quality", href: "/admin/quality", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
 ];
 
 // ── Main component ────────────────────────────────────────────────────────
