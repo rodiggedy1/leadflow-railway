@@ -1462,3 +1462,7 @@
 ## Bug Fix: Synced Jobs Not Appearing on Quality Dashboard
 - [x] Investigate mismatch between syncTodayJobs stored data and getJobsForDate/getJobsForDay query
 - [x] Fix so synced jobs appear correctly on the quality dashboard
+
+## Quality Dashboard Enhancements
+- [x] Show service time (from serviceDateTime) on each job card next to the address
+- [x] Add by-time / by-cleaner view toggle on quality dashboard

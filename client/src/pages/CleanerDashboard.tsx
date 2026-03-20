@@ -1,15 +1,17 @@
 /**
- * CleanerDashboard — /cleaner
+ * CleanerDashboard — /admin/quality
  *
  * Shows today's jobs for all cleaners (admin-facing view until cleaner auth is built).
  * Features:
  *  - Date picker to browse any day's jobs
  *  - Per-job card: customer name, address, service type, revenue, cleaner assignment
+ *  - Service time displayed prominently on each card
+ *  - View toggle: "By Time" (chronological) vs "By Cleaner" (grouped by team)
  *  - Customer rating badge (once received)
  *  - Photo upload per job (completion photo)
  *  - Weekly pay summary per cleaner
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +23,7 @@ import { toast } from "sonner";
 import {
   Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
-  CalendarDays, TrendingUp, RefreshCw
+  CalendarDays, TrendingUp, RefreshCw, List, Users
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,6 +45,18 @@ function shiftDate(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(y, m - 1, d + days);
   return formatDate(date);
+}
+
+/** Format an ISO datetime string to a short local time, e.g. "9:30 AM" */
+function formatServiceTime(serviceDateTime: string | null): string | null {
+  if (!serviceDateTime) return null;
+  try {
+    const d = new Date(serviceDateTime);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  } catch {
+    return null;
+  }
 }
 
 function RatingStars({ rating }: { rating: number | null }) {
@@ -135,17 +149,19 @@ function PhotoUploadButton({
             Photo submitted
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-w-lg">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Completion Photos</DialogTitle>
+            <DialogTitle>Completion Photo</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            {job.photos.map((p) => (
-              <a key={p.id} href={p.photoUrl} target="_blank" rel="noopener noreferrer">
-                <img src={p.photoUrl} alt={p.filename ?? "photo"} className="rounded-lg w-full h-40 object-cover border hover:opacity-90 transition-opacity" />
-              </a>
-            ))}
-          </div>
+          {job.photos.length > 0 ? (
+            <div className="space-y-2">
+              {job.photos.map((p) => (
+                <img key={p.id} src={p.photoUrl} alt={p.filename ?? "photo"} className="w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Photo was marked as submitted but no file found.</p>
+          )}
         </DialogContent>
       </Dialog>
     );
@@ -157,7 +173,7 @@ function PhotoUploadButton({
       <Button
         variant="outline"
         size="sm"
-        className="gap-1.5"
+        className="gap-1.5 text-xs"
         disabled={uploading || !job.cleanerAssignment}
         onClick={() => fileRef.current?.click()}
       >
@@ -210,13 +226,174 @@ function CleanerAssignSelector({
   );
 }
 
+// ── Job Card ──────────────────────────────────────────────────────────────────
+
+type JobRow = {
+  id: number;
+  name: string | null;
+  address: string | null;
+  serviceType: string | null;
+  lastBookingPrice: number | null;
+  jobDate: string;
+  serviceDateTime: string | null;
+  bookingStatus: string | null;
+  bookingId: number | null;
+  cleanerAssignment: {
+    id: number;
+    completedJobId: number;
+    cleanerProfileId: number;
+    cleanerName: string;
+    teamName: string | null;
+    basePay: string | null;
+    payPercent: string | null;
+    finalPay: string | null;
+    ratingAdjustment: string | null;
+    streakBonus: string | null;
+    customerRating: number | null;
+    missedSomething: number | null;
+    photoSubmitted: number;
+    flagged: number;
+    adminNotes: string | null;
+  };
+  photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
+};
+
+function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+  const rating = job.cleanerAssignment?.customerRating ?? null;
+  const hasMissed = job.cleanerAssignment?.missedSomething === 1;
+  const isLowRating = rating !== null && rating <= 3;
+  const isFlagged = isLowRating || hasMissed;
+  const serviceTime = formatServiceTime(job.serviceDateTime);
+
+  return (
+    <Card className={`transition-all ${isFlagged ? "border-red-200 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+      <CardContent className="py-4">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          {/* Left: Job info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Service time badge — prominent */}
+              {serviceTime && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-primary/10 text-primary rounded-full px-2 py-0.5">
+                  <Clock className="w-3 h-3" />
+                  {serviceTime}
+                </span>
+              )}
+              <span className="font-semibold text-sm">{job.name ?? "Unknown customer"}</span>
+              {isFlagged && (
+                <Badge variant="destructive" className="text-xs gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Flagged
+                </Badge>
+              )}
+              {rating !== null && !isFlagged && <RatingBadge rating={rating} />}
+            </div>
+
+            <div className="mt-1.5 space-y-1">
+              {job.address && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{job.address}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                {job.serviceType && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {job.serviceType}
+                  </span>
+                )}
+                {job.lastBookingPrice && (
+                  <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                    <DollarSign className="w-3 h-3" />
+                    ${job.lastBookingPrice} job revenue
+                  </span>
+                )}
+                {job.bookingStatus && (
+                  <span className="capitalize text-muted-foreground/70">{job.bookingStatus}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Rating */}
+            <div className="mt-2">
+              <RatingStars rating={rating} />
+              {hasMissed && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Customer reported something was missed
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Cleaner + pay + photo */}
+          <div className="flex flex-col gap-2 sm:items-end sm:min-w-[200px]">
+            {/* Cleaner assignment */}
+            <div className="flex items-center gap-2">
+              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              {job.cleanerAssignment ? (
+                <span className="text-sm font-medium">{job.cleanerAssignment.cleanerName}</span>
+              ) : (
+                <CleanerAssignSelector
+                  jobId={job.id}
+                  currentCleanerProfileId={null}
+                  onAssigned={onRefetch}
+                />
+              )}
+            </div>
+
+            {/* Base pay */}
+            {job.cleanerAssignment?.basePay && (
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <DollarSign className="w-3 h-3" />
+                Base pay: <span className="font-semibold text-foreground">${parseFloat(job.cleanerAssignment.basePay).toFixed(2)}</span>
+                {job.cleanerAssignment.payPercent && (
+                  <span className="text-muted-foreground/60">({parseFloat(job.cleanerAssignment.payPercent)}%)</span>
+                )}
+              </div>
+            )}
+
+            {/* Pay adjustments */}
+            {job.cleanerAssignment && (
+              <div className="text-xs space-y-0.5">
+                {rating === 5 && (
+                  <p className="text-emerald-600">+$10 five-star bonus</p>
+                )}
+                {rating !== null && rating <= 3 && (
+                  <p className="text-red-500">-$20 low rating deduction</p>
+                )}
+                {hasMissed && (
+                  <p className="text-red-500">-$20 complaint deduction</p>
+                )}
+              </div>
+            )}
+
+            {/* Photo upload */}
+            {job.cleanerAssignment ? (
+              <PhotoUploadButton
+                job={job}
+                onSuccess={onRefetch}
+              />
+            ) : (
+              <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs opacity-50">
+                <Upload className="w-3.5 h-3.5" />
+                Assign cleaner first
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Pay Summary Card ──────────────────────────────────────────────────────────
 
 function PaySummarySection({ date }: { date: string }) {
-  // Calculate week range (Mon–Sun) containing the selected date
   const [y, m, d] = date.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
-  const dow = dt.getDay(); // 0=Sun
+  const dow = dt.getDay();
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
   const monday = new Date(y, m - 1, d + mondayOffset);
   const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
@@ -287,8 +464,12 @@ function PaySummarySection({ date }: { date: string }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+type ViewMode = "by-time" | "by-cleaner";
+
 export default function CleanerDashboard() {
   const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
+  const [viewMode, setViewMode] = useState<ViewMode>("by-time");
+
   const { data: jobs, isLoading, refetch } = trpc.quality.getJobsForDate.useQuery(
     { date: selectedDate },
     { refetchOnWindowFocus: false }
@@ -322,14 +503,39 @@ export default function CleanerDashboard() {
     onError: (err) => toast.error("Sync failed", { description: err.message }),
   });
 
+  // Group jobs by cleaner for the "by-cleaner" view, sorted by service time within each group
+  const cleanerGroups = useMemo((): [string, JobRow[]][] => {
+    if (!jobs || jobs.length === 0) return [];
+    const record: Record<string, JobRow[]> = {};
+    for (const job of jobs) {
+      const key = job.cleanerAssignment?.cleanerName ?? "Unassigned";
+      if (!record[key]) record[key] = [];
+      record[key].push(job);
+    }
+    // Sort each group by serviceDateTime
+    Object.values(record).forEach((group) => {
+      group.sort((a: JobRow, b: JobRow) => (a.serviceDateTime ?? "").localeCompare(b.serviceDateTime ?? ""));
+    });
+    // Sort groups: Unassigned last, rest alphabetical
+    return Object.entries(record).sort(([a]: [string, JobRow[]], [b]: [string, JobRow[]]) => {
+      if (a === "Unassigned") return 1;
+      if (b === "Unassigned") return -1;
+      return a.localeCompare(b);
+    });
+  }, [jobs]);
+
+  const totalJobs = jobs?.length ?? 0;
+
   return (
     <div className="min-h-screen bg-background">
       <AdminHeader activeTab="quality" />
-      {/* Date navigation */}
+
+      {/* Date navigation + controls */}
       <div className="border-b bg-card">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <h2 className="font-semibold text-sm text-muted-foreground">Cleaner Quality Dashboard</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Date nav */}
             <Button variant="ghost" size="icon" onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
@@ -343,15 +549,39 @@ export default function CleanerDashboard() {
             <Button
               variant="outline"
               size="sm"
-              className="ml-2 text-xs"
+              className="text-xs"
               onClick={() => setSelectedDate(formatDate(new Date()))}
             >
               Today
             </Button>
+
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-lg border bg-muted/40 p-0.5 gap-0.5">
+              <Button
+                variant={viewMode === "by-time" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 text-xs gap-1.5 px-2.5"
+                onClick={() => setViewMode("by-time")}
+              >
+                <List className="w-3 h-3" />
+                By Time
+              </Button>
+              <Button
+                variant={viewMode === "by-cleaner" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 text-xs gap-1.5 px-2.5"
+                onClick={() => setViewMode("by-cleaner")}
+              >
+                <Users className="w-3 h-3" />
+                By Cleaner
+              </Button>
+            </div>
+
+            {/* Sync */}
             <Button
               variant="default"
               size="sm"
-              className="ml-1 text-xs gap-1.5"
+              className="text-xs gap-1.5"
               disabled={syncJobs.isPending}
               onClick={() => syncJobs.mutate({ date: selectedDate })}
             >
@@ -396,7 +626,7 @@ export default function CleanerDashboard() {
                               <div>
                                 <p className="font-medium text-sm">{item.customerFirstName ?? item.customerPhone}</p>
                                 <p className="text-xs text-muted-foreground">{item.customerPhone}</p>
-                <p className="text-xs text-muted-foreground">{item.customerFirstName ?? ""}</p>
+                                <p className="text-xs text-muted-foreground">{item.customerFirstName ?? ""}</p>
                                 <p className="text-xs text-muted-foreground mt-1">
                                   Cleaner: {item.cleanerName ?? "Unassigned"} · {item.jobDate}
                                 </p>
@@ -407,20 +637,12 @@ export default function CleanerDashboard() {
                             </div>
                             {item.status === "pending" && (
                               <div className="flex gap-2 mt-2">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="text-xs h-7"
-                                  onClick={() => {
-                                    // approve handled by approveAll button
-                                  }}
+                                <Button size="sm" variant="default" className="text-xs h-7"
+                                  onClick={() => { /* approve handled by approveAll */ }}
                                 >
                                   Approve
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-xs h-7 text-muted-foreground"
+                                <Button size="sm" variant="ghost" className="text-xs h-7 text-muted-foreground"
                                   onClick={() => skipSms.mutate({ id: item.id })}
                                 >
                                   Skip
@@ -446,12 +668,17 @@ export default function CleanerDashboard() {
           </Card>
         )}
 
-        {/* Jobs List */}
+        {/* Jobs section */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-base">
-              {isLoading ? "Loading jobs…" : `${jobs?.length ?? 0} job${jobs?.length !== 1 ? "s" : ""} on ${formatDisplayDate(selectedDate)}`}
+              {isLoading
+                ? "Loading jobs…"
+                : `${totalJobs} job${totalJobs !== 1 ? "s" : ""} on ${formatDisplayDate(selectedDate)}`}
             </h2>
+            {!isLoading && totalJobs > 0 && viewMode === "by-cleaner" && (
+              <span className="text-xs text-muted-foreground">{cleanerGroups.length} team{cleanerGroups.length !== 1 ? "s" : ""}</span>
+            )}
           </div>
 
           {isLoading ? (
@@ -470,124 +697,58 @@ export default function CleanerDashboard() {
                 </p>
               </CardContent>
             </Card>
-          ) : (
+          ) : viewMode === "by-time" ? (
+            /* ── By Time view ── */
             <div className="space-y-3">
-              {jobs.map((job) => {
-                const rating = job.cleanerAssignment?.customerRating ?? null;
-                const hasMissed = job.cleanerAssignment?.missedSomething === 1;
-                const isLowRating = rating !== null && rating <= 3;
-                const isFlagged = isLowRating || hasMissed;
+              {jobs.map((job) => (
+                <JobCard key={job.id} job={job} onRefetch={refetch} />
+              ))}
+            </div>
+          ) : (
+            /* ── By Cleaner view ── */
+            <div className="space-y-6">
+              {cleanerGroups.map(([cleanerName, groupJobs]) => {
+                const totalRevenue = groupJobs.reduce((sum, j) => sum + (j.lastBookingPrice ?? 0), 0);
+                const totalBasePay = groupJobs.reduce((sum, j) => {
+                  const bp = j.cleanerAssignment?.basePay ? parseFloat(j.cleanerAssignment.basePay) : 0;
+                  return sum + bp;
+                }, 0);
+                const payPercent = groupJobs[0]?.cleanerAssignment?.payPercent;
+                const flaggedCount = groupJobs.filter((j) => {
+                  const r = j.cleanerAssignment?.customerRating ?? null;
+                  return (r !== null && r <= 3) || j.cleanerAssignment?.missedSomething === 1;
+                }).length;
 
                 return (
-                  <Card key={job.id} className={`transition-all ${isFlagged ? "border-red-200 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
-                    <CardContent className="py-4">
-                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                        {/* Left: Job info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-sm">{job.name ?? "Unknown customer"}</span>
-                            {isFlagged && (
-                              <Badge variant="destructive" className="text-xs gap-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                Flagged
-                              </Badge>
-                            )}
-                            {rating !== null && !isFlagged && <RatingBadge rating={rating} />}
-                          </div>
-
-                          <div className="mt-1.5 space-y-1">
-                            {job.address && (
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <MapPin className="w-3 h-3 shrink-0" />
-                                <span className="truncate">{job.address}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                              {job.serviceType && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {job.serviceType}
-                                </span>
-                              )}
-                              {job.lastBookingPrice && (
-                                <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                                  <DollarSign className="w-3 h-3" />
-                                  ${job.lastBookingPrice} job revenue
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Rating */}
-                          <div className="mt-2">
-                            <RatingStars rating={rating} />
-                            {hasMissed && (
-                              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                Customer reported something was missed
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right: Cleaner + pay + photo */}
-                        <div className="flex flex-col gap-2 sm:items-end sm:min-w-[200px]">
-                          {/* Cleaner assignment */}
-                          <div className="flex items-center gap-2">
-                            <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            {job.cleanerAssignment ? (
-                              <span className="text-sm font-medium">{job.cleanerAssignment.cleanerName}</span>
-                            ) : (
-                              <CleanerAssignSelector
-                                jobId={job.id}
-                                currentCleanerProfileId={null}
-                                onAssigned={() => refetch()}
-                              />
-                            )}
-                          </div>
-
-                          {/* Base pay */}
-                          {job.cleanerAssignment?.basePay && (
-                            <div className="text-xs text-muted-foreground flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" />
-                              Base pay: <span className="font-semibold text-foreground">${parseFloat(job.cleanerAssignment.basePay).toFixed(2)}</span>
-                              {job.cleanerAssignment.payPercent && (
-                                <span className="text-muted-foreground/60">({parseFloat(job.cleanerAssignment.payPercent)}%)</span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Pay adjustments */}
-                          {job.cleanerAssignment && (
-                            <div className="text-xs space-y-0.5">
-                              {rating === 5 && (
-                                <p className="text-emerald-600">+$10 five-star bonus</p>
-                              )}
-                              {rating !== null && rating <= 3 && (
-                                <p className="text-red-500">-$20 low rating deduction</p>
-                              )}
-                              {hasMissed && (
-                                <p className="text-red-500">-$20 complaint deduction</p>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Photo upload */}
-                          {job.cleanerAssignment ? (
-                            <PhotoUploadButton
-                              job={job}
-                              onSuccess={() => refetch()}
-                            />
-                          ) : (
-                            <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs opacity-50">
-                              <Upload className="w-3.5 h-3.5" />
-                              Assign cleaner first
-                            </Button>
-                          )}
-                        </div>
+                  <div key={cleanerName}>
+                    {/* Cleaner group header */}
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-sm">{cleanerName}</span>
+                        <Badge variant="secondary" className="text-xs">{groupJobs.length} job{groupJobs.length !== 1 ? "s" : ""}</Badge>
+                        {flaggedCount > 0 && (
+                          <Badge variant="destructive" className="text-xs gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            {flaggedCount} flagged
+                          </Badge>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        {payPercent && (
+                          <span className="text-muted-foreground/70">{parseFloat(payPercent)}% rate</span>
+                        )}
+                        <span className="text-emerald-600 font-medium">${totalRevenue.toFixed(0)} revenue</span>
+                        <span className="font-semibold text-foreground">${totalBasePay.toFixed(2)} base pay</span>
+                      </div>
+                    </div>
+                    {/* Jobs in this group */}
+                    <div className="space-y-2 pl-2 border-l-2 border-primary/20">
+                      {groupJobs.map((job) => (
+                        <JobCard key={job.id} job={job} onRefetch={refetch} />
+                      ))}
+                    </div>
+                  </div>
                 );
               })}
             </div>
