@@ -177,6 +177,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [completing, setCompleting] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
   const [showIssueInput, setShowIssueInput] = useState(false);
@@ -245,8 +246,10 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
     if (valid.length === 0) return;
 
     setUploading(true);
+    setUploadProgress({ current: 0, total: valid.length });
     // Upload all selected photos sequentially
-    for (const file of valid) {
+    for (let i = 0; i < valid.length; i++) {
+      setUploadProgress({ current: i + 1, total: valid.length });
       await new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -255,16 +258,17 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             {
               cleanerJobId: job.id,
               completedJobId: job.completedJobId,
-              filename: file.name,
-              mimeType: file.type,
+              filename: valid[i].name,
+              mimeType: valid[i].type,
               dataBase64: base64,
             },
             { onSettled: () => resolve() }
           );
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(valid[i]);
       });
     }
+    setUploadProgress(null);
     // Reset input so same files can be re-selected
     e.target.value = "";
   }, [job.id, job.completedJobId, uploadMutation]);
@@ -697,7 +701,11 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             disabled={uploading}
           >
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Camera className="w-3.5 h-3.5 mr-1.5" />}
-            {uploading ? "Uploading…" : "Add Photo"}
+            {uploading
+              ? uploadProgress && uploadProgress.total > 1
+                ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…`
+                : "Uploading…"
+              : "Add Photo"}
           </Button>
           {!isComplete && (
             <Button

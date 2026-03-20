@@ -155,6 +155,7 @@ function PhotoUploadButton({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const upload = trpc.quality.uploadJobPhoto.useMutation({
@@ -179,9 +180,11 @@ function PhotoUploadButton({
     if (valid.length === 0) return;
 
     setUploading(true);
+    setUploadProgress({ current: 0, total: valid.length });
     try {
       // Upload all selected photos sequentially
-      for (const file of valid) {
+      for (let i = 0; i < valid.length; i++) {
+        setUploadProgress({ current: i + 1, total: valid.length });
         await new Promise<void>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = async () => {
@@ -191,8 +194,8 @@ function PhotoUploadButton({
                 cleanerJobId: job.cleanerAssignment!.id,
                 completedJobId: job.id,
                 cleanerProfileId: job.cleanerAssignment!.cleanerProfileId,
-                filename: file.name,
-                mimeType: file.type,
+                filename: valid[i].name,
+                mimeType: valid[i].type,
                 base64Data: base64,
               });
               resolve();
@@ -200,11 +203,12 @@ function PhotoUploadButton({
               reject(err);
             }
           };
-          reader.readAsDataURL(file);
+          reader.readAsDataURL(valid[i]);
         });
       }
     } finally {
       setUploading(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   };
@@ -306,7 +310,11 @@ function PhotoUploadButton({
         onClick={() => fileRef.current?.click()}
       >
         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-        {uploading ? "Uploading..." : "Upload photo"}
+        {uploading
+          ? uploadProgress && uploadProgress.total > 1
+            ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…`
+            : "Uploading..."
+          : "Upload photo"}
       </Button>
     </>
   );

@@ -1664,3 +1664,4 @@
 - [x] Extend cleaner and agent cookie maxAge from 30 days to 1 year
 - [x] SameSite=None kept (required for widget cross-origin) — maxAge extended to 1 year instead
 - [x] Allow multiple photo selection and upload in CleanerPortal and CleanerDashboard
+- [x] Add upload progress counter (Uploading 2 of 5...) to CleanerPortal and CleanerDashboard
