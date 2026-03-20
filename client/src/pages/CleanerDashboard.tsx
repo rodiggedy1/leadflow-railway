@@ -589,7 +589,11 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
           <div className="flex flex-col gap-2 sm:items-end sm:min-w-[200px]">
             {/* Cleaner assignment */}
             <div className="flex items-center gap-2">
-              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              {job.cleanerAssignment ? (
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cleanerAccentBorder(job.cleanerAssignment.cleanerProfileId).replace("border-l-", "bg-")}`} />
+              ) : (
+                <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              )}
               {job.cleanerAssignment ? (
                 <span className="text-sm font-medium">{job.cleanerAssignment.cleanerName}</span>
               ) : (
