@@ -237,6 +237,119 @@ function _unused_QualityWidget_placeholder() {
   );
 }
 
+// ── AdminDashboardNav — grouped dropdown nav matching AdminHeader ─────────────
+type DashTab = "leads" | "pipeline" | "agents" | "leaderboard" | "callbacks";
+function AdminDashboardNav({
+  activeTab,
+  setActiveTab,
+  callbackCount,
+}: {
+  activeTab: DashTab;
+  setActiveTab: (t: DashTab) => void;
+  callbackCount: number;
+}) {
+  // Dropdown state for Voice, Staff, Campaigns groups
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [campaignsOpen, setCampaignsOpen] = useState(false);
+  const voiceRef = useRef<HTMLDivElement>(null);
+  const staffRef = useRef<HTMLDivElement>(null);
+  const campaignsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (voiceRef.current && !voiceRef.current.contains(e.target as Node)) setVoiceOpen(false);
+      if (staffRef.current && !staffRef.current.contains(e.target as Node)) setStaffOpen(false);
+      if (campaignsRef.current && !campaignsRef.current.contains(e.target as Node)) setCampaignsOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const tabStyle = (active: boolean) =>
+    active
+      ? { borderColor: "#000000", color: "#000000", fontWeight: 700 as const }
+      : { borderColor: "transparent", color: "#888888" };
+
+  const tabCls = "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap";
+
+  const dropdownCls = "absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px] py-1";
+  const dropItemCls = (active: boolean) =>
+    `flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-gray-50 ${
+      active ? "font-bold text-black" : "text-gray-600"
+    }`;
+
+  const isVoiceActive = activeTab === "callbacks";
+  const isStaffActive = activeTab === "agents" || activeTab === "leaderboard";
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: "#E5E5E5" }}>
+      {/* Leads */}
+      <button onClick={() => setActiveTab("leads")} className={tabCls} style={tabStyle(activeTab === "leads")}>
+        <Phone className="w-3.5 h-3.5" /> Leads
+      </button>
+      {/* Pipeline */}
+      <button onClick={() => setActiveTab("pipeline")} className={tabCls} style={tabStyle(activeTab === "pipeline")}>
+        <Columns className="w-3.5 h-3.5" /> Pipeline
+      </button>
+      {/* Voice dropdown */}
+      <div ref={voiceRef} className="relative">
+        <button onClick={() => setVoiceOpen(v => !v)} className={tabCls} style={tabStyle(isVoiceActive)}>
+          <Mic className="w-3.5 h-3.5" /> Voice
+          <svg className={`w-3 h-3 transition-transform ${voiceOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        {voiceOpen && (
+          <div className={dropdownCls}>
+            <button onClick={() => { setActiveTab("callbacks"); setVoiceOpen(false); }} className={dropItemCls(activeTab === "callbacks")}>
+              <PhoneIncoming className="w-3.5 h-3.5" /> Callbacks
+              {callbackCount > 0 && <span className="ml-auto bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{callbackCount}</span>}
+            </button>
+            <a href="/admin/calls" className={dropItemCls(false)}><Mic className="w-3.5 h-3.5" /> All Calls</a>
+          </div>
+        )}
+      </div>
+      {/* Staff dropdown */}
+      <div ref={staffRef} className="relative">
+        <button onClick={() => setStaffOpen(v => !v)} className={tabCls} style={tabStyle(isStaffActive)}>
+          <Users className="w-3.5 h-3.5" /> Staff
+          <svg className={`w-3 h-3 transition-transform ${staffOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        {staffOpen && (
+          <div className={dropdownCls}>
+            <button onClick={() => { setActiveTab("agents"); setStaffOpen(false); }} className={dropItemCls(activeTab === "agents")}>
+              <Users className="w-3.5 h-3.5" /> Team
+            </button>
+            <button onClick={() => { setActiveTab("leaderboard"); setStaffOpen(false); }} className={dropItemCls(activeTab === "leaderboard")}>
+              <Trophy className="w-3.5 h-3.5" /> Leaderboard
+            </button>
+          </div>
+        )}
+      </div>
+      {/* Campaigns dropdown */}
+      <div ref={campaignsRef} className="relative">
+        <button onClick={() => setCampaignsOpen(v => !v)} className={tabCls} style={tabStyle(false)}>
+          <Send className="w-3.5 h-3.5" /> Campaigns
+          <svg className={`w-3 h-3 transition-transform ${campaignsOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        {campaignsOpen && (
+          <div className={dropdownCls}>
+            <a href="/admin/campaigns" className={dropItemCls(false)}><Send className="w-3.5 h-3.5" /> Campaigns</a>
+            <a href="/admin/always-on" className={dropItemCls(false)}><Zap className="w-3.5 h-3.5" /> Always-On</a>
+          </div>
+        )}
+      </div>
+      {/* Happiness */}
+      <a href="/admin/completed-jobs" className={tabCls} style={tabStyle(false)}>
+        <Star className="w-3.5 h-3.5" /> Happiness
+      </a>
+      {/* Jobs */}
+      <a href="/admin/quality" className={tabCls} style={tabStyle(false)}>
+        <ClipboardCheck className="w-3.5 h-3.5" /> Jobs
+      </a>
+    </div>
+  );
+}
+
 // ── Admin Login Screen ────────────────────────────────────────────────────────
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
@@ -2181,31 +2294,11 @@ export default function AdminDashboard() {
           </div>
         </div>
         {/* Tab navigation */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t" style={{ borderColor: '#E5E5E5' }}>
-           {(["leads", "pipeline", "agents", "leaderboard", "callbacks"] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
-              style={activeTab === tab
-                ? { borderColor: "#000000", color: "#000000", fontWeight: 700 }
-                : { borderColor: "transparent", color: "#888888" }}
-            >
-              {tab === "leads" ? <Phone className="w-3.5 h-3.5" /> : tab === "pipeline" ? <Columns className="w-3.5 h-3.5" /> : tab === "agents" ? <Users className="w-3.5 h-3.5" /> : tab === "leaderboard" ? <Trophy className="w-3.5 h-3.5" /> : <PhoneIncoming className="w-3.5 h-3.5" />}
-              {tab === "leads" ? "Leads" : tab === "pipeline" ? "Pipeline" : tab === "agents" ? "Agents" : tab === "leaderboard" ? "Leaderboard" : "Callbacks"}
-              {tab === "callbacks" && (callbackList?.filter(c => !c.completed).length ?? 0) > 0 && (
-                <span className="ml-1 bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
-                  {callbackList?.filter(c => !c.completed).length}
-                </span>
-              )}
-            </button>
-          ))}
-          {[{href:'/admin/campaigns',icon:<Send className="w-3.5 h-3.5"/>,label:'Campaigns'},{href:'/admin/completed-jobs',icon:<Star className="w-3.5 h-3.5"/>,label:'Reviews'},{href:'/admin/always-on',icon:<Zap className="w-3.5 h-3.5"/>,label:'Always-On'},{href:'/admin/sync-health',icon:<Activity className="w-3.5 h-3.5"/>,label:'Sync Health'},{href:'/admin/calls',icon:<Mic className="w-3.5 h-3.5"/>,label:'All Calls'},{href:'/admin/revenue',icon:<TrendingUp className="w-3.5 h-3.5"/>,label:'Revenue ROI'},{href:'/admin/quality',icon:<ClipboardCheck className="w-3.5 h-3.5"/>,label:'Quality'}].map(({href,icon,label})=>(
-            <a key={href} href={href} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors" style={{ borderColor: 'transparent', color: '#888888' }}>
-              {icon}{label}
-            </a>
-          ))}
-        </div>
+        <AdminDashboardNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          callbackCount={callbackList?.filter(c => !c.completed).length ?? 0}
+        />
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

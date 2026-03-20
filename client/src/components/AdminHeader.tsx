@@ -1,15 +1,15 @@
 /**
  * AdminHeader — shared header for all admin sub-pages.
- * Renders the full "HeyJade" logo row + all nav tabs,
- * matching the AdminDashboard header exactly.
+ * Renders the full "HeyJade" logo row + grouped nav tabs.
  *
- * Usage:
- *   <AdminHeader activeTab="calls" />
+ * Nav structure (7 entries, 3 with dropdowns):
+ *   Leads | Pipeline | Voice ▾ | Staff ▾ | Campaigns ▾ | Happiness | Jobs
  *
- * activeTab values: "leads" | "pipeline" | "agents" | "leaderboard" |
- *   "callbacks" | "campaigns" | "completed-jobs" | "always-on" |
- *   "sync-health" | "calls"
+ * activeTab values: "leads" | "pipeline" | "callbacks" | "calls" |
+ *   "agents" | "leaderboard" | "campaigns" | "always-on" |
+ *   "completed-jobs" | "quality"
  */
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/NotificationBell";
@@ -28,11 +28,13 @@ import {
   Send,
   Star,
   Zap,
-  Activity,
   Mic,
   Webhook,
   ClipboardCheck,
   HeartPulse,
+  ChevronDown,
+  Smile,
+  Briefcase,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -134,7 +136,6 @@ export function SyncHealthBadge() {
   }
   if (!data) return null;
 
-  // Healthy = both latest runs succeeded or were skipped (or no runs yet = no data to fail)
   const l27Status = data.launch27?.status;
   const aoStatus = data.alwaysOn?.status;
   const l27Ok = !l27Status || l27Status === "success" || l27Status === "skipped";
@@ -153,7 +154,7 @@ export function SyncHealthBadge() {
       className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-opacity hover:opacity-80 ${
         isOk
           ? "bg-green-50 text-green-700 border-green-200"
-          : "bg-red-50 text-red-700 border-red-200"
+          : "bg-red-50 text-red-700 border-red-200 animate-pulse"
       }`}
     >
       {isFetching ? (
@@ -166,7 +167,7 @@ export function SyncHealthBadge() {
   );
 }
 
-// ── Quality Widget ──────────────────────────────────────────────────────────
+// ── Quality Widget (exported for footer use) ────────────────────────────────
 export function QualityWidget() {
   const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -178,7 +179,7 @@ export function QualityWidget() {
   return (
     <a
       href="/admin/quality"
-      title="Cleaner Quality Dashboard"
+      title="Jobs Dashboard"
       className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-all hover:opacity-80 ${
         hasPending
           ? "bg-amber-50 text-amber-700 border-amber-300 animate-pulse"
@@ -189,7 +190,7 @@ export function QualityWidget() {
       {hasPending ? (
         <span>{data!.pending} SMS pending</span>
       ) : (
-        <span>Quality</span>
+        <span>Jobs</span>
       )}
     </a>
   );
@@ -222,42 +223,164 @@ function PreviewAgentButton() {
   );
 }
 
-// ── Nav tab definitions ───────────────────────────────────────────────────
-type AdminTab =
+// ── Nav tab type ──────────────────────────────────────────────────────────
+export type AdminTab =
   | "leads"
   | "pipeline"
+  | "callbacks"
+  | "calls"
   | "agents"
   | "leaderboard"
-  | "callbacks"
   | "campaigns"
-  | "completed-jobs"
   | "always-on"
-  | "calls"
+  | "completed-jobs"
   | "quality";
 
-const NAV_TABS: {
+// ── Dropdown nav item ─────────────────────────────────────────────────────
+interface DropdownItem {
   id: AdminTab;
   label: string;
   href: string;
   icon: React.ReactNode;
-}[] = [
-  { id: "leads", label: "Leads", href: "/admin", icon: <Phone className="w-3.5 h-3.5" /> },
-  { id: "pipeline", label: "Pipeline", href: "/admin?tab=pipeline", icon: <Columns className="w-3.5 h-3.5" /> },
-  { id: "agents", label: "Agents", href: "/admin?tab=agents", icon: <Users className="w-3.5 h-3.5" /> },
-  { id: "leaderboard", label: "Leaderboard", href: "/admin?tab=leaderboard", icon: <Trophy className="w-3.5 h-3.5" /> },
-  { id: "callbacks", label: "Callbacks", href: "/admin?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
-  { id: "campaigns", label: "Campaigns", href: "/admin/campaigns", icon: <Send className="w-3.5 h-3.5" /> },
-  { id: "completed-jobs", label: "Reviews", href: "/admin/completed-jobs", icon: <Star className="w-3.5 h-3.5" /> },
-  { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
-  { id: "calls", label: "All Calls", href: "/admin/calls", icon: <Mic className="w-3.5 h-3.5" /> },
-  { id: "quality", label: "Quality", href: "/admin/quality", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+}
+
+interface NavEntry {
+  id: string;          // unique key; for dropdowns this is the group id
+  label: string;
+  icon: React.ReactNode;
+  // standalone
+  href?: string;
+  tabId?: AdminTab;
+  // dropdown
+  children?: DropdownItem[];
+}
+
+const NAV_ENTRIES: NavEntry[] = [
+  {
+    id: "leads",
+    label: "Leads",
+    icon: <Phone className="w-3.5 h-3.5" />,
+    href: "/admin",
+    tabId: "leads",
+  },
+  {
+    id: "pipeline",
+    label: "Pipeline",
+    icon: <Columns className="w-3.5 h-3.5" />,
+    href: "/admin?tab=pipeline",
+    tabId: "pipeline",
+  },
+  {
+    id: "voice",
+    label: "Voice",
+    icon: <Mic className="w-3.5 h-3.5" />,
+    children: [
+      { id: "callbacks", label: "Callbacks", href: "/admin?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
+      { id: "calls",     label: "All Calls", href: "/admin/calls",          icon: <Mic className="w-3.5 h-3.5" /> },
+    ],
+  },
+  {
+    id: "staff",
+    label: "Staff",
+    icon: <Users className="w-3.5 h-3.5" />,
+    children: [
+      { id: "agents",      label: "Team",        href: "/admin?tab=agents",      icon: <Users className="w-3.5 h-3.5" /> },
+      { id: "leaderboard", label: "Leaderboard", href: "/admin?tab=leaderboard", icon: <Trophy className="w-3.5 h-3.5" /> },
+    ],
+  },
+  {
+    id: "campaigns-group",
+    label: "Campaigns",
+    icon: <Send className="w-3.5 h-3.5" />,
+    children: [
+      { id: "campaigns", label: "Campaigns", href: "/admin/campaigns",  icon: <Send className="w-3.5 h-3.5" /> },
+      { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
+    ],
+  },
+  {
+    id: "completed-jobs",
+    label: "Happiness",
+    icon: <Smile className="w-3.5 h-3.5" />,
+    href: "/admin/completed-jobs",
+    tabId: "completed-jobs",
+  },
+  {
+    id: "quality",
+    label: "Jobs",
+    icon: <Briefcase className="w-3.5 h-3.5" />,
+    href: "/admin/quality",
+    tabId: "quality",
+  },
 ];
+
+// ── Dropdown component ────────────────────────────────────────────────────
+function NavDropdown({
+  entry,
+  activeTab,
+}: {
+  entry: NavEntry;
+  activeTab: AdminTab;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isActive = entry.children?.some((c) => c.id === activeTab) ?? false;
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+        style={
+          isActive
+            ? { borderColor: "#000000", color: "#000000", fontWeight: 700 }
+            : { borderColor: "transparent", color: "#888888" }
+        }
+      >
+        {entry.icon}
+        {entry.label}
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+          {entry.children!.map((child) => {
+            const childActive = child.id === activeTab;
+            return (
+              <a
+                key={child.id}
+                href={child.href}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-gray-50"
+                style={
+                  childActive
+                    ? { color: "#000000", fontWeight: 700 }
+                    : { color: "#555555" }
+                }
+              >
+                {child.icon}
+                {child.label}
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Main component ────────────────────────────────────────────────────────
 interface AdminHeaderProps {
-  /** Which tab to highlight as active */
   activeTab: AdminTab;
-  /** Optional extra content for the right side of the logo row */
   rightExtra?: React.ReactNode;
 }
 
@@ -284,7 +407,6 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
           <WidgetHealthBadge />
           <WebhookHealthBadge />
           <SyncHealthBadge />
-          <QualityWidget />
           {rightExtra}
           <NotificationBell />
           <PreviewAgentButton />
@@ -296,12 +418,17 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
         className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t overflow-x-auto"
         style={{ borderColor: "#E5E5E5" }}
       >
-        {NAV_TABS.map((tab) => {
-          const isActive = tab.id === activeTab;
+        {NAV_ENTRIES.map((entry) => {
+          if (entry.children) {
+            return (
+              <NavDropdown key={entry.id} entry={entry} activeTab={activeTab} />
+            );
+          }
+          const isActive = entry.tabId === activeTab;
           return (
             <a
-              key={tab.id}
-              href={tab.href}
+              key={entry.id}
+              href={entry.href}
               className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
               style={
                 isActive
@@ -309,8 +436,8 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
                   : { borderColor: "transparent", color: "#888888" }
               }
             >
-              {tab.icon}
-              {tab.label}
+              {entry.icon}
+              {entry.label}
             </a>
           );
         })}
