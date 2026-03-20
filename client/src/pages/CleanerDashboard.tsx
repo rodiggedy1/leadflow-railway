@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import {
   Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
-  CalendarDays, TrendingUp
+  CalendarDays, TrendingUp, RefreshCw
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -311,6 +311,17 @@ export default function CleanerDashboard() {
 
   const { data: pendingList, refetch: refetchPending } = trpc.quality.listPendingRatingSms.useQuery();
 
+  const syncJobs = trpc.quality.syncTodayJobs.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `Sync complete: ${result.jobsCreated} new, ${result.jobsUpdated} updated`,
+        { description: result.errors.length > 0 ? `${result.errors.length} error(s): ${result.errors[0]}` : `${result.bookingsFetched} bookings fetched from Launch27` }
+      );
+      refetch();
+    },
+    onError: (err) => toast.error("Sync failed", { description: err.message }),
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <AdminHeader activeTab="quality" />
@@ -336,6 +347,16 @@ export default function CleanerDashboard() {
               onClick={() => setSelectedDate(formatDate(new Date()))}
             >
               Today
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="ml-1 text-xs gap-1.5"
+              disabled={syncJobs.isPending}
+              onClick={() => syncJobs.mutate({ date: selectedDate })}
+            >
+              {syncJobs.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {syncJobs.isPending ? "Syncing…" : "Sync from Launch27"}
             </Button>
           </div>
         </div>

@@ -288,6 +288,13 @@
       "when": 1773976990546,
       "tag": "0040_bumpy_zzzax",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1773978907689,
+      "tag": "0041_special_valeria_richards",
+      "breakpoints": true
     }
   ]
 }

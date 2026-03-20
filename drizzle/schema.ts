@@ -804,17 +804,39 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   id: int("id").autoincrement().primaryKey(),
   /** Link to completedJobs.id */
   completedJobId: int("completedJobId").notNull(),
+  /** Launch27 booking ID (unique identifier from Launch27) */
+  bookingId: int("bookingId"),
   /** Link to cleanerProfiles.id */
   cleanerProfileId: int("cleanerProfileId").notNull(),
   /** Cleaner name (denormalized for display) */
   cleanerName: varchar("cleanerName", { length: 255 }).notNull(),
+  /** Team name from Launch27 (e.g. "Team Solange") */
+  teamName: varchar("teamName", { length: 255 }),
+  /** Launch27 team ID */
+  teamId: int("teamId"),
   /** Job date (YYYY-MM-DD) */
   jobDate: varchar("jobDate", { length: 20 }).notNull(),
-  /** Total job revenue from Launch27 */
+  /** Service date/time from Launch27 (ISO 8601) */
+  serviceDateTime: varchar("serviceDateTime", { length: 50 }),
+  /** Customer full name */
+  customerName: varchar("customerName", { length: 255 }),
+  /** Customer phone (for rating SMS) */
+  customerPhone: varchar("customerPhone", { length: 30 }),
+  /** Job address */
+  jobAddress: varchar("jobAddress", { length: 500 }),
+  /** Service type / names (comma-separated, e.g. "1 bedroom, 1 Bathroom") */
+  serviceType: varchar("serviceType", { length: 500 }),
+  /** Booking status from Launch27 (assigned, completed, cancelled) */
+  bookingStatus: varchar("bookingStatus", { length: 50 }),
+  /** Customer notes from Launch27 */
+  customerNotes: text("customerNotes"),
+  /** Staff notes from Launch27 */
+  staffNotes: text("staffNotes"),
+  /** Total job revenue from Launch27 (summary.total) */
   jobRevenue: varchar("jobRevenue", { length: 20 }),
-  /** Cleaner pay percentage at time of job */
+  /** Cleaner pay percentage at time of job (from team.share, e.g. "55") */
   payPercent: varchar("payPercent", { length: 10 }),
-  /** Calculated base pay = jobRevenue * payPercent */
+  /** Calculated base pay = jobRevenue * (payPercent/100) */
   basePay: varchar("basePay", { length: 20 }),
   /** Customer star rating (1–5), null until received */
   customerRating: int("customerRating"),

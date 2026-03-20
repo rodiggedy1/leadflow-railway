@@ -901,4 +901,144 @@ export const qualityRouter = router({
       .from(cleanerStreaks)
       .orderBy(desc(cleanerStreaks.currentStreak));
   }),
+
+  /**
+   * Manual sync: pull today's (or a specific date's) jobs from Launch27 and
+   * upsert into cleaner_jobs with full team/price/customer data.
+   * Creates cleaner_profiles automatically for new teams.
+   */
+  syncTodayJobs: protectedProcedure
+    .input(z.object({ date: z.string().optional() })) // YYYY-MM-DD, defaults to today
+    .mutation(async ({ input }) => {
+      const { getCompletedBookingsForDate } = await import("./launch27");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Use provided date or today in America/New_York
+      const dateStr = input.date ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+      // Fetch ALL bookings for the date (not just completed — include assigned too)
+      const result = await getCompletedBookingsForDate(dateStr, { includeAll: true });
+      const bookings = result.bookings;
+
+      let created = 0;
+      let updated = 0;
+      const errors: string[] = [];
+
+      for (const booking of bookings) {
+        try {
+          // Each booking may have multiple teams — create one cleanerJob per team
+          const teams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
+
+          for (const team of teams) {
+            // Find or create cleaner profile for this team
+            let [profile] = await db
+              .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
+              .from(cleanerProfiles)
+              .where(eq(cleanerProfiles.name, team.title))
+              .limit(1);
+
+            if (!profile) {
+              // Auto-create profile from Launch27 team data
+              const [ins] = await db.insert(cleanerProfiles).values({
+                name: team.title,
+                payPercent: team.share > 0 ? String(team.share) : null,
+                isActive: 1,
+              });
+              profile = { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null };
+            } else if (team.share > 0 && (!profile.payPercent || profile.payPercent === "0")) {
+              // Update pay % from Launch27 if it's now available
+              await db
+                .update(cleanerProfiles)
+                .set({ payPercent: String(team.share) })
+                .where(eq(cleanerProfiles.id, profile.id));
+              profile.payPercent = String(team.share);
+            }
+
+            // Calculate base pay
+            const revenue = booking.totalRevenue;
+            const payPct = parseFloat(profile.payPercent ?? String(team.share) ?? "0");
+            const basePay = payPct > 0 ? ((revenue * payPct) / 100).toFixed(2) : null;
+
+            const jobDate = dateStr;
+            const serviceNames = booking.serviceNames.join(", ") || "";
+
+            // Check if a cleanerJob already exists for this booking + team
+            const [existing] = await db
+              .select({ id: cleanerJobs.id })
+              .from(cleanerJobs)
+              .where(
+                and(
+                  eq(cleanerJobs.bookingId, booking.id),
+                  eq(cleanerJobs.cleanerProfileId, profile.id)
+                )
+              )
+              .limit(1);
+
+            const jobData = {
+              bookingId: booking.id,
+              cleanerProfileId: profile.id,
+              cleanerName: team.title,
+              teamName: team.title,
+              teamId: team.id || null,
+              jobDate,
+              serviceDateTime: booking.serviceDate,
+              customerName: booking.fullName,
+              customerPhone: booking.phone || null,
+              jobAddress: booking.address || null,
+              serviceType: serviceNames || null,
+              bookingStatus: booking.bookingStatus,
+              customerNotes: booking.customerNotes || null,
+              staffNotes: booking.staffNotes || null,
+              jobRevenue: String(revenue),
+              payPercent: payPct > 0 ? String(payPct) : null,
+              basePay,
+            };
+
+            if (existing) {
+              // Update existing record with latest data from Launch27
+              await db
+                .update(cleanerJobs)
+                .set(jobData)
+                .where(eq(cleanerJobs.id, existing.id));
+              updated++;
+            } else {
+              // Create new cleanerJob
+              await db.insert(cleanerJobs).values({
+                ...jobData,
+                completedJobId: 0, // placeholder — not linked to completedJobs table for quality-sync jobs
+                photoSubmitted: 0,
+                flagged: 0,
+              });
+              created++;
+            }
+          }
+        } catch (err) {
+          errors.push(`Booking ${booking.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      return {
+        date: dateStr,
+        bookingsFetched: bookings.length,
+        jobsCreated: created,
+        jobsUpdated: updated,
+        errors,
+      };
+    }),
+
+  /**
+   * Get all cleaner jobs for a specific date (for the dashboard view).
+   */
+  getJobsForDay: protectedProcedure
+    .input(z.object({ date: z.string() })) // YYYY-MM-DD
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      return db
+        .select()
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.jobDate, input.date))
+        .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
+    }),
 });

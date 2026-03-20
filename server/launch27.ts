@@ -7,6 +7,13 @@
 
 import { ENV } from "./_core/env";
 
+export interface Launch27Team {
+  id: number;
+  title: string;       // e.g. "Team Solange"
+  share: number;       // pay percentage, e.g. 55 = 55%
+  bgColor: string;     // team color for UI badges
+}
+
 export interface Launch27Booking {
   id: number;
   phone: string; // e.g. "+1 202 384 3991"
@@ -17,8 +24,17 @@ export interface Launch27Booking {
   serviceDate: string; // ISO 8601, e.g. "2026-03-15T12:30:00Z"
   frequency: string; // e.g. "Monthly (10%OFF)"
   address: string; // full address string
-  totalRevenue: number; // summary.total
-  bookingStatus: string; // "completed"
+  city: string;
+  state: string;
+  zip: string;
+  totalRevenue: number; // summary.total (after discounts/tips)
+  baseRevenue: number;  // summary.revenue (before tip)
+  bookingStatus: string; // "assigned", "completed", "cancelled"
+  completed: boolean;
+  teams: Launch27Team[]; // assigned teams with pay share %
+  serviceNames: string[]; // e.g. ["1 bedroom"]
+  customerNotes: string;
+  staffNotes: string;
 }
 
 export interface Launch27SyncResult {
@@ -44,7 +60,8 @@ function getBearer(): string {
  * Handles pagination automatically (20 per page).
  */
 export async function getCompletedBookingsForDate(
-  date: string
+  date: string,
+  opts?: { includeAll?: boolean } // if true, fetch all bookings (assigned + completed), not just completed
 ): Promise<Launch27SyncResult> {
   const baseUrl = getBaseUrl();
   const bearer = getBearer();
@@ -57,7 +74,8 @@ export async function getCompletedBookingsForDate(
     const params = new URLSearchParams({
       from: date,
       to: date,
-      options: "completed,exclude_forecasted",
+      // When includeAll=true, don't filter by completed — fetch all statuses
+      ...(opts?.includeAll ? {} : { options: "completed,exclude_forecasted" }),
       limit: String(limit),
       offset: String(offset),
       sort: "asc",
@@ -108,8 +126,22 @@ export async function getCompletedBookingsForDate(
         serviceDate: b.service_date ?? date,
         frequency: b.frequency?.name ?? "",
         address: b.address?.full_address ?? "",
+        city: b.address?.city ?? "",
+        state: b.address?.state ?? "",
+        zip: b.address?.zip ?? "",
         totalRevenue: b.summary?.total ?? 0,
-        bookingStatus: b.booking_status ?? "completed",
+        baseRevenue: b.summary?.revenue ?? 0,
+        bookingStatus: b.booking_status ?? "assigned",
+        completed: b.completed ?? false,
+        teams: (b.teams ?? []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          share: t.share ?? 0,
+          bgColor: t.bg_color ?? "#888888",
+        })),
+        serviceNames: (b.services ?? []).map((s) => s.name),
+        customerNotes: b.customer_notes ?? "",
+        staffNotes: b.staff_notes ?? "",
       });
     }
 
@@ -150,11 +182,38 @@ interface RawBooking {
   };
   summary: {
     services: number;
+    pricing_parameters?: number;
     extras: number;
     discount: number;
+    adjustment?: number;
     revenue: number;
+    tip?: number;
     total: number;
   };
   booking_status: string;
   completed: boolean;
+  teams?: Array<{
+    id: number;
+    title: string;
+    share: number;
+    bg_color: string;
+    fg_color: string;
+    image: string | null;
+  }>;
+  services?: Array<{
+    id: number;
+    name: string;
+    price: number;
+    extras: unknown;
+    pricing_parameters?: Array<{
+      id: number;
+      type: string;
+      name: string;
+      quantity: number;
+      price: number;
+      total: number;
+    }>;
+  }>;
+  customer_notes?: string;
+  staff_notes?: string;
 }

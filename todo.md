@@ -1446,3 +1446,11 @@
 - [x] Pay calculation: base pay = revenue × cleaner% + $10 for 5-star + -$20 for ≤3-star or complaint + $50 streak bonus at 10 consecutive clean jobs
 - [x] Admin quality view: per-cleaner stats, flagged jobs, weekly pay summary, streak leaderboard
 - [x] Tests: 21 pay calculation, rating reply parsing, and streak logic tests (all passing)
+
+## Quality Widget & Launch27 Sync Improvements
+- [x] Quality widget in AdminHeader: visible on all admin pages, quick link to /admin/quality (pulses amber when SMS pending)
+- [x] Manual sync button on quality page: pulls today's jobs from Launch27 (date-aware, shows created/updated counts)
+- [x] Expand Launch27 sync: pull cleaner assignment (name, team), job price, team % into cleaner_jobs
+- [x] Auto-populate basePay from job price x cleaner % on sync
+- [x] Auto-create cleaner_profiles from Launch27 team data on first sync
+- [x] getJobsForDay procedure for quality dashboard date browsing

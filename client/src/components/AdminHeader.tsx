@@ -116,6 +116,35 @@ function WebhookHealthBadge() {
   );
 }
 
+// ── Quality Widget ──────────────────────────────────────────────────────────
+function QualityWidget() {
+  const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 55_000,
+  });
+
+  const hasPending = data && data.pending > 0;
+
+  return (
+    <a
+      href="/admin/quality"
+      title="Cleaner Quality Dashboard"
+      className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-all hover:opacity-80 ${
+        hasPending
+          ? "bg-amber-50 text-amber-700 border-amber-300 animate-pulse"
+          : "bg-gray-50 text-gray-600 border-gray-200"
+      }`}
+    >
+      <ClipboardCheck className="w-3 h-3" />
+      {hasPending ? (
+        <span>{data!.pending} SMS pending</span>
+      ) : (
+        <span>Quality</span>
+      )}
+    </a>
+  );
+}
+
 // ── Preview Agent View Button ─────────────────────────────────────────────
 function PreviewAgentButton() {
   const previewMutation = trpc.agents.previewAsAgent.useMutation({
@@ -206,6 +235,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
         <div className="flex items-center gap-3">
           <WidgetHealthBadge />
           <WebhookHealthBadge />
+          <QualityWidget />
           {rightExtra}
           <NotificationBell />
           <PreviewAgentButton />
