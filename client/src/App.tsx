@@ -4,21 +4,34 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-import AdminDashboard from "./pages/AdminDashboard";
-import AgentDashboard from "./pages/AgentDashboard";
-import ReactivationCampaigns from "./pages/ReactivationCampaigns";
-import CompletedJobs from "./pages/CompletedJobs";
-import AlwaysOnCampaign from "./pages/AlwaysOnCampaign";
-import SyncHealthPage from "./pages/SyncHealthPage";
-import AllCalls from "./pages/AllCalls";
-import RevenueAttribution from "./pages/RevenueAttribution";
-import CleanerDashboard from "./pages/CleanerDashboard";
-import CleanerPortal from "./pages/CleanerPortal";
+import { lazy, Suspense } from "react";
+
+// Route-level code splitting — each page loads only when its route is visited.
+// Splits the monolithic bundle into small per-route chunks for faster deploys.
+const Home = lazy(() => import("./pages/Home"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AgentDashboard = lazy(() => import("./pages/AgentDashboard"));
+const ReactivationCampaigns = lazy(() => import("./pages/ReactivationCampaigns"));
+const CompletedJobs = lazy(() => import("./pages/CompletedJobs"));
+const AlwaysOnCampaign = lazy(() => import("./pages/AlwaysOnCampaign"));
+const SyncHealthPage = lazy(() => import("./pages/SyncHealthPage"));
+const AllCalls = lazy(() => import("./pages/AllCalls"));
+const RevenueAttribution = lazy(() => import("./pages/RevenueAttribution"));
+const CleanerDashboard = lazy(() => import("./pages/CleanerDashboard"));
+const CleanerPortal = lazy(() => import("./pages/CleanerPortal"));
+
+// Minimal spinner shown while a route chunk is downloading.
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-[#E8735A] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
+    <Suspense fallback={<PageLoader />}>
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/admin"} component={AdminDashboard} />
@@ -34,6 +47,7 @@ function Router() {
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
+    </Suspense>
   );
 }
 

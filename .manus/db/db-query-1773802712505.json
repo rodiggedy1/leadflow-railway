@@ -1,9 +1,0 @@
-{
-  "query": "DELETE FROM conversation_sessions WHERE id = 720004;\nDELETE FROM quote_leads WHERE phone = '+13029816191' AND name = 'Test Caller';",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute DELETE FROM conversation_sessions WHERE id = 720004;\nDELETE FROM quote_leads WHERE phone = '+13029816191' AND name = 'Test Caller';",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 112
-}

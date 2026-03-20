@@ -1,9 +1,0 @@
-{
-  "query": "\n-- Fix 1: Amy's session has stage=BOOKED but isBooked=0 — flip the flag\nUPDATE conversation_sessions SET isBooked = 1 WHERE id = 690009 AND stage = 'BOOKED';\n\n-- Fix 2: Rohan's message has ts=1742270456000 (March 18, 2025 — 1 year ago)\n-- Correct it to the session's actual updatedAt timestamp (2026-03-18 04:18:52 = 1742271532000)\nUPDATE conversation_sessions \nSET messageHistory = REPLACE(messageHistory, '\"ts\":1742270456000', '\"ts\":1742271532000')\nWHERE id = 750002;\n",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \n-- Fix 1: Amy's session has stage=BOOKED but isBooked=0 — flip the flag\nUPDATE conversation_sessions SET isBooked = 1 WHERE id = 690009 AND stage = 'BOOKED';\n\n-- Fix 2: Rohan's message has ts=1742270456000 (March 18, 2025 — 1 year ago)\n-- Correct it to the session's actual updatedAt timestamp (2026-03-18 04:18:52 = 1742271532000)\nUPDATE conversation_sessions \nSET messageHistory = REPLACE(messageHistory, '\"ts\":1742270456000', '\"ts\":1742271532000')\nWHERE id = 750002;\n",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 74
-}

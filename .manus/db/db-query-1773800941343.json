@@ -1,9 +1,0 @@
-{
-  "query": "\nDELETE FROM conversation_sessions \nWHERE leadPhone = '+12025559999' OR leadName = 'John Smith';\n\nDELETE FROM quote_leads \nWHERE phone = '+12025559999' OR name = 'John Smith';\n",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nDELETE FROM conversation_sessions \nWHERE leadPhone = '+12025559999' OR leadName = 'John Smith';\n\nDELETE FROM quote_leads \nWHERE phone = '+12025559999' OR name = 'John Smith';\n",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 65
-}

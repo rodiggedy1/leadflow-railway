@@ -1,8 +1,0 @@
-{
-  "query": "\n-- Delete test conversation sessions\nDELETE FROM conversation_sessions \nWHERE lead_phone IN ('+12025551234', '+12025559999') \n  AND lead_source = 'voice';\n\n-- Delete associated quote leads\nDELETE FROM quote_leads \nWHERE phone IN ('+12025551234', '+12025559999');\n",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \n-- Delete test conversation sessions\nDELETE FROM conversation_sessions \nWHERE lead_phone IN ('+12025551234', '+12025559999') \n  AND lead_source = 'voice';\n\n-- Delete associated quote leads\nDELETE FROM quote_leads \nWHERE phone IN ('+12025551234', '+12025559999');\n",
-  "returncode": 1,
-  "logs": [
-    "ERROR 1054 (42S22) at line 3: Unknown column 'lead_phone' in 'where clause'"
-  ]
-}

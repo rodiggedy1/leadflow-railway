@@ -1,8 +1,0 @@
-{
-  "query": "UPDATE conversation_sessions SET leadPhone = CONCAT('+1', leadPhone) WHERE leadPhone NOT LIKE '+%' AND LENGTH(leadPhone) = 10;\nUPDATE conversation_sessions SET leadPhone = CONCAT('+', leadPhone) WHERE leadPhone NOT LIKE '+%' AND LENGTH(leadPhone) = 11 AND LEFT(leadPhone, 1) = '1';\nSELECT id, leadPhone, leadName, stage FROM conversation_sessions ORDER BY createdAt DESC LIMIT 5;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute UPDATE conversation_sessions SET leadPhone = CONCAT('+1', leadPhone) WHERE leadPhone NOT LIKE '+%' AND LENGTH(leadPhone) = 10;\nUPDATE conversation_sessions SET leadPhone = CONCAT('+', leadPhone) WHERE leadPhone NOT LIKE '+%' AND LENGTH(leadPhone) = 11 AND LEFT(leadPhone, 1) = '1';\nSELECT id, leadPhone, leadName, stage FROM conversation_sessions ORDER BY createdAt DESC LIMIT 5;",
-  "returncode": 1,
-  "logs": [
-    "ERROR 1062 (23000) at line 1: Duplicate entry '?' for key 'conversation_sessions.conversation_sessions_leadPhone_unique'"
-  ]
-}

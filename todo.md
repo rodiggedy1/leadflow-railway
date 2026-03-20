@@ -1656,3 +1656,5 @@
 - [x] Update parseChecklistFromNotes to accept both notes fields
 - [x] Disable rating-sms-send and review-send cron endpoints (return 503 disabled) to stop unwanted texts to sample accounts
 - [x] Add phoneNumberId guard to webhook handler to prevent cross-project message contamination
+- [x] Implement React.lazy() code splitting on all routes in App.tsx to reduce 2.4MB bundle
+- [x] Add .manus/db to .gitignore and remove debug files from git tracking

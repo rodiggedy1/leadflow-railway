@@ -1,9 +1,0 @@
-{
-  "query": "SELECT id, leadPhone, leadName, stage, leadSource, messageHistory, createdAt FROM conversation_sessions WHERE leadPhone = '+13029816191' AND leadSource = 'review' ORDER BY createdAt DESC LIMIT 3;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute SELECT id, leadPhone, leadName, stage, leadSource, messageHistory, createdAt FROM conversation_sessions WHERE leadPhone = '+13029816191' AND leadSource = 'review' ORDER BY createdAt DESC LIMIT 3;",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 349
-}
