@@ -1623,3 +1623,9 @@
 - [x] Amber card border + "⚠ Due Soon" badge when within 10 min of ETA (on_the_way / running_late)
 - [x] Red card border + "🚨 Overdue" badge when ETA has passed (on_the_way / running_late)
 - [x] Live re-evaluation using a 30s interval so cards update without page reload
+
+## Per-Cleaner Color Accent on Job Cards
+- [x] Add cleanerColor(id) helper that maps cleaner ID to a consistent accent color
+- [x] Apply subtle left border stripe to each job card using the cleaner's color
+- [x] Color does not override overdue/flagged red highlights (those take priority)
+- [x] Color dot shown in the "By Cleaner" grouped header next to cleaner name

@@ -89,6 +89,28 @@ function formatEtaTime(ts: number | null | undefined): string | null {
   return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
+// A palette of distinct, readable accent colors for cleaner identification.
+// Colors are chosen to be visually distinct and work on both light/dark backgrounds.
+const CLEANER_ACCENT_PALETTE = [
+  { border: "border-l-teal-400",    bg: "" },
+  { border: "border-l-violet-400",  bg: "" },
+  { border: "border-l-sky-400",     bg: "" },
+  { border: "border-l-rose-400",    bg: "" },
+  { border: "border-l-emerald-400", bg: "" },
+  { border: "border-l-amber-400",   bg: "" },
+  { border: "border-l-fuchsia-400", bg: "" },
+  { border: "border-l-cyan-400",    bg: "" },
+  { border: "border-l-orange-400",  bg: "" },
+  { border: "border-l-indigo-400",  bg: "" },
+];
+
+/** Returns a stable accent color for a given cleaner profile ID */
+function cleanerAccentBorder(cleanerProfileId: number | null | undefined): string {
+  if (!cleanerProfileId) return "border-l-muted-foreground/20";
+  const idx = cleanerProfileId % CLEANER_ACCENT_PALETTE.length;
+  return CLEANER_ACCENT_PALETTE[idx].border;
+}
+
 function JobStatusBadge({ status, issueNote, etaTimestamp }: { status: string | null; issueNote?: string | null; etaTimestamp?: number | null }) {
   if (!status) return null;
   const configs: Record<string, { label: string; className: string }> = {
@@ -470,12 +492,16 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const etaOverdue   = isEtaStatus && etaTs !== null && now > etaTs;
   const etaDueSoon   = isEtaStatus && etaTs !== null && !etaOverdue && (etaTs - now) <= 10 * 60 * 1000;
 
+  const accentBorder = cleanerAccentBorder(job.cleanerAssignment?.cleanerProfileId);
+
   const cardClass = etaOverdue
-    ? "border-red-400 bg-red-50/40 dark:bg-red-950/20 ring-1 ring-red-300"
+    ? "border-l-4 border-l-red-500 bg-red-50/40 dark:bg-red-950/20 ring-1 ring-red-300"
     : etaDueSoon
-    ? "border-amber-400 bg-amber-50/40 dark:bg-amber-950/20 ring-1 ring-amber-300"
+    ? "border-l-4 border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/20 ring-1 ring-amber-300"
     : isFlagged
-    ? "border-red-200 bg-red-50/30 dark:bg-red-950/10"
+    ? `border-l-4 ${accentBorder} border-red-200 bg-red-50/30 dark:bg-red-950/10`
+    : job.cleanerAssignment
+    ? `border-l-4 ${accentBorder}`
     : "";
 
   return (
@@ -1055,6 +1081,10 @@ export default function CleanerDashboard() {
             /* ── By Cleaner view ── */
             <div className="space-y-6">
               {cleanerGroups.map(([cleanerName, groupJobs]) => {
+                const groupCleanerProfileId = groupJobs[0]?.cleanerAssignment?.cleanerProfileId ?? null;
+                const groupAccentBorder = cleanerAccentBorder(groupCleanerProfileId);
+                // Convert border class to bg class for the dot (border-l-teal-400 → bg-teal-400)
+                const dotBgClass = groupAccentBorder.replace("border-l-", "bg-");
                 const totalRevenue = groupJobs.reduce((sum, j) => sum + (j.lastBookingPrice ?? 0), 0);
                 const totalBasePay = groupJobs.reduce((sum, j) => {
                   const bp = j.cleanerAssignment?.basePay ? parseFloat(j.cleanerAssignment.basePay) : 0;
@@ -1071,7 +1101,7 @@ export default function CleanerDashboard() {
                     {/* Cleaner group header */}
                     <div className="flex items-center justify-between mb-2 px-1">
                       <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-primary" />
+                        <span className={`w-3 h-3 rounded-full shrink-0 ${dotBgClass}`} />
                         <span className="font-semibold text-sm">{cleanerName}</span>
                         <Badge variant="secondary" className="text-xs">{groupJobs.length} job{groupJobs.length !== 1 ? "s" : ""}</Badge>
                         {flaggedCount > 0 && (
