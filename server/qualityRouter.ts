@@ -750,6 +750,10 @@ export const qualityRouter = router({
           photoSubmitted: cj.photoSubmitted,
           flagged: cj.flagged,
           adminNotes: cj.adminNotes ?? null,
+          jobStatus: cj.jobStatus ?? null,
+          issueNote: cj.issueNote ?? null,
+          manualAdjustment: cj.manualAdjustment ?? null,
+          manualAdjustmentNote: cj.manualAdjustmentNote ?? null,
         },
         photos: photos.filter((p) => p.cleanerJobId === cj.id),
       }));
@@ -1167,4 +1171,32 @@ export const qualityRouter = router({
     const result = await sendApprovedRatingSms();
     return result;
   }),
+
+  /**
+   * Admin sets a manual pay adjustment on a specific cleaner job.
+   * Pass amount as a decimal string (e.g. "-15.00" or "20.00").
+   * Pass null to clear the adjustment.
+   */
+  setManualAdjustment: protectedProcedure
+    .input(
+      z.object({
+        cleanerJobId: z.number(),
+        amount: z.string().nullable(), // e.g. "-15.00" or null to clear
+        note: z.string().max(255).nullable(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      await db
+        .update(cleanerJobs)
+        .set({
+          manualAdjustment: input.amount ?? null,
+          manualAdjustmentNote: input.note ?? null,
+        })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      return { ok: true };
+    }),
 });

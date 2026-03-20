@@ -17,6 +17,7 @@ import { parse as parseCookie } from "cookie";
 import { publicProcedure, cleanerProcedure, adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { storagePut } from "./storage";
+import { notifyOwner } from "./_core/notification";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -286,6 +287,68 @@ export const cleanerRouter = router({
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
       return { success: true };
+    }),
+
+  /**
+   * cleaner.updateJobStatus — cleaner updates the status of their job.
+   * Auto-transitions: arrived → in_progress
+   * Notifications: running_late and issue_at_property alert the owner.
+   */
+  updateJobStatus: cleanerProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      status: z.enum(["on_the_way", "arrived", "running_late", "in_progress", "completed", "issue_at_property"]),
+      issueNote: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Verify ownership
+      const jobRows = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          and(
+            eq(cleanerJobs.id, input.cleanerJobId),
+            eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+          )
+        )
+        .limit(1);
+
+      const job = jobRows[0];
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
+
+      // Auto-transition: arrived → also set in_progress
+      const effectiveStatus = input.status === "arrived" ? "in_progress" : input.status;
+      const updateData: Record<string, unknown> = { jobStatus: effectiveStatus };
+      if (input.issueNote) updateData.issueNote = input.issueNote;
+      if (effectiveStatus === "issue_at_property") updateData.flagged = 1;
+
+      await db
+        .update(cleanerJobs)
+        .set(updateData)
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      // Send owner notifications for urgent statuses
+      const cleanerName = ctx.cleaner.cleanerName;
+      const jobLabel = [job.customerName, job.jobAddress].filter(Boolean).join(" — ");
+
+      if (input.status === "running_late") {
+        await notifyOwner({
+          title: `⏰ Running Late — ${cleanerName}`,
+          content: `${cleanerName} is running late to: ${jobLabel}`,
+        }).catch(() => {});
+      }
+
+      if (input.status === "issue_at_property") {
+        await notifyOwner({
+          title: `🚨 Issue at Property — ${cleanerName}`,
+          content: `${cleanerName} reported an issue at: ${jobLabel}${input.issueNote ? `\n\nNote: ${input.issueNote}` : ""}`,
+        }).catch(() => {});
+      }
+
+      return { success: true, status: effectiveStatus };
     }),
 
   // ── Admin procedures ────────────────────────────────────────────────────────

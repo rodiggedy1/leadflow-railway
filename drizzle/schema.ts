@@ -862,8 +862,23 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   photoAdjustment: varchar("photoAdjustment", { length: 20 }),
   /** Streak bonus applied this job (0 or positive amount) */
   streakBonus: varchar("streakBonus", { length: 20 }),
-  /** Final pay = basePay + ratingAdjustment + photoAdjustment + streakBonus */
+  /** Final pay = basePay + ratingAdjustment + photoAdjustment + streakBonus + manualAdjustment */
   finalPay: varchar("finalPay", { length: 20 }),
+  /** Admin-set one-time manual adjustment (positive or negative dollar amount, stored as string like "-15.00") */
+  manualAdjustment: varchar("manualAdjustment", { length: 20 }),
+  /** Reason for the manual adjustment (shown to cleaner) */
+  manualAdjustmentNote: varchar("manualAdjustmentNote", { length: 255 }),
+  /** Cleaner-reported job status */
+  jobStatus: mysqlEnum("jobStatus", [
+    "on_the_way",
+    "arrived",
+    "running_late",
+    "in_progress",
+    "completed",
+    "issue_at_property",
+  ]),
+  /** Issue description when jobStatus = issue_at_property */
+  issueNote: text("issueNote"),
   /** Whether this job has been flagged for admin review */
   flagged: int("flagged").default(0).notNull(),
   /** Admin notes on this job */

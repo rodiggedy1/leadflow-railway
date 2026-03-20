@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
   CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink,
-  X, ZoomIn, Images
+  X, ZoomIn, Images, Pencil
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -82,6 +82,27 @@ function RatingBadge({ rating }: { rating: number | null }) {
   if (rating === 3) return <Badge className="bg-yellow-500 text-white text-xs">3★ Average</Badge>;
   if (rating <= 2) return <Badge className="bg-red-500 text-white text-xs">{rating}★ Poor</Badge>;
   return null;
+}
+
+function JobStatusBadge({ status, issueNote }: { status: string | null; issueNote?: string | null }) {
+  if (!status) return null;
+  const configs: Record<string, { label: string; className: string }> = {
+    on_the_way:        { label: "On the Way",        className: "bg-blue-100 text-blue-700 border-blue-200" },
+    in_progress:       { label: "In Progress",       className: "bg-amber-100 text-amber-700 border-amber-200" },
+    running_late:      { label: "⏰ Running Late",    className: "bg-orange-100 text-orange-700 border-orange-200" },
+    issue_at_property: { label: "🚨 Issue",           className: "bg-red-100 text-red-700 border-red-200" },
+    completed:         { label: "✓ Completed",        className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  };
+  const cfg = configs[status];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2 py-0.5 ${cfg.className}`}>
+      {cfg.label}
+      {status === "issue_at_property" && issueNote && (
+        <span className="text-red-600 font-normal">: {issueNote}</span>
+      )}
+    </span>
+  );
 }
 
 // ── Photo Upload Component ────────────────────────────────────────────────────
@@ -312,9 +333,109 @@ type JobRow = {
     photoSubmitted: number;
     flagged: number;
     adminNotes: string | null;
+    jobStatus: string | null;
+    issueNote: string | null;
+    manualAdjustment: string | null;
+    manualAdjustmentNote: string | null;
   };
   photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
 };
+
+function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+
+  const setAdj = trpc.quality.setManualAdjustment.useMutation({
+    onSuccess: () => {
+      toast.success("Manual adjustment saved");
+      setOpen(false);
+      onRefetch();
+    },
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
+
+  const existing = job.cleanerAssignment?.manualAdjustment;
+  const existingNote = job.cleanerAssignment?.manualAdjustmentNote;
+
+  const handleOpen = () => {
+    setAmount(existing ?? "");
+    setNote(existingNote ?? "");
+    setOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!job.cleanerAssignment) return;
+    const parsed = parseFloat(amount);
+    if (amount && isNaN(parsed)) {
+      toast.error("Invalid amount — enter a number like 10 or -15");
+      return;
+    }
+    setAdj.mutate({
+      cleanerJobId: job.cleanerAssignment.id,
+      amount: amount ? parsed.toFixed(2) : null,
+      note: note.trim() || null,
+    });
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs h-7 px-2"
+        onClick={handleOpen}
+      >
+        <Pencil className="w-3 h-3" />
+        {existing ? `Adj: ${parseFloat(existing) >= 0 ? "+" : ""}$${parseFloat(existing).toFixed(2)}` : "+ Adj"}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Manual Pay Adjustment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {job.name} — {job.address}
+            </p>
+            <div className="space-y-1">
+              <label className="text-sm font-medium block">Amount ($)</label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="e.g. 10 or -15"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">Positive = bonus, negative = deduction. Leave blank to clear.</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium block">Reason (shown to cleaner)</label>
+              <Input
+                placeholder="e.g. Extra deep clean, supply reimbursement"
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSave()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleSave}
+              disabled={setAdj.isPending}
+              style={{ backgroundColor: "#E8603C", color: "white" }}
+            >
+              {setAdj.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const rating = job.cleanerAssignment?.customerRating ?? null;
@@ -345,6 +466,10 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                 </Badge>
               )}
               {rating !== null && !isFlagged && <RatingBadge rating={rating} />}
+              <JobStatusBadge
+                status={job.cleanerAssignment?.jobStatus ?? null}
+                issueNote={job.cleanerAssignment?.issueNote}
+              />
             </div>
 
             <div className="mt-1.5 space-y-1">
@@ -426,7 +551,20 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                 {hasMissed && (
                   <p className="text-red-500">-$20 complaint deduction</p>
                 )}
+                {job.cleanerAssignment.manualAdjustment && (
+                  <p className={parseFloat(job.cleanerAssignment.manualAdjustment) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                    {parseFloat(job.cleanerAssignment.manualAdjustment) >= 0 ? "+" : ""}${parseFloat(job.cleanerAssignment.manualAdjustment).toFixed(2)}
+                    {job.cleanerAssignment.manualAdjustmentNote && (
+                      <span className="text-muted-foreground"> ({job.cleanerAssignment.manualAdjustmentNote})</span>
+                    )}
+                  </p>
+                )}
               </div>
+            )}
+
+            {/* Manual adjustment button */}
+            {job.cleanerAssignment && (
+              <ManualAdjustButton job={job} onRefetch={onRefetch} />
             )}
 
             {/* Photo upload */}

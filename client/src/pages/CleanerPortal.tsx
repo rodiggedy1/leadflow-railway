@@ -153,17 +153,37 @@ type Job = {
   photoSubmitted: number;
   customerNotes: string | null;
   photos: { id: number; photoUrl: string; filename: string | null }[];
+  jobStatus: string | null;
+  issueNote: string | null;
+  manualAdjustment: string | null;
+  manualAdjustmentNote: string | null;
 };
 
-function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
+const JOB_STATUSES = [
+  { key: "on_the_way",       label: "On the Way",       color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
+  { key: "in_progress",      label: "In Progress",      color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
+  { key: "running_late",     label: "Running Late",     color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
+  { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
+  { key: "completed",        label: "Completed",        color: "bg-emerald-600/30 text-emerald-300 border-emerald-600/40", activeColor: "bg-emerald-600 text-white" },
+] as const;
+
+function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
   job: Job;
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
+  onStatusUpdated: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
+  const [showIssueInput, setShowIssueInput] = useState(false);
+  const [issueNote, setIssueNote] = useState("");
+
+  const statusMutation = trpc.cleaner.updateJobStatus.useMutation({
+    onSuccess: () => { onStatusUpdated(); },
+    onError: (err) => toast.error(err.message),
+  });
 
   const uploadMutation = trpc.cleaner.uploadPhoto.useMutation({
     onSuccess: () => {
@@ -217,9 +237,10 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
     ? parseFloat(job.photoAdjustment)
     : (hasPhoto ? 5 : -10);
   const streakBonus = parseFloat(job.streakBonus ?? "0") || 0;
+  const manualAdj = parseFloat(job.manualAdjustment ?? "0") || 0;
   // Always recalculate display total from components — stored finalPay may be stale
   // (e.g. set before photoAdjustment column existed). DB finalPay is for payroll records only.
-  const finalPay = basePay + ratingAdj + photoAdj + streakBonus;
+  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   return (
@@ -368,6 +389,23 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
             </div>
           )}
 
+          {/* Manual adjustment — only shown if set by admin */}
+          {manualAdj !== 0 && (
+            <div className="flex justify-between items-start py-2 border-b border-slate-800">
+              <div>
+                <p className={`text-sm font-medium ${manualAdj > 0 ? "text-emerald-300" : "text-red-300"}`}>
+                  {manualAdj > 0 ? "Adjustment (Bonus)" : "Adjustment (Deduction)"}
+                </p>
+                {job.manualAdjustmentNote && (
+                  <p className="text-slate-500 text-xs mt-0.5">{job.manualAdjustmentNote}</p>
+                )}
+              </div>
+              <span className={`font-semibold text-sm ${manualAdj > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {manualAdj > 0 ? "+" : ""}{formatCurrency(manualAdj.toFixed(2))}
+              </span>
+            </div>
+          )}
+
           {/* Final total */}
           <div className="flex justify-between items-center pt-3 mt-1">
             <div>
@@ -418,6 +456,68 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
             )}
           </div>
         )}
+
+        {/* Job Status Buttons */}
+        <div className="space-y-2">
+          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">Job Status</p>
+          <div className="flex flex-wrap gap-1.5">
+            {JOB_STATUSES.map(s => {
+              const isActive = job.jobStatus === s.key;
+              const isPending = statusMutation.isPending && statusMutation.variables?.status === s.key;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => {
+                    if (s.key === "issue_at_property") {
+                      setShowIssueInput(v => !v);
+                      return;
+                    }
+                    statusMutation.mutate({ cleanerJobId: job.id, status: s.key });
+                  }}
+                  disabled={statusMutation.isPending}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                    isActive ? s.activeColor + " border-transparent" : s.color
+                  } ${statusMutation.isPending ? "opacity-50 cursor-not-allowed" : "hover:opacity-90 cursor-pointer"}`}
+                >
+                  {isPending ? "…" : s.label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Issue note input */}
+          {showIssueInput && (
+            <div className="flex gap-2 mt-1">
+              <Input
+                placeholder="Describe the issue (optional)"
+                value={issueNote}
+                onChange={e => setIssueNote(e.target.value)}
+                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm h-8"
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    statusMutation.mutate({ cleanerJobId: job.id, status: "issue_at_property", issueNote: issueNote || undefined });
+                    setShowIssueInput(false);
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-500 text-white h-8 px-3 text-xs shrink-0"
+                onClick={() => {
+                  statusMutation.mutate({ cleanerJobId: job.id, status: "issue_at_property", issueNote: issueNote || undefined });
+                  setShowIssueInput(false);
+                }}
+                disabled={statusMutation.isPending}
+              >
+                Report
+              </Button>
+            </div>
+          )}
+          {job.issueNote && (
+            <p className="text-red-300 text-xs bg-red-900/20 rounded px-2 py-1 border border-red-700/30">
+              Issue: {job.issueNote}
+            </p>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
@@ -602,13 +702,14 @@ export default function CleanerPortal() {
 
   // Earnings summary
   // Always sum components directly so photoAdjustment is always included
-  const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null }) => {
+  const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null }) => {
     const base = parseFloat(j.basePay ?? "0") || 0;
     const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
     const hasPhoto = j.photoSubmitted === 1 || ((j.photos as unknown[])?.length ?? 0) > 0;
     const photo = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : (hasPhoto ? 5 : -10);
     const streak = parseFloat(j.streakBonus ?? "0") || 0;
-    return base + rating + photo + streak;
+    const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
+    return base + rating + photo + streak + manual;
   };
   const todayEarnings = jobs.reduce((sum, j) => sum + calcJobPay(j), 0);
   const weekEarnings = weekJobs.reduce((sum, j) => sum + calcJobPay(j), 0);
@@ -703,10 +804,7 @@ export default function CleanerPortal() {
 
             {/* Daily rows */}
             {weekDays.map(({ date: d, jobs: dayJobs }) => {
-              const dayTotal = dayJobs.reduce((sum, j) => {
-                const fp = parseFloat(j.finalPay ?? "0") || (parseFloat(j.basePay ?? "0") + parseFloat(j.ratingAdjustment ?? "0") + parseFloat(j.streakBonus ?? "0"));
-                return sum + (isNaN(fp) ? 0 : fp);
-              }, 0);
+              const dayTotal = dayJobs.reduce((sum, j) => sum + calcJobPay(j), 0);
               const dayName = new Date(...(d.split("-").map((v, i) => i === 1 ? Number(v) - 1 : Number(v)) as [number, number, number])).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
               const isCurrentDay = d === getTodayET();
               return (
@@ -815,6 +913,7 @@ export default function CleanerPortal() {
                 job={job}
                 onPhotoUploaded={refetch}
                 onMarkedComplete={refetch}
+                onStatusUpdated={refetch}
               />
             ))}
           </div>

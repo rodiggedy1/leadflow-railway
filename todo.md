@@ -1566,3 +1566,25 @@
 ## Bug Fix: Photo Thumbnails Too Large
 - [x] Fix admin quality view: thumbnails should be small fixed-size squares (48px), not full-width
 - [x] Fix cleaner portal This Week view: same small thumbnail treatment
+
+## Job Status System (Cleaner Portal + Admin)
+- [x] Add jobStatus enum column to cleanerJobs schema (on_the_way, arrived, running_late, in_progress, completed, issue_at_property)
+- [x] Run db:push (migration 0046)
+- [x] Add cleaner.updateJobStatus procedure: validates transitions, auto-sets in_progress when arrived, sends owner notification for running_late and issue_at_property
+- [x] Add status buttons to cleaner portal job cards with visual flow
+- [x] Show status badge on admin quality job cards (color-coded, live)
+- [x] Admin quality cards update when cleaner changes status
+- [x] Owner notification on Running Late and Issue at Property
+
+## Admin Quality: Status Badge Update
+- [x] Update admin quality job cards to show new status labels: On the Way, Arrived, Running Late, In Progress, Completed, Issue at Property
+- [x] Color-coded badges: blue (on_the_way), amber (in_progress), orange (running_late), red (issue_at_property), emerald (completed)
+- [x] Issue at Property badge shows issueNote inline
+
+## Manual Pay Adjustment
+- [x] Add manualAdjustment and manualAdjustmentNote columns to cleanerJobs schema (migration 0047)
+- [x] Add quality.setManualAdjustment tRPC procedure (admin-only)
+- [x] Add + Adj button to each admin quality job card — opens dialog with amount + reason
+- [x] Show manual adjustment line in admin quality pay breakdown
+- [x] Show manual adjustment line in cleaner portal pay breakdown (visible to cleaner)
+- [x] Include manualAdjustment in finalPay calculation (cleaner portal today + week views)

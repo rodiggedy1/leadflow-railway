@@ -1,0 +1,2 @@
+ALTER TABLE `cleaner_jobs` ADD `jobStatus` enum('on_the_way','arrived','running_late','in_progress','completed','issue_at_property');--> statement-breakpoint
+ALTER TABLE `cleaner_jobs` ADD `issueNote` text;

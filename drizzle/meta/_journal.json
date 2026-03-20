@@ -323,6 +323,20 @@
       "when": 1773992823154,
       "tag": "0045_known_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1774014584448,
+      "tag": "0046_smart_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1774015058874,
+      "tag": "0047_heavy_the_renegades",
+      "breakpoints": true
     }
   ]
 }
