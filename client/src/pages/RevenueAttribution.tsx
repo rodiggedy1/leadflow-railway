@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,10 @@ export default function RevenueAttribution() {
           </div>
 
           <div className="flex items-center gap-2">
+            <WidgetHealthBadge />
+            <WebhookHealthBadge />
+            <SyncHealthBadge />
+            <QualityWidget />
             <Select value={String(months)} onValueChange={v => setMonths(Number(v))}>
               <SelectTrigger className="h-8 text-xs w-36">
                 <SelectValue />

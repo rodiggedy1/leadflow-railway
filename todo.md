@@ -1668,3 +1668,4 @@
 - [x] Show uploaded photos by default in CleanerPortal job card (remove hidden toggle)
 - [x] Add Sync Health pill to persistent header status bar (alongside Widget and SMS Webhook) on all admin pages — clicks navigate to /admin/sync-health
 - [x] Remove redundant Sync Health tab from AdminHeader nav row
+- [x] Ensure all 4 status pills (Widget, SMS Webhook, Sync Healthy, Quality) persist on every admin page

@@ -97,6 +97,7 @@ import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/component
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
 import DailyRecapModal, { hasShownToday, markShownToday } from "@/components/DailyRecapModal";
+import { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
 /**
@@ -140,8 +141,9 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
   );
 }
 
-// ── Widget Health Badge ─────────────────────────────────────────────────────
-function WidgetHealthBadge() {
+// ── Widget Health Badge — imported from AdminHeader ────────────────────────
+// (removed local duplicate — now imported from @/components/AdminHeader)
+function _unused_WidgetHealthBadge_placeholder() {
   const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000, // auto-refresh every 5 minutes
     staleTime: 4 * 60 * 1000,
@@ -211,8 +213,9 @@ function PreviewAgentButton() {
   );
 }
 
-// ── Quality Widget ─────────────────────────────────────────────────────────────
-function QualityWidget() {
+// ── Quality Widget — imported from AdminHeader ─────────────────────────────
+// (removed local duplicate — now imported from @/components/AdminHeader)
+function _unused_QualityWidget_placeholder() {
   const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 55_000,
@@ -2158,8 +2161,10 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Widget health indicator */}
+            {/* Status pills — all 4 */}
             <WidgetHealthBadge />
+            <WebhookHealthBadge />
+            <SyncHealthBadge />
             <QualityWidget />
             {/* TEMP: Daily Recap preview trigger — remove after review */}
             <button

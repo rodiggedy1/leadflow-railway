@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
-function WidgetHealthBadge() {
+export function WidgetHealthBadge() {
   const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
@@ -77,7 +77,7 @@ function WidgetHealthBadge() {
 }
 
 // ── OpenPhone Webhook health badge ───────────────────────────────────────
-function WebhookHealthBadge() {
+export function WebhookHealthBadge() {
   const { data, isFetching, refetch } = trpc.system.webhookHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
@@ -118,7 +118,7 @@ function WebhookHealthBadge() {
 }
 
 // ── Sync Health badge ────────────────────────────────────────────────────────
-function SyncHealthBadge() {
+export function SyncHealthBadge() {
   const { data, isFetching, refetch } = trpc.syncHealth.getSummary.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
@@ -167,7 +167,7 @@ function SyncHealthBadge() {
 }
 
 // ── Quality Widget ──────────────────────────────────────────────────────────
-function QualityWidget() {
+export function QualityWidget() {
   const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 55_000,
