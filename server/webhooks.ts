@@ -97,7 +97,7 @@ export function registerWebhookRoutes(app: Express) {
       // to the quality/review flow, not the lead AI engine.
       const reversedSessions = sessions.slice().reverse();
       const reviewSession = reversedSessions.find(
-        s => s.stage === "QUALITY_RATING_REQUESTED" || s.stage === "QUALITY_RATING_FOLLOWUP"
+        s => s.stage === "QUALITY_RATING_REQUESTED" || s.stage === "QUALITY_MISSED_FOLLOWUP"
           || s.stage === "REVIEW_REQUESTED" || s.stage === "REVIEW_DONE"
       );
       const activeSession = reviewSession ??
@@ -215,7 +215,7 @@ export function registerWebhookRoutes(app: Express) {
       };
 
       // ── QUALITY_RATING: Post-job 1-5 star rating flow ───────────────────────────
-      if (session.stage === "QUALITY_RATING_REQUESTED" || session.stage === "QUALITY_RATING_FOLLOWUP") {
+      if (session.stage === "QUALITY_RATING_REQUESTED" || session.stage === "QUALITY_MISSED_FOLLOWUP") {
         const ratingResult = await handleRatingReply(session.id, fromPhone, inboundText, session.stage);
         console.log(`[Webhook] Quality rating stage: ${session.stage} → ${ratingResult.newStage}. Reply: "${ratingResult.responseText}"`);
         history.push({ role: "assistant", content: ratingResult.responseText, ts: Date.now() });

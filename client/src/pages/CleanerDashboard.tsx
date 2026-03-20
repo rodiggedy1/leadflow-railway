@@ -514,6 +514,15 @@ export default function CleanerDashboard() {
     },
   });
 
+  const requeueSms = trpc.quality.requeueRatingSms.useMutation({
+    onSuccess: () => {
+      toast.success("Re-queued — approve and send again");
+      utils.quality.ratingSmsQueueSummary.invalidate();
+      refetchPending();
+    },
+    onError: (err) => toast.error("Re-queue failed", { description: err.message }),
+  });
+
   const { data: pendingList, refetch: refetchPending } = trpc.quality.listPendingRatingSms.useQuery();
 
   const syncJobs = trpc.quality.syncTodayJobs.useMutation({
@@ -675,6 +684,20 @@ export default function CleanerDashboard() {
                                   onClick={() => skipSms.mutate({ id: item.id })}
                                 >
                                   Skip
+                                </Button>
+                              </div>
+                            )}
+                            {(item.status === "sent" || item.status === "skipped") && (
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-7 gap-1"
+                                  onClick={() => requeueSms.mutate({ id: item.id })}
+                                  disabled={requeueSms.isPending}
+                                >
+                                  {requeueSms.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                                  Re-queue
                                 </Button>
                               </div>
                             )}

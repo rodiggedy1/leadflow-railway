@@ -1475,3 +1475,9 @@
 - [x] Root cause 1: sendApprovedRatingSms tried to update completedJobs table - removed (quality jobs use cleanerJobs)
 - [x] Root cause 2: QUALITY_RATING_REQUESTED and QUALITY_MISSED_FOLLOWUP were missing from conversationStages enum - added and migrated
 - [x] Fix: both issues resolved, Send Now now works end-to-end
+
+## Webhook Routing & Re-queue Button
+- [x] Fixed webhook: QUALITY_RATING_FOLLOWUP renamed to QUALITY_MISSED_FOLLOWUP in both session filter and routing block
+- [x] Fixed handleRatingReply: now looks up cleanerJob by cleanerJobId directly (not via completedJobId which was 0 for synced jobs)
+- [x] Added requeueRatingSms procedure: resets sent/skipped rows back to pending
+- [x] Added Re-queue button in Review dialog for sent and skipped items

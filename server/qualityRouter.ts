@@ -333,19 +333,24 @@ export async function handleRatingReply(
 
     if (pendingRow.length > 0) {
       const pending = pendingRow[0]!;
-      // Find the cleanerJob for this completedJob
-      const cleanerJobRow = await db
-        .select()
-        .from(cleanerJobs)
-        .where(eq(cleanerJobs.completedJobId, pending.completedJobId))
-        .limit(1);
-
-      if (cleanerJobRow.length > 0) {
-        const cj = cleanerJobRow[0]!;
+      // Prefer cleanerJobId direct link; fall back to completedJobId lookup for legacy rows
+      let cleanerJobId: number | null = pending.cleanerJobId ?? null;
+      if (!cleanerJobId && pending.completedJobId) {
+        const legacyRow = await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.completedJobId, pending.completedJobId))
+          .limit(1);
+        cleanerJobId = legacyRow[0]?.id ?? null;
+      }
+      if (cleanerJobId) {
         await db
           .update(cleanerJobs)
           .set({ customerRating: rating })
-          .where(eq(cleanerJobs.id, cj.id));
+          .where(eq(cleanerJobs.id, cleanerJobId));
+        console.log(`[Quality] Updated customerRating=${rating} on cleanerJob ${cleanerJobId}`);
+      } else {
+        console.warn(`[Quality] Could not find cleanerJob for phone ${fromPhone} (pendingId=${pending.id})`);
       }
     }
 
@@ -382,11 +387,19 @@ export async function handleRatingReply(
 
     if (pendingRow.length > 0) {
       const pending = pendingRow[0]!;
-      const cleanerJobRow = await db
-        .select()
-        .from(cleanerJobs)
-        .where(eq(cleanerJobs.completedJobId, pending.completedJobId))
-        .limit(1);
+      // Prefer cleanerJobId direct link; fall back to completedJobId lookup for legacy rows
+      let resolvedCleanerJobId: number | null = pending.cleanerJobId ?? null;
+      if (!resolvedCleanerJobId && pending.completedJobId) {
+        const legacyRow = await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.completedJobId, pending.completedJobId))
+          .limit(1);
+        resolvedCleanerJobId = legacyRow[0]?.id ?? null;
+      }
+      const cleanerJobRow = resolvedCleanerJobId
+        ? await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, resolvedCleanerJobId)).limit(1)
+        : [];
 
       if (cleanerJobRow.length > 0) {
         const cj = cleanerJobRow[0]!;
@@ -583,6 +596,19 @@ export const qualityRouter = router({
       await db
         .update(ratingSmsPending)
         .set({ status: "skipped", skipReason: input.reason ?? null })
+        .where(eq(ratingSmsPending.id, input.id));
+      return { ok: true };
+    }),
+
+  /** Re-queue a sent/skipped rating SMS back to pending so it can be re-approved and re-sent */
+  requeueRatingSms: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db
+        .update(ratingSmsPending)
+        .set({ status: "pending", sentAt: null, skipReason: null, approvedAt: null, approvedBy: null })
         .where(eq(ratingSmsPending.id, input.id));
       return { ok: true };
     }),
