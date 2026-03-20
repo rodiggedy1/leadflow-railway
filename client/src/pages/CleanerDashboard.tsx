@@ -168,30 +168,44 @@ function PhotoUploadButton({
   });
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !job.cleanerAssignment) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("File too large", { description: "Max 10MB per photo." });
-      return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0 || !job.cleanerAssignment) return;
+
+    const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast.error("File too large", { description: `${oversized.length} photo(s) exceed 10MB and were skipped.` });
     }
+    const valid = files.filter(f => f.size <= 10 * 1024 * 1024);
+    if (valid.length === 0) return;
+
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        await upload.mutateAsync({
-          cleanerJobId: job.cleanerAssignment!.id,
-          completedJobId: job.id,
-          cleanerProfileId: job.cleanerAssignment!.cleanerProfileId,
-          filename: file.name,
-          mimeType: file.type,
-          base64Data: base64,
+      // Upload all selected photos sequentially
+      for (const file of valid) {
+        await new Promise<void>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = async () => {
+            try {
+              const base64 = (reader.result as string).split(",")[1];
+              await upload.mutateAsync({
+                cleanerJobId: job.cleanerAssignment!.id,
+                completedJobId: job.id,
+                cleanerProfileId: job.cleanerAssignment!.cleanerProfileId,
+                filename: file.name,
+                mimeType: file.type,
+                base64Data: base64,
+              });
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          };
+          reader.readAsDataURL(file);
         });
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch {
+      }
+    } finally {
       setUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -283,7 +297,7 @@ function PhotoUploadButton({
 
   return (
     <>
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
       <Button
         variant="outline"
         size="sm"

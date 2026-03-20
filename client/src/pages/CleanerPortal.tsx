@@ -234,26 +234,38 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
   };
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error("Photo must be under 8MB");
-      return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    const oversized = files.filter(f => f.size > 8 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} photo(s) exceed 8MB and were skipped`);
     }
+    const valid = files.filter(f => f.size <= 8 * 1024 * 1024);
+    if (valid.length === 0) return;
+
     setUploading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadMutation.mutate({
-        cleanerJobId: job.id,
-        completedJobId: job.completedJobId,
-        filename: file.name,
-        mimeType: file.type,
-        dataBase64: base64,
+    // Upload all selected photos sequentially
+    for (const file of valid) {
+      await new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(",")[1];
+          uploadMutation.mutate(
+            {
+              cleanerJobId: job.id,
+              completedJobId: job.completedJobId,
+              filename: file.name,
+              mimeType: file.type,
+              dataBase64: base64,
+            },
+            { onSettled: () => resolve() }
+          );
+        };
+        reader.readAsDataURL(file);
       });
-    };
-    reader.readAsDataURL(file);
-    // Reset input so same file can be re-selected
+    }
+    // Reset input so same files can be re-selected
     e.target.value = "";
   }, [job.id, job.completedJobId, uploadMutation]);
 
@@ -673,6 +685,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={handleFileChange}
           />

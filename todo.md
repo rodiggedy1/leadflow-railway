@@ -1663,3 +1663,4 @@
 - [x] Remove capture="environment" from CleanerPortal photo input to show camera+library sheet
 - [x] Extend cleaner and agent cookie maxAge from 30 days to 1 year
 - [x] SameSite=None kept (required for widget cross-origin) — maxAge extended to 1 year instead
+- [x] Allow multiple photo selection and upload in CleanerPortal and CleanerDashboard
