@@ -1522,3 +1522,10 @@
 - [x] Admin: add Set Password button on cleaner profile in quality dashboard
 - [x] Wire /cleaner route in App.tsx
 - [ ] Write vitest tests for cleaner auth and job query procedures (pending)
+
+## Cleaner Portal: Switch to Email+Password Login
+- [x] Update cleaner.login procedure to accept email instead of phone
+- [x] Update cleaner.setPassword procedure to also accept email input
+- [x] Update CleanerPortal login form: phone field → email field
+- [x] Update quality dashboard Set PW dialog: add email field (same as agent Create dialog)
+- [x] Test email+password login end-to-end

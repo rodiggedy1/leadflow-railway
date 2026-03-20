@@ -20,50 +20,41 @@ import { storagePut } from "./storage";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Normalize phone to E.164 for lookup (strip spaces, dashes, parens) */
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return `+${digits}`;
-}
-
-// ── Router ───────────────────────────────────────────────────────────────────
+// ── Router ────────────────────────────────────────────
 
 export const cleanerRouter = router({
   /**
-   * cleaner.login — authenticate with phone + password, set cleaner session cookie.
+   * cleaner.login — authenticate with email + password, set cleaner session cookie.
    */
   login: publicProcedure
     .input(z.object({
-      phone: z.string().min(7),
+      email: z.string().email(),
       password: z.string().min(1),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      const normalizedPhone = normalizePhone(input.phone);
       const rows = await db
         .select()
         .from(cleanerProfiles)
-        .where(eq(cleanerProfiles.phone, normalizedPhone))
+        .where(eq(cleanerProfiles.email, input.email.toLowerCase().trim()))
         .limit(1);
 
       const cleaner = rows[0];
       if (!cleaner || !cleaner.isActive || !cleaner.passwordHash) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid phone or password" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
       }
 
       const valid = await bcrypt.compare(input.password, cleaner.passwordHash);
       if (!valid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid phone or password" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
       }
 
       const token = await signCleanerSession({
         cleanerId: cleaner.id,
         cleanerName: cleaner.name,
-        cleanerPhone: cleaner.phone ?? normalizedPhone,
+        cleanerPhone: cleaner.phone ?? "",
       });
 
       const cookieOpts = getSessionCookieOptions(ctx.req);
@@ -74,7 +65,7 @@ export const cleanerRouter = router({
 
       return {
         success: true,
-        cleaner: { id: cleaner.id, name: cleaner.name, phone: cleaner.phone },
+        cleaner: { id: cleaner.id, name: cleaner.name, email: cleaner.email },
       };
     }),
 
@@ -268,11 +259,12 @@ export const cleanerRouter = router({
   // ── Admin procedures ────────────────────────────────────────────────────────
 
   /**
-   * cleaner.setPassword — admin sets or resets a cleaner's portal password.
+   * cleaner.setPassword — admin sets email + password for a cleaner's portal access.
    */
   setPassword: adminAgentProcedure
     .input(z.object({
       cleanerProfileId: z.number(),
+      email: z.string().email("Must be a valid email"),
       password: z.string().min(6, "Password must be at least 6 characters"),
     }))
     .mutation(async ({ input }) => {
@@ -282,7 +274,7 @@ export const cleanerRouter = router({
       const hash = await bcrypt.hash(input.password, 10);
       await db
         .update(cleanerProfiles)
-        .set({ passwordHash: hash })
+        .set({ email: input.email.toLowerCase().trim(), passwordHash: hash })
         .where(eq(cleanerProfiles.id, input.cleanerProfileId));
 
       return { success: true };

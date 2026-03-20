@@ -70,7 +70,7 @@ function StarRating({ rating }: { rating: number | null }) {
 // ── Login Form ────────────────────────────────────────────────────────────────
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const loginMutation = trpc.cleaner.login.useMutation({
     onSuccess: () => {
@@ -92,14 +92,15 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-slate-300 text-sm font-medium block mb-1.5">Phone Number</label>
+            <label className="text-slate-300 text-sm font-medium block mb-1.5">Email</label>
             <Input
-              type="tel"
-              placeholder="(202) 555-1234"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
+              type="email"
+              placeholder="cleaner@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
               className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 focus:border-emerald-500"
-              onKeyDown={e => e.key === "Enter" && loginMutation.mutate({ phone, password })}
+              autoFocus
+              onKeyDown={e => e.key === "Enter" && loginMutation.mutate({ email: email.trim(), password })}
             />
           </div>
           <div>
@@ -110,13 +111,13 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 focus:border-emerald-500"
-              onKeyDown={e => e.key === "Enter" && loginMutation.mutate({ phone, password })}
+              onKeyDown={e => e.key === "Enter" && loginMutation.mutate({ email: email.trim(), password })}
             />
           </div>
           <Button
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
-            onClick={() => loginMutation.mutate({ phone, password })}
-            disabled={loginMutation.isPending || !phone || !password}
+            onClick={() => loginMutation.mutate({ email: email.trim(), password })}
+            disabled={loginMutation.isPending || !email || !password}
           >
             {loginMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Sign In

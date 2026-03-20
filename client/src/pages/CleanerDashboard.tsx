@@ -494,6 +494,7 @@ export default function CleanerDashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>("by-time");
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
 
   const resetPasswordMutation = trpc.cleaner.setPassword.useMutation({
     onSuccess: () => {
@@ -859,33 +860,38 @@ export default function CleanerDashboard() {
         </div>
 
         {/* Weekly Pay Summary */}
-        <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); }} />
+        <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); setResetEmail(""); }} />
       </div>
     </div>
 
     {/* Set Password Dialog */}
-    <Dialog open={!!resetTarget} onOpenChange={() => setResetTarget(null)}>
+    <Dialog open={!!resetTarget} onOpenChange={() => { setResetTarget(null); setResetEmail(""); setResetPw(""); }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Set Password — {resetTarget?.name}</DialogTitle>
+          <DialogTitle>Set Portal Access — {resetTarget?.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
-          <p className="text-sm text-muted-foreground">
-            Cleaner logs in at <code className="text-xs bg-muted px-1 rounded">/cleaner</code> with their phone number and this password.
-          </p>
           <div className="space-y-1">
-            <label className="text-sm font-medium block">New Password</label>
+            <label className="text-sm font-medium block">Email</label>
+            <Input type="email" placeholder="cleaner@example.com" value={resetEmail} onChange={e => setResetEmail(e.target.value)} autoFocus />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium block">Password</label>
             <Input type="password" placeholder="Min 6 characters" value={resetPw} onChange={e => setResetPw(e.target.value)} />
           </div>
+          <p className="text-xs text-muted-foreground">
+            Cleaner logs in at <code className="text-xs bg-muted px-1 rounded">/cleaner</code> with this email and password.
+          </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+          <Button variant="outline" onClick={() => { setResetTarget(null); setResetEmail(""); setResetPw(""); }}>Cancel</Button>
           <Button
-            onClick={() => resetTarget && resetPasswordMutation.mutate({ cleanerProfileId: resetTarget.id, password: resetPw })}
-            disabled={resetPasswordMutation.isPending || resetPw.length < 6}
+            onClick={() => resetTarget && resetPasswordMutation.mutate({ cleanerProfileId: resetTarget.id, email: resetEmail.trim(), password: resetPw })}
+            disabled={resetPasswordMutation.isPending || resetPw.length < 6 || !resetEmail.includes("@")}
+            style={{ backgroundColor: "#E8603C", color: "white" }}
           >
             {resetPasswordMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-            Save Password
+            Save & Enable Access
           </Button>
         </DialogFooter>
       </DialogContent>
