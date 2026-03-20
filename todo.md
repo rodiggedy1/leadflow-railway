@@ -1558,3 +1558,7 @@
 - [x] Replace "Photo submitted" button with thumbnail grid (2-3 per row) in quality job card
 - [x] Add lightbox modal: click thumbnail → full-size photo with prev/next navigation
 - [x] Show photo count badge on the job card
+
+## Cleaner Portal: Photos in This Week View
+- [x] Show photo thumbnails on each job row in the This Week tab
+- [x] Click thumbnail opens lightbox (reuse same pattern as Today view)

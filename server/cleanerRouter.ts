@@ -7,7 +7,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerJobs, cleanerProfiles, jobPhotos } from "../drizzle/schema";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -161,7 +161,18 @@ export const cleanerRouter = router({
         )
         .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
 
-      return jobs;
+      // Fetch photos for all jobs in one query
+      let photos: typeof jobPhotos.$inferSelect[] = [];
+      if (jobs.length > 0) {
+        const jobIds = jobs.map(j => j.id);
+        const allPhotos = await db.select().from(jobPhotos).where(inArray(jobPhotos.cleanerJobId, jobIds));
+        photos = allPhotos;
+      }
+
+      return jobs.map(job => ({
+        ...job,
+        photos: photos.filter(p => p.cleanerJobId === job.id),
+      }));
     }),
 
   /**

@@ -456,6 +456,83 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
   );
 }
 
+// ── WeekJobRow ───────────────────────────────────────────────────────────────
+
+function WeekJobRow({
+  j, fp, isFinalized, photos
+}: {
+  j: { id: number; customerName: string | null; serviceDateTime: string | null; serviceType: string | null; basePay: string | null; customerRating: number | null };
+  fp: number;
+  isFinalized: boolean;
+  photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
+}) {
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const currentPhoto = lightboxIdx !== null ? photos[lightboxIdx] : null;
+
+  return (
+    <div className="px-4 py-2.5 space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-slate-200 text-sm">{j.customerName ?? "Customer"}</p>
+          <p className="text-slate-500 text-xs">
+            {j.serviceDateTime ? formatTime(j.serviceDateTime) : ""}
+            {j.serviceType ? ` · ${j.serviceType}` : ""}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className={`text-sm font-semibold ${fp >= parseFloat(j.basePay ?? "0") ? "text-emerald-400" : "text-red-400"}`}>
+            ${fp.toFixed(2)}
+          </p>
+          {!isFinalized && <p className="text-slate-600 text-xs">Preview</p>}
+          {j.customerRating && (
+            <div className="flex items-center gap-0.5 justify-end mt-0.5">
+              {[1,2,3,4,5].map(i => (
+                <Star key={i} className={`w-3 h-3 ${i <= (j.customerRating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-600"}`} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Photo thumbnails */}
+      {photos.length > 0 && (
+        <div className={`grid gap-1.5 ${photos.length === 1 ? "grid-cols-1" : photos.length === 2 ? "grid-cols-2" : "grid-cols-3"} max-w-[200px]`}>
+          {photos.map((p, i) => (
+            <button
+              key={p.id}
+              onClick={() => setLightboxIdx(i)}
+              className="relative aspect-square rounded overflow-hidden bg-slate-700 group"
+            >
+              <img src={p.photoUrl} alt={p.filename ?? `Photo ${i + 1}`} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <ImageIcon className="w-4 h-4 text-white" />
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxIdx !== null && currentPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl" onClick={() => setLightboxIdx(null)}>✕</button>
+          {photos.length > 1 && (
+            <button className="absolute left-4 text-white/70 hover:text-white text-2xl" onClick={e => { e.stopPropagation(); setLightboxIdx((lightboxIdx - 1 + photos.length) % photos.length); }}>‹</button>
+          )}
+          <img src={currentPhoto.photoUrl} alt={currentPhoto.filename ?? "Photo"} className="max-h-[85vh] max-w-full rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          {photos.length > 1 && (
+            <button className="absolute right-4 text-white/70 hover:text-white text-2xl" onClick={e => { e.stopPropagation(); setLightboxIdx((lightboxIdx + 1) % photos.length); }}>›</button>
+          )}
+          {photos.length > 1 && <p className="absolute bottom-4 text-white/50 text-sm">{lightboxIdx + 1} / {photos.length}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Portal ───────────────────────────────────────────────────────────────
 
 export default function CleanerPortal() {
@@ -660,33 +737,17 @@ export default function CleanerPortal() {
                   ) : (
                     <div className="divide-y divide-slate-700/30">
                       {dayJobs.map(j => {
-                        const fp = parseFloat(j.finalPay ?? "0") || (parseFloat(j.basePay ?? "0") + parseFloat(j.ratingAdjustment ?? "0") + parseFloat(j.streakBonus ?? "0"));
+                        const fp = calcJobPay(j);
                         const isFinalized = j.ratingAdjustment != null;
+                        const photos = j.photos ?? [];
                         return (
-                          <div key={j.id} className="flex items-center justify-between px-4 py-2.5">
-                            <div>
-                              <p className="text-slate-200 text-sm">{j.customerName ?? "Customer"}</p>
-                              <p className="text-slate-500 text-xs">
-                                {j.serviceDateTime ? formatTime(j.serviceDateTime) : ""}
-                                {j.serviceType ? ` · ${j.serviceType}` : ""}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className={`text-sm font-semibold ${fp >= parseFloat(j.basePay ?? "0") ? "text-emerald-400" : "text-red-400"}`}>
-                                ${fp.toFixed(2)}
-                              </p>
-                              {!isFinalized && (
-                                <p className="text-slate-600 text-xs">Preview</p>
-                              )}
-                              {j.customerRating && (
-                                <div className="flex items-center gap-0.5 justify-end mt-0.5">
-                                  {[1,2,3,4,5].map(i => (
-                                    <Star key={i} className={`w-3 h-3 ${i <= (j.customerRating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-600"}`} />
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          <WeekJobRow
+                            key={j.id}
+                            j={j}
+                            fp={fp}
+                            isFinalized={isFinalized}
+                            photos={photos}
+                          />
                         );
                       })}
                     </div>
