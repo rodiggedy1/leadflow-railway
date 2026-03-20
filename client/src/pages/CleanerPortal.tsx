@@ -484,6 +484,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                       return;
                     }
                     if (s.key === "running_late" || s.key === "on_the_way") {
+                      // Toggle picker open/closed; re-tap on active status also reopens it
                       const alreadyOpen = showEtaPicker && etaPickerFor === s.key;
                       setShowEtaPicker(!alreadyOpen);
                       setEtaPickerFor(alreadyOpen ? null : s.key as "on_the_way" | "running_late");
@@ -493,11 +494,15 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                     statusMutation.mutate({ cleanerJobId: job.id, status: s.key });
                   }}
                   disabled={statusMutation.isPending}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                    isActive ? s.activeColor + " border-transparent" : s.color
-                  } ${statusMutation.isPending ? "opacity-50 cursor-not-allowed" : "hover:opacity-90 cursor-pointer"}`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                    isActive
+                      ? s.activeColor + " border-transparent ring-2 ring-white/30 ring-offset-1 ring-offset-slate-900 scale-105 shadow-lg"
+                      : s.color + " opacity-60"
+                  } ${statusMutation.isPending ? "opacity-50 cursor-not-allowed" : "hover:opacity-100 cursor-pointer"}`}
                 >
-                  {isPending ? "…" : s.label}
+                  {isPending ? <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-current animate-pulse inline-block" /> …</span> : (
+                    isActive ? <span className="inline-flex items-center gap-1">✓ {s.label}</span> : s.label
+                  )}
                 </button>
               );
             })}
@@ -511,7 +516,9 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             }`}>
               <p className={`text-xs font-semibold uppercase tracking-widest ${
                 etaPickerFor === "on_the_way" ? "text-blue-300" : "text-orange-300"
-              }`}>When will you arrive?</p>
+              }`}>
+                {job.jobStatus === etaPickerFor && job.issueNote ? "Update ETA" : "When will you arrive?"}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {ETA_OPTIONS.map(opt => (
                   <button

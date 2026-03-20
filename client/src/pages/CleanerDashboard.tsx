@@ -11,7 +11,7 @@
  *  - Photo upload per job (completion photo)
  *  - Weekly pay summary per cleaner
  */
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -705,10 +705,19 @@ export default function CleanerDashboard() {
     onError: (err) => toast.error(err.message),
   });
 
-  const { data: jobs, isLoading, refetch } = trpc.quality.getJobsForDate.useQuery(
+  const { data: jobs, isLoading, refetch, dataUpdatedAt } = trpc.quality.getJobsForDate.useQuery(
     { date: selectedDate },
-    { refetchOnWindowFocus: true, refetchInterval: 15_000 }
+    { refetchOnWindowFocus: true, refetchInterval: 30_000 }
   );
+
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  useEffect(() => {
+    setSecondsAgo(0);
+  }, [dataUpdatedAt]);
+  useEffect(() => {
+    const timer = setInterval(() => setSecondsAgo(s => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const { data: pendingSms } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -845,6 +854,14 @@ export default function CleanerDashboard() {
                 By Cleaner
               </Button>
             </div>
+
+            {/* Last updated indicator */}
+            {dataUpdatedAt > 0 && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" />
+                {secondsAgo < 5 ? "Just updated" : `${secondsAgo}s ago`}
+              </span>
+            )}
 
             {/* Sync */}
             <Button

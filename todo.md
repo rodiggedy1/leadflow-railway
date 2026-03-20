@@ -1604,3 +1604,9 @@
 - [x] Show ETA picker when cleaner taps "On the Way" (same 5 options as Running Late)
 - [x] Store ETA in issueNote for on_the_way (e.g. "ETA: 30 minutes")
 - [x] Show ETA on admin quality card for on_the_way and running_late badges
+
+## Admin Quality Auto-Refresh + ETA Update + Clearer Status UI
+- [x] Add 30s polling (refetchInterval) to admin quality getJobsForDate query
+- [x] Show a subtle "Last updated X seconds ago" indicator on the quality dashboard
+- [x] Allow cleaner to re-tap active on_the_way/running_late badge to reopen ETA picker and update
+- [x] Improve active status button styling: checkmark prefix, ring/scale effect, inactive buttons dimmed
