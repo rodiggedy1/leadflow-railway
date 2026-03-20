@@ -415,7 +415,7 @@ export default function SyncHealthPage() {
 
   return (
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
-      <AdminHeader activeTab="sync-health" />
+      <AdminHeader activeTab="always-on" />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Page title */}

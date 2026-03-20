@@ -232,7 +232,6 @@ type AdminTab =
   | "campaigns"
   | "completed-jobs"
   | "always-on"
-  | "sync-health"
   | "calls"
   | "quality";
 
@@ -250,7 +249,6 @@ const NAV_TABS: {
   { id: "campaigns", label: "Campaigns", href: "/admin/campaigns", icon: <Send className="w-3.5 h-3.5" /> },
   { id: "completed-jobs", label: "Reviews", href: "/admin/completed-jobs", icon: <Star className="w-3.5 h-3.5" /> },
   { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
-  { id: "sync-health", label: "Sync Health", href: "/admin/sync-health", icon: <Activity className="w-3.5 h-3.5" /> },
   { id: "calls", label: "All Calls", href: "/admin/calls", icon: <Mic className="w-3.5 h-3.5" /> },
   { id: "quality", label: "Quality", href: "/admin/quality", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
 ];
