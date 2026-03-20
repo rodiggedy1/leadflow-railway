@@ -1658,3 +1658,5 @@
 - [x] Add phoneNumberId guard to webhook handler to prevent cross-project message contamination
 - [x] Implement React.lazy() code splitting on all routes in App.tsx to reduce 2.4MB bundle
 - [x] Add .manus/db to .gitignore and remove debug files from git tracking
+- [x] Add 10-second AbortController timeout to vapiRequest() to prevent startup hangs
+- [x] Parallelize Vapi tool upserts with Promise.all() to reduce sequential API calls

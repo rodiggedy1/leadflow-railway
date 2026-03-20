@@ -28,24 +28,33 @@ const VAPI_API_BASE = "https://api.vapi.ai";
 
 // ─── Vapi API helpers ──────────────────────────────────────────────────────────
 
+const VAPI_REQUEST_TIMEOUT_MS = 10_000; // 10 seconds — prevents startup hangs if Vapi is slow
+
 async function vapiRequest(
   method: string,
   path: string,
   body?: unknown
 ): Promise<unknown> {
-  const res = await fetch(`${VAPI_API_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${ENV.vapiPrivateKey}`,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Vapi API ${method} ${path} → ${res.status}: ${text}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), VAPI_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${VAPI_API_BASE}${path}`, {
+      method,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${ENV.vapiPrivateKey}`,
+        "Content-Type": "application/json",
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Vapi API ${method} ${path} → ${res.status}: ${text}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 // ─── Assistant system prompt ───────────────────────────────────────────────────
@@ -522,13 +531,10 @@ export async function bootstrapVapiAssistant(webhookUrl: string): Promise<string
   }
 
   try {
-    // Step 1: Upsert all tools and collect their IDs
+    // Step 1: Upsert all tools in parallel and collect their IDs.
+    // Promise.all() is safe here because each tool upsert is independent.
     const toolDefs = buildToolDefinitions(webhookUrl);
-    const toolIds: string[] = [];
-    for (const toolDef of toolDefs) {
-      const id = await upsertVapiTool(toolDef);
-      toolIds.push(id);
-    }
+    const toolIds = await Promise.all(toolDefs.map((toolDef) => upsertVapiTool(toolDef)));
 
     // Step 2: Build assistant config with toolIds and webhook URL
     const config = buildAssistantConfig(toolIds, webhookUrl);
