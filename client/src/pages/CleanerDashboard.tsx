@@ -967,6 +967,60 @@ function OperationsOverview({ date }: { date: string }) {
         </Card>
       </div>
 
+      {/* ── Completion Progress Bar ── */}
+      {metrics.total > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="font-medium">Day Progress</span>
+            <span>
+              <span className="text-emerald-600 font-semibold">{metrics.completed} completed</span>
+              {metrics.inProgress > 0 && <span className="text-amber-600"> · {metrics.inProgress} in progress</span>}
+              {metrics.onTheWay > 0 && <span className="text-blue-600"> · {metrics.onTheWay} on the way</span>}
+              <span className="text-muted-foreground"> / {metrics.total} total</span>
+            </span>
+          </div>
+          <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+            {/* Completed — emerald */}
+            {metrics.completed > 0 && (
+              <div
+                className="h-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${(metrics.completed / metrics.total) * 100}%` }}
+              />
+            )}
+            {/* In Progress — amber */}
+            {metrics.inProgress > 0 && (
+              <div
+                className="h-full bg-amber-400 transition-all duration-500"
+                style={{ width: `${(metrics.inProgress / metrics.total) * 100}%` }}
+              />
+            )}
+            {/* On the Way — blue */}
+            {metrics.onTheWay > 0 && (
+              <div
+                className="h-full bg-blue-400 transition-all duration-500"
+                style={{ width: `${(metrics.onTheWay / metrics.total) * 100}%` }}
+              />
+            )}
+            {/* Issues — red */}
+            {metrics.issueCount > 0 && (
+              <div
+                className="h-full bg-red-400 transition-all duration-500"
+                style={{ width: `${(metrics.issueCount / metrics.total) * 100}%` }}
+              />
+            )}
+            {/* Remaining — muted (implicit, fills the rest) */}
+          </div>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground pt-0.5">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Completed</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />In Progress</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />On the Way</span>
+            {metrics.issueCount > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Issue</span>}
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted-foreground/30 inline-block" />Not Started</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Revenue Snapshot ── */}
       <Card className="border-0 bg-muted/30">
         <CardContent className="py-4">

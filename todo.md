@@ -1670,3 +1670,6 @@
 - [x] AI daily summary: LLM-generated plain-English ops briefing (generated on demand)
 - [x] Revenue snapshot: total day revenue, estimated total pay, net margin
 - [x] Auto-refresh every 30s
+
+## Overview: Completion Progress Bar
+- [x] Add thin segmented progress bar below metric cards showing completed / in-progress / not-started breakdown
