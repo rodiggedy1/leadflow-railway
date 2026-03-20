@@ -20,10 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import {
-  Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
+import { Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
-  CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink
+  CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink,
+  X, ZoomIn, Images
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -140,31 +140,88 @@ function PhotoUploadButton({
   };
 
   const hasPhoto = job.photos.length > 0 || job.cleanerAssignment?.photoSubmitted === 1;
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   if (hasPhoto) {
+    const photos = job.photos;
+    const currentPhoto = lightboxIndex !== null ? photos[lightboxIndex] : null;
+
     return (
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
-            <CheckCircle2 className="w-4 h-4" />
-            Photo submitted
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Completion Photo</DialogTitle>
-          </DialogHeader>
-          {job.photos.length > 0 ? (
-            <div className="space-y-2">
-              {job.photos.map((p) => (
-                <img key={p.id} src={p.photoUrl} alt={p.filename ?? "photo"} className="w-full rounded-lg" />
+      <>
+        {/* Thumbnail grid */}
+        {photos.length > 0 ? (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Images className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-xs font-medium text-emerald-700">{photos.length} photo{photos.length !== 1 ? 's' : ''} submitted</span>
+            </div>
+            <div className={`grid gap-1.5 ${photos.length === 1 ? 'grid-cols-1' : photos.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              {photos.map((p, i) => (
+                <button
+                  key={p.id}
+                  onClick={() => setLightboxIndex(i)}
+                  className="relative group rounded-lg overflow-hidden border border-slate-200 hover:border-emerald-400 transition-all aspect-square"
+                >
+                  <img
+                    src={p.photoUrl}
+                    alt={p.filename ?? `Photo ${i + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                    <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Photo was marked as submitted but no file found.</p>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-emerald-600">
+            <CheckCircle2 className="w-4 h-4" />
+            <span className="text-xs font-medium">Photo submitted</span>
+          </div>
+        )}
+
+        {/* Lightbox */}
+        {lightboxIndex !== null && currentPhoto && (
+          <div
+            className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
+            onClick={() => setLightboxIndex(null)}
+          >
+            <button
+              className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-all"
+              onClick={() => setLightboxIndex(null)}
+            >
+              <X className="w-6 h-6" />
+            </button>
+            {photos.length > 1 && (
+              <>
+                <button
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-all"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIndex((lightboxIndex - 1 + photos.length) % photos.length); }}
+                >
+                  <ChevronLeft className="w-8 h-8" />
+                </button>
+                <button
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-all"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIndex((lightboxIndex + 1) % photos.length); }}
+                >
+                  <ChevronRight className="w-8 h-8" />
+                </button>
+              </>
+            )}
+            <div className="max-w-4xl max-h-[90vh] px-16" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={currentPhoto.photoUrl}
+                alt={currentPhoto.filename ?? `Photo ${lightboxIndex + 1}`}
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              />
+              {photos.length > 1 && (
+                <p className="text-center text-white/50 text-sm mt-3">{lightboxIndex + 1} / {photos.length}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 

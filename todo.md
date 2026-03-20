@@ -1553,3 +1553,8 @@
 ## Bug Fix: Total Pay not reflecting photo penalty
 - [x] Fix: Total Pay in cleaner portal must always include photoAdjustment (photo penalty/bonus)
 - [x] Fix: finalPay from DB may be stale (set before photoAdjustment column existed) — always recalculate display total as basePay + ratingAdj + photoAdj + streakBonus
+
+## Admin Quality: Better Photo Presentation
+- [x] Replace "Photo submitted" button with thumbnail grid (2-3 per row) in quality job card
+- [x] Add lightbox modal: click thumbnail → full-size photo with prev/next navigation
+- [x] Show photo count badge on the job card
