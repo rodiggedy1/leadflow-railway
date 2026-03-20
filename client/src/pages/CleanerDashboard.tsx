@@ -552,7 +552,7 @@ export default function CleanerDashboard() {
                               <DollarSign className="w-3 h-3" />
                               Base pay: <span className="font-semibold text-foreground">${parseFloat(job.cleanerAssignment.basePay).toFixed(2)}</span>
                               {job.cleanerAssignment.payPercent && (
-                                <span className="text-muted-foreground/60">({parseFloat(job.cleanerAssignment.payPercent) * 100}%)</span>
+                                <span className="text-muted-foreground/60">({parseFloat(job.cleanerAssignment.payPercent)}%)</span>
                               )}
                             </div>
                           )}

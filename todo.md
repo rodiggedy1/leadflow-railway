@@ -1458,3 +1458,7 @@
 ## Bug Fix: Quality Widget Missing from Main Admin Header
 - [x] Add Quality widget to AdminDashboard inline header (the /admin page has its own header, not using AdminHeader component)
 - [x] Add Quality tab link to AdminDashboard tab nav row
+
+## Bug Fix: Synced Jobs Not Appearing on Quality Dashboard
+- [x] Investigate mismatch between syncTodayJobs stored data and getJobsForDate/getJobsForDay query
+- [x] Fix so synced jobs appear correctly on the quality dashboard

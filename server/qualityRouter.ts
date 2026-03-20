@@ -617,35 +617,56 @@ export const qualityRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const date = input.date ?? getTodayET();
-      const jobs = await db
+
+      // Query cleanerJobs directly (populated by syncTodayJobs from Launch27)
+      const cjRows = await db
         .select()
-        .from(completedJobs)
-        .where(eq(completedJobs.jobDate, date))
-        .orderBy(completedJobs.createdAt);
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.jobDate, date))
+        .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
 
-      // Get cleaner assignments for these jobs
-      const jobIds = jobs.map((j) => j.id);
-      const assignments =
-        jobIds.length > 0
-          ? await db
-              .select()
-              .from(cleanerJobs)
-              .where(sql`${cleanerJobs.completedJobId} IN (${sql.join(jobIds.map((id) => sql`${id}`), sql`, `)})`)
-          : [];
-
-      // Get photos
+      // Get photos for these cleaner job rows
+      const cjIds = cjRows.map((r) => r.id);
       const photos =
-        jobIds.length > 0
+        cjIds.length > 0
           ? await db
               .select()
               .from(jobPhotos)
-              .where(sql`${jobPhotos.completedJobId} IN (${sql.join(jobIds.map((id) => sql`${id}`), sql`, `)})`)
+              .where(sql`${jobPhotos.cleanerJobId} IN (${sql.join(cjIds.map((id) => sql`${id}`), sql`, `)})`)
           : [];
 
-      return jobs.map((job) => ({
-        ...job,
-        cleanerAssignment: assignments.find((a) => a.completedJobId === job.id) ?? null,
-        photos: photos.filter((p) => p.completedJobId === job.id),
+      // Shape each cleanerJob row into the format the UI expects:
+      // { id, name, address, serviceType, lastBookingPrice, cleanerAssignment, photos }
+      return cjRows.map((cj) => ({
+        // Legacy fields the UI reads directly on the job object
+        id: cj.id,
+        name: cj.customerName ?? null,
+        address: cj.jobAddress ?? null,
+        serviceType: cj.serviceType ?? null,
+        lastBookingPrice: cj.jobRevenue ? parseFloat(cj.jobRevenue) : null,
+        jobDate: cj.jobDate,
+        serviceDateTime: cj.serviceDateTime ?? null,
+        bookingStatus: cj.bookingStatus ?? null,
+        bookingId: cj.bookingId ?? null,
+        // The cleanerAssignment is the cleanerJob row itself (already has all pay/rating fields)
+        cleanerAssignment: {
+          id: cj.id,
+          completedJobId: cj.completedJobId,
+          cleanerProfileId: cj.cleanerProfileId,
+          cleanerName: cj.cleanerName,
+          teamName: cj.teamName ?? null,
+          basePay: cj.basePay ?? null,
+          payPercent: cj.payPercent ?? null,
+          finalPay: cj.finalPay ?? null,
+          ratingAdjustment: cj.ratingAdjustment ?? null,
+          streakBonus: cj.streakBonus ?? null,
+          customerRating: cj.customerRating ?? null,
+          missedSomething: cj.missedSomething ?? null,
+          photoSubmitted: cj.photoSubmitted,
+          flagged: cj.flagged,
+          adminNotes: cj.adminNotes ?? null,
+        },
+        photos: photos.filter((p) => p.cleanerJobId === cj.id),
       }));
     }),
 
