@@ -885,6 +885,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   flagged: int("flagged").default(0).notNull(),
   /** Admin notes on this job */
   adminNotes: text("adminNotes"),
+  /** AI-parsed checklist from customerNotes. JSON array of {text: string, checked: boolean}. Null if no actionable tasks found. */
+  checklistItems: text("checklistItems"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

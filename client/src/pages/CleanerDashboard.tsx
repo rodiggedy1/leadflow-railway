@@ -375,6 +375,7 @@ type JobRow = {
     manualAdjustmentNote: string | null;
     customerNotes: string | null;
     staffNotes: string | null;
+    checklistItems: Array<{ text: string; checked: boolean }> | null;
   };
   photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
 };
@@ -601,6 +602,39 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                 <p className="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">{job.cleanerAssignment.staffNotes}</p>
               </div>
             )}
+
+            {/* AI Checklist — read-only progress for admin */}
+            {job.cleanerAssignment?.checklistItems && job.cleanerAssignment.checklistItems.length > 0 && (() => {
+              const items = job.cleanerAssignment!.checklistItems!;
+              const done = items.filter(i => i.checked).length;
+              const allDone = done === items.length;
+              return (
+                <div className="mt-2 rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">✅ Checklist</p>
+                    <span className={`text-xs font-medium ${
+                      allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                    }`}>{done}/{items.length}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {items.map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-1.5">
+                        <span className={`mt-0.5 shrink-0 w-3 h-3 rounded border flex items-center justify-center text-[9px] ${
+                          item.checked
+                            ? "bg-emerald-500 border-emerald-500 text-white"
+                            : "border-slate-400 dark:border-slate-600"
+                        }`}>
+                          {item.checked && "✓"}
+                        </span>
+                        <span className={`text-xs leading-snug ${
+                          item.checked ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"
+                        }`}>{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right: Cleaner + pay + photo */}

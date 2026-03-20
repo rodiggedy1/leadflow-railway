@@ -159,6 +159,7 @@ type Job = {
   etaTimestamp: number | null;
   manualAdjustment: string | null;
   manualAdjustmentNote: string | null;
+  checklistItems: Array<{ text: string; checked: boolean }> | null;
 };
 
 const JOB_STATUSES = [
@@ -213,6 +214,24 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
     onError: (err) => toast.error(err.message),
     onSettled: () => setCompleting(false),
   });
+
+  const toggleChecklistMutation = trpc.cleaner.toggleChecklistItem.useMutation({
+    onError: (err) => toast.error(`Failed to save: ${err.message}`),
+  });
+
+  // Checklist gating: all items must be checked before Mark Complete
+  const checklist = job.checklistItems ?? null;
+  const hasChecklist = checklist !== null && checklist.length > 0;
+  const allChecked = hasChecklist ? checklist.every(item => item.checked) : true;
+
+  const handleMarkComplete = () => {
+    if (!allChecked) {
+      toast.warning("Please check off all checklist items before marking complete.");
+      return;
+    }
+    setCompleting(true);
+    completeMutation.mutate({ cleanerJobId: job.id });
+  };
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -308,6 +327,55 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
           <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
             <p className="text-blue-300 text-xs font-medium mb-1">🗒️ Staff Notes</p>
             <p className="text-blue-200 text-sm whitespace-pre-wrap">{job.staffNotes}</p>
+          </div>
+        )}
+
+        {/* AI Checklist */}
+        {hasChecklist && (
+          <div className="bg-slate-900/80 border border-slate-600 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider">✅ Job Checklist</p>
+              <span className="text-xs text-slate-500">{checklist!.filter(i => i.checked).length}/{checklist!.length} done</span>
+            </div>
+            <div className="space-y-2">
+              {checklist!.map((item, idx) => (
+                <button
+                  key={idx}
+                  className={`w-full flex items-start gap-2.5 text-left rounded-md px-2 py-1.5 transition-colors ${
+                    item.checked
+                      ? "bg-emerald-900/20 border border-emerald-700/30"
+                      : "bg-slate-800 border border-slate-700 hover:border-slate-500"
+                  }`}
+                  onClick={() => {
+                    toggleChecklistMutation.mutate({
+                      jobId: job.id,
+                      itemIndex: idx,
+                      checked: !item.checked,
+                    });
+                    // Optimistic update via onStatusUpdated refetch
+                    onStatusUpdated();
+                  }}
+                >
+                  <span className={`mt-0.5 shrink-0 w-4 h-4 rounded border flex items-center justify-center text-xs ${
+                    item.checked
+                      ? "bg-emerald-500 border-emerald-500 text-white"
+                      : "border-slate-500 bg-transparent"
+                  }`}>
+                    {item.checked && "✓"}
+                  </span>
+                  <span className={`text-sm leading-snug ${
+                    item.checked ? "text-emerald-300 line-through opacity-70" : "text-slate-200"
+                  }`}>
+                    {item.text}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {!allChecked && (
+              <p className="text-amber-400 text-xs mt-2 flex items-center gap-1">
+                ⚠️ Complete all items above before marking the job done
+              </p>
+            )}
           </div>
         )}
 
@@ -622,8 +690,12 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
           {!isComplete && (
             <Button
               size="sm"
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
-              onClick={() => { setCompleting(true); completeMutation.mutate({ cleanerJobId: job.id }); }}
+              className={`flex-1 text-white ${
+                !allChecked
+                  ? "bg-slate-600 hover:bg-amber-600 cursor-pointer"
+                  : "bg-emerald-600 hover:bg-emerald-500"
+              }`}
+              onClick={handleMarkComplete}
               disabled={completing}
             >
               {completing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}

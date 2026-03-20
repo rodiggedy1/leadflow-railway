@@ -1636,3 +1636,16 @@
 - [x] Expose customerNotes and staffNotes in cleanerRouter myJobs/myJobsRange (already in DB via select *)
 - [x] Show customerNotes on cleaner portal job cards (amber, 📋 Customer Notes)
 - [x] Show staffNotes on cleaner portal job cards (blue, 🗒️ Staff Notes)
+
+## AI-Parsed Customer Notes Checklist
+- [x] Add checklistItems JSON column to cleanerJobs schema (stores array of {text, checked})
+- [x] Run db:push (migration 0049)
+- [x] Add parseChecklistFromNotes(notes) LLM helper in qualityRouter — returns [] if no actionable tasks
+- [x] Call parseChecklistFromNotes at sync time when customerNotes is non-empty, store result in checklistItems
+- [x] Re-sync regenerates checklist (fresh unchecked items per new job row)
+- [x] Add cleaner.toggleChecklistItem procedure — saves checked state to DB
+- [x] Expose checklistItems in qualityRouter getJobsForDate
+- [x] Expose checklistItems in cleanerRouter myJobs/myJobsRange (via select *)
+- [x] Cleaner portal: show checklist below customerNotes, each item tappable to toggle
+- [x] Cleaner portal: Mark Complete button grayed + toast prompt if any items unchecked
+- [x] Admin quality: show read-only checklist with X/Y progress indicator

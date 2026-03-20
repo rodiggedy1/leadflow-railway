@@ -408,6 +408,45 @@ export const cleanerRouter = router({
     }),
 
   /**
+   * cleaner.toggleChecklistItem — toggle a checklist item's checked state for a job.
+   * Saves to DB as a permanent audit trail.
+   */
+  toggleChecklistItem: cleanerProcedure
+    .input(z.object({
+      jobId: z.number(),
+      itemIndex: z.number().int().nonnegative(),
+      checked: z.boolean(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Verify the job belongs to this cleaner
+      const [job] = await db
+        .select({ id: cleanerJobs.id, cleanerProfileId: cleanerJobs.cleanerProfileId, checklistItems: cleanerJobs.checklistItems })
+        .from(cleanerJobs)
+        .where(and(eq(cleanerJobs.id, input.jobId), eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)))
+        .limit(1);
+
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      if (!job.checklistItems) throw new TRPCError({ code: "BAD_REQUEST", message: "No checklist for this job" });
+
+      const items = JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>;
+      if (input.itemIndex < 0 || input.itemIndex >= items.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid item index" });
+      }
+
+      items[input.itemIndex].checked = input.checked;
+
+      await db
+        .update(cleanerJobs)
+        .set({ checklistItems: JSON.stringify(items) })
+        .where(eq(cleanerJobs.id, job.id));
+
+      return { success: true, items };
+    }),
+
+  /**
    * cleaner.listProfiles — admin gets all cleaner profiles (for management UI).
    */
   listProfiles: adminAgentProcedure.query(async () => {

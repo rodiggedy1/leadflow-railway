@@ -35,6 +35,7 @@ import { sendSms } from "./openphone";
 import { storagePut } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
+import { invokeLLM } from "./_core/llm";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,61 @@ export const PAY_PHOTO_BONUS = 5;           // +$5 for submitting a completion p
 export const PAY_NO_PHOTO_PENALTY = 10;     // -$10 if no photo submitted
 export const PAY_STREAK_BONUS = 50;         // +$50 for completing a 10-job streak
 export const STREAK_TARGET = 10;            // Jobs needed to earn streak bonus
+
+// ─── AI Checklist Parser ─────────────────────────────────────────────────────
+
+/**
+ * Uses LLM to parse customerNotes into a checklist of actionable tasks.
+ * Returns null if no actionable tasks are found (e.g. empty notes or purely informational).
+ */
+async function parseChecklistFromNotes(
+  notes: string
+): Promise<Array<{ text: string; checked: boolean }> | null> {
+  if (!notes || notes.trim().length < 5) return null;
+  try {
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a cleaning job assistant. Extract a list of discrete, actionable tasks from customer notes for a cleaning crew. " +
+            "Return ONLY a JSON object with a \"tasks\" array of strings. Each string should be a clear, concise action item. " +
+            "If the notes contain no actionable tasks (e.g. just greetings, compliments, or purely informational context), return {\"tasks\": []}. " +
+            "Do not include vague items. Fold context into the relevant task (e.g. 'Clean shower door — use blue spray under sink').",
+        },
+        {
+          role: "user",
+          content: `Customer notes: ${notes}`,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "checklist",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              tasks: {
+                type: "array",
+                items: { type: "string" },
+              },
+            },
+            required: ["tasks"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const content = response?.choices?.[0]?.message?.content;
+    if (!content) return null;
+    const parsed = JSON.parse(content as string) as { tasks: string[] };
+    if (!parsed.tasks || parsed.tasks.length === 0) return null;
+    return parsed.tasks.map((text: string) => ({ text, checked: false }));
+  } catch {
+    return null;
+  }
+}
 
 /** Rating SMS template */
 export const RATING_SMS_TEXT = (firstName: string) =>
@@ -757,6 +813,9 @@ export const qualityRouter = router({
           manualAdjustmentNote: cj.manualAdjustmentNote ?? null,
           customerNotes: cj.customerNotes ?? null,
           staffNotes: cj.staffNotes ?? null,
+          checklistItems: cj.checklistItems
+            ? (JSON.parse(cj.checklistItems) as Array<{ text: string; checked: boolean }>)
+            : null,
         },
         photos: photos.filter((p) => p.cleanerJobId === cj.id),
       }));
@@ -1099,6 +1158,11 @@ export const qualityRouter = router({
               )
               .limit(1);
 
+            // Parse customerNotes into AI checklist (null if no actionable tasks)
+            const parsedChecklist = booking.customerNotes
+              ? await parseChecklistFromNotes(booking.customerNotes)
+              : null;
+
             const jobData = {
               bookingId: booking.id,
               cleanerProfileId: profile.id,
@@ -1117,6 +1181,7 @@ export const qualityRouter = router({
               jobRevenue: String(revenue),
               payPercent: payPct > 0 ? String(payPct) : null,
               basePay,
+              checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
             };
 
             if (existing) {
