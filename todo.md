@@ -1485,3 +1485,6 @@
 ## Job Card Star Rating & Notification Fix
 - [x] Show star rating visually on job card (e.g. 4/5 stars) when customerRating is set; hidden when no rating yet
 - [x] Fix complaint notification to include customer name, address, service date, rating, and cleaner name
+
+## Bug Fix: Thank-you SMS Not Sent After Customer Rating Reply
+- [ ] Trace working webhook->sendSms path and fix quality reply to use same pattern
