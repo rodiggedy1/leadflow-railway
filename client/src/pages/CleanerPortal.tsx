@@ -179,7 +179,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [completing, setCompleting] = useState(false);
-  const [showPhotos, setShowPhotos] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(true);
   const [showIssueInput, setShowIssueInput] = useState(false);
   const [issueNote, setIssueNote] = useState("");
   const [showEtaPicker, setShowEtaPicker] = useState(false);
@@ -542,7 +542,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             >
               <ImageIcon className="w-3.5 h-3.5" />
               {job.photos.length} photo{job.photos.length !== 1 ? "s" : ""} uploaded
-              {showPhotos ? " (hide)" : " (show)"}
+              {showPhotos ? " (tap to hide)" : " (tap to show)"}
             </button>
             {showPhotos && (
               <div className="grid grid-cols-3 gap-2 mt-2">
