@@ -2161,31 +2161,10 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Status pills — all 4 */}
+            {/* Status pills — 3 system status only */}
             <WidgetHealthBadge />
             <WebhookHealthBadge />
             <SyncHealthBadge />
-            <QualityWidget />
-            {/* TEMP: Daily Recap preview trigger — remove after review */}
-            <button
-              onClick={() => { localStorage.removeItem(`recap_shown_${new Date().toISOString().slice(0,10)}`); setShowRecap(true); }}
-              title="Preview yesterday's recap"
-              className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-[#AAFF00] hover:text-gray-700 transition-colors"
-            >
-              <span className="text-xs font-bold">☀</span>
-            </button>
-            {/* AI Simulator shortcut */}
-            <button
-              onClick={() => setShowSimulator(v => !v)}
-              title="AI Simulator"
-              className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-colors ${
-                showSimulator
-                  ? 'border-black text-black bg-[#AAFF00]'
-                  : 'text-gray-500 border-gray-300 hover:border-gray-500 hover:text-gray-800'
-              }`}
-            >
-              <Bot className="w-4 h-4" />
-            </button>
             {unhandledCount > 0 && activeTab === "leads" && (
               <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-xs font-semibold px-3 py-1.5 rounded-full">
                 ⚠ {unhandledCount} need{unhandledCount === 1 ? "s" : ""} review
@@ -2806,6 +2785,31 @@ export default function AdminDashboard() {
         </p>
         </>}
       </main>
+
+      {/* ── Sticky footer bar: Quality, Recap, AI Simulator ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 py-2 px-4 bg-white/80 backdrop-blur border-t border-gray-100">
+        <QualityWidget />
+        {/* Daily Recap preview trigger */}
+        <button
+          onClick={() => { localStorage.removeItem(`recap_shown_${new Date().toISOString().slice(0,10)}`); setShowRecap(true); }}
+          title="Preview yesterday's recap"
+          className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-[#AAFF00] hover:text-gray-700 transition-colors"
+        >
+          <span className="text-xs font-bold">☀</span>
+        </button>
+        {/* AI Simulator shortcut */}
+        <button
+          onClick={() => setShowSimulator(v => !v)}
+          title="AI Simulator"
+          className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-colors ${
+            showSimulator
+              ? 'border-black text-black bg-[#AAFF00]'
+              : 'text-gray-500 border-gray-300 hover:border-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Bot className="w-4 h-4" />
+        </button>
+      </div>
 
       {/* Conversation drawer */}
       {selectedSession && (
