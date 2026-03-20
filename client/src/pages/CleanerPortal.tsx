@@ -262,30 +262,122 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
         )}
 
         {/* Pay breakdown */}
-        <div className="bg-slate-900/60 rounded-lg p-3 space-y-1.5">
-          <p className="text-slate-400 text-xs font-medium uppercase tracking-wide mb-2">Pay Breakdown</p>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Base Pay</span>
-            <span className="text-white font-medium">{formatCurrency(job.basePay)}</span>
+        <div className="bg-slate-900/60 rounded-xl p-4 space-y-0">
+          <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">Pay Breakdown</p>
+
+          {/* Base pay */}
+          <div className="flex justify-between items-start py-2 border-b border-slate-800">
+            <div>
+              <p className="text-slate-200 text-sm font-medium">Base Pay</p>
+              <p className="text-slate-500 text-xs mt-0.5">{job.serviceType ?? "Cleaning service"}</p>
+            </div>
+            <span className="text-white font-semibold text-sm">{formatCurrency(job.basePay)}</span>
           </div>
-          {ratingAdj !== 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Rating Adjustment</span>
-              <span className={ratingAdj > 0 ? "text-emerald-400 font-medium" : "text-red-400 font-medium"}>
-                {ratingAdj > 0 ? "+" : ""}{formatCurrency(job.ratingAdjustment)}
-              </span>
+
+          {/* Rating bonus/penalty */}
+          {(() => {
+            const rating = job.customerRating;
+            const isMissed = job.missedSomething === 1;
+            const isBonus = ratingAdj > 0;
+            const isPenalty = ratingAdj < 0;
+
+            // No rating yet — show pending with rules
+            if (rating === null && !isMissed && ratingAdj === 0) {
+              return (
+                <div className="flex justify-between items-start py-2 border-b border-slate-800">
+                  <div>
+                    <p className="text-slate-400 text-sm font-medium">Rating Bonus</p>
+                    <p className="text-slate-500 text-xs mt-0.5">+$10 for 5 stars · -$20 for 3 stars or below</p>
+                  </div>
+                  <span className="text-slate-500 text-xs italic">Pending</span>
+                </div>
+              );
+            }
+
+            // Rating received — show result
+            let label = "Rating";
+            let reason = "";
+            if (rating === 5 && !isMissed) {
+              label = "5-Star Rating Bonus";
+              reason = "Perfect score — keep it up!";
+            } else if (isMissed) {
+              label = "Rating Penalty";
+              reason = "Customer reported an issue";
+            } else if (rating !== null && rating <= 3) {
+              label = "Rating Penalty";
+              reason = `${rating}-star rating`;
+            } else if (rating !== null) {
+              label = `${rating}-Star Rating`;
+              reason = "No bonus or penalty at this level";
+            }
+
+            return (
+              <div className="flex justify-between items-start py-2 border-b border-slate-800">
+                <div>
+                  <p className={`text-sm font-medium ${isBonus ? "text-emerald-300" : isPenalty ? "text-red-300" : "text-slate-200"}`}>{label}</p>
+                  {reason && <p className="text-slate-500 text-xs mt-0.5">{reason}</p>}
+                </div>
+                <span className={`font-semibold text-sm ${isBonus ? "text-emerald-400" : isPenalty ? "text-red-400" : "text-slate-400"}`}>
+                  {isBonus ? "+" : ""}{ratingAdj !== 0 ? formatCurrency(ratingAdj.toFixed(2)) : "—"}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* Photo bonus/penalty */}
+          {(() => {
+            const hasPhoto = job.photoSubmitted === 1 || job.photos.length > 0;
+            const photoAdj = hasPhoto ? 5 : -10;
+            return (
+              <div className="flex justify-between items-start py-2 border-b border-slate-800">
+                <div>
+                  <p className={`text-sm font-medium ${hasPhoto ? "text-emerald-300" : "text-red-300"}`}>
+                    {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
+                  </p>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    {hasPhoto ? "Completion photo uploaded" : "Upload a photo to earn +$5 and avoid -$10"}
+                  </p>
+                </div>
+                <span className={`font-semibold text-sm ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>
+                  {hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* Streak bonus */}
+          {streakBonus > 0 ? (
+            <div className="flex justify-between items-start py-2 border-b border-slate-800">
+              <div>
+                <p className="text-emerald-300 text-sm font-medium">Streak Bonus</p>
+                <p className="text-slate-500 text-xs mt-0.5">10 clean jobs in a row — amazing work!</p>
+              </div>
+              <span className="text-emerald-400 font-semibold text-sm">+{formatCurrency(job.streakBonus)}</span>
+            </div>
+          ) : (
+            <div className="flex justify-between items-start py-2 border-b border-slate-800">
+              <div>
+                <p className="text-slate-400 text-sm font-medium">Streak Bonus</p>
+                <p className="text-slate-500 text-xs mt-0.5">+$50 for 10 clean jobs with no issues</p>
+              </div>
+              <span className="text-slate-500 text-xs italic">Not earned</span>
             </div>
           )}
-          {streakBonus > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Streak Bonus</span>
-              <span className="text-emerald-400 font-medium">+{formatCurrency(job.streakBonus)}</span>
-            </div>
-          )}
-          <div className="border-t border-slate-700 pt-1.5 flex justify-between">
-            <span className="text-white font-semibold text-sm">Total Pay</span>
-            <span className="text-emerald-400 font-bold text-base">{formatCurrency(finalPay.toFixed(2))}</span>
-          </div>
+
+          {/* Final total */}
+          {(() => {
+            const hasPhoto = job.photoSubmitted === 1 || job.photos.length > 0;
+            const photoAdj = hasPhoto ? 5 : -10;
+            const total = basePay + ratingAdj + photoAdj + streakBonus;
+            return (
+              <div className="flex justify-between items-center pt-3 mt-1">
+                <span className="text-white font-bold text-base">Total Pay</span>
+                <span className={`font-bold text-xl ${total >= basePay ? "text-emerald-400" : "text-red-400"}`}>
+                  {formatCurrency(total.toFixed(2))}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Rating */}

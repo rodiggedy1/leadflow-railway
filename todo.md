@@ -1529,3 +1529,16 @@
 - [x] Update CleanerPortal login form: phone field → email field
 - [x] Update quality dashboard Set PW dialog: add email field (same as agent Create dialog)
 - [x] Test email+password login end-to-end
+
+## Job Photos in Admin Quality View
+- [ ] Add getJobPhotos query to qualityRouter (fetch job_photos by cleanerJobId or completedJobId)
+- [ ] Show photo thumbnails on job cards in the quality dashboard (lightbox on click)
+- [ ] Test end-to-end: upload photo as cleaner, see it appear in admin quality view
+
+## Cleaner Portal: Detailed Pay Breakdown
+- [x] Redesign pay breakdown card: base pay, rating bonus/penalty, photo bonus/penalty, streak bonus, final total
+- [x] Rating: +$10 if 5 stars, -$20 if 3 stars or below or customer unhappy
+- [x] Photo: +$5 if uploaded, -$10 if no upload
+- [x] Streak: +$50 if 10 clean jobs no issues
+- [x] Show each line with label, amount (green/red), and reason
+- [x] Show final total prominently at bottom
