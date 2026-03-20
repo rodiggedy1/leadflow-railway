@@ -54,6 +54,10 @@ export interface ConversationContext {
   language?: string | null;
   /** Stage before LANGUAGE_CONFIRM was triggered — used to resume flow */
   preLangStage?: string | null;
+  /** Lead source: "form" | "widget" | "reactivation" | "bark" | etc. */
+  leadSource?: string | null;
+  /** For Bark leads: the Q&A summary extracted from display_text */
+  barkQA?: string | null;
 }
 
 export interface ChatMessage {

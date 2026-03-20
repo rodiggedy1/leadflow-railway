@@ -156,12 +156,18 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   utmContent: varchar("utmContent", { length: 255 }),
   /** Google Ads click ID for exact ad attribution */
   gclid: varchar("gclid", { length: 255 }),
-  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com, "reactivation" = reactivation campaign */
-  leadSource: varchar("leadSource", { length: 20 }).$default(() => "form"),
+  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com, "reactivation" = reactivation campaign, "bark" = Bark.com Zapier webhook */
+  leadSource: varchar("leadSource", { length: 50 }).$default(() => "form"),
   /** For reactivation leads: the last price they paid (dollars) */
   reactivationLastPrice: int("reactivationLastPrice"),
   /** For reactivation leads: discount percentage offered (e.g. 10 = 10%) */
   reactivationDiscountPct: int("reactivationDiscountPct"),
+  /**
+   * For Bark.com leads: the full Q&A transcript extracted from the Bark display_text field.
+   * Stored as a plain-text summary of the customer's answers (bedrooms, frequency, etc.).
+   * Used to skip qualification questions in the AI conversation flow.
+   */
+  barkQA: text("barkQA"),
 
   // ── Follow-up fields ──────────────────────────────────────────────────────
   /**

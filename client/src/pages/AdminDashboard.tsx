@@ -572,6 +572,7 @@ type DrawerSession = {
   followUpMessage: string | null;
   followUpSent: number;
   language: string | null;
+  barkQA: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -619,6 +620,9 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   }
   if (leadSource === "reactivation") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
+  }
+  if (leadSource === "bark") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Bark</span>;
   }
   // always-on:new-one-time, always-on:lapsed-one-time, always-on:lapsed-recurring, always-on:dormant
   if (leadSource.startsWith("always-on:")) {
@@ -1094,6 +1098,13 @@ function ConversationDrawer({
                     </div>
                   );
                 })()}
+                {/* Bark Q&A summary */}
+                {session.leadSource === "bark" && session.barkQA && (
+                  <div className="mt-1 p-2 rounded bg-green-50 border border-green-100">
+                    <p className="text-xs font-semibold text-green-700 mb-1">Bark Q&amp;A</p>
+                    <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{session.barkQA}</p>
+                  </div>
+                )}
                 {session.serviceType && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">Service</span>
@@ -2061,6 +2072,7 @@ export default function AdminDashboard() {
         (sourceFilter === "widget" && s.leadSource === "widget") ||
         (sourceFilter === "voice" && s.leadSource === "voice") ||
         (sourceFilter === "always-on" && (s.leadSource?.startsWith("always-on:") ?? false)) ||
+        (sourceFilter === "bark" && s.leadSource === "bark") ||
         (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
       const q = search.toLowerCase();
       const matchesSearch =
@@ -2560,6 +2572,7 @@ export default function AdminDashboard() {
               <SelectItem value="voice">Voice Call</SelectItem>
               <SelectItem value="reactivation">Campaign</SelectItem>
               <SelectItem value="always-on">Always-On</SelectItem>
+              <SelectItem value="bark">Bark</SelectItem>
             </SelectContent>
           </Select>
           {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all") && (

@@ -1423,3 +1423,11 @@
 - [x] Fix Claim button not visible/accessible to agents
 - [x] Fix agents cannot change a Booked lead's stage to another stage
 - [x] Fix TiDB only_full_group_by error: LEFT() in SELECT vs GROUP BY uses different column refs when Drizzle interpolates — fixed by using db.execute(sql\`...\`) with explicit table.column names in dailyTrend (routers.ts) and voice.stats (voiceRouter.ts)
+
+## Bark.com Lead Integration
+- [x] Schema: add barkQA text column to conversationSessions
+- [x] Webhook: POST /api/webhooks/bark receiver + AI Q&A parser
+- [x] Conversation engine: skip qualification for bark leads, go straight to scheduling SMS
+- [x] Pipeline UI: Bark badge (green) + Q&A summary on lead cards
+- [x] Pipeline filter: add "bark" to source filter dropdown
+- [x] Tests: 16 bark webhook handler unit tests (all passing)

@@ -35,8 +35,12 @@ import { markReactivationContactReplied } from "./campaignRouter";
 import { markAlwaysOnContactReplied } from "./alwaysOnSend";
 import { handleReviewReplyForJob } from "./reviewRouter";
 import { logActivity } from "./activityLogger";
+import { registerBarkWebhookRoute } from "./barkWebhook";
 
 export function registerWebhookRoutes(app: Express) {
+  // Bark.com lead integration (Zapier webhook)
+  registerBarkWebhookRoute(app);
+
   app.post("/api/webhooks/openphone", async (req, res) => {
     // Acknowledge immediately — OpenPhone expects a 200 within 5 seconds
     res.status(200).json({ received: true });
@@ -203,6 +207,9 @@ export function registerWebhookRoutes(app: Express) {
         // Language context — critical for multilingual confirmation flow
         language: session.language ?? "en",
         preLangStage: session.preLangStage ?? undefined,
+        // Lead source context (used by Bark leads to skip qualification)
+        leadSource: session.leadSource ?? "form",
+        barkQA: session.barkQA ?? undefined,
       };
 
       // ── REVIEW_REQUESTED / REVIEW_DONE: Post-cleaning review flow ───────────────
