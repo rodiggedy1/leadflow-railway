@@ -1,0 +1,22 @@
+{
+  "query": "\nSELECT cj.id, cj.customerName, cj.customerRating, cj.jobDate, cj.flagged, cj.missedSomething,\n       rsp.id as sms_id, rsp.status as sms_status, rsp.sentAt, rsp.cleanerJobId\nFROM cleaner_jobs cj\nLEFT JOIN rating_sms_pending rsp ON rsp.cleanerJobId = cj.id\nWHERE cj.customerName = 'Jane Sample'\nORDER BY cj.id DESC LIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT cj.id, cj.customerName, cj.customerRating, cj.jobDate, cj.flagged, cj.missedSomething,\n       rsp.id as sms_id, rsp.status as sms_status, rsp.sentAt, rsp.cleanerJobId\nFROM cleaner_jobs cj\nLEFT JOIN rating_sms_pending rsp ON rsp.cleanerJobId = cj.id\nWHERE cj.customerName = 'Jane Sample'\nORDER BY cj.id DESC LIMIT 5;\n",
+  "rows": [
+    {
+      "id": "18",
+      "customerName": "Jane Sample",
+      "customerRating": "5",
+      "jobDate": "2026-03-20",
+      "flagged": "0",
+      "missedSomething": "NULL",
+      "sms_id": "2",
+      "sms_status": "sent",
+      "sentAt": "2026-03-20 05:36:09",
+      "cleanerJobId": "18"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcustomerName\tcustomerRating\tjobDate\tflagged\tmissedSomething\tsms_id\tsms_status\tsentAt\tcleanerJobId\n18\tJane Sample\t5\t2026-03-20\t0\tNULL\t2\tsent\t2026-03-20 05:36:09\t18\n",
+  "stderr": "",
+  "execution_time_ms": 434
+}

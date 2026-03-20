@@ -474,7 +474,7 @@ export default function CleanerDashboard() {
 
   const { data: jobs, isLoading, refetch } = trpc.quality.getJobsForDate.useQuery(
     { date: selectedDate },
-    { refetchOnWindowFocus: false }
+    { refetchOnWindowFocus: true, refetchInterval: 15_000 }
   );
 
   const { data: pendingSms } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
