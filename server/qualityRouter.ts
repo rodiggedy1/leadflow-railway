@@ -454,11 +454,23 @@ export async function handleRatingReply(
           }
         }
 
-        // Notify owner if complaint
+        // Notify owner if complaint — include customer name, address, and service date from cleanerJob
         if (shouldFlag) {
+          const customerName = cj.customerName ?? firstName;
+          const address = cj.jobAddress ?? "(no address)";
+          const serviceDate = cj.serviceDateTime
+            ? new Date(cj.serviceDateTime).toLocaleString("en-US", {
+                timeZone: "America/New_York",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })
+            : pending.jobDate;
+          const rating = cj.customerRating !== null ? `${cj.customerRating}/5 stars` : "no rating yet";
           notifyOwner({
             title: `⚠️ Quality complaint — ${pending.cleanerName ?? "Unknown cleaner"}`,
-            content: `Customer ${firstName} (${fromPhone}) reported something was missed on job ${pending.completedJobId} (${pending.jobDate}). Cleaner: ${pending.cleanerName ?? "unassigned"}. Please review.`,
+            content: `Customer ${customerName} (${fromPhone}) reported something was missed.\n\n📍 ${address}\n📅 ${serviceDate}\n⭐ Rating: ${rating}\n👷 Cleaner: ${pending.cleanerName ?? "Unassigned"}\n\nPlease review the job on the Quality dashboard.`,
           }).catch(() => {});
         }
       }

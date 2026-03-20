@@ -60,7 +60,7 @@ function formatServiceTime(serviceDateTime: string | null): string | null {
 }
 
 function RatingStars({ rating }: { rating: number | null }) {
-  if (rating === null) return <span className="text-muted-foreground text-sm">Awaiting rating</span>;
+  if (rating === null) return null;
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
@@ -315,16 +315,18 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               </div>
             </div>
 
-            {/* Rating */}
-            <div className="mt-2">
-              <RatingStars rating={rating} />
-              {hasMissed && (
-                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Customer reported something was missed
-                </p>
-              )}
-            </div>
+            {/* Rating — only shown once a rating has been received */}
+            {(rating !== null || hasMissed) && (
+              <div className="mt-2">
+                <RatingStars rating={rating} />
+                {hasMissed && (
+                  <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Customer reported something was missed
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Cleaner + pay + photo */}

@@ -1481,3 +1481,7 @@
 - [x] Fixed handleRatingReply: now looks up cleanerJob by cleanerJobId directly (not via completedJobId which was 0 for synced jobs)
 - [x] Added requeueRatingSms procedure: resets sent/skipped rows back to pending
 - [x] Added Re-queue button in Review dialog for sent and skipped items
+
+## Job Card Star Rating & Notification Fix
+- [x] Show star rating visually on job card (e.g. 4/5 stars) when customerRating is set; hidden when no rating yet
+- [x] Fix complaint notification to include customer name, address, service date, rating, and cleaner name
