@@ -136,6 +136,9 @@ export const cleanerRouter = router({
 
       return jobs.map(job => ({
         ...job,
+        checklistItems: job.checklistItems
+          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
+          : null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
       }));
     }),
@@ -172,6 +175,9 @@ export const cleanerRouter = router({
 
       return jobs.map(job => ({
         ...job,
+        checklistItems: job.checklistItems
+          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
+          : null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
       }));
     }),

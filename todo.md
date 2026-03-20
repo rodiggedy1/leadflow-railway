@@ -1649,3 +1649,8 @@
 - [x] Cleaner portal: show checklist below customerNotes, each item tappable to toggle
 - [x] Cleaner portal: Mark Complete button grayed + toast prompt if any items unchecked
 - [x] Admin quality: show read-only checklist with X/Y progress indicator
+
+## Checklist Fixes
+- [x] Fix cleaner portal not showing checklistItems (myJobs query returns raw JSON string, needs parsing)
+- [x] Combine customerNotes + staffNotes into one unified checklist at sync time
+- [x] Update parseChecklistFromNotes to accept both notes fields

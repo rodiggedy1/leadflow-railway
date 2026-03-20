@@ -50,27 +50,30 @@ export const STREAK_TARGET = 10;            // Jobs needed to earn streak bonus
 // ─── AI Checklist Parser ─────────────────────────────────────────────────────
 
 /**
- * Uses LLM to parse customerNotes into a checklist of actionable tasks.
- * Returns null if no actionable tasks are found (e.g. empty notes or purely informational).
+ * Uses LLM to parse customerNotes and staffNotes into a unified checklist of actionable tasks.
+ * Returns null if no actionable tasks are found.
  */
 async function parseChecklistFromNotes(
-  notes: string
+  customerNotes: string | null,
+  staffNotes: string | null
 ): Promise<Array<{ text: string; checked: boolean }> | null> {
-  if (!notes || notes.trim().length < 5) return null;
+  const combined = [customerNotes, staffNotes].filter(Boolean).join("\n\n");
+  if (!combined || combined.trim().length < 5) return null;
   try {
     const response = await invokeLLM({
       messages: [
         {
           role: "system",
           content:
-            "You are a cleaning job assistant. Extract a list of discrete, actionable tasks from customer notes for a cleaning crew. " +
+            "You are a cleaning job assistant. Extract a list of discrete, actionable tasks from the provided notes for a cleaning crew. " +
+            "The notes may include customer instructions and internal staff notes — combine them into one unified checklist. " +
             "Return ONLY a JSON object with a \"tasks\" array of strings. Each string should be a clear, concise action item. " +
             "If the notes contain no actionable tasks (e.g. just greetings, compliments, or purely informational context), return {\"tasks\": []}. " +
-            "Do not include vague items. Fold context into the relevant task (e.g. 'Clean shower door — use blue spray under sink').",
+            "Do not include vague items. Fold context into the relevant task (e.g. 'Clean shower door \u2014 use blue spray under sink').",
         },
         {
           role: "user",
-          content: `Customer notes: ${notes}`,
+          content: `Notes:\n${combined}`,
         },
       ],
       response_format: {
@@ -1158,10 +1161,11 @@ export const qualityRouter = router({
               )
               .limit(1);
 
-            // Parse customerNotes into AI checklist (null if no actionable tasks)
-            const parsedChecklist = booking.customerNotes
-              ? await parseChecklistFromNotes(booking.customerNotes)
-              : null;
+            // Parse customerNotes + staffNotes into unified AI checklist (null if no actionable tasks)
+            const parsedChecklist =
+              booking.customerNotes || booking.staffNotes
+                ? await parseChecklistFromNotes(booking.customerNotes || null, booking.staffNotes || null)
+                : null;
 
             const jobData = {
               bookingId: booking.id,
