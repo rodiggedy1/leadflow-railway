@@ -20,6 +20,7 @@ import { reviewRouter } from "./reviewRouter";
 import { launch27Router } from "./launch27Router";
 import { alwaysOnRouter } from "./alwaysOnRouter";
 import { syncHealthRouter } from "./syncHealthRouter";
+import { campaignApprovalRouter } from "./campaignApprovalRouter";
 import { activityRouter } from "./activityRouter";
 import { voiceRouter } from "./voiceRouter";
 import { qualityRouter } from "./qualityRouter";
@@ -1769,6 +1770,7 @@ export const appRouter = router({
   launch27: launch27Router,
   alwaysOn: alwaysOnRouter,
   syncHealth: syncHealthRouter,
+  campaignApproval: campaignApprovalRouter,
   activity: activityRouter,
   voice: voiceRouter,
   quality: qualityRouter,

@@ -970,3 +970,76 @@ export const cleanerStreaks = mysqlTable("cleaner_streaks", {
 });
 export type CleanerStreak = typeof cleanerStreaks.$inferSelect;
 export type InsertCleanerStreak = typeof cleanerStreaks.$inferInsert;
+
+// ── Cron Heartbeats ───────────────────────────────────────────────────────────
+/**
+ * cronHeartbeats — one row per internal cron job tick, even no-ops.
+ * Lets the Sync Health page distinguish "ran and found nothing" from "never ran".
+ *
+ * jobName values:
+ *   "nightly-sync"        → Launch27 booking import (noon ET daily)
+ *   "always-on-send"      → Campaign SMS batch (10 AM ET Mon-Sat)
+ *   "silence-followup"    → 5-min silence nudge (every 5 min)
+ *   "scheduled-followup"  → Daily circle-back SMS (9 AM ET)
+ */
+export const cronHeartbeats = mysqlTable("cron_heartbeats", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Which cron job fired */
+  jobName: varchar("jobName", { length: 50 }).notNull(),
+  /** Short result summary (e.g. "inserted 7", "sent 0 — no active groups", "sent 3 nudges") */
+  resultSummary: varchar("resultSummary", { length: 500 }),
+  /** Whether this tick did any meaningful work */
+  didWork: int("didWork").default(0).notNull(),
+  ranAt: timestamp("ranAt").defaultNow().notNull(),
+});
+export type CronHeartbeat = typeof cronHeartbeats.$inferSelect;
+export type InsertCronHeartbeat = typeof cronHeartbeats.$inferInsert;
+
+// ── Campaign Approval Batches ─────────────────────────────────────────────────
+/**
+ * campaignApprovalBatches — one row per pending Always-On send batch.
+ * When the daily cron fires, instead of sending immediately it creates a
+ * pending batch here. Admin reviews the recipient list and approves or rejects.
+ * Only after approval does the actual SMS send happen.
+ *
+ * status:
+ *   "pending"  → Awaiting admin review
+ *   "approved" → Admin approved; SMS send in progress or complete
+ *   "rejected" → Admin rejected; batch discarded
+ *   "sent"     → All SMS sent successfully
+ */
+export const campaignApprovalStatuses = ["pending", "approved", "rejected", "sent"] as const;
+export type CampaignApprovalStatus = (typeof campaignApprovalStatuses)[number];
+
+export const campaignApprovalBatches = mysqlTable("campaign_approval_batches", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Which always-on group this batch is for */
+  groupId: int("groupId").notNull(),
+  /** Snapshot of the group type at creation time */
+  groupType: varchar("groupType", { length: 30 }).notNull(),
+  /** Snapshot of the group name at creation time */
+  groupName: varchar("groupName", { length: 100 }).notNull(),
+  /** Snapshot of the message template at creation time */
+  messageTemplate: text("messageTemplate").notNull(),
+  /** JSON array of enrollment IDs included in this batch */
+  enrollmentIds: text("enrollmentIds").notNull(),
+  /** Number of recipients in this batch */
+  recipientCount: int("recipientCount").notNull(),
+  /** JSON array of preview objects: [{phone, firstName, name, message}] (first 5) */
+  recipientPreview: text("recipientPreview").notNull(),
+  /** Current status */
+  status: mysqlEnum("status", campaignApprovalStatuses as unknown as [string, ...string[]]).default("pending").notNull(),
+  /** Admin who approved or rejected */
+  reviewedBy: varchar("reviewedBy", { length: 255 }),
+  /** Optional rejection reason */
+  rejectionReason: varchar("rejectionReason", { length: 500 }),
+  /** How many SMS were actually sent after approval */
+  sentCount: int("sentCount").default(0).notNull(),
+  /** How many SMS failed after approval */
+  failedCount: int("failedCount").default(0).notNull(),
+  reviewedAt: timestamp("reviewedAt"),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CampaignApprovalBatch = typeof campaignApprovalBatches.$inferSelect;
+export type InsertCampaignApprovalBatch = typeof campaignApprovalBatches.$inferInsert;

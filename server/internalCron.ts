@@ -20,11 +20,24 @@ import cron from "node-cron";
 import { runNightlySync } from "./cronSync";
 import { runSilenceFollowUp, runScheduledFollowUp } from "./followUpCron";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
-import { sendAlwaysOnBatch } from "./alwaysOnSend";
-import { logActivity } from "./activityLogger";
-import { notifyOwner } from "./_core/notification";
+import { generatePendingBatches } from "./campaignApproval";
 import { getDb } from "./db";
-import { syncRuns } from "../drizzle/schema";
+import { syncRuns, cronHeartbeats } from "../drizzle/schema";
+
+async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(cronHeartbeats).values({
+      jobName,
+      resultSummary,
+      didWork: didWork ? 1 : 0,
+      ranAt: new Date(),
+    });
+  } catch (err) {
+    console.error(`[InternalCron] Failed to record heartbeat for ${jobName} (non-fatal):`, err);
+  }
+}
 
 async function recordSyncRun(params: {
   runType: "launch27-sync" | "always-on-send";
@@ -71,11 +84,14 @@ export function startInternalCron(): void {
   cron.schedule("0 */5 * * * *", async () => {
     try {
       const result = await runSilenceFollowUp();
+      const summary = `checked: ${result.checked}, sent: ${result.sent}, errors: ${result.errors}`;
       if (result.sent > 0) {
-        console.log(`[InternalCron] SilenceFollowUp — checked: ${result.checked}, sent: ${result.sent}, errors: ${result.errors}`);
+        console.log(`[InternalCron] SilenceFollowUp — ${summary}`);
       }
+      await recordHeartbeat("silence-followup", summary, result.sent > 0);
     } catch (err) {
       console.error("[InternalCron] SilenceFollowUp failed:", err);
+      await recordHeartbeat("silence-followup", `error: ${err instanceof Error ? err.message : String(err)}`, false);
     }
   }, { timezone: "America/New_York" });
 
@@ -85,9 +101,12 @@ export function startInternalCron(): void {
     console.log("[InternalCron] Running ScheduledFollowUp...");
     try {
       const result = await runScheduledFollowUp();
-      console.log(`[InternalCron] ScheduledFollowUp — checked: ${result.checked}, sent: ${result.sent}, errors: ${result.errors}`);
+      const summary = `checked: ${result.checked}, sent: ${result.sent}, errors: ${result.errors}`;
+      console.log(`[InternalCron] ScheduledFollowUp — ${summary}`);
+      await recordHeartbeat("scheduled-followup", summary, result.sent > 0);
     } catch (err) {
       console.error("[InternalCron] ScheduledFollowUp failed:", err);
+      await recordHeartbeat("scheduled-followup", `error: ${err instanceof Error ? err.message : String(err)}`, false);
     }
   }, { timezone: "America/New_York" });
 
@@ -99,10 +118,13 @@ export function startInternalCron(): void {
     const startedAt = new Date();
     try {
       const result = await runNightlySync();
-      console.log(`[InternalCron] NightlySync — date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`);
+      const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
+      console.log(`[InternalCron] NightlySync — ${summary}`);
+      await recordHeartbeat("nightly-sync", summary, result.inserted > 0);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[InternalCron] NightlySync failed:", msg);
+      await recordHeartbeat("nightly-sync", `error: ${msg}`, false);
       // recordSyncRun is already called inside runNightlySync on error,
       // but if runNightlySync itself throws before reaching that, record here.
       await recordSyncRun({
@@ -116,76 +138,39 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Always-On SMS send: 10 AM ET Mon–Sat ────────────────────────────────────
-  // Sends the daily always-on campaign batch.
-  // GATED: only groups with isActive=1 in the DB will send messages.
-  // All groups are currently isActive=0 — no messages will go out until
-  // explicitly enabled in the admin UI (Campaigns → Always-On).
+  // ── Always-On batch generation: 10 AM ET Mon–Sat ───────────────────────────
+  // Creates pending approval batches for admin review. Does NOT send SMS directly.
+  // Admin must approve each batch in Campaigns → Always-On before SMS goes out.
+  // GATED: only groups with isActive=1 in the DB will generate batches.
   cron.schedule("0 0 10 * * 1-6", async () => {
-    console.log("[InternalCron] Running AlwaysOnSend...");
-    const sendStartedAt = new Date();
+    console.log("[InternalCron] Running AlwaysOn batch generation (approval mode)...");
+    const genStartedAt = new Date();
     try {
-      const results = await sendAlwaysOnBatch();
-      const totalSent = results.reduce((sum, r) => sum + r.sent, 0);
-      const totalFailed = results.reduce((sum, r) => sum + r.failed, 0);
+      const results = await generatePendingBatches();
+      const totalRecipients = results.reduce((sum, r) => sum + r.recipientCount, 0);
 
-      const groupBreakdown: Record<string, { sent: number; failed: number }> = {};
-      for (const r of results) {
-        groupBreakdown[r.groupType] = { sent: r.sent, failed: r.failed };
-      }
+      const heartbeatSummary = results.length > 0
+        ? `generated ${results.length} pending batch(es) — ${totalRecipients} recipients awaiting approval`
+        : "no batches generated (all groups inactive or empty)";
+      await recordHeartbeat("always-on-send", heartbeatSummary, results.length > 0);
 
-      const sendStatus = totalSent > 0 ? (totalFailed > 0 ? "partial" : "success") : "skipped";
       await recordSyncRun({
         runType: "always-on-send",
-        status: sendStatus,
-        message: totalSent > 0
-          ? `Sent ${totalSent} messages (${totalFailed} failed) across ${results.filter(r => r.sent > 0).length} groups`
-          : "No messages sent (all groups inactive, empty, or outside TCPA window)",
-        smsSent: totalSent,
-        smsFailed: totalFailed,
-        groupBreakdown,
-        startedAt: sendStartedAt,
-        durationMs: Date.now() - sendStartedAt.getTime(),
+        status: "skipped",
+        message: results.length > 0
+          ? `Generated ${results.length} pending batch(es) for approval — ${totalRecipients} recipients total`
+          : "No batches generated (all groups inactive or empty)",
+        smsSent: 0,
+        smsFailed: 0,
+        startedAt: genStartedAt,
+        durationMs: Date.now() - genStartedAt.getTime(),
       });
 
-      logActivity({
-        eventType: "always_on_batch",
-        title: totalSent > 0
-          ? `📤 Always-On batch: ${totalSent} SMS sent`
-          : `Always-On batch: no messages sent`,
-        body: totalSent > 0
-          ? `Sent ${totalSent} messages (${totalFailed} failed) across ${results.filter(r => r.sent > 0).length} groups`
-          : "All groups inactive, empty, or outside TCPA window",
-        meta: { totalSent, totalFailed, groupBreakdown },
-      }).catch(() => {});
-
-      if (totalSent > 0) {
-        const summary = results
-          .filter((r) => r.sent > 0)
-          .map((r) => `${r.groupType}: ${r.sent} sent`)
-          .join(", ");
-        try {
-          await notifyOwner({
-            title: `Always-On SMS — ${totalSent} messages sent`,
-            content: `Daily always-on batch complete. ${summary}. Failed: ${totalFailed}.`,
-          });
-        } catch {
-          // Non-fatal
-        }
-      }
-
-      console.log(`[InternalCron] AlwaysOnSend — sent: ${totalSent}, failed: ${totalFailed}`);
+      console.log(`[InternalCron] AlwaysOn batch generation — ${results.length} batch(es) pending approval`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] AlwaysOnSend failed:", msg);
-      await recordSyncRun({
-        runType: "always-on-send",
-        status: "error",
-        message: `Internal cron: AlwaysOnSend threw: ${msg}`,
-        errorDetail: msg,
-        startedAt: sendStartedAt,
-        durationMs: Date.now() - sendStartedAt.getTime(),
-      });
+      console.error("[InternalCron] AlwaysOn batch generation failed:", msg);
+      await recordHeartbeat("always-on-send", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
 

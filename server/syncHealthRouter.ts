@@ -4,14 +4,15 @@
  * Exposes:
  *   syncHealth.getRecentRuns  — last N runs (default 30), optionally filtered by runType
  *   syncHealth.getSummary     — latest run per type + streak counts for the status cards
+ *   syncHealth.getHeartbeats  — latest heartbeat per job (for the "last ran" indicator)
  *   syncHealth.triggerSync    — manually trigger a nightly sync (admin only, for testing)
  */
 
 import { z } from "zod";
-import { desc, eq, and, gte } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { syncRuns } from "../drizzle/schema";
+import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { runNightlySync } from "./cronSync";
 
 export const syncHealthRouter = router({
@@ -60,9 +61,6 @@ export const syncHealthRouter = router({
         alwaysOnRecent: [],
       };
     }
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     // Latest run per type
     const [latestSync] = await db
@@ -126,6 +124,47 @@ export const syncHealthRouter = router({
       launch27Recent: launch27Recent.map(parseBreakdown),
       alwaysOnRecent: alwaysOnRecent.map(parseBreakdown),
     };
+  }),
+
+  /**
+   * Returns the latest heartbeat for each of the 4 internal cron jobs.
+   * Used by the Sync Health page to show "last ran X minutes ago" per job.
+   */
+  getHeartbeats: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+
+    const jobNames = ["nightly-sync", "always-on-send", "silence-followup", "scheduled-followup"];
+
+    // Fetch latest heartbeat per job using a subquery approach
+    const results: Array<{
+      jobName: string;
+      resultSummary: string | null;
+      didWork: number;
+      ranAt: Date;
+    }> = [];
+
+    for (const jobName of jobNames) {
+      const [row] = await db
+        .select()
+        .from(cronHeartbeats)
+        .where(eq(cronHeartbeats.jobName, jobName))
+        .orderBy(desc(cronHeartbeats.ranAt))
+        .limit(1);
+      if (row) {
+        results.push(row);
+      } else {
+        // Never ran — return a null sentinel
+        results.push({
+          jobName,
+          resultSummary: null,
+          didWork: 0,
+          ranAt: new Date(0), // epoch = never
+        });
+      }
+    }
+
+    return results;
   }),
 
   /**

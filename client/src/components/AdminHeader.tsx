@@ -233,6 +233,7 @@ export type AdminTab =
   | "leaderboard"
   | "campaigns"
   | "always-on"
+  | "campaign-approval"
   | "completed-jobs"
   | "quality";
 
@@ -295,6 +296,7 @@ const NAV_ENTRIES: NavEntry[] = [
     children: [
       { id: "campaigns", label: "Campaigns", href: "/admin/campaigns",  icon: <Send className="w-3.5 h-3.5" /> },
       { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
+      { id: "campaign-approval", label: "Approvals", href: "/admin/campaign-approval", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
     ],
   },
   {

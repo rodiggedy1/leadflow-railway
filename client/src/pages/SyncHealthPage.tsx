@@ -2,6 +2,7 @@
  * SyncHealthPage — Daily automation health monitor for Maids in Black
  *
  * Shows:
+ *  - Cron heartbeat panel: last-ran time per job (even no-ops)
  *  - Status cards for each cron job (Launch27 Sync, Always-On SMS)
  *  - Last run time, record counts, duration
  *  - Color-coded status (green = success, yellow = partial/skipped, red = error)
@@ -32,12 +33,10 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
-  Zap,
-  Send,
-  CheckCircle,
-  AlertTriangle,
   Play,
-  Calendar,
+  Heart,
+  Timer,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -62,6 +61,13 @@ interface SyncRun {
   durationMs: number | null;
   startedAt: Date;
   completedAt: Date | null;
+}
+
+interface CronHeartbeat {
+  jobName: string;
+  resultSummary: string | null;
+  didWork: number;
+  ranAt: Date;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -93,6 +99,7 @@ function formatDuration(ms: number | null): string {
 function timeAgo(date: Date | string): string {
   const d = new Date(date);
   const diffMs = Date.now() - d.getTime();
+  if (d.getTime() === 0) return "Never";
   const diffMins = Math.floor(diffMs / 60000);
   if (diffMins < 1) return "just now";
   if (diffMins < 60) return `${diffMins}m ago`;
@@ -103,7 +110,9 @@ function timeAgo(date: Date | string): string {
 }
 
 function formatDateTime(date: Date | string): string {
-  return new Date(date).toLocaleString("en-US", {
+  const d = new Date(date);
+  if (d.getTime() === 0) return "Never";
+  return d.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -111,6 +120,82 @@ function formatDateTime(date: Date | string): string {
     hour12: true,
     timeZone: "America/New_York",
   }) + " ET";
+}
+
+// ─── Heartbeat Panel ──────────────────────────────────────────────────────────
+
+const JOB_META: Record<string, { label: string; schedule: string; icon: React.ReactNode }> = {
+  "nightly-sync": {
+    label: "Launch27 Sync",
+    schedule: "12:00 PM ET daily",
+    icon: <Database className="w-4 h-4 text-blue-500" />,
+  },
+  "always-on-send": {
+    label: "Always-On SMS",
+    schedule: "10 AM ET Mon–Sat",
+    icon: <MessageSquare className="w-4 h-4 text-purple-500" />,
+  },
+  "silence-followup": {
+    label: "Silence Follow-Up",
+    schedule: "Every 5 minutes",
+    icon: <Timer className="w-4 h-4 text-amber-500" />,
+  },
+  "scheduled-followup": {
+    label: "Scheduled Follow-Up",
+    schedule: "9 AM ET daily",
+    icon: <Zap className="w-4 h-4 text-emerald-500" />,
+  },
+};
+
+function HeartbeatCard({ hb }: { hb: CronHeartbeat }) {
+  const meta = JOB_META[hb.jobName] ?? { label: hb.jobName, schedule: "—", icon: <Activity className="w-4 h-4 text-gray-400" /> };
+  const neverRan = new Date(hb.ranAt).getTime() === 0;
+  const isRecent = !neverRan && (Date.now() - new Date(hb.ranAt).getTime()) < 10 * 60 * 1000; // within 10 min
+  const isStale = !neverRan && (Date.now() - new Date(hb.ranAt).getTime()) > 25 * 60 * 60 * 1000; // > 25 hours (daily jobs)
+
+  let dotColor = "bg-emerald-400";
+  if (neverRan) dotColor = "bg-gray-300";
+  else if (isStale && hb.jobName !== "silence-followup") dotColor = "bg-amber-400";
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-gray-50 rounded-lg border border-gray-100">
+            {meta.icon}
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-800">{meta.label}</p>
+            <p className="text-xs text-gray-400">{meta.schedule}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${dotColor} ${isRecent ? "animate-pulse" : ""}`} />
+          {neverRan ? (
+            <span className="text-xs text-gray-400 font-medium">Never ran</span>
+          ) : (
+            <span className="text-xs font-semibold text-gray-700">{timeAgo(hb.ranAt)}</span>
+          )}
+        </div>
+      </div>
+
+      {!neverRan && (
+        <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            <span className="font-medium text-gray-600">Last result: </span>
+            {hb.resultSummary ?? "—"}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(hb.ranAt)}</p>
+        </div>
+      )}
+
+      {neverRan && (
+        <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 text-center">
+          <p className="text-xs text-gray-400 italic">Waiting for first tick…</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Status Card ──────────────────────────────────────────────────────────────
@@ -200,52 +285,29 @@ function StatusCard({
             <p className="text-xs text-gray-500">Inserted</p>
           </div>
           <div className="flex-1 bg-white rounded-lg p-2.5 border border-gray-100 text-center">
-            <p className="text-lg font-bold text-gray-500">{latestRun.recordsSkipped ?? 0}</p>
+            <p className="text-lg font-bold text-gray-400">{latestRun.recordsSkipped ?? 0}</p>
             <p className="text-xs text-gray-500">Skipped</p>
           </div>
-          {latestRun.enrollmentBreakdown && Object.keys(latestRun.enrollmentBreakdown).length > 0 && (
-            <div className="flex-1 bg-white rounded-lg p-2.5 border border-gray-100 text-center">
-              <p className="text-lg font-bold text-blue-600">
-                {Object.values(latestRun.enrollmentBreakdown).reduce((a, b) => a + b, 0)}
-              </p>
-              <p className="text-xs text-gray-500">Enrolled</p>
-            </div>
-          )}
         </div>
       )}
 
       {latestRun && latestRun.runType === "always-on-send" && (
         <div className="flex gap-2">
           <div className="flex-1 bg-white rounded-lg p-2.5 border border-gray-100 text-center">
-            <p className="text-lg font-bold text-emerald-600">{latestRun.smsSent ?? 0}</p>
-            <p className="text-xs text-gray-500">Sent</p>
+            <p className="text-lg font-bold text-purple-600">{latestRun.smsSent ?? 0}</p>
+            <p className="text-xs text-gray-500">SMS Sent</p>
           </div>
           <div className="flex-1 bg-white rounded-lg p-2.5 border border-gray-100 text-center">
-            <p className="text-lg font-bold text-red-500">{latestRun.smsFailed ?? 0}</p>
+            <p className="text-lg font-bold text-red-400">{latestRun.smsFailed ?? 0}</p>
             <p className="text-xs text-gray-500">Failed</p>
           </div>
-          {latestRun.groupBreakdown && (
-            <div className="flex-1 bg-white rounded-lg p-2.5 border border-gray-100 text-center">
-              <p className="text-lg font-bold text-blue-600">
-                {Object.keys(latestRun.groupBreakdown).filter(k => (latestRun.groupBreakdown![k].sent ?? 0) > 0).length}
-              </p>
-              <p className="text-xs text-gray-500">Groups</p>
-            </div>
-          )}
         </div>
       )}
 
       {/* Message */}
       {latestRun?.message && (
-        <p className="text-xs text-gray-600 bg-white rounded-lg px-3 py-2 border border-gray-100 leading-relaxed">
+        <p className="text-xs text-gray-500 italic bg-white rounded-lg px-3 py-2 border border-gray-100">
           {latestRun.message}
-        </p>
-      )}
-
-      {/* Error detail */}
-      {latestRun?.errorDetail && (
-        <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100 font-mono leading-relaxed">
-          {latestRun.errorDetail}
         </p>
       )}
 
@@ -383,7 +445,7 @@ export default function SyncHealthPage() {
   const [historyFilter, setHistoryFilter] = useState<"all" | "launch27-sync" | "always-on-send">("all");
 
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = trpc.syncHealth.getSummary.useQuery(undefined, {
-    refetchInterval: 60_000, // auto-refresh every minute
+    refetchInterval: 60_000,
   });
 
   const { data: recentRuns, isLoading: runsLoading, refetch: refetchRuns } = trpc.syncHealth.getRecentRuns.useQuery(
@@ -394,11 +456,16 @@ export default function SyncHealthPage() {
     { refetchInterval: 60_000 }
   );
 
+  const { data: heartbeats, isLoading: heartbeatsLoading, refetch: refetchHeartbeats } = trpc.syncHealth.getHeartbeats.useQuery(undefined, {
+    refetchInterval: 30_000, // refresh every 30s so silence-followup ticks are visible
+  });
+
   const triggerSync = trpc.syncHealth.triggerSync.useMutation({
     onSuccess: (result) => {
       toast.success(`Sync complete: ${result.inserted} inserted, ${result.skipped} skipped`);
       refetchSummary();
       refetchRuns();
+      refetchHeartbeats();
     },
     onError: (err) => {
       toast.error(`Sync failed: ${err.message}`);
@@ -408,10 +475,11 @@ export default function SyncHealthPage() {
   const handleRefresh = () => {
     refetchSummary();
     refetchRuns();
+    refetchHeartbeats();
     toast.success("Refreshed");
   };
 
-  const isLoading = summaryLoading || runsLoading;
+  const isLoading = summaryLoading || runsLoading || heartbeatsLoading;
 
   return (
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
@@ -441,6 +509,32 @@ export default function SyncHealthPage() {
           </Button>
         </div>
 
+        {/* ── Cron Heartbeats ── */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+            <Heart className="w-4 h-4 text-rose-500" />
+            <h2 className="text-sm font-semibold text-gray-900">Cron Heartbeats</h2>
+            <span className="text-xs text-gray-400 ml-1">— last tick per job, even if nothing was sent</span>
+          </div>
+          {heartbeatsLoading ? (
+            <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[0,1,2,3].map(i => <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              {(["nightly-sync", "always-on-send", "silence-followup", "scheduled-followup"]).map((jobName) => {
+                const hb = (heartbeats as CronHeartbeat[] | undefined)?.find(h => h.jobName === jobName) ?? {
+                  jobName,
+                  resultSummary: null,
+                  didWork: 0,
+                  ranAt: new Date(0),
+                };
+                return <HeartbeatCard key={jobName} hb={hb} />;
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Status cards */}
         {summaryLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -456,7 +550,7 @@ export default function SyncHealthPage() {
               latestRun={summary?.launch27 as SyncRun | null ?? null}
               streak={summary?.launch27Streak ?? 0}
               recentRuns={(summary?.launch27Recent ?? []) as (SyncRun | null)[]}
-              schedule="Every night at 10 PM ET"
+              schedule="Every day at 12:00 PM ET"
             />
             <StatusCard
               title="Always-On SMS Send"

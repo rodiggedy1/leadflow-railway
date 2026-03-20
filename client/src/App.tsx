@@ -15,6 +15,7 @@ const ReactivationCampaigns = lazy(() => import("./pages/ReactivationCampaigns")
 const CompletedJobs = lazy(() => import("./pages/CompletedJobs"));
 const AlwaysOnCampaign = lazy(() => import("./pages/AlwaysOnCampaign"));
 const SyncHealthPage = lazy(() => import("./pages/SyncHealthPage"));
+const CampaignApprovalPage = lazy(() => import("./pages/CampaignApprovalPage"));
 const AllCalls = lazy(() => import("./pages/AllCalls"));
 const RevenueAttribution = lazy(() => import("./pages/RevenueAttribution"));
 const CleanerDashboard = lazy(() => import("./pages/CleanerDashboard"));
@@ -40,6 +41,7 @@ function Router() {
       <Route path={"/admin/completed-jobs"} component={CompletedJobs} />
       <Route path={"/admin/always-on"} component={AlwaysOnCampaign} />
       <Route path={"/admin/sync-health"} component={SyncHealthPage} />
+      <Route path={"/admin/campaign-approval"} component={CampaignApprovalPage} />
       <Route path={"/admin/calls"} component={AllCalls} />
       <Route path={"/admin/revenue"} component={RevenueAttribution} />
       <Route path={"/admin/quality"} component={CleanerDashboard} />

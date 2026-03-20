@@ -351,6 +351,13 @@
       "when": 1774022779637,
       "tag": "0049_mature_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1774050395222,
+      "tag": "0050_tidy_amphibian",
+      "breakpoints": true
     }
   ]
 }

@@ -1677,3 +1677,13 @@
 - [x] Re-register all 4 cron jobs with Manus scheduler (nightly-sync, always-on-send, silence-followup, scheduled-followup)
 - [x] Shift nightly-sync from 10 PM ET to noon ET so Launch27 has time to mark jobs complete
 - [x] Ensure always-on-send remains gated - no campaign messages sent without manual approval
+
+- [x] Cron heartbeat: log every internal cron job run (even no-ops) to DB with job name, ran_at, result summary
+- [x] Cron heartbeat: display last-run timestamp per job on Sync Health page (distinguish "ran, nothing to do" vs "never ran")
+- [ ] Campaign approval: when Always-On batch is due, generate a pending approval record with recipient list + message preview instead of sending immediately
+- [ ] Campaign approval: admin UI to review pending batch (recipient count, sample messages, full list), then Approve or Reject
+- [ ] Campaign approval: only send SMS after admin approves; rejected batches are discarded with a note
+- [ ] Campaign approval: show pending approval badge/alert on Campaigns nav tab
+- [x] Build campaign approval workflow: pending batch preview, approve/reject, gated send
+- [x] Add Approvals nav item under Campaigns dropdown in AdminHeader
+- [x] Shift nightly sync from 10 PM to noon ET
