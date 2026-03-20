@@ -11,7 +11,7 @@
  *  - Photo upload per job (completion photo)
  *  - Weekly pay summary per cleaner
  */
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -458,8 +458,28 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const isFlagged = isLowRating || hasMissed;
   const serviceTime = formatServiceTime(job.serviceDateTime);
 
+  // ETA alert: re-evaluate every 30s so cards update live
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const etaTs = job.cleanerAssignment?.etaTimestamp ?? null;
+  const isEtaStatus = job.cleanerAssignment?.jobStatus === "on_the_way" || job.cleanerAssignment?.jobStatus === "running_late";
+  const etaOverdue   = isEtaStatus && etaTs !== null && now > etaTs;
+  const etaDueSoon   = isEtaStatus && etaTs !== null && !etaOverdue && (etaTs - now) <= 10 * 60 * 1000;
+
+  const cardClass = etaOverdue
+    ? "border-red-400 bg-red-50/40 dark:bg-red-950/20 ring-1 ring-red-300"
+    : etaDueSoon
+    ? "border-amber-400 bg-amber-50/40 dark:bg-amber-950/20 ring-1 ring-amber-300"
+    : isFlagged
+    ? "border-red-200 bg-red-50/30 dark:bg-red-950/10"
+    : "";
+
   return (
-    <Card className={`transition-all ${isFlagged ? "border-red-200 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+    <Card className={`transition-all ${cardClass}`}>
       <CardContent className="py-4">
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           {/* Left: Job info */}
@@ -485,6 +505,18 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                 issueNote={job.cleanerAssignment?.issueNote}
                 etaTimestamp={job.cleanerAssignment?.etaTimestamp}
               />
+              {etaOverdue && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-red-500 text-white rounded-full px-2 py-0.5 animate-pulse">
+                  <AlertTriangle className="w-3 h-3" />
+                  Overdue
+                </span>
+              )}
+              {etaDueSoon && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-500 text-white rounded-full px-2 py-0.5">
+                  <Clock className="w-3 h-3" />
+                  Due Soon
+                </span>
+              )}
             </div>
 
             <div className="mt-1.5 space-y-1">

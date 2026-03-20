@@ -1618,3 +1618,8 @@
 - [x] Expose etaTimestamp in qualityRouter getJobsForDate
 - [x] Admin quality badge shows "~9:45 AM" instead of "30 minutes"
 - [x] Cleaner portal note shows "Arrives ~9:45 AM" instead of raw label
+
+## ETA Overdue Alert on Admin Quality Cards
+- [x] Amber card border + "⚠ Due Soon" badge when within 10 min of ETA (on_the_way / running_late)
+- [x] Red card border + "🚨 Overdue" badge when ETA has passed (on_the_way / running_late)
+- [x] Live re-evaluation using a 30s interval so cards update without page reload
