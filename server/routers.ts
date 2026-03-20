@@ -421,7 +421,7 @@ export const appRouter = router({
       const BOT_FILTER_SECONDS = 8;
       const visitorRows = await db
         .select({
-          day: sql<string>`DATE(${pageViews.createdAt})`,
+          day: sql<string>`LEFT(${pageViews.createdAt}, 10)`,
           count: sql<number>`count(distinct ${pageViews.sessionKey})`,
         })
         .from(pageViews)
@@ -434,22 +434,22 @@ export const appRouter = router({
             ),
           )
         )
-        .groupBy(sql`DATE(${pageViews.createdAt})`);
+        .groupBy(sql`LEFT(${pageViews.createdAt}, 10)`);
 
       // Daily lead counts
       const leadRows = await db
         .select({
-          day: sql<string>`DATE(${conversationSessions.createdAt})`,
+          day: sql<string>`LEFT(${conversationSessions.createdAt}, 10)`,
           count: sql<number>`count(*)`,
         })
         .from(conversationSessions)
         .where(gte(conversationSessions.createdAt, sevenDaysAgo))
-        .groupBy(sql`DATE(${conversationSessions.createdAt})`);
+        .groupBy(sql`LEFT(${conversationSessions.createdAt}, 10)`);
 
       // Daily booked counts
       const bookedRows = await db
         .select({
-          day: sql<string>`DATE(${conversationSessions.bookedAt})`,
+          day: sql<string>`LEFT(${conversationSessions.bookedAt}, 10)`,
           count: sql<number>`count(*)`,
         })
         .from(conversationSessions)
@@ -459,7 +459,7 @@ export const appRouter = router({
             eq(conversationSessions.isBooked, 1)
           )
         )
-        .groupBy(sql`DATE(${conversationSessions.bookedAt})`);
+        .groupBy(sql`LEFT(${conversationSessions.bookedAt}, 10)`);
 
       // Build lookup maps
       const visitorMap = new Map(visitorRows.map(r => [r.day, Number(r.count)]));

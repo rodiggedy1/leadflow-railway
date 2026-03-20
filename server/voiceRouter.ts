@@ -138,13 +138,13 @@ export const voiceRouter = router({
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const dailyRows = await db
         .select({
-          date: sql<string>`DATE(${voiceCalls.createdAt})`,
+          date: sql<string>`LEFT(${voiceCalls.createdAt}, 10)`,
           count: sql<number>`COUNT(*)`,
         })
         .from(voiceCalls)
         .where(gte(voiceCalls.createdAt, sevenDaysAgo))
-        .groupBy(sql`DATE(${voiceCalls.createdAt})`)
-        .orderBy(sql`DATE(${voiceCalls.createdAt})`);
+        .groupBy(sql`LEFT(${voiceCalls.createdAt}, 10)`)
+        .orderBy(sql`LEFT(${voiceCalls.createdAt}, 10)`);
 
       // Fill in missing days with 0
       const dailyMap = new Map<string, number>();
