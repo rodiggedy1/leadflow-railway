@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -879,6 +879,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   ]),
   /** Issue description when jobStatus = issue_at_property */
   issueNote: text("issueNote"),
+  /** Absolute ETA as Unix ms timestamp — computed when cleaner picks an ETA option (now + duration) */
+  etaTimestamp: bigint("etaTimestamp", { mode: "number" }),
   /** Whether this job has been flagged for admin review */
   flagged: int("flagged").default(0).notNull(),
   /** Admin notes on this job */

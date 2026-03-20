@@ -752,6 +752,7 @@ export const qualityRouter = router({
           adminNotes: cj.adminNotes ?? null,
           jobStatus: cj.jobStatus ?? null,
           issueNote: cj.issueNote ?? null,
+          etaTimestamp: cj.etaTimestamp ?? null,
           manualAdjustment: cj.manualAdjustment ?? null,
           manualAdjustmentNote: cj.manualAdjustmentNote ?? null,
         },

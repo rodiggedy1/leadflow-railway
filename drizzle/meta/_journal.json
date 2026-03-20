@@ -337,6 +337,13 @@
       "when": 1774015058874,
       "tag": "0047_heavy_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1774018092273,
+      "tag": "0048_great_masque",
+      "breakpoints": true
     }
   ]
 }

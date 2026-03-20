@@ -84,7 +84,12 @@ function RatingBadge({ rating }: { rating: number | null }) {
   return null;
 }
 
-function JobStatusBadge({ status, issueNote }: { status: string | null; issueNote?: string | null }) {
+function formatEtaTime(ts: number | null | undefined): string | null {
+  if (!ts) return null;
+  return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+function JobStatusBadge({ status, issueNote, etaTimestamp }: { status: string | null; issueNote?: string | null; etaTimestamp?: number | null }) {
   if (!status) return null;
   const configs: Record<string, { label: string; className: string }> = {
     on_the_way:        { label: "On the Way",        className: "bg-blue-100 text-blue-700 border-blue-200" },
@@ -95,15 +100,18 @@ function JobStatusBadge({ status, issueNote }: { status: string | null; issueNot
   };
   const cfg = configs[status];
   if (!cfg) return null;
+
+  const etaTime = formatEtaTime(etaTimestamp);
+
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2 py-0.5 ${cfg.className}`}>
       {cfg.label}
       {status === "issue_at_property" && issueNote && (
         <span className="text-red-600 font-normal">: {issueNote}</span>
       )}
-      {(status === "on_the_way" || status === "running_late") && issueNote && (
+      {(status === "on_the_way" || status === "running_late") && (
         <span className={`font-normal ${status === "on_the_way" ? "text-blue-600" : "text-orange-600"}`}>
-          · {issueNote}
+          {etaTime ? `· ~${etaTime}` : issueNote === "Don't know" ? "· ETA unknown" : null}
         </span>
       )}
     </span>
@@ -340,6 +348,7 @@ type JobRow = {
     adminNotes: string | null;
     jobStatus: string | null;
     issueNote: string | null;
+    etaTimestamp: number | null;
     manualAdjustment: string | null;
     manualAdjustmentNote: string | null;
   };
@@ -474,6 +483,7 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               <JobStatusBadge
                 status={job.cleanerAssignment?.jobStatus ?? null}
                 issueNote={job.cleanerAssignment?.issueNote}
+                etaTimestamp={job.cleanerAssignment?.etaTimestamp}
               />
             </div>
 

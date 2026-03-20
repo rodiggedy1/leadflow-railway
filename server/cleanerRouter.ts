@@ -325,9 +325,25 @@ export const cleanerRouter = router({
       const effectiveStatus = input.status === "arrived" ? "in_progress" : input.status;
       const updateData: Record<string, unknown> = { jobStatus: effectiveStatus };
 
-      // For running_late: store ETA in issueNote so admin can see it on the badge
-      if (input.status === "running_late" && input.etaLabel) {
-        updateData.issueNote = `ETA: ${input.etaLabel}`;
+      // Compute absolute ETA timestamp for on_the_way / running_late
+      const ETA_MINUTES: Record<string, number | null> = {
+        "30 minutes": 30,
+        "1 hour": 60,
+        "1 hr 30 min": 90,
+        "2 hours": 120,
+        "Don't know": null,
+      };
+
+      if ((input.status === "on_the_way" || input.status === "running_late") && input.etaLabel) {
+        const mins = ETA_MINUTES[input.etaLabel] ?? null;
+        if (mins !== null) {
+          updateData.etaTimestamp = Date.now() + mins * 60 * 1000;
+        } else {
+          // "Don't know" — clear any previous ETA
+          updateData.etaTimestamp = null;
+        }
+        // Keep issueNote as the human label for cleaner portal display
+        updateData.issueNote = input.etaLabel;
       } else if (input.issueNote) {
         updateData.issueNote = input.issueNote;
       }
@@ -344,7 +360,13 @@ export const cleanerRouter = router({
       const jobLabel = [job.customerName, job.jobAddress].filter(Boolean).join(" — ");
 
       if (input.status === "running_late") {
-        const etaPart = input.etaLabel ? ` (ETA: ${input.etaLabel})` : "";
+        let etaPart = "";
+        if (updateData.etaTimestamp) {
+          const arrivalTime = new Date(updateData.etaTimestamp as number).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+          etaPart = ` — arrives ~${arrivalTime}`;
+        } else if (input.etaLabel === "Don't know") {
+          etaPart = " — ETA unknown";
+        }
         await notifyOwner({
           title: `⏰ Running Late — ${cleanerName}`,
           content: `${cleanerName} is running late to: ${jobLabel}${etaPart}`,

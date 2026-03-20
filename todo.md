@@ -1610,3 +1610,11 @@
 - [x] Show a subtle "Last updated X seconds ago" indicator on the quality dashboard
 - [x] Allow cleaner to re-tap active on_the_way/running_late badge to reopen ETA picker and update
 - [x] Improve active status button styling: checkmark prefix, ring/scale effect, inactive buttons dimmed
+
+## ETA Absolute Timestamp
+- [x] Add etaTimestamp (bigint, nullable) column to cleanerJobs schema
+- [x] Run db:push (migration 0048)
+- [x] Compute arrival time on submit: now + duration minutes, store as Unix ms timestamp
+- [x] Expose etaTimestamp in qualityRouter getJobsForDate
+- [x] Admin quality badge shows "~9:45 AM" instead of "30 minutes"
+- [x] Cleaner portal note shows "Arrives ~9:45 AM" instead of raw label

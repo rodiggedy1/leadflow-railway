@@ -155,6 +155,7 @@ type Job = {
   photos: { id: number; photoUrl: string; filename: string | null }[];
   jobStatus: string | null;
   issueNote: string | null;
+  etaTimestamp: number | null;
   manualAdjustment: string | null;
   manualAdjustmentNote: string | null;
 };
@@ -570,15 +571,21 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
               </Button>
             </div>
           )}
-          {job.issueNote && (
+          {(job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && (
             <p className={`text-xs rounded px-2 py-1 border ${
               job.jobStatus === "on_the_way"
                 ? "text-blue-300 bg-blue-900/20 border-blue-700/30"
-                : job.jobStatus === "running_late"
-                ? "text-orange-300 bg-orange-900/20 border-orange-700/30"
-                : "text-red-300 bg-red-900/20 border-red-700/30"
+                : "text-orange-300 bg-orange-900/20 border-orange-700/30"
             }`}>
-              {(job.jobStatus === "on_the_way" || job.jobStatus === "running_late") ? job.issueNote : `Issue: ${job.issueNote}`}
+              {job.etaTimestamp
+                ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                : job.issueNote === "Don't know" ? "ETA unknown" : null
+              }
+            </p>
+          )}
+          {job.jobStatus === "issue_at_property" && job.issueNote && (
+            <p className="text-xs rounded px-2 py-1 border text-red-300 bg-red-900/20 border-red-700/30">
+              Issue: {job.issueNote}
             </p>
           )}
         </div>
