@@ -313,6 +313,21 @@ const NAV_ENTRIES: NavEntry[] = [
   },
 ];
 
+// ── Voice pending callbacks badge ───────────────────────────────────────
+function VoicePendingBadge() {
+  const { data } = trpc.voice.listCallbacks.useQuery(
+    { includeCompleted: false },
+    { refetchInterval: 60_000, staleTime: 55_000 }
+  );
+  const count = data?.length ?? 0;
+  if (count === 0) return null;
+  return (
+    <span className="ml-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+      {count}
+    </span>
+  );
+}
+
 // ── Dropdown component ────────────────────────────────────────────────────
 function NavDropdown({
   entry,
@@ -348,6 +363,7 @@ function NavDropdown({
       >
         {entry.icon}
         {entry.label}
+        {entry.id === "voice" && <VoicePendingBadge />}
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
@@ -415,7 +431,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
 
       {/* Tab navigation */}
       <div
-        className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t overflow-x-auto"
+        className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t overflow-x-visible"
         style={{ borderColor: "#E5E5E5" }}
       >
         {NAV_ENTRIES.map((entry) => {

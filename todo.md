@@ -1671,3 +1671,5 @@
 - [x] Ensure all 4 status pills (Widget, SMS Webhook, Sync Healthy, Quality) persist on every admin page
 - [x] Move Quality pill, theme toggle, and AI Simulator button from AdminDashboard header to footer
 - [ ] Redesign admin nav: 7 tabs with 3 dropdowns (Voice, Staff, Campaigns), rename Reviews→Happiness, Quality→Jobs, remove Quality header pill
+- [x] Add pending callback count badge on Voice dropdown tab in AdminHeader
+- [x] Fix Staff/Campaigns dropdown clipped by overflow-x-auto on nav tab row in AdminHeader
