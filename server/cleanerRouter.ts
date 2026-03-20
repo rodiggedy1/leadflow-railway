@@ -283,7 +283,7 @@ export const cleanerRouter = router({
 
       await db
         .update(cleanerJobs)
-        .set({ bookingStatus: "completed" })
+        .set({ bookingStatus: "completed", jobStatus: "completed" })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
       return { success: true };
@@ -293,12 +293,14 @@ export const cleanerRouter = router({
    * cleaner.updateJobStatus — cleaner updates the status of their job.
    * Auto-transitions: arrived → in_progress
    * Notifications: running_late and issue_at_property alert the owner.
+   * etaLabel: human-readable ETA string for running_late (e.g. "30 minutes")
    */
   updateJobStatus: cleanerProcedure
     .input(z.object({
       cleanerJobId: z.number(),
       status: z.enum(["on_the_way", "arrived", "running_late", "in_progress", "completed", "issue_at_property"]),
       issueNote: z.string().max(500).optional(),
+      etaLabel: z.string().max(50).optional(), // e.g. "30 minutes", "1 hour", "Don't know"
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -322,7 +324,14 @@ export const cleanerRouter = router({
       // Auto-transition: arrived → also set in_progress
       const effectiveStatus = input.status === "arrived" ? "in_progress" : input.status;
       const updateData: Record<string, unknown> = { jobStatus: effectiveStatus };
-      if (input.issueNote) updateData.issueNote = input.issueNote;
+
+      // For running_late: store ETA in issueNote so admin can see it on the badge
+      if (input.status === "running_late" && input.etaLabel) {
+        updateData.issueNote = `ETA: ${input.etaLabel}`;
+      } else if (input.issueNote) {
+        updateData.issueNote = input.issueNote;
+      }
+
       if (effectiveStatus === "issue_at_property") updateData.flagged = 1;
 
       await db
@@ -335,9 +344,10 @@ export const cleanerRouter = router({
       const jobLabel = [job.customerName, job.jobAddress].filter(Boolean).join(" — ");
 
       if (input.status === "running_late") {
+        const etaPart = input.etaLabel ? ` (ETA: ${input.etaLabel})` : "";
         await notifyOwner({
           title: `⏰ Running Late — ${cleanerName}`,
-          content: `${cleanerName} is running late to: ${jobLabel}`,
+          content: `${cleanerName} is running late to: ${jobLabel}${etaPart}`,
         }).catch(() => {});
       }
 

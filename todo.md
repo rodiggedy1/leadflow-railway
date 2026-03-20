@@ -1592,3 +1592,10 @@
 ## UX: Remove Redundant "Completed" Status Button
 - [x] Remove "completed" from JOB_STATUSES in CleanerPortal.tsx (redundant with Mark Complete button)
 - [x] Keep "completed" badge in admin quality view (still useful to show the state was reached)
+
+## Auto-Complete Status + Running Late ETA
+- [x] Auto-set jobStatus=completed when cleaner taps Mark Complete (cleanerRouter.markComplete)
+- [x] Add etaLabel field to updateJobStatus procedure (string, stored in issueNote as "ETA: X")
+- [x] Add Running Late ETA popup in CleanerPortal: 30 min, 1 hr, 1 hr 30 min, 2 hrs, Don't know
+- [x] Store ETA in issueNote field (e.g. "ETA: 30 minutes")
+- [x] Show ETA on admin quality Running Late badge (via issueNote)

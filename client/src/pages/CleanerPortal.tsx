@@ -178,6 +178,15 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
   const [showPhotos, setShowPhotos] = useState(false);
   const [showIssueInput, setShowIssueInput] = useState(false);
   const [issueNote, setIssueNote] = useState("");
+  const [showEtaPicker, setShowEtaPicker] = useState(false);
+
+  const ETA_OPTIONS = [
+    { label: "30 minutes", value: "30 minutes" },
+    { label: "1 hour",     value: "1 hour" },
+    { label: "1 hr 30 min", value: "1 hr 30 min" },
+    { label: "2 hours",    value: "2 hours" },
+    { label: "Don't know", value: "Don't know" },
+  ];
 
   const statusMutation = trpc.cleaner.updateJobStatus.useMutation({
     onSuccess: () => { onStatusUpdated(); },
@@ -469,6 +478,12 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                   onClick={() => {
                     if (s.key === "issue_at_property") {
                       setShowIssueInput(v => !v);
+                      setShowEtaPicker(false);
+                      return;
+                    }
+                    if (s.key === "running_late") {
+                      setShowEtaPicker(v => !v);
+                      setShowIssueInput(false);
                       return;
                     }
                     statusMutation.mutate({ cleanerJobId: job.id, status: s.key });
@@ -483,6 +498,28 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
               );
             })}
           </div>
+          {/* ETA picker for Running Late */}
+          {showEtaPicker && (
+            <div className="mt-2 p-3 bg-orange-950/30 border border-orange-700/40 rounded-xl space-y-2">
+              <p className="text-orange-300 text-xs font-semibold uppercase tracking-widest">When will you arrive?</p>
+              <div className="flex flex-wrap gap-2">
+                {ETA_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      statusMutation.mutate({ cleanerJobId: job.id, status: "running_late", etaLabel: opt.value });
+                      setShowEtaPicker(false);
+                    }}
+                    disabled={statusMutation.isPending}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-orange-900/40 text-orange-200 border border-orange-700/50 hover:bg-orange-800/60 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Issue note input */}
           {showIssueInput && (
             <div className="flex gap-2 mt-1">
@@ -512,8 +549,12 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             </div>
           )}
           {job.issueNote && (
-            <p className="text-red-300 text-xs bg-red-900/20 rounded px-2 py-1 border border-red-700/30">
-              Issue: {job.issueNote}
+            <p className={`text-xs rounded px-2 py-1 border ${
+              job.jobStatus === "running_late"
+                ? "text-orange-300 bg-orange-900/20 border-orange-700/30"
+                : "text-red-300 bg-red-900/20 border-red-700/30"
+            }`}>
+              {job.jobStatus === "running_late" ? job.issueNote : `Issue: ${job.issueNote}`}
             </p>
           )}
         </div>
