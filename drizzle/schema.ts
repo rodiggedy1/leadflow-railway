@@ -91,6 +91,12 @@ export const conversationStages = [
    * Waiting for the lead to confirm their preferred language before continuing.
    */
   "LANGUAGE_CONFIRM",
+  /**
+   * QUALITY_RATING_REQUESTED → Post-job rating SMS sent, waiting for 1-5 star reply.
+   * QUALITY_MISSED_FOLLOWUP  → Low rating received, asked "was anything missed?", waiting for YES/NO.
+   */
+  "QUALITY_RATING_REQUESTED",
+  "QUALITY_MISSED_FOLLOWUP",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

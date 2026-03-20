@@ -295,6 +295,13 @@
       "when": 1773978907689,
       "tag": "0041_special_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1773983083565,
+      "tag": "0042_dry_paibok",
+      "breakpoints": true
     }
   ]
 }

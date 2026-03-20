@@ -1472,5 +1472,6 @@
 - [x] Add sendApprovedRatingSmsNow procedure + Send Now button on dashboard to fire immediately
 
 ## Bug Fix: Send Now Returns "Send Failed"
-- [x] Root cause: sendApprovedRatingSms tried to update completedJobs table after send, but quality jobs use cleanerJobs (no completedJobId)
-- [x] Fix: removed completedJobs update from sendApprovedRatingSms - now just sends SMS + marks sent in rating_sms_pending
+- [x] Root cause 1: sendApprovedRatingSms tried to update completedJobs table - removed (quality jobs use cleanerJobs)
+- [x] Root cause 2: QUALITY_RATING_REQUESTED and QUALITY_MISSED_FOLLOWUP were missing from conversationStages enum - added and migrated
+- [x] Fix: both issues resolved, Send Now now works end-to-end
