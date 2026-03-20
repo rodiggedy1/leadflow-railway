@@ -32,6 +32,7 @@ import {
   Mic,
   Webhook,
   ClipboardCheck,
+  HeartPulse,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -113,6 +114,55 @@ function WebhookHealthBadge() {
       )}
       {data.ok ? "SMS Webhook" : "Webhook DOWN"}
     </button>
+  );
+}
+
+// ── Sync Health badge ────────────────────────────────────────────────────────
+function SyncHealthBadge() {
+  const { data, isFetching, refetch } = trpc.syncHealth.getSummary.useQuery(undefined, {
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 4 * 60 * 1000,
+  });
+
+  if (!data && isFetching) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 border border-gray-200 rounded-full px-2.5 py-1">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Sync…
+      </span>
+    );
+  }
+  if (!data) return null;
+
+  // Healthy = both latest runs succeeded or were skipped (or no runs yet = no data to fail)
+  const l27Status = data.launch27?.status;
+  const aoStatus = data.alwaysOn?.status;
+  const l27Ok = !l27Status || l27Status === "success" || l27Status === "skipped";
+  const aoOk = !aoStatus || aoStatus === "success" || aoStatus === "skipped";
+  const isOk = l27Ok && aoOk;
+
+  const tooltip = isOk
+    ? `Sync healthy — Launch27: ${l27Status ?? "no runs"}, Always-On: ${aoStatus ?? "no runs"}. Click to re-check.`
+    : `Sync issue — Launch27: ${l27Status ?? "no runs"}, Always-On: ${aoStatus ?? "no runs"}. Click to re-check.`;
+
+  return (
+    <a
+      href="/admin/sync-health"
+      onClick={(e) => { e.preventDefault(); refetch(); window.location.href = "/admin/sync-health"; }}
+      title={tooltip}
+      className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition-opacity hover:opacity-80 ${
+        isOk
+          ? "bg-green-50 text-green-700 border-green-200"
+          : "bg-red-50 text-red-700 border-red-200"
+      }`}
+    >
+      {isFetching ? (
+        <RotateCcw className="w-3 h-3 animate-spin" />
+      ) : (
+        <HeartPulse className="w-3 h-3" />
+      )}
+      {isOk ? "Sync Healthy" : "Sync Issue"}
+    </a>
   );
 }
 
@@ -235,6 +285,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
         <div className="flex items-center gap-3">
           <WidgetHealthBadge />
           <WebhookHealthBadge />
+          <SyncHealthBadge />
           <QualityWidget />
           {rightExtra}
           <NotificationBell />

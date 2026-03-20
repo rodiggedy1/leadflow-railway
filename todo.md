@@ -1666,3 +1666,4 @@
 - [x] Allow multiple photo selection and upload in CleanerPortal and CleanerDashboard
 - [x] Add upload progress counter (Uploading 2 of 5...) to CleanerPortal and CleanerDashboard
 - [x] Show uploaded photos by default in CleanerPortal job card (remove hidden toggle)
+- [x] Add Sync Health pill to persistent header status bar (alongside Widget and SMS Webhook) on all admin pages — clicks navigate to /admin/sync-health
