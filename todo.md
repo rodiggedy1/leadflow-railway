@@ -1466,3 +1466,7 @@
 ## Quality Dashboard Enhancements
 - [x] Show service time (from serviceDateTime) on each job card next to the address
 - [x] Add by-time / by-cleaner view toggle on quality dashboard
+
+## Bug Fix: Rating SMS Approve Button Does Nothing
+- [x] Debug approveAllRatingSms procedure - approve sets status but SMS not sent (working, just waits for cron)
+- [x] Add sendApprovedRatingSmsNow procedure + Send Now button on dashboard to fire immediately

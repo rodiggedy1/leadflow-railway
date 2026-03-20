@@ -1062,4 +1062,13 @@ export const qualityRouter = router({
         .where(eq(cleanerJobs.jobDate, input.date))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
     }),
+
+  /**
+   * Immediately send all approved (unsent) rating SMS for today.
+   * Use from the dashboard to fire SMS without waiting for the 7 PM cron.
+   */
+  sendApprovedRatingSmsNow: protectedProcedure.mutation(async () => {
+    const result = await sendApprovedRatingSms();
+    return result;
+  }),
 });

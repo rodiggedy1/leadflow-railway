@@ -479,15 +479,39 @@ export default function CleanerDashboard() {
     refetchInterval: 30_000,
   });
 
+  const utils = trpc.useUtils();
+
   const approveAll = trpc.quality.approveAllRatingSms.useMutation({
     onSuccess: () => {
-      toast.success("Rating SMS messages approved");
+      toast.success("Rating SMS messages approved — click \"Send Now\" to deliver immediately");
+      utils.quality.ratingSmsQueueSummary.invalidate();
       refetchPending();
     },
   });
 
+  const sendNow = trpc.quality.sendApprovedRatingSmsNow.useMutation({
+    onSuccess: (result) => {
+      if (result.sent > 0) {
+        toast.success(`${result.sent} SMS sent successfully!`, {
+          description: result.failed > 0 ? `${result.failed} failed` : undefined,
+        });
+      } else if (result.failed > 0) {
+        toast.error(`Failed to send ${result.failed} SMS`);
+      } else {
+        toast("No approved SMS to send — approve them first");
+      }
+      utils.quality.ratingSmsQueueSummary.invalidate();
+      refetchPending();
+    },
+    onError: (err) => toast.error("Send failed", { description: err.message }),
+  });
+
   const skipSms = trpc.quality.skipRatingSms.useMutation({
-    onSuccess: () => toast("SMS skipped"),
+    onSuccess: () => {
+      toast("SMS skipped");
+      utils.quality.ratingSmsQueueSummary.invalidate();
+      refetchPending();
+    },
   });
 
   const { data: pendingList, refetch: refetchPending } = trpc.quality.listPendingRatingSms.useQuery();
@@ -594,8 +618,8 @@ export default function CleanerDashboard() {
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
-        {/* Rating SMS Approval Banner */}
-        {pendingSms && pendingSms.pending > 0 && (
+        {/* Rating SMS Approval Banner — shown when pending OR approved-but-unsent */}
+        {pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) && (
           <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-4">
@@ -603,21 +627,27 @@ export default function CleanerDashboard() {
                   <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
                   <div>
                     <p className="font-medium text-sm">
-                      {pendingSms.pending} rating SMS{pendingSms.pending !== 1 ? "es" : ""} pending approval
+                      {pendingSms.pending > 0 && (
+                        <span>{pendingSms.pending} rating SMS{pendingSms.pending !== 1 ? "es" : ""} pending approval</span>
+                      )}
+                      {pendingSms.pending > 0 && pendingSms.approved > 0 && " · "}
+                      {pendingSms.approved > 0 && (
+                        <span className="text-emerald-700">{pendingSms.approved} approved, ready to send</span>
+                      )}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Will be sent at 7 PM ET today if approved. {pendingSms.approved} already approved.
+                      Approve first, then click <strong>Send Now</strong> to deliver immediately (or wait for 7 PM ET cron).
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 shrink-0 flex-wrap justify-end">
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">Review</Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Pending Rating SMS</DialogTitle>
+                        <DialogTitle>Rating SMS Queue</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-3 mt-2">
                         {(pendingList ?? []).map((item) => (
@@ -626,7 +656,6 @@ export default function CleanerDashboard() {
                               <div>
                                 <p className="font-medium text-sm">{item.customerFirstName ?? item.customerPhone}</p>
                                 <p className="text-xs text-muted-foreground">{item.customerPhone}</p>
-                                <p className="text-xs text-muted-foreground">{item.customerFirstName ?? ""}</p>
                                 <p className="text-xs text-muted-foreground mt-1">
                                   Cleaner: {item.cleanerName ?? "Unassigned"} · {item.jobDate}
                                 </p>
@@ -638,7 +667,7 @@ export default function CleanerDashboard() {
                             {item.status === "pending" && (
                               <div className="flex gap-2 mt-2">
                                 <Button size="sm" variant="default" className="text-xs h-7"
-                                  onClick={() => { /* approve handled by approveAll */ }}
+                                  onClick={() => approveAll.mutate()}
                                 >
                                   Approve
                                 </Button>
@@ -654,14 +683,27 @@ export default function CleanerDashboard() {
                       </div>
                     </DialogContent>
                   </Dialog>
-                  <Button
-                    size="sm"
-                    className="bg-amber-500 hover:bg-amber-600 text-white"
-                    onClick={() => approveAll.mutate()}
-                    disabled={approveAll.isPending}
-                  >
-                    {approveAll.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Approve All"}
-                  </Button>
+                  {pendingSms.pending > 0 && (
+                    <Button
+                      size="sm"
+                      className="bg-amber-500 hover:bg-amber-600 text-white"
+                      onClick={() => approveAll.mutate()}
+                      disabled={approveAll.isPending}
+                    >
+                      {approveAll.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Approve All"}
+                    </Button>
+                  )}
+                  {pendingSms.approved > 0 && (
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                      onClick={() => sendNow.mutate()}
+                      disabled={sendNow.isPending}
+                    >
+                      {sendNow.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      {sendNow.isPending ? "Sending…" : `Send Now (${pendingSms.approved})`}
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
