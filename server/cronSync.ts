@@ -403,94 +403,16 @@ export function registerCronRoutes(app: Express): void {
   // Sends the post-cleaning feedback SMS to customers whose job was yesterday.
   // Customers receive: "How did your cleaning go?" the morning after service.
   // Positive replies → Google review link + 10% off incentive.
-  app.post("/api/cron/review-send", async (req: Request, res: Response) => {
-    const secret = process.env.CRON_SECRET;
-
-    if (!secret) {
-      res.status(503).json({ error: "Cron endpoint is not configured (CRON_SECRET missing)" });
-      return;
-    }
-
-    const provided = req.headers["x-cron-secret"];
-    if (provided !== secret) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-
-    const startedAt = new Date();
-    try {
-      const sent = await sendPendingReviewSms();
-
-      // Log activity
-      logActivity({
-        eventType: "review_send",
-        title: sent > 0
-          ? `⭐ Review SMS: ${sent} sent (10 AM daily)`
-          : `Review SMS: no pending jobs`,
-        body: sent > 0
-          ? `Sent post-cleaning feedback SMS to ${sent} customer${sent !== 1 ? "s" : ""} from yesterday's jobs.`
-          : "No jobs with jobDate <= yesterday were pending.",
-        meta: { sent, durationMs: Date.now() - startedAt.getTime() },
-      }).catch(() => {});
-
-      // Notify owner if any were sent
-      if (sent > 0) {
-        try {
-          await notifyOwner({
-            title: `Review SMS — ${sent} sent`,
-            content: `Sent post-cleaning feedback SMS to ${sent} customer${sent !== 1 ? "s" : ""} from yesterday's jobs. Positive replies will receive the Google review link + 10% off incentive automatically.`,
-          });
-        } catch {
-          // Non-fatal
-        }
-      }
-
-      res.json({ ok: true, sent, durationMs: Date.now() - startedAt.getTime() });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[ReviewSend] Cron error:", msg);
-      res.status(500).json({ ok: false, error: msg });
-    }
+  // ── TEMPORARILY DISABLED — review SMS paused to prevent sends to sample/test accounts ──
+  app.post("/api/cron/review-send", (_req: Request, res: Response) => {
+    res.status(503).json({ ok: false, error: "Review SMS cron is temporarily disabled." });
   });
 
   // ── Quality Rating SMS send (7 PM ET daily) ────────────────────────────────
   // Sends all admin-approved rating SMS messages to customers whose job was today.
   // Admin approves in the Quality tab before 7pm; this cron fires the actual sends.
-  app.post("/api/cron/rating-sms-send", async (req: Request, res: Response) => {
-    const secret = process.env.CRON_SECRET;
-    if (!secret) {
-      res.status(503).json({ error: "Cron endpoint is not configured (CRON_SECRET missing)" });
-      return;
-    }
-    const provided = req.headers["x-cron-secret"];
-    if (provided !== secret) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    const startedAt = new Date();
-    try {
-      const { sent, failed } = await sendApprovedRatingSms();
-      logActivity({
-        eventType: "rating_sms_send",
-        title: sent > 0
-          ? `⭐ Rating SMS: ${sent} sent (7 PM ET)`
-          : `Rating SMS: no approved messages pending`,
-        body: sent > 0
-          ? `Sent post-job rating SMS to ${sent} customer${sent !== 1 ? "s" : ""}. Failed: ${failed}.`
-          : "No approved rating SMS pending for today.",
-        meta: { sent, failed, durationMs: Date.now() - startedAt.getTime() },
-      }).catch(() => {});
-      if (sent > 0) {
-        notifyOwner({
-          title: `Quality Rating SMS — ${sent} sent`,
-          content: `Sent post-job rating SMS to ${sent} customer${sent !== 1 ? "s" : ""} today. Failed: ${failed}. Replies will be tracked in the Quality dashboard.`,
-        }).catch(() => {});
-      }
-      res.json({ ok: true, sent, failed, durationMs: Date.now() - startedAt.getTime() });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[RatingSend] Cron error:", msg);
-      res.status(500).json({ ok: false, error: msg });
-    }
+  // ── TEMPORARILY DISABLED — rating SMS paused to prevent sends to sample/test accounts ──
+  app.post("/api/cron/rating-sms-send", (_req: Request, res: Response) => {
+    res.status(503).json({ ok: false, error: "Rating SMS cron is temporarily disabled." });
   });
 }

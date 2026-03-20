@@ -1654,3 +1654,5 @@
 - [x] Fix cleaner portal not showing checklistItems (myJobs query returns raw JSON string, needs parsing)
 - [x] Combine customerNotes + staffNotes into one unified checklist at sync time
 - [x] Update parseChecklistFromNotes to accept both notes fields
+- [x] Disable rating-sms-send and review-send cron endpoints (return 503 disabled) to stop unwanted texts to sample accounts
+- [x] Add phoneNumberId guard to webhook handler to prevent cross-project message contamination

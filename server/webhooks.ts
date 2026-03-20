@@ -37,6 +37,7 @@ import { handleReviewReplyForJob } from "./reviewRouter";
 import { handleRatingReply } from "./qualityRouter";
 import { logActivity } from "./activityLogger";
 import { registerBarkWebhookRoute } from "./barkWebhook";
+import { ENV } from "./_core/env";
 
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
@@ -60,6 +61,14 @@ export function registerWebhookRoutes(app: Express) {
 
       if (!msg || msg.direction !== "incoming") {
         console.log(`[Webhook] Skipping: not an incoming message (direction=${msg?.direction})`);
+        return;
+      }
+      // Guard: only process messages addressed to THIS project's phone number.
+      // Prevents cross-project contamination when multiple projects share the same
+      // OpenPhone account or the same webhook URL receives events from other numbers.
+      const configuredNumberId = ENV.openPhoneNumberId;
+      if (configuredNumberId && msg.phoneNumberId && msg.phoneNumberId !== configuredNumberId) {
+        console.log(`[Webhook] Skipping: phoneNumberId ${msg.phoneNumberId} does not match configured ${configuredNumberId}`);
         return;
       }
 
