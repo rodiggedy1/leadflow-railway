@@ -245,7 +245,7 @@ export async function sendApprovedRatingSms(): Promise<{
   let failed = 0;
 
   for (const pending of approved) {
-    // Create a conversation session for the rating flow
+    // Create a conversation session so inbound replies are routed to the rating flow
     const [sessionInsert] = await db.insert(conversationSessions).values({
       leadPhone: pending.customerPhone,
       leadName: pending.customerFirstName ?? "Customer",
@@ -256,21 +256,17 @@ export async function sendApprovedRatingSms(): Promise<{
       ]),
     });
     const sessionId = (sessionInsert as any).insertId as number;
+    console.log(`[Quality] Created session ${sessionId} for rating SMS to ${pending.customerPhone}`);
 
     const result = await sendSms({ to: pending.customerPhone, content: pending.smsText });
 
     if (result.success) {
+      // Mark as sent — do NOT touch completedJobs (quality jobs use cleanerJobs, not completedJobs)
       await db
         .update(ratingSmsPending)
         .set({ status: "sent", sentAt: new Date() })
         .where(eq(ratingSmsPending.id, pending.id));
-
-      // Link session to completedJob
-      await db
-        .update(completedJobs)
-        .set({ sessionId, smsSentAt: new Date() })
-        .where(eq(completedJobs.id, pending.completedJobId));
-
+      console.log(`[Quality] Rating SMS sent to ${pending.customerPhone} (message ${result.messageId})`);
       sent++;
     } else {
       console.error(

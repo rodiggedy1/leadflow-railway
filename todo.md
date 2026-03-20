@@ -1470,3 +1470,7 @@
 ## Bug Fix: Rating SMS Approve Button Does Nothing
 - [x] Debug approveAllRatingSms procedure - approve sets status but SMS not sent (working, just waits for cron)
 - [x] Add sendApprovedRatingSmsNow procedure + Send Now button on dashboard to fire immediately
+
+## Bug Fix: Send Now Returns "Send Failed"
+- [x] Root cause: sendApprovedRatingSms tried to update completedJobs table after send, but quality jobs use cleanerJobs (no completedJobId)
+- [x] Fix: removed completedJobs update from sendApprovedRatingSms - now just sends SMS + marks sent in rating_sms_pending
