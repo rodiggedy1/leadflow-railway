@@ -61,7 +61,7 @@ export const cleanerRouter = router({
       const cookieOpts = getSessionCookieOptions(ctx.req);
       ctx.res.cookie(CLEANER_COOKIE_NAME, token, {
         ...cookieOpts,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        maxAge: ONE_YEAR_MS, // 1 year — persist across browser restarts
       });
 
       return {

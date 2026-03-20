@@ -673,7 +673,6 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={handleFileChange}
           />

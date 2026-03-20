@@ -1660,3 +1660,6 @@
 - [x] Add .manus/db to .gitignore and remove debug files from git tracking
 - [x] Add 10-second AbortController timeout to vapiRequest() to prevent startup hangs
 - [x] Parallelize Vapi tool upserts with Promise.all() to reduce sequential API calls
+- [x] Remove capture="environment" from CleanerPortal photo input to show camera+library sheet
+- [x] Extend cleaner and agent cookie maxAge from 30 days to 1 year
+- [x] SameSite=None kept (required for widget cross-origin) — maxAge extended to 1 year instead

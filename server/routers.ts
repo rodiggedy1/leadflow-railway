@@ -1,4 +1,4 @@
-import { COOKIE_NAME, AGENT_COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminAgentProcedure, router } from "./_core/trpc";
@@ -1035,7 +1035,7 @@ export const appRouter = router({
         const cookieOpts = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(AGENT_COOKIE_NAME, token, {
           ...cookieOpts,
-          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+          maxAge: ONE_YEAR_MS, // 1 year — persist across browser restarts
         });
         return { success: true, agent: { id: agent.id, name: agent.name, email: agent.email, isAdmin: agent.isAdmin === 1 } };
       }),
