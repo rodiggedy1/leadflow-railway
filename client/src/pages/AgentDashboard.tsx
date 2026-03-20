@@ -50,6 +50,7 @@ import {
   BotOff,
   Mic,
   PlayCircle,
+  RotateCcw,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -957,6 +958,10 @@ function LeadCard({
     onSuccess: () => { utils.leads.list.invalidate(); toast.success("Marked as not interested"); },
     onError: (err) => toast.error(err.message),
   });
+  const markUnbooked = trpc.agents.markUnbooked.useMutation({
+    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead moved back to Follow Up"); },
+    onError: (err) => toast.error(err.message),
+  });
 
   const isMine = session.assignedAgentId === currentAgentId;
   const isBooked = session.isBooked === 1;
@@ -1103,7 +1108,7 @@ function LeadCard({
                 >
                   <UserX className="w-3 h-3" /> Release
                 </button>
-              ) : !session.assignedAgentId ? (
+              ) : (
                 <button
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors disabled:opacity-60"
                   onClick={e => { e.stopPropagation(); claimLead.mutate({ sessionId: session.id }); }}
@@ -1111,7 +1116,19 @@ function LeadCard({
                 >
                   <UserCheck className="w-3 h-3" /> Claim
                 </button>
-              ) : null
+              )
+            )}
+
+            {/* Unbook — only shown for booked leads */}
+            {isBooked && (
+              <button
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors disabled:opacity-60"
+                onClick={e => { e.stopPropagation(); markUnbooked.mutate({ sessionId: session.id, stage: "FOLLOW_UP" }); }}
+                disabled={markUnbooked.isPending}
+                title="Move back to Follow Up"
+              >
+                <RotateCcw className="w-3 h-3" /> Unbook
+              </button>
             )}
 
             {/* Not Interested — far right, muted */}

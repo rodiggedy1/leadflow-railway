@@ -1223,6 +1223,30 @@ export const appRouter = router({
       }),
 
     /**
+     * agents.markUnbooked — revert a booked lead back to a specified stage.
+     * Any authenticated agent can call this.
+     */
+    markUnbooked: publicProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        stage: z.enum(["FOLLOW_UP", "AVAILABILITY", "QUOTE_SENT", "LOST"]).default("FOLLOW_UP"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx); // require agent auth
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({
+            isBooked: 0,
+            stage: input.stage,
+            bookedAt: null,
+          })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
      * agents.setBookedAmount — agent sets the actual invoiced/booked dollar amount.
      * Any authenticated agent can set this on any session.
      */
