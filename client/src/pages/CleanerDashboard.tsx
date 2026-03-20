@@ -23,7 +23,8 @@ import { toast } from "sonner";
 import { Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
   CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink,
-  X, ZoomIn, Images, Pencil
+  X, ZoomIn, Images, Pencil, LayoutDashboard, Zap, Activity, ShieldAlert,
+  Image, TrendingDown, Sparkles, CircleCheck, CircleAlert, Timer
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -878,12 +879,268 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
   );
 }
 
+// ── Operations Overview ─────────────────────────────────────────────────────
+function OperationsOverview({ date }: { date: string }) {
+  const { data, isLoading, refetch } = trpc.quality.getDayOverview.useQuery(
+    { date },
+    { refetchInterval: 30_000 }
+  );
+  const generateSummary = trpc.quality.generateDaySummary.useMutation();
+  const [summary, setSummary] = useState<string | null>(null);
+
+  const handleGenerateSummary = async () => {
+    const result = await generateSummary.mutateAsync({ date });
+    setSummary(result.summary);
+  };
+
+  // Reset summary when date changes
+  useEffect(() => { setSummary(null); }, [date]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        {[1,2,3].map(i => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { metrics, alerts, teamStatus } = data;
+
+  const criticalAlerts = alerts.filter(a => a.severity === "critical");
+  const warningAlerts = alerts.filter(a => a.severity === "warning");
+  const infoAlerts = alerts.filter(a => a.severity === "info");
+
+  const completionPct = metrics.total > 0 ? Math.round((metrics.completed / metrics.total) * 100) : 0;
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+      {/* ── Top Metric Cards ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total */}
+        <Card className="border-0 bg-muted/40">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Total Jobs</p>
+            <p className="text-2xl font-bold">{metrics.total}</p>
+          </CardContent>
+        </Card>
+        {/* Completed */}
+        <Card className="border-0 bg-emerald-50 dark:bg-emerald-950/20">
+          <CardContent className="p-4">
+            <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-1">Completed</p>
+            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{metrics.completed}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{completionPct}% done</p>
+          </CardContent>
+        </Card>
+        {/* In Progress */}
+        <Card className="border-0 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="p-4">
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-1">In Progress</p>
+            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{metrics.inProgress}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{metrics.onTheWay} on the way</p>
+          </CardContent>
+        </Card>
+        {/* Issues */}
+        <Card className={`border-0 ${metrics.issueCount > 0 ? "bg-red-50 dark:bg-red-950/20" : "bg-muted/40"}`}>
+          <CardContent className="p-4">
+            <p className={`text-xs mb-1 ${metrics.issueCount > 0 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>Issues</p>
+            <p className={`text-2xl font-bold ${metrics.issueCount > 0 ? "text-red-700 dark:text-red-400" : ""}`}>{metrics.issueCount}</p>
+            {metrics.runningLate > 0 && <p className="text-xs text-orange-600 mt-0.5">{metrics.runningLate} running late</p>}
+          </CardContent>
+        </Card>
+        {/* Photos */}
+        <Card className={`border-0 ${metrics.completedNoPhoto > 0 ? "bg-orange-50 dark:bg-orange-950/20" : "bg-muted/40"}`}>
+          <CardContent className="p-4">
+            <p className={`text-xs mb-1 ${metrics.completedNoPhoto > 0 ? "text-orange-700 dark:text-orange-400" : "text-muted-foreground"}`}>Photos</p>
+            <p className={`text-2xl font-bold ${metrics.completedNoPhoto > 0 ? "text-orange-700 dark:text-orange-400" : ""}`}>{metrics.photosSubmitted}</p>
+            {metrics.completedNoPhoto > 0 && <p className="text-xs text-orange-600 mt-0.5">{metrics.completedNoPhoto} missing</p>}
+          </CardContent>
+        </Card>
+        {/* Avg Rating */}
+        <Card className="border-0 bg-muted/40">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Avg Rating</p>
+            <p className="text-2xl font-bold">{metrics.avgRating !== null ? `${metrics.avgRating}★` : "—"}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Revenue Snapshot ── */}
+      <Card className="border-0 bg-muted/30">
+        <CardContent className="py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Revenue Snapshot</span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Total Revenue</p>
+              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">${metrics.totalRevenue.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Pay</p>
+              <p className="text-lg font-bold text-amber-700 dark:text-amber-400">${metrics.totalPay.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Net Margin</p>
+              <p className={`text-lg font-bold ${metrics.netMargin >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600"}`}>${metrics.netMargin.toFixed(2)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Alert Feed ── */}
+      {alerts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-500" />
+            <span className="text-sm font-semibold">Active Alerts</span>
+            {criticalAlerts.length > 0 && (
+              <Badge className="bg-red-500 text-white text-xs">{criticalAlerts.length} critical</Badge>
+            )}
+            {warningAlerts.length > 0 && (
+              <Badge className="bg-amber-500 text-white text-xs">{warningAlerts.length} warning</Badge>
+            )}
+          </div>
+          <div className="space-y-2">
+            {alerts.map((alert, i) => {
+              const isC = alert.severity === "critical";
+              const isW = alert.severity === "warning";
+              const bg = isC ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800" :
+                         isW ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" :
+                               "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800";
+              const iconColor = isC ? "text-red-500" : isW ? "text-amber-500" : "text-blue-500";
+              const Icon = isC ? CircleAlert : isW ? Timer : CircleCheck;
+              return (
+                <div key={i} className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${bg}`}>
+                  <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${iconColor}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{alert.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {alert.cleanerName} · {alert.customerName ?? alert.address ?? "Unknown"}
+                      {alert.serviceTime && ` · ${alert.serviceTime}`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {alerts.length === 0 && (
+        <Card className="border-0 bg-emerald-50 dark:bg-emerald-950/20">
+          <CardContent className="py-4 flex items-center gap-3">
+            <CircleCheck className="w-5 h-5 text-emerald-600" />
+            <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">No active alerts — all jobs running smoothly.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Team Status Grid ── */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">Team Status</span>
+        </div>
+        <div className="space-y-2">
+          {teamStatus.map((cleaner) => {
+            const accentBorder = cleanerAccentBorder(cleaner.cleanerProfileId);
+            const dotBg = accentBorder.replace("border-l-", "bg-");
+            const hasIssue = cleaner.hasIssue;
+            const isLate = cleaner.isLate;
+            const allDone = cleaner.jobsDone === cleaner.totalJobs && cleaner.totalJobs > 0;
+            const statusText = hasIssue ? "Issue" : isLate ? "Running Late" : allDone ? "All Done" :
+              cleaner.latestStatus === "in_progress" ? "In Progress" :
+              cleaner.latestStatus === "on_the_way" ? "On the Way" :
+              cleaner.latestStatus === "arrived" ? "Arrived" : "Not Started";
+            const statusColor = hasIssue ? "text-red-600" : isLate ? "text-orange-600" : allDone ? "text-emerald-600" :
+              cleaner.latestStatus === "in_progress" ? "text-amber-600" : "text-muted-foreground";
+
+            return (
+              <Card key={cleaner.cleanerName} className={`border-l-4 ${hasIssue ? "border-l-red-500" : isLate ? "border-l-orange-400" : accentBorder}`}>
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotBg}`} />
+                      <span className="font-medium text-sm">{cleaner.cleanerName}</span>
+                      <span className={`text-xs font-medium ${statusColor}`}>{statusText}</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {cleaner.jobsDone}/{cleaner.totalJobs} jobs
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Camera className="w-3.5 h-3.5" />
+                        {cleaner.photosSubmitted} photos
+                      </span>
+                      {cleaner.checklistProgress.total > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Activity className="w-3.5 h-3.5" />
+                          {cleaner.checklistProgress.done}/{cleaner.checklistProgress.total} checklist
+                        </span>
+                      )}
+                      {cleaner.avgRating !== null && (
+                        <span className="flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                          {cleaner.avgRating}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="w-3.5 h-3.5" />
+                        ${cleaner.totalPay.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── AI Daily Briefing ── */}
+      <Card className="border-0 bg-muted/30">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-500" />
+              <span className="text-sm font-semibold">AI Daily Briefing</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1.5"
+              onClick={handleGenerateSummary}
+              disabled={generateSummary.isPending}
+            >
+              {generateSummary.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              {generateSummary.isPending ? "Generating…" : summary ? "Regenerate" : "Generate Briefing"}
+            </Button>
+          </div>
+          {summary ? (
+            <p className="text-sm leading-relaxed text-foreground">{summary}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Click "Generate Briefing" for an AI-powered plain-English summary of today's operations.</p>
+          )}
+        </CardContent>
+      </Card>
+
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 type ViewMode = "by-time" | "by-cleaner";
+type PageTab = "jobs" | "overview";
 
 export default function CleanerDashboard() {
   const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>("by-time");
+  const [pageTab, setPageTab] = useState<PageTab>("jobs");
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -995,7 +1252,26 @@ export default function CleanerDashboard() {
       {/* Date navigation + controls */}
       <div className="border-b bg-card">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-semibold text-sm text-muted-foreground">Cleaner Quality Dashboard</h2>
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5">
+            <Button
+              variant={pageTab === "jobs" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2.5"
+              onClick={() => setPageTab("jobs")}
+            >
+              <List className="w-3 h-3" />
+              Jobs
+            </Button>
+            <Button
+              variant={pageTab === "overview" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2.5"
+              onClick={() => setPageTab("overview")}
+            >
+              <LayoutDashboard className="w-3 h-3" />
+              Overview
+            </Button>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Date nav */}
             <Button variant="ghost" size="icon" onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}>
@@ -1054,6 +1330,9 @@ export default function CleanerDashboard() {
         </div>
       </div>
 
+      {pageTab === "overview" ? (
+        <OperationsOverview date={selectedDate} />
+      ) : (
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
         {/* Rating SMS Queue — always shown when there are any items today (pending, approved, sent, skipped) */}
@@ -1259,6 +1538,7 @@ export default function CleanerDashboard() {
         {/* Weekly Pay Summary */}
         <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); setResetEmail(""); }} />
       </div>
+      )}
     </div>
 
     {/* Set Password Dialog */}

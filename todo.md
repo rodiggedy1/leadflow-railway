@@ -1660,3 +1660,13 @@
 - [x] Inline add item input on admin checklist section
 - [x] Inline remove (×) button per checklist item on admin card (hover to reveal)
 - [x] Save changes immediately on add/remove
+
+## Operations Command Center Tab (Admin Quality)
+- [x] Add quality.getDayOverview backend procedure — returns metrics, alerts, cleaner status grid, AI summary
+- [x] Add "Overview" tab to CleanerDashboard header alongside Jobs tab
+- [x] Metric cards: Total Jobs, Completed, In Progress, Issues, Photos, Avg Rating
+- [x] Alert feed: Running Late (with ETA), Overdue ETA, Issue at Property, No Photo after Completed
+- [x] Team status grid: one row per cleaner with color dot, status, job count, photos, checklist progress, rating, pay
+- [x] AI daily summary: LLM-generated plain-English ops briefing (generated on demand)
+- [x] Revenue snapshot: total day revenue, estimated total pay, net margin
+- [x] Auto-refresh every 30s
