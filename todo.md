@@ -1654,3 +1654,9 @@
 - [x] Fix cleaner portal not showing checklistItems (myJobs query returns raw JSON string, needs parsing)
 - [x] Combine customerNotes + staffNotes into one unified checklist at sync time
 - [x] Update parseChecklistFromNotes to accept both notes fields
+
+## Admin Checklist Editing
+- [x] Add quality.updateChecklist procedure (saves full checklist array to DB)
+- [x] Inline add item input on admin checklist section
+- [x] Inline remove (×) button per checklist item on admin card (hover to reveal)
+- [x] Save changes immediately on add/remove

@@ -1271,4 +1271,27 @@ export const qualityRouter = router({
 
       return { ok: true };
     }),
+
+  /**
+   * quality.updateChecklist — admin replaces the full checklist for a job.
+   * Preserves existing checked states for items whose text matches.
+   */
+  updateChecklist: protectedProcedure
+    .input(
+      z.object({
+        cleanerJobId: z.number(),
+        items: z.array(z.object({ text: z.string(), checked: z.boolean() })),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      await db
+        .update(cleanerJobs)
+        .set({ checklistItems: JSON.stringify(input.items) })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      return { ok: true };
+    }),
 });

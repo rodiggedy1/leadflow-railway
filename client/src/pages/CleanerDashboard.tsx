@@ -476,6 +476,99 @@ function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => 
   );
 }
 
+function AdminChecklist({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+  const items = job.cleanerAssignment?.checklistItems ?? [];
+  const [newText, setNewText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const updateChecklist = trpc.quality.updateChecklist.useMutation({
+    onSuccess: () => onRefetch(),
+    onError: (err) => toast.error("Failed to update checklist", { description: err.message }),
+  });
+
+  const save = (nextItems: Array<{ text: string; checked: boolean }>) => {
+    if (!job.cleanerAssignment) return;
+    updateChecklist.mutate({ cleanerJobId: job.cleanerAssignment.id, items: nextItems });
+  };
+
+  const handleRemove = (idx: number) => {
+    save(items.filter((_, i) => i !== idx));
+  };
+
+  const handleAdd = () => {
+    const text = newText.trim();
+    if (!text) return;
+    save([...items, { text, checked: false }]);
+    setNewText("");
+    inputRef.current?.focus();
+  };
+
+  if (items.length === 0 && !job.cleanerAssignment?.customerNotes && !job.cleanerAssignment?.staffNotes) {
+    return null;
+  }
+
+  const done = items.filter(i => i.checked).length;
+  const allDone = items.length > 0 && done === items.length;
+
+  return (
+    <div className="mt-2 rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">✅ Checklist</p>
+        {items.length > 0 && (
+          <span className={`text-xs font-medium ${
+            allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+          }`}>{done}/{items.length}</span>
+        )}
+      </div>
+
+      {/* Existing items */}
+      <div className="space-y-1 mb-2">
+        {items.map((item, idx) => (
+          <div key={idx} className="flex items-start gap-1.5 group">
+            <span className={`mt-0.5 shrink-0 w-3 h-3 rounded border flex items-center justify-center text-[9px] ${
+              item.checked
+                ? "bg-emerald-500 border-emerald-500 text-white"
+                : "border-slate-400 dark:border-slate-600"
+            }`}>
+              {item.checked && "✓"}
+            </span>
+            <span className={`text-xs leading-snug flex-1 ${
+              item.checked ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"
+            }`}>{item.text}</span>
+            <button
+              onClick={() => handleRemove(idx)}
+              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity shrink-0 ml-1"
+              title="Remove item"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add new item */}
+      <div className="flex gap-1.5 items-center">
+        <input
+          ref={inputRef}
+          type="text"
+          value={newText}
+          onChange={e => setNewText(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleAdd()}
+          placeholder="Add item…"
+          className="flex-1 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-slate-400 placeholder:text-slate-400"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={!newText.trim() || updateChecklist.isPending}
+          className="text-xs px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const rating = job.cleanerAssignment?.customerRating ?? null;
   const hasMissed = job.cleanerAssignment?.missedSomething === 1;
@@ -603,38 +696,13 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               </div>
             )}
 
-            {/* AI Checklist — read-only progress for admin */}
-            {job.cleanerAssignment?.checklistItems && job.cleanerAssignment.checklistItems.length > 0 && (() => {
-              const items = job.cleanerAssignment!.checklistItems!;
-              const done = items.filter(i => i.checked).length;
-              const allDone = done === items.length;
-              return (
-                <div className="mt-2 rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">✅ Checklist</p>
-                    <span className={`text-xs font-medium ${
-                      allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                    }`}>{done}/{items.length}</span>
-                  </div>
-                  <div className="space-y-1">
-                    {items.map((item, idx) => (
-                      <div key={idx} className="flex items-start gap-1.5">
-                        <span className={`mt-0.5 shrink-0 w-3 h-3 rounded border flex items-center justify-center text-[9px] ${
-                          item.checked
-                            ? "bg-emerald-500 border-emerald-500 text-white"
-                            : "border-slate-400 dark:border-slate-600"
-                        }`}>
-                          {item.checked && "✓"}
-                        </span>
-                        <span className={`text-xs leading-snug ${
-                          item.checked ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"
-                        }`}>{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            {/* AI Checklist — editable by admin */}
+            {job.cleanerAssignment && (
+              <AdminChecklist
+                job={job}
+                onRefetch={onRefetch}
+              />
+            )}
           </div>
 
           {/* Right: Cleaner + pay + photo */}
