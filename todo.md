@@ -1599,3 +1599,8 @@
 - [x] Add Running Late ETA popup in CleanerPortal: 30 min, 1 hr, 1 hr 30 min, 2 hrs, Don't know
 - [x] Store ETA in issueNote field (e.g. "ETA: 30 minutes")
 - [x] Show ETA on admin quality Running Late badge (via issueNote)
+
+## On the Way ETA Picker
+- [x] Show ETA picker when cleaner taps "On the Way" (same 5 options as Running Late)
+- [x] Store ETA in issueNote for on_the_way (e.g. "ETA: 30 minutes")
+- [x] Show ETA on admin quality card for on_the_way and running_late badges

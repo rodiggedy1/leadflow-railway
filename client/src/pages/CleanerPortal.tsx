@@ -179,6 +179,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
   const [showIssueInput, setShowIssueInput] = useState(false);
   const [issueNote, setIssueNote] = useState("");
   const [showEtaPicker, setShowEtaPicker] = useState(false);
+  const [etaPickerFor, setEtaPickerFor] = useState<"on_the_way" | "running_late" | null>(null);
 
   const ETA_OPTIONS = [
     { label: "30 minutes", value: "30 minutes" },
@@ -479,10 +480,13 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                     if (s.key === "issue_at_property") {
                       setShowIssueInput(v => !v);
                       setShowEtaPicker(false);
+                      setEtaPickerFor(null);
                       return;
                     }
-                    if (s.key === "running_late") {
-                      setShowEtaPicker(v => !v);
+                    if (s.key === "running_late" || s.key === "on_the_way") {
+                      const alreadyOpen = showEtaPicker && etaPickerFor === s.key;
+                      setShowEtaPicker(!alreadyOpen);
+                      setEtaPickerFor(alreadyOpen ? null : s.key as "on_the_way" | "running_late");
                       setShowIssueInput(false);
                       return;
                     }
@@ -498,20 +502,31 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
               );
             })}
           </div>
-          {/* ETA picker for Running Late */}
-          {showEtaPicker && (
-            <div className="mt-2 p-3 bg-orange-950/30 border border-orange-700/40 rounded-xl space-y-2">
-              <p className="text-orange-300 text-xs font-semibold uppercase tracking-widest">When will you arrive?</p>
+          {/* ETA picker for On the Way / Running Late */}
+          {showEtaPicker && etaPickerFor && (
+            <div className={`mt-2 p-3 rounded-xl space-y-2 border ${
+              etaPickerFor === "on_the_way"
+                ? "bg-blue-950/30 border-blue-700/40"
+                : "bg-orange-950/30 border-orange-700/40"
+            }`}>
+              <p className={`text-xs font-semibold uppercase tracking-widest ${
+                etaPickerFor === "on_the_way" ? "text-blue-300" : "text-orange-300"
+              }`}>When will you arrive?</p>
               <div className="flex flex-wrap gap-2">
                 {ETA_OPTIONS.map(opt => (
                   <button
                     key={opt.value}
                     onClick={() => {
-                      statusMutation.mutate({ cleanerJobId: job.id, status: "running_late", etaLabel: opt.value });
+                      statusMutation.mutate({ cleanerJobId: job.id, status: etaPickerFor, etaLabel: opt.value });
                       setShowEtaPicker(false);
+                      setEtaPickerFor(null);
                     }}
                     disabled={statusMutation.isPending}
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-orange-900/40 text-orange-200 border border-orange-700/50 hover:bg-orange-800/60 transition-colors cursor-pointer disabled:opacity-50"
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 ${
+                      etaPickerFor === "on_the_way"
+                        ? "bg-blue-900/40 text-blue-200 border-blue-700/50 hover:bg-blue-800/60"
+                        : "bg-orange-900/40 text-orange-200 border-orange-700/50 hover:bg-orange-800/60"
+                    }`}
                   >
                     {opt.label}
                   </button>
@@ -550,11 +565,13 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
           )}
           {job.issueNote && (
             <p className={`text-xs rounded px-2 py-1 border ${
-              job.jobStatus === "running_late"
+              job.jobStatus === "on_the_way"
+                ? "text-blue-300 bg-blue-900/20 border-blue-700/30"
+                : job.jobStatus === "running_late"
                 ? "text-orange-300 bg-orange-900/20 border-orange-700/30"
                 : "text-red-300 bg-red-900/20 border-red-700/30"
             }`}>
-              {job.jobStatus === "running_late" ? job.issueNote : `Issue: ${job.issueNote}`}
+              {(job.jobStatus === "on_the_way" || job.jobStatus === "running_late") ? job.issueNote : `Issue: ${job.issueNote}`}
             </p>
           )}
         </div>

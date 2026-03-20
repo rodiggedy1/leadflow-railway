@@ -101,6 +101,11 @@ function JobStatusBadge({ status, issueNote }: { status: string | null; issueNot
       {status === "issue_at_property" && issueNote && (
         <span className="text-red-600 font-normal">: {issueNote}</span>
       )}
+      {(status === "on_the_way" || status === "running_late") && issueNote && (
+        <span className={`font-normal ${status === "on_the_way" ? "text-blue-600" : "text-orange-600"}`}>
+          · {issueNote}
+        </span>
+      )}
     </span>
   );
 }
