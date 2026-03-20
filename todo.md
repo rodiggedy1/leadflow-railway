@@ -1491,3 +1491,8 @@
 - [x] Fix: listPendingRatingSms now returns ALL of today's rows (pending/approved/sent/skipped)
 - [x] Fix: Review button + banner now always visible when any items exist today (not just when pending/approved)
 - [x] Fix: Re-queue button always reachable after Send Now fires
+
+## Bug Fix: Requeue + Thank-you SMS
+- [x] Requeue now clears customerRating, missedSomething, flagged on the linked cleanerJob
+- [x] Requeue now resets the conversation session back to QUALITY_RATING_REQUESTED (removes old reply from history)
+- [x] Thank-you SMS: webhook code is correct - published site was running old version, new checkpoint forces fresh publish

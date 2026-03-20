@@ -614,6 +614,52 @@ export const qualityRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Get the pending row to find linked cleanerJob and session
+      const pendingRow = await db
+        .select()
+        .from(ratingSmsPending)
+        .where(eq(ratingSmsPending.id, input.id))
+        .limit(1);
+
+      if (pendingRow.length > 0) {
+        const row = pendingRow[0]!;
+
+        // Clear customerRating on the linked cleanerJob so the card shows no stars
+        if (row.cleanerJobId) {
+          await db
+            .update(cleanerJobs)
+            .set({ customerRating: null, missedSomething: null, flagged: 0 })
+            .where(eq(cleanerJobs.id, row.cleanerJobId));
+        }
+
+        // Reset the most recent QUALITY_RATING session for this phone back to QUALITY_RATING_REQUESTED
+        // so the webhook correctly routes the next inbound reply
+        const qualitySessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.leadPhone, row.customerPhone))
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(10);
+        const qualitySession = qualitySessions.find(
+          s => s.stage === "QUALITY_RATING_REQUESTED" || s.stage === "QUALITY_RATING_DONE" || s.stage === "QUALITY_MISSED_FOLLOWUP"
+        );
+        if (qualitySession) {
+          // Keep only the original outbound message (first assistant message)
+          let history: Array<{role: string; content: string; ts: number}> = [];
+          try { history = JSON.parse(qualitySession.messageHistory ?? "[]"); } catch { history = []; }
+          const outboundOnly = history.filter(m => m.role === "assistant").slice(0, 1);
+          await db
+            .update(conversationSessions)
+            .set({
+              stage: "QUALITY_RATING_REQUESTED" as any,
+              messageHistory: JSON.stringify(outboundOnly),
+            })
+            .where(eq(conversationSessions.id, qualitySession.id));
+        }
+      }
+
+      // Reset the SMS row back to pending
       await db
         .update(ratingSmsPending)
         .set({ status: "pending", sentAt: null, skipReason: null, approvedAt: null, approvedBy: null })

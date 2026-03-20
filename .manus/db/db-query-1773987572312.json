@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT id, stage, LEFT(messageHistory, 600) as history FROM conversation_sessions WHERE id = 990004;\nSELECT id, customerRating FROM cleaner_jobs WHERE customerPhone = '+13029816191' OR id IN (SELECT cleanerJobId FROM rating_sms_pending WHERE customerPhone = '+13029816191') LIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user QXWpcJKwPBoGqNG.f679bd03aa5d --database CAeRhAUjAZoEuxNGm5QbPr --execute \nSELECT id, stage, LEFT(messageHistory, 600) as history FROM conversation_sessions WHERE id = 990004;\nSELECT id, customerRating FROM cleaner_jobs WHERE customerPhone = '+13029816191' OR id IN (SELECT cleanerJobId FROM rating_sms_pending WHERE customerPhone = '+13029816191') LIMIT 5;\n",
+  "rows": [
+    {
+      "id": "990004",
+      "stage": "QUALITY_RATING_REQUESTED",
+      "history": "[{\"role\":\"assistant\",\"content\":\"Hi Jane! 🏠 How was your cleaning today? Please rate us 1–5 ⭐ (just reply with a number). Your feedback helps us improve!\",\"ts\":1773987460510}]"
+    }
+  ],
+  "messages": [
+    "id\tcustomerRating",
+    "18\t5"
+  ],
+  "stdout": "id\tstage\thistory\n990004\tQUALITY_RATING_REQUESTED\t[{\"role\":\"assistant\",\"content\":\"Hi Jane! 🏠 How was your cleaning today? Please rate us 1–5 ⭐ (just reply with a number). Your feedback helps us improve!\",\"ts\":1773987460510}]\nid\tcustomerRating\n18\t5\n",
+  "stderr": "",
+  "execution_time_ms": 428
+}
