@@ -1629,3 +1629,10 @@
 - [x] Apply subtle left border stripe to each job card using the cleaner's color
 - [x] Color does not override overdue/flagged red highlights (those take priority)
 - [x] Color dot shown in the "By Cleaner" grouped header next to cleaner name
+
+## Sync Notes to Admin + Cleaner Views
+- [x] Expose customerNotes and staffNotes in qualityRouter getJobsForDate result
+- [x] Show customerNotes (blue) and staffNotes (amber) on admin quality job cards
+- [x] Expose customerNotes and staffNotes in cleanerRouter myJobs/myJobsRange (already in DB via select *)
+- [x] Show customerNotes on cleaner portal job cards (amber, 📋 Customer Notes)
+- [x] Show staffNotes on cleaner portal job cards (blue, 🗒️ Staff Notes)

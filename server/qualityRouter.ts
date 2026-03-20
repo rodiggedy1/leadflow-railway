@@ -755,6 +755,8 @@ export const qualityRouter = router({
           etaTimestamp: cj.etaTimestamp ?? null,
           manualAdjustment: cj.manualAdjustment ?? null,
           manualAdjustmentNote: cj.manualAdjustmentNote ?? null,
+          customerNotes: cj.customerNotes ?? null,
+          staffNotes: cj.staffNotes ?? null,
         },
         photos: photos.filter((p) => p.cleanerJobId === cj.id),
       }));

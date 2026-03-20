@@ -152,6 +152,7 @@ type Job = {
   missedSomething: number | null;
   photoSubmitted: number;
   customerNotes: string | null;
+  staffNotes: string | null;
   photos: { id: number; photoUrl: string; filename: string | null }[];
   jobStatus: string | null;
   issueNote: string | null;
@@ -297,8 +298,16 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
         {/* Customer notes */}
         {job.customerNotes && (
           <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-3">
-            <p className="text-amber-300 text-xs font-medium mb-1">Customer Notes</p>
-            <p className="text-amber-200 text-sm">{job.customerNotes}</p>
+            <p className="text-amber-300 text-xs font-medium mb-1">📋 Customer Notes</p>
+            <p className="text-amber-200 text-sm whitespace-pre-wrap">{job.customerNotes}</p>
+          </div>
+        )}
+
+        {/* Staff notes */}
+        {job.staffNotes && (
+          <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
+            <p className="text-blue-300 text-xs font-medium mb-1">🗒️ Staff Notes</p>
+            <p className="text-blue-200 text-sm whitespace-pre-wrap">{job.staffNotes}</p>
           </div>
         )}
 
