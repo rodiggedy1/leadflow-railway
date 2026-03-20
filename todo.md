@@ -1549,3 +1549,7 @@
 - [x] Admin writes ratingAdjustment (+10/-20) and photoAdjustment (+5/-10) to DB when rating webhook fires; recalculates when photo uploaded
 - [x] Cleaner portal reads ratingAdjustment and photoAdjustment from DB; falls back to client-side preview before rating
 - [x] Add This Week tab to cleaner portal: Mon-Sun jobs, daily subtotals, weekly grand total
+
+## Bug Fix: Total Pay not reflecting photo penalty
+- [x] Fix: Total Pay in cleaner portal must always include photoAdjustment (photo penalty/bonus)
+- [x] Fix: finalPay from DB may be stale (set before photoAdjustment column existed) — always recalculate display total as basePay + ratingAdj + photoAdj + streakBonus

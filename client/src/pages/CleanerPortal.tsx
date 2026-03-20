@@ -217,10 +217,9 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete }: {
     ? parseFloat(job.photoAdjustment)
     : (hasPhoto ? 5 : -10);
   const streakBonus = parseFloat(job.streakBonus ?? "0") || 0;
-  // finalPay from DB is authoritative once rating is set; otherwise preview client-side
-  const finalPay = job.finalPay != null
-    ? parseFloat(job.finalPay)
-    : (basePay + ratingAdj + photoAdj + streakBonus);
+  // Always recalculate display total from components — stored finalPay may be stale
+  // (e.g. set before photoAdjustment column existed). DB finalPay is for payroll records only.
+  const finalPay = basePay + ratingAdj + photoAdj + streakBonus;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   return (
@@ -525,15 +524,17 @@ export default function CleanerPortal() {
   const weekJobs = weekJobs0;
 
   // Earnings summary
-  const todayEarnings = jobs.reduce((sum, j) => {
-    const fp = parseFloat(j.finalPay ?? "0") || (parseFloat(j.basePay ?? "0") + parseFloat(j.ratingAdjustment ?? "0") + parseFloat(j.streakBonus ?? "0"));
-    return sum + (isNaN(fp) ? 0 : fp);
-  }, 0);
-
-  const weekEarnings = weekJobs.reduce((sum, j) => {
-    const fp = parseFloat(j.finalPay ?? "0") || (parseFloat(j.basePay ?? "0") + parseFloat(j.ratingAdjustment ?? "0") + parseFloat(j.streakBonus ?? "0"));
-    return sum + (isNaN(fp) ? 0 : fp);
-  }, 0);
+  // Always sum components directly so photoAdjustment is always included
+  const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null }) => {
+    const base = parseFloat(j.basePay ?? "0") || 0;
+    const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
+    const hasPhoto = j.photoSubmitted === 1 || ((j.photos as unknown[])?.length ?? 0) > 0;
+    const photo = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : (hasPhoto ? 5 : -10);
+    const streak = parseFloat(j.streakBonus ?? "0") || 0;
+    return base + rating + photo + streak;
+  };
+  const todayEarnings = jobs.reduce((sum, j) => sum + calcJobPay(j), 0);
+  const weekEarnings = weekJobs.reduce((sum, j) => sum + calcJobPay(j), 0);
 
   const completedToday = jobs.filter(j => j.bookingStatus === "completed").length;
   const avgRating = jobs.filter(j => j.customerRating).reduce((sum, j, _, arr) => sum + (j.customerRating ?? 0) / arr.length, 0);
