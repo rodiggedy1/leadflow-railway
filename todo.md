@@ -1814,3 +1814,6 @@
 ## SMS Formatting Fix — Flow B ADDRESS stage
 - [x] Fix lock-in confirmation message: add newline between "anything like that)" and "We'll do a quick 60-sec call..." so it doesn't run together
 - [x] Fix price reveal message: add blank line between "no hidden fees or surprises." and "I've got [DAY] at 9am or 1pm" — fixed in DB (flowB_sms2 already had double \n), fallback in aiService.ts, and LLM prompt instructions in prompt.ts
+
+## Bug: Duplicate Nudge Messages
+- [x] Find and fix root cause of two nudge SMS being sent to same lead — root cause: same phone had two active sessions (1080002 ADDRESS + 1080003 CONFIRMATION). Fixed by deduplicating by phone in runSilenceFollowUp: only nudge the most recent session per phone, and mark older stale sessions as autoFollowUpSent=1 to prevent them re-appearing on every cron tick.

@@ -55,7 +55,7 @@ export async function runSilenceFollowUp(): Promise<{
   // - Had an AI message sent 5+ minutes ago
   // - Have NOT had an auto follow-up sent yet
   // - Are in AI mode (aiMode = 1)
-  const sessions = await db
+  const allSessions = await db
     .select()
     .from(conversationSessions)
     .where(
@@ -74,6 +74,31 @@ export async function runSilenceFollowUp(): Promise<{
       )
     )
     .limit(50); // Safety cap — process at most 50 per run
+
+  // Deduplicate by phone: only nudge the most recent active session per phone number.
+  // A lead may have multiple sessions (e.g. re-submitted the form) — we only want
+  // to send one nudge to the most recent one, not one per session.
+  const seenPhones = new Set<string>();
+  const sorted = allSessions.sort((a, b) => b.id - a.id); // most recent first
+  const sessions = sorted.filter((s) => {
+    if (seenPhones.has(s.leadPhone)) return false;
+    seenPhones.add(s.leadPhone);
+    return true;
+  });
+
+  // Silence older stale sessions for the same phone so they don't keep appearing
+  // in the query on every cron tick. Mark them as already nudged.
+  const selectedIds = new Set(sessions.map((s) => s.id));
+  const staleIds = sorted.filter((s) => !selectedIds.has(s.id)).map((s) => s.id);
+  if (staleIds.length > 0) {
+    for (const staleId of staleIds) {
+      await db
+        .update(conversationSessions)
+        .set({ autoFollowUpSent: 1 })
+        .where(eq(conversationSessions.id, staleId));
+    }
+    console.log(`[SilenceFollowUp] Silenced ${staleIds.length} stale older session(s) for deduplication.`);
+  }
 
   let sent = 0;
   let errors = 0;
