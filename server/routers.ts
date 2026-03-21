@@ -25,6 +25,7 @@ import { activityRouter } from "./activityRouter";
 import { voiceRouter } from "./voiceRouter";
 import { qualityRouter } from "./qualityRouter";
 import { cleanerRouter } from "./cleanerRouter";
+import { trackerRouter } from "./trackerRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -1775,6 +1776,7 @@ export const appRouter = router({
   voice: voiceRouter,
   quality: qualityRouter,
   cleaner: cleanerRouter,
+  tracker: trackerRouter,
 
   simulator: router({
     chat: publicProcedure

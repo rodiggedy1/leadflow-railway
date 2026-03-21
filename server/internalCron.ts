@@ -21,6 +21,7 @@ import { runNightlySync } from "./cronSync";
 import { runSilenceFollowUp, runScheduledFollowUp } from "./followUpCron";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { generatePendingBatches } from "./campaignApproval";
+import { sendTrackerLinksForToday } from "./trackerCron";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 
@@ -174,9 +175,26 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Tracker link SMS: 8 AM ET daily ────────────────────────────────────────
+  // Texts each customer with a job today a link to their real-time tracker page.
+  cron.schedule("0 0 8 * * *", async () => {
+    console.log("[InternalCron] Running TrackerLinkSend...");
+    try {
+      const result = await sendTrackerLinksForToday();
+      const summary = `date: ${result.date}, sent: ${result.sent}, skipped: ${result.skipped}, errors: ${result.errors.length}`;
+      console.log(`[InternalCron] TrackerLinkSend — ${summary}`);
+      await recordHeartbeat("tracker-link-send", summary, result.sent > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] TrackerLinkSend failed:", msg);
+      await recordHeartbeat("tracker-link-send", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
   console.log("  - NightlySync:        12:00 PM ET daily");
   console.log("  - AlwaysOnSend:       10 AM ET Mon-Sat (gated by isActive flag)");
+  console.log("  - TrackerLinkSend:    8 AM ET daily");
 }

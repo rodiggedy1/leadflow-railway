@@ -887,6 +887,10 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   adminNotes: text("adminNotes"),
   /** AI-parsed checklist from customerNotes. JSON array of {text: string, checked: boolean}. Null if no actionable tasks found. */
   checklistItems: text("checklistItems"),
+  /** Unique public token for the customer-facing job tracker URL (e.g. /track/abc123) */
+  trackerToken: varchar("trackerToken", { length: 64 }),
+  /** When the tracker link SMS was sent to the customer */
+  trackerSmsSentAt: timestamp("trackerSmsSentAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

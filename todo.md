@@ -1695,3 +1695,8 @@
 - [x] Global opt-out: exclude OPTED_OUT phones from all future enrollments across all groups
 - [x] Ensure STOP/UNSUBSCRIBE webhook handler marks enrollment as OPTED_OUT
 - [x] Write tests for global opt-out exclusion logic
+- [ ] Customer job tracker page: Uber-style design with status timeline, neighborhood map, star rating
+- [ ] Add trackerToken + status fields to jobs/bookings schema
+- [ ] tRPC procedures: getTrackerJob (public, by token), submitTrackerRating
+- [ ] 8 AM cron: text tracker link to all customers with a job today
+- [ ] Wire cleaner portal status (on_the_way/arrived/done) to tracker page via polling

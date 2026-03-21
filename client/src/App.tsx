@@ -20,6 +20,7 @@ const AllCalls = lazy(() => import("./pages/AllCalls"));
 const RevenueAttribution = lazy(() => import("./pages/RevenueAttribution"));
 const CleanerDashboard = lazy(() => import("./pages/CleanerDashboard"));
 const CleanerPortal = lazy(() => import("./pages/CleanerPortal"));
+const JobTracker = lazy(() => import("./pages/JobTracker"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -46,6 +47,7 @@ function Router() {
       <Route path={"/admin/revenue"} component={RevenueAttribution} />
       <Route path={"/admin/quality"} component={CleanerDashboard} />
       <Route path={"/cleaner"} component={CleanerPortal} />
+      <Route path={"/track/:token"} component={JobTracker} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
