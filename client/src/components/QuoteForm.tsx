@@ -771,14 +771,17 @@ export default function QuoteForm() {
           className="px-6 py-5"
           style={{ background: "linear-gradient(135deg, #FFF8F5 0%, #FFF0EC 100%)", borderBottom: "1px solid #F5D5C8" }}
         >
-          {/* Logo row */}
+          {/* Logo row — wordmark only, no image with duplicate badges */}
           <div className="flex justify-center mb-4">
-            <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/trust-header_af20df71.png"
-              alt="Maids in Black"
-              className="h-12 w-auto object-contain object-top"
-              style={{ maxWidth: "200px" }}
-            />
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 32 32" className="w-8 h-8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="16" cy="10" r="6" stroke="#1E1E1E" strokeWidth="1.8" fill="none"/>
+                <path d="M10 10 Q10 6 16 6 Q22 6 22 10" stroke="#1E1E1E" strokeWidth="1.8" fill="none"/>
+                <path d="M8 28 C8 20 24 20 24 28" stroke="#1E1E1E" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+                <rect x="12" y="14" width="8" height="4" rx="1" stroke="#1E1E1E" strokeWidth="1.4" fill="none"/>
+              </svg>
+              <span className="font-bold text-xl tracking-tight" style={{ color: "#1E1E1E", fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>maids in black</span>
+            </div>
           </div>
           {/* Trust badges row */}
           <div className="flex items-center justify-center gap-4 flex-wrap">
