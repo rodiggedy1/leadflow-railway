@@ -1717,3 +1717,4 @@
 - [x] Add testimonial + multi-platform review grid (Google, Facebook, Angi, Yelp) below the quote submit button
 - [x] Replace "200% Happy Clean Guarantee" with better trust message
 - [x] Add auto-scrolling review carousel (Latoya P, Justin C, Erin T, Bonnie P) with realistic avatars
+- [x] Move scrolling review carousel to replace Ashley Purcell static testimonial; remove Ashley block
