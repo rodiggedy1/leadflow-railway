@@ -1817,3 +1817,6 @@
 
 ## Bug: Duplicate Nudge Messages
 - [x] Find and fix root cause of two nudge SMS being sent to same lead — root cause: same phone had two active sessions (1080002 ADDRESS + 1080003 CONFIRMATION). Fixed by deduplicating by phone in runSilenceFollowUp: only nudge the most recent session per phone, and mark older stale sessions as autoFollowUpSent=1 to prevent them re-appearing on every cron tick.
+
+## Bug: flowB_sms2 missing supplies line
+- [x] DB template for flowB_sms2 is missing "Just so you know upfront: we bring all our own supplies..." line — root cause was V2 engine LLM prompt (QUOTE_SENT + AVAILABILITY) showing a shortened format without the supplies line. Fixed both stage instructions to include the full 4-paragraph format with supplies line.
