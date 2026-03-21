@@ -30,11 +30,8 @@ export const LEAD_ALERT_CALL_NUMBER = "+13029816191"; // test: 302-981-6191
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LeadAlertDetails {
+  /** Lead's first name (title-cased) */
   name: string;
-  city?: string;
-  serviceType: string;
-  bedrooms: string;
-  bathrooms: string;
 }
 
 // ─── Business hours helper ────────────────────────────────────────────────────
@@ -60,22 +57,15 @@ export function isWithinBusinessHours(now: Date = new Date()): boolean {
  * Builds the TTS alert script read to the CS team member who picks up.
  *
  * Example output:
- *   "New lead alert. Sarah from Washington D.C. requested a standard cleaning
- *    for 3 bedrooms, 2 bathrooms. Claim it in Heyjade and call right away."
+ *   "New lead alert from Sarah. Check the lead platform now and respond in the
+ *    next 30 seconds. Bonus for most leads closed this month."
  */
 export function buildLeadAlertScript(details: LeadAlertDetails): string {
-  const { name, city, serviceType, bedrooms, bathrooms } = details;
-
-  // Normalize bedroom/bathroom labels for natural speech
-  const bedroomLabel = bedrooms === "1" ? "1 bedroom" : `${bedrooms} bedrooms`;
-  const bathroomLabel = bathrooms === "1" ? "1 bathroom" : `${bathrooms} bathrooms`;
-
-  const locationPart = city ? ` from ${city}` : "";
-
+  const { name } = details;
   return (
-    `New lead alert. ${name}${locationPart} requested a ${serviceType} ` +
-    `for ${bedroomLabel}, ${bathroomLabel}. ` +
-    `Claim it in Heyjade and call right away.`
+    `New lead alert from ${name}. ` +
+    `Check the lead platform now and respond in the next 30 seconds. ` +
+    `Bonus for most leads closed this month.`
   );
 }
 
@@ -149,17 +139,17 @@ export async function notifyNewLeadViaCall(
               content:
                 "You are a brief automated notification system. " +
                 "You have already delivered your message. " +
-                "If the person says anything, simply say 'Thank you, goodbye.' and end the call.",
+                "If the person says anything, simply say 'Got it, good luck!' and end the call.",
             },
           ],
         },
         voice: {
           provider: "11labs",
-          voiceId: "burt", // neutral, clear voice for alerts
+          voiceId: "rachel", // clear female voice
         },
-        endCallMessage: "Thank you, goodbye.",
+        endCallMessage: "Got it, good luck!",
         endCallPhrases: ["goodbye", "thanks", "ok", "got it", "thank you"],
-        maxDurationSeconds: 60,
+        maxDurationSeconds: 45,
       },
     };
 

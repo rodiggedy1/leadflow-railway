@@ -1897,3 +1897,8 @@
 - [x] TTS script: "New lead alert. {name} requested a {serviceType} for {bedrooms}, {bathrooms}. Claim it in Heyjade and call right away."
 - [x] Wire into form and widget lead submission flows (fire-and-forget)
 - [x] Write tests for business hours guard and TTS script generation (21 tests, all pass)
+
+## VAPI Call Notification Fixes — March 21
+- [x] Fix doubled words in TTS script ("bedrooms bedrooms", "bathrooms bathrooms")
+- [x] Switch voice to female (ElevenLabs rachel)
+- [x] Update script to: "New lead alert from {name}. Check the lead platform now and respond in the next 30 seconds. Bonus for most leads closed this month."

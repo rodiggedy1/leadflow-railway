@@ -1902,13 +1902,8 @@ async function processWidgetLeadInBackground(input: {
   );
 
   // ── Step 1b: VAPI call notification to CS team (fire-and-forget) ─────────
-  // Widget leads don't have room counts yet — use placeholder text
-  notifyNewLeadViaCall({
-    name: firstName,
-    serviceType: "home cleaning",
-    bedrooms: "unknown",
-    bathrooms: "unknown",
-  }).catch(err => console.error("[submitWidgetLead] VAPI call notification failed:", err));
+  notifyNewLeadViaCall({ name: firstName })
+    .catch(err => console.error("[submitWidgetLead] VAPI call notification failed:", err));
 
   // ── Step 2: Read widgetSmsFlow setting to determine persona ───────────────────
   const db = await getDb();
@@ -2026,12 +2021,8 @@ async function processQuoteInBackground(
   );
 
   // ── Step 1b: VAPI call notification to CS team (fire-and-forget) ─────────
-  notifyNewLeadViaCall({
-    name: toTitleCase(input.name),
-    serviceType: input.serviceType,
-    bedrooms: input.bedrooms,
-    bathrooms: input.bathrooms,
-  }).catch(err => console.error("[submitQuote] VAPI call notification failed:", err));
+  notifyNewLeadViaCall({ name: toTitleCase(input.name) })
+    .catch(err => console.error("[submitQuote] VAPI call notification failed:", err));
 
   // ── Step 2: Read smsFlow setting to determine which flow to use ────────────
   const db = await getDb();

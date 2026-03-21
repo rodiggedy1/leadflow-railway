@@ -20,16 +20,10 @@ import {
 describe("isWithinBusinessHours", () => {
   /**
    * Helper: create a Date that resolves to a specific hour in ET.
-   * We use fixed UTC offsets:
-   *   EST = UTC-5  (Nov–Mar)
-   *   EDT = UTC-4  (Mar–Nov)
-   *
-   * For simplicity, tests use a winter date (EST = UTC-5).
-   * 7am ET = 12:00 UTC, 7pm ET = 00:00 UTC next day.
+   * Uses a fixed winter date (2026-01-15, EST = UTC-5).
+   * etHour 7 → UTC 12:00, etHour 19 → UTC 00:00 next day.
    */
   function etHourToUtcDate(etHour: number): Date {
-    // Use a fixed winter date: 2026-01-15 (EST = UTC-5)
-    // etHour 7 → UTC 12:00, etHour 19 → UTC 00:00 next day
     const utcHour = etHour + 5; // EST offset
     const day = utcHour >= 24 ? 16 : 15;
     const normalizedHour = utcHour >= 24 ? utcHour - 24 : utcHour;
@@ -72,98 +66,46 @@ describe("isWithinBusinessHours", () => {
 // ─── buildLeadAlertScript ─────────────────────────────────────────────────────
 
 describe("buildLeadAlertScript", () => {
-  it("includes lead name", () => {
-    const script = buildLeadAlertScript({
-      name: "Sarah",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
-    expect(script).toContain("Sarah");
+  it("starts with 'New lead alert from'", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script.startsWith("New lead alert from Sarah")).toBe(true);
   });
 
-  it("includes service type", () => {
-    const script = buildLeadAlertScript({
-      name: "John",
-      serviceType: "Deep Cleaning",
-      bedrooms: "2",
-      bathrooms: "1",
-    });
-    expect(script).toContain("Deep Cleaning");
+  it("includes the lead's name", () => {
+    const script = buildLeadAlertScript({ name: "Marcus" });
+    expect(script).toContain("Marcus");
   });
 
-  it("includes bedroom count with correct label (plural)", () => {
-    const script = buildLeadAlertScript({
-      name: "Jane",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
-    expect(script).toContain("3 bedrooms");
+  it("tells agent to check the lead platform", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).toContain("Check the lead platform now");
   });
 
-  it("uses singular 'bedroom' for 1 bedroom", () => {
-    const script = buildLeadAlertScript({
-      name: "Jane",
-      serviceType: "Standard Cleaning",
-      bedrooms: "1",
-      bathrooms: "1",
-    });
-    expect(script).toContain("1 bedroom");
-    expect(script).not.toContain("1 bedrooms");
+  it("includes the 30-second urgency line", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).toContain("respond in the next 30 seconds");
   });
 
-  it("uses singular 'bathroom' for 1 bathroom", () => {
-    const script = buildLeadAlertScript({
-      name: "Jane",
-      serviceType: "Standard Cleaning",
-      bedrooms: "2",
-      bathrooms: "1",
-    });
-    expect(script).toContain("1 bathroom");
-    expect(script).not.toContain("1 bathrooms");
+  it("includes the bonus incentive line", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).toContain("Bonus for most leads closed this month");
   });
 
-  it("includes city when provided", () => {
-    const script = buildLeadAlertScript({
-      name: "Mike",
-      city: "Washington D.C.",
-      serviceType: "Move-Out Cleaning",
-      bedrooms: "2",
-      bathrooms: "2",
-    });
-    expect(script).toContain("Washington D.C.");
-    expect(script).toContain("from Washington D.C.");
+  it("does NOT include bedroom or bathroom counts (simplified script)", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).not.toContain("bedroom");
+    expect(script).not.toContain("bathroom");
   });
 
-  it("omits city phrase when city is not provided", () => {
-    const script = buildLeadAlertScript({
-      name: "Mike",
-      serviceType: "Move-Out Cleaning",
-      bedrooms: "2",
-      bathrooms: "2",
-    });
-    expect(script).not.toContain(" from ");
+  it("does NOT include 'Heyjade' (old CTA removed)", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).not.toContain("Heyjade");
   });
 
-  it("ends with Heyjade call-to-action", () => {
-    const script = buildLeadAlertScript({
-      name: "Alex",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
-    expect(script).toContain("Claim it in Heyjade and call right away");
-  });
-
-  it("starts with 'New lead alert'", () => {
-    const script = buildLeadAlertScript({
-      name: "Alex",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
-    expect(script.startsWith("New lead alert")).toBe(true);
+  it("produces consistent output for same input", () => {
+    const s1 = buildLeadAlertScript({ name: "Alex" });
+    const s2 = buildLeadAlertScript({ name: "Alex" });
+    expect(s1).toBe(s2);
   });
 });
 
@@ -173,7 +115,6 @@ describe("notifyNewLeadViaCall", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    // Mock global fetch
     fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ id: "call-test-123" }),
@@ -188,24 +129,14 @@ describe("notifyNewLeadViaCall", () => {
 
   it("returns false and skips call outside business hours", async () => {
     // 3am ET in January = 8am UTC
-    const outsideHours = new Date("2026-01-15T08:00:00.000Z"); // 3am EST
-    vi.spyOn(Date, "now").mockReturnValue(outsideHours.getTime());
-
-    // Patch isWithinBusinessHours by using a date that's clearly outside hours
-    // We test this indirectly: the function calls isWithinBusinessHours() with new Date()
-    // We'll mock Date constructor instead
+    const outsideHours = new Date("2026-01-15T08:00:00.000Z");
     const OriginalDate = globalThis.Date;
     vi.spyOn(globalThis, "Date").mockImplementation((...args: unknown[]) => {
       if (args.length === 0) return outsideHours;
       return new OriginalDate(...(args as ConstructorParameters<typeof Date>));
     });
 
-    const result = await notifyNewLeadViaCall({
-      name: "Test User",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
+    const result = await notifyNewLeadViaCall({ name: "Test User" });
 
     expect(result).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -213,19 +144,14 @@ describe("notifyNewLeadViaCall", () => {
 
   it("calls VAPI API with correct phone number during business hours", async () => {
     // 10am ET in January = 3pm UTC
-    const insideHours = new Date("2026-01-15T15:00:00.000Z"); // 10am EST
+    const insideHours = new Date("2026-01-15T15:00:00.000Z");
     const OriginalDate = globalThis.Date;
     vi.spyOn(globalThis, "Date").mockImplementation((...args: unknown[]) => {
       if (args.length === 0) return insideHours;
       return new OriginalDate(...(args as ConstructorParameters<typeof Date>));
     });
 
-    const result = await notifyNewLeadViaCall({
-      name: "Sarah",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
+    const result = await notifyNewLeadViaCall({ name: "Sarah" });
 
     expect(result).toBe(true);
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -237,10 +163,25 @@ describe("notifyNewLeadViaCall", () => {
     const body = JSON.parse(options.body as string);
     expect(body.customer.number).toBe(LEAD_ALERT_CALL_NUMBER);
     expect(body.assistant.firstMessage).toContain("Sarah");
-    expect(body.assistant.firstMessage).toContain("Standard Cleaning");
-    expect(body.assistant.firstMessage).toContain("3 bedrooms");
-    expect(body.assistant.firstMessage).toContain("2 bathrooms");
-    expect(body.assistant.firstMessage).toContain("Heyjade");
+    expect(body.assistant.firstMessage).toContain("Check the lead platform now");
+    expect(body.assistant.firstMessage).toContain("30 seconds");
+    expect(body.assistant.firstMessage).toContain("Bonus for most leads closed this month");
+  });
+
+  it("uses a female voice (rachel)", async () => {
+    const insideHours = new Date("2026-01-15T15:00:00.000Z");
+    const OriginalDate = globalThis.Date;
+    vi.spyOn(globalThis, "Date").mockImplementation((...args: unknown[]) => {
+      if (args.length === 0) return insideHours;
+      return new OriginalDate(...(args as ConstructorParameters<typeof Date>));
+    });
+
+    await notifyNewLeadViaCall({ name: "Sarah" });
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.assistant.voice.voiceId).toBe("rachel");
+    expect(body.assistant.voice.provider).toBe("11labs");
   });
 
   it("returns false and does not throw when VAPI API returns an error", async () => {
@@ -249,7 +190,6 @@ describe("notifyNewLeadViaCall", () => {
       text: async () => "Internal Server Error",
     });
 
-    // 10am ET
     const insideHours = new Date("2026-01-15T15:00:00.000Z");
     const OriginalDate = globalThis.Date;
     vi.spyOn(globalThis, "Date").mockImplementation((...args: unknown[]) => {
@@ -257,13 +197,7 @@ describe("notifyNewLeadViaCall", () => {
       return new OriginalDate(...(args as ConstructorParameters<typeof Date>));
     });
 
-    const result = await notifyNewLeadViaCall({
-      name: "Sarah",
-      serviceType: "Standard Cleaning",
-      bedrooms: "3",
-      bathrooms: "2",
-    });
-
+    const result = await notifyNewLeadViaCall({ name: "Sarah" });
     expect(result).toBe(false);
   });
 
@@ -275,15 +209,26 @@ describe("notifyNewLeadViaCall", () => {
       return new OriginalDate(...(args as ConstructorParameters<typeof Date>));
     });
 
-    await notifyNewLeadViaCall({
-      name: "Test",
-      serviceType: "Deep Cleaning",
-      bedrooms: "2",
-      bathrooms: "1",
-    });
+    await notifyNewLeadViaCall({ name: "Test" });
 
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
     expect(body.phoneNumberId).toBe("f2f1c044-c70a-4d73-a755-051f8a2a96e4");
+  });
+
+  it("script does not contain doubled words (no 'bedrooms bedrooms')", async () => {
+    const insideHours = new Date("2026-01-15T15:00:00.000Z");
+    const OriginalDate = globalThis.Date;
+    vi.spyOn(globalThis, "Date").mockImplementation((...args: unknown[]) => {
+      if (args.length === 0) return insideHours;
+      return new OriginalDate(...(args as ConstructorParameters<typeof Date>));
+    });
+
+    await notifyNewLeadViaCall({ name: "Sarah" });
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    const script: string = body.assistant.firstMessage;
+    expect(script).not.toMatch(/\b(\w+)\s+\1\b/i); // no consecutive duplicate words
   });
 });
