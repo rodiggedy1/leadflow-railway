@@ -1941,3 +1941,7 @@
 - [x] Default range to 30 days
 - [x] Add AI pulse hero section: dark gradient header with animated rings, pulsing green dot, live KPI pills, AI insight ticker
 - [x] Add Conversation Intelligence panel: LLM-analyzed top 5 objections with % bars, coaching tips, example quotes, and top insight callout
+
+## AI Command Center Fixes — March 21 (Round 3)
+- [x] Remove dark hero banner, replace with light white header with violet AI icon, pulsing green live dot, and light KPI pills
+- [x] Fix avg contact time in hero: now uses speed.avgFirstResponseMinutes (capped 10-min window), not stats.avgResponseMinutes

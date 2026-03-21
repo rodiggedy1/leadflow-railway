@@ -514,62 +514,67 @@ export default function CommandCenter() {
     <div className="min-h-screen bg-gray-50">
       <AdminHeader activeTab="command-center" />
 
-      {/* ── AI Pulse Hero ─────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-gray-950 via-gray-900 to-gray-800 border-b border-gray-700">
-        {/* Animated rings */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-[600px] h-[600px] rounded-full border border-white/5 animate-[spin_20s_linear_infinite]" />
-          <div className="absolute w-[400px] h-[400px] rounded-full border border-white/5 animate-[spin_15s_linear_infinite_reverse]" />
-          <div className="absolute w-[200px] h-[200px] rounded-full border border-white/5 animate-[spin_10s_linear_infinite]" />
-        </div>
-        {/* Pulsing glow dot */}
-        <div className="absolute top-6 right-8 flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-          </span>
-          <span className="text-xs text-emerald-400 font-medium tracking-wide">AI monitoring live</span>
-        </div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 relative z-10">
+      {/* ── AI Pulse Hero (light) ──────────────────────────────────────────── */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Title + live indicator */}
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
-                  <BrainCircuit className="w-6 h-6 text-white" />
+              <div className="relative shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center">
+                  <BrainCircuit className="w-5 h-5 text-violet-600" />
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-gray-900" />
+                <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
               </div>
               <div>
-                <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">AI Lead Command Center</p>
-                <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">Maids in Black</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-bold text-gray-900">AI Lead Command Center</h1>
+                  <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">Live</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
+                </p>
               </div>
             </div>
-            <div className="sm:ml-auto flex flex-wrap items-center gap-3">
-              {/* Live KPI pills */}
-              {stats && (
+
+            {/* Live KPI pills */}
+            <div className="sm:ml-auto flex flex-wrap items-center gap-2">
+              {stats ? (
                 <>
-                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
-                    <Flame className="w-3.5 h-3.5 text-orange-400" />
-                    <span className="text-xs text-white font-medium">{stats.totalLeads} leads</span>
+                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5">
+                    <Flame className="w-3.5 h-3.5 text-orange-500" />
+                    <span className="text-xs text-gray-700 font-medium">{stats.totalLeads} leads</span>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-xs text-white font-medium">{stats.bookedJobs} booked</span>
+                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-xs text-gray-700 font-medium">{stats.bookedJobs} booked</span>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
-                    <DollarSign className="w-3.5 h-3.5 text-violet-400" />
-                    <span className="text-xs text-white font-medium">{fmtDollar(stats.pipelineValue)} pipeline</span>
+                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-violet-500" />
+                    <span className="text-xs text-gray-700 font-medium">{fmtDollar(stats.pipelineValue)} pipeline</span>
                   </div>
+                  {speed && (
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="text-xs text-gray-700 font-medium">{speed.avgFirstResponseMinutes} min avg contact</span>
+                    </div>
+                  )}
                 </>
+              ) : (
+                <div className="h-7 w-64 rounded-full bg-gray-100 animate-pulse" />
               )}
             </div>
           </div>
-          {/* Insight ticker */}
+
+          {/* AI insight ticker */}
           {insights?.pulse && insights.pulse.length > 0 && (
-            <div className="mt-4 flex items-start gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-3 max-w-2xl">
-              <Activity className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
-              <p className="text-sm text-gray-300 leading-relaxed">
-                <span className="text-violet-300 font-semibold">AI: </span>
+            <div className="mt-3 flex items-start gap-2 bg-violet-50 border border-violet-100 rounded-xl px-4 py-2.5 max-w-3xl">
+              <Activity className="w-3.5 h-3.5 text-violet-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-gray-600 leading-relaxed">
+                <span className="text-violet-600 font-semibold">AI: </span>
                 {insights.pulse[0].body}
               </p>
             </div>
