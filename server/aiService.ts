@@ -105,11 +105,12 @@ export async function buildJadePriceReveal(params: {
   const totalDisplay = grandTotal > basePrice ? `$${grandTotal}` : `$${price}`;
   const priceForTemplate = grandTotal > basePrice ? `${grandTotal}` : `${price}`;
 
-  const extrasNote = resolvedExtras.length > 0
-    ? `\n\nThat includes your add-ons (${resolvedExtras.map(e => e.label).join(", ")}).`
+  // Build inline extras note: "(including cleaning inside your oven, load of laundry)"
+  const extrasLine = resolvedExtras.length > 0
+    ? ` (including ${resolvedExtras.map(e => e.label.toLowerCase()).join(", ")})`
     : "";
 
-  const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\n\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
+  const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises${extrasLine}.\n\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
 
   // Use template from DB; substitute dynamic values.
   // NOTE: {price} in the DB template already has "$" before it, so pass the number only.
@@ -122,6 +123,7 @@ export async function buildJadePriceReveal(params: {
       "{bathrooms}": bathrooms,
       "{price}": priceForTemplate,
       "{day}": day,
+      "{extrasLine}": extrasLine,
     }
   );
   return template;

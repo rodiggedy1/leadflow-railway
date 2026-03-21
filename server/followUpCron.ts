@@ -105,6 +105,26 @@ export async function runSilenceFollowUp(): Promise<{
 
   for (const session of sessions) {
     try {
+      // ── Atomic claim: mark autoFollowUpSent=1 BEFORE sending ──────────────────────────────────────────
+      // This prevents race conditions when multiple cron instances run simultaneously
+      // (e.g. after multiple server restarts in dev). Only the instance that wins the
+      // UPDATE (affected rows = 1) will proceed to send the SMS.
+      const claimResult = await db
+        .update(conversationSessions)
+        .set({ autoFollowUpSent: 1 })
+        .where(
+          and(
+            eq(conversationSessions.id, session.id),
+            eq(conversationSessions.autoFollowUpSent, 0)  // only claim if not already claimed
+          )
+        );
+      const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 1;
+      if (claimed === 0) {
+        // Another cron instance already claimed this session — skip it
+        console.log(`[SilenceFollowUp] Session ${session.id} already claimed by another instance — skipping.`);
+        continue;
+      }
+
       const firstName = session.leadName?.split(" ")[0] ?? session.leadName ?? "there";
 
       // Generate a contextual nudge using the AI
@@ -149,10 +169,10 @@ Example: "Hey ${firstName}, just circling back — can we help get this set up f
         history.push({ role: "assistant", content: nudgeMessage, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
 
+        // autoFollowUpSent was already set to 1 atomically before sending (race-condition guard above)
         await db
           .update(conversationSessions)
           .set({
-            autoFollowUpSent: 1,
             lastAiMessageAt: new Date(),
             messageHistory: JSON.stringify(history),
           })

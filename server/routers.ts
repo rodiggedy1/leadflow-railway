@@ -2037,6 +2037,31 @@ async function processQuoteInBackground(
       ];
   const initialHistory = JSON.stringify(historyEntries);
 
+  // ── Step 4a: Supersede any existing active sessions for this phone ──────────
+  // If the lead re-submits the form, close their old sessions so the cron
+  // doesn't nudge them twice (once per old session + once for the new one).
+  const ACTIVE_LEAD_STAGES = [
+    "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF",
+    "ADDRESS", "CONFIRMATION", "WIDGET_SIZING",
+  ];
+  try {
+    const supersededCount = await db
+      .update(conversationSessions)
+      .set({ stage: "DONE" as any, autoFollowUpSent: 1 })
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, normalizedPhone),
+          or(...ACTIVE_LEAD_STAGES.map(s => eq(conversationSessions.stage, s as any)))
+        )
+      );
+    const affected = (supersededCount as any)?.rowsAffected ?? (supersededCount as any)?.[0]?.affectedRows ?? 0;
+    if (affected > 0) {
+      console.log(`[submitQuote] Superseded ${affected} old active session(s) for ${normalizedPhone} before creating new one.`);
+    }
+  } catch (supersedErr) {
+    console.error("[submitQuote] Failed to supersede old sessions (non-fatal):", supersedErr);
+  }
+
   // Always create a new session row — same phone can submit again months later
   try {
     await db.insert(conversationSessions).values({

@@ -92,7 +92,8 @@ function applyPreviewVars(template: string): string {
     .replace(/\{slot1\}/g, "Thursday afternoon")
     .replace(/\{slot2\}/g, "Saturday morning")
     .replace(/\{timePref\}/g, "Morning")
-    .replace(/\{address\}/g, "123 Main St, DC 20001");
+    .replace(/\{address\}/g, "123 Main St, DC 20001")
+    .replace(/\{extrasLine\}/g, " (including clean inside oven)");
 }
 
 // Full conversation thread definitions per flow

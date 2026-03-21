@@ -1829,3 +1829,8 @@
 - [x] Normalize lead name to title case (ROHAN → Rohan, rohan → Rohan) — toTitleCase() added to routers.ts, applied at both DB save points (widget + quote form) and in generateQuoteMessage/buildJadePriceReveal
 - [x] Fix double $$ in price display — DB template has "$" before {price}, so now passing priceForTemplate (number only) to substitution map
 - [x] Update Flow B SMS 1 (Jade greeting) — updated fallback in aiService.ts and DB flowB_sms1 template to new script with "so we can see how fast we can get you taken care of?"
+
+## Issues — March 21 (round 2)
+- [x] Duplicate nudge messages still firing — root cause: same phone resubmitted form creating multiple active sessions; fixed by superseding old sessions at form submission in routers.ts; added atomic DB claim guard in cron (UPDATE WHERE autoFollowUpSent=0, skip if rowsAffected=0); 7 new vitest tests in followUpCron.test.ts; 649/649 tests pass
+- [x] Settings SMS 1 preview — DB already had correct new text; updated seed value in settingsRouter.ts to match
+- [x] Extras inline in price reveal — {extrasLine} placeholder added to DB template and seed; buildJadePriceReveal passes formatted extras string (e.g. " (including clean inside oven)"); Settings preview shows sample extras

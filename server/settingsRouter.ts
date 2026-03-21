@@ -73,14 +73,14 @@ const DEFAULT_SETTINGS = [
   // ── Flow B (Jade) SMS Templates ───────────────────────────────────────────
   {
     key: "flowB_sms1",
-    value: "Hey {firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking?",
+    value: "Hey {firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking so we can see how fast we can get you taken care of?",
     label: "Flow B — SMS 1: Greeting",
     description: "Sent immediately after the lead submits the quote form. Use {firstName} for the lead's first name.",
     fieldType: "textarea",
   },
   {
     key: "flowB_sms2",
-    value: "Perfect. We handle a lot of {bedrooms} bed / {bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹\n\nFor a home like yours, most clients land around ${price}. That covers everything, no hidden fees or surprises.\nI've got {day} at 9am or 1pm — which one should I lock in?",
+    value: "Perfect. We handle a lot of {bedrooms} bed / {bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹\n\nFor a home like yours, most clients land around ${price}. That covers everything, no hidden fees or surprises{extrasLine}.\n\nI've got {day} at 9am or 1pm — which one should I lock in?",
     label: "Flow B — SMS 2: Price Reveal",
     description: "Sent after the lead names a day. Use {firstName}, {bedrooms}, {bathrooms}, {price}, {day} as placeholders.",
     fieldType: "textarea",
