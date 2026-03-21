@@ -63,6 +63,13 @@ const DEFAULT_SETTINGS = [
     description: "When enabled, the system will automatically text tracker links to all customers with a job today at 8 AM ET.",
     fieldType: "toggle",
   },
+  {
+    key: "smsFlow",
+    value: "B",
+    label: "SMS Conversation Flow",
+    description: "Flow A (Madison): sends price upfront in SMS 1, then asks for availability. Flow B (Jade): greets + asks for day first, reveals price in SMS 2. Split: randomly assigns A or B to each new lead for A/B testing.",
+    fieldType: "select",
+  },
 ] as const;
 
 async function seedDefaultSettings() {

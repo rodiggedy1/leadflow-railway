@@ -59,6 +59,13 @@ export interface ConversationContext {
   leadSource?: string | null;
   /** For Bark leads: the Q&A summary extracted from display_text */
   barkQA?: string | null;
+  /**
+   * Which SMS flow was assigned to this lead at creation time.
+   * "A" = Madison flow (price upfront + availability question)
+   * "B" = Jade flow (greeting + day ask → price reveal → lock in)
+   * Defaults to "B" if not set.
+   */
+  smsFlow?: string | null;
 }
 
 export interface ChatMessage {
@@ -744,10 +751,60 @@ async function _processLeadReplyCore(
     return handleWidgetSizingReply(leadReply, context);
   }
 
-  // ── QUOTE_SENT: Any reply → send availability (no objection check needed) ──
+  // ── QUOTE_SENT: Route to Flow A (Madison) or Flow B (Jade) based on smsFlow ──
   if (stage === "QUOTE_SENT") {
+    const flowVariant = (context.smsFlow ?? "B").toUpperCase();
+
+    if (flowVariant === "A") {
+      // Flow A (Madison): any reply → send availability question
+      return {
+        reply: buildAvailabilityMessage(context.extras),
+        nextStage: "AVAILABILITY",
+      };
+    }
+
+    // Flow B (Jade): check if lead already mentioned a day — if so, skip straight to SMS 2 (price reveal)
+    const replyLowerQS = leadReply.toLowerCase();
+    const ALL_DAY_NAMES_QS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const mentionedDayQS = ALL_DAY_NAMES_QS.find(d => replyLowerQS.includes(d));
+
+    // Also check for "today", "tomorrow", "this week", "next week" as day-like signals
+    const hasDaySignal = mentionedDayQS ||
+      /\b(today|tomorrow|this week|next week|asap|as soon as possible|soonest|earliest)\b/.test(replyLowerQS);
+
+    if (hasDaySignal) {
+      // Resolve the day label
+      const dynamicSlotsQS = getNextAvailableSlots(2);
+      let dayLabel: string;
+      if (mentionedDayQS) {
+        const matchedSlot = dynamicSlotsQS.find(s => s.shortLabel.toLowerCase() === mentionedDayQS);
+        dayLabel = matchedSlot?.label ?? (mentionedDayQS.charAt(0).toUpperCase() + mentionedDayQS.slice(1));
+      } else if (/\btoday\b/.test(replyLowerQS)) {
+        dayLabel = "Today";
+      } else if (/\btomorrow\b/.test(replyLowerQS)) {
+        dayLabel = dynamicSlotsQS[0]?.label ?? "Tomorrow";
+      } else {
+        // "this week", "asap", "next week" — offer the first available slot
+        dayLabel = dynamicSlotsQS[0]?.label ?? "this week";
+      }
+      const firstName = context.leadName.split(" ")[0] ?? context.leadName;
+      return {
+        reply: buildJadePriceReveal({
+          firstName,
+          bedrooms: context.bedrooms,
+          bathrooms: context.bathrooms,
+          price: context.quotedPrice,
+          extras: context.extras,
+          day: dayLabel,
+        }),
+        nextStage: "SLOT_CHOICE",
+        extractedData: { selectedSlot: dayLabel },
+      };
+    }
+
+    // No day mentioned — re-ask what day works (stay in AVAILABILITY so next reply triggers day detection)
     return {
-      reply: buildAvailabilityMessage(context.extras),
+      reply: `What day were you thinking? We have openings most days this week. 📅`,
       nextStage: "AVAILABILITY",
     };
   }
@@ -1071,21 +1128,47 @@ async function _processLeadReplyCore(
         };
       }
 
-      // Unclear — use AI to handle naturally
-      const offScript = await handleOffScriptReply({
-        stage,
-        leadName: context.leadName,
-        quotedPrice: context.quotedPrice,
-        serviceType: context.serviceType,
-        selectedSlot: context.selectedSlot,
-        messageHistory: context.messageHistory,
-        leadReply,
-        extrasContext,
-      });
+      // Hard opt-out — end the conversation
+      if (parsed.intent === "no" && parsed.confidence === "high") {
+        return {
+          reply: `No worries at all! If you ever need a cleaning in the future, we're here. Have a great day! 🏠`,
+          nextStage: "DONE",
+        };
+      }
 
+      // Looks like notes/special instructions (not a call preference) — acknowledge and re-ask call question
+      // This handles replies like "no pets", "gate code is 1234", "just let yourselves in", etc.
+      const looksLikeNotes = parsed.intent !== "now" && parsed.intent !== "few_minutes" &&
+        !/\b(call|phone|ring|now|minute|soon|later|yes|yeah|sure|ok|okay)\b/i.test(leadReply);
+
+      if (looksLikeNotes) {
+        // Check if this is a wrong-path reply (existing customer, support request, wrong number)
+        const offScript = await handleOffScriptReply({
+          stage,
+          leadName: context.leadName,
+          quotedPrice: context.quotedPrice,
+          serviceType: context.serviceType,
+          selectedSlot: context.selectedSlot,
+          messageHistory: context.messageHistory,
+          leadReply,
+          extrasContext,
+        });
+        if (offScript.isWrongPath) {
+          return {
+            reply: offScript.reply,
+            nextStage: "DONE",
+          };
+        }
+        return {
+          reply: `Got it — noted for the team! 📝\n\nShould I have someone call you now to confirm, or in a few minutes?`,
+          nextStage: "CONFIRMATION",
+        };
+      }
+
+      // Unclear — re-ask the call question directly (never ask for address here)
       return {
-        reply: offScript.reply,
-        nextStage: offScript.isWrongPath ? "DONE" : "CONFIRMATION",
+        reply: `Just to confirm — should we call you now or in a few minutes to lock everything in? 📞`,
+        nextStage: "CONFIRMATION",
       };
     }
 

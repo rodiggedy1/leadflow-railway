@@ -10,7 +10,7 @@ import { and, desc, eq, gte, isNull, isNotNull, lte, ne, or, sql } from "drizzle
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
-import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply } from "./aiService";
+import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
@@ -1945,41 +1945,104 @@ async function processQuoteInBackground(
     console.error("[submitQuote] Secondary alert SMS failed:", err)
   );
 
-  // ── Step 2: Generate SMS 1 — Jade greeting + day ask (no price yet) ────────
-  const msg1 = await generateQuoteMessage({
-    leadName: input.name,
-    bedrooms: input.bedrooms,
-    bathrooms: input.bathrooms,
-    serviceType: input.serviceType,
-    price,
-    extras: input.extras,
-  });
-
-  // ── Step 3: Send SMS #1 to lead ───────────────────────────────────────────
-  // Note: No photo MMS on SMS 1 — Jade's intro is conversational, not a headshot
-  const sms1 = await sendSms({ to: input.phone, content: msg1 });
-  console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
-  // SMS 2 (price reveal + 9am/1pm offer) is sent in the AVAILABILITY stage handler
-  // when the lead replies with a specific day — NOT immediately after SMS 1.
-
+  // ── Step 2: Read smsFlow setting to determine which flow to use ────────────
   const db = await getDb();
   if (!db) {
     console.warn("[submitQuote] No DB — skipping session and lead save");
     return;
   }
 
+  // Read the smsFlow setting (default to "B" = Jade flow)
+  let flowVariant = "B";
+  try {
+    const { appSettings } = await import("../drizzle/schema");
+    const settingRows = await db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "smsFlow"))
+      .limit(1);
+    const rawFlow = settingRows[0]?.value ?? "B";
+    if (rawFlow === "split") {
+      // 50-50 random assignment
+      flowVariant = Math.random() < 0.5 ? "A" : "B";
+    } else {
+      flowVariant = rawFlow.toUpperCase() === "A" ? "A" : "B";
+    }
+  } catch (err) {
+    console.warn("[submitQuote] Could not read smsFlow setting, defaulting to B:", err);
+  }
+
+  const MADISON_PHOTO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-SPXr6KHGViveW2LxjwfyqN.png";
+
+  let msg1: string;
+  let msg2: string | null = null;
+  let initialStage: string;
+
+  if (flowVariant === "A") {
+    // ── Flow A (Madison): SMS 1 = price upfront + value note (with photo), SMS 2 = availability question ──
+    msg1 = buildMadisonQuoteMessage({
+      leadName: input.name,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      serviceType: input.serviceType,
+      price,
+      extras: input.extras,
+    });
+    msg2 = await generatePricingFollowUp({
+      leadName: input.name,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      serviceType: input.serviceType,
+      price,
+    });
+    initialStage = "AVAILABILITY";
+  } else {
+    // ── Flow B (Jade): SMS 1 = greeting + day ask (no price yet) ──
+    msg1 = await generateQuoteMessage({
+      leadName: input.name,
+      bedrooms: input.bedrooms,
+      bathrooms: input.bathrooms,
+      serviceType: input.serviceType,
+      price,
+      extras: input.extras,
+    });
+    initialStage = "AVAILABILITY";
+  }
+
+  // ── Step 3: Send SMS #1 to lead ───────────────────────────────────────────
+  const sms1SendOpts = flowVariant === "A"
+    ? { to: input.phone, content: msg1, mediaUrl: MADISON_PHOTO_URL }
+    : { to: input.phone, content: msg1 };
+  const sms1 = await sendSms(sms1SendOpts);
+  console.log(`[submitQuote] SMS1 (Flow ${flowVariant}) sent: ${sms1.success}`);
+
+  // ── Step 3b: Flow A only — send SMS #2 (availability question) after a short delay ──
+  if (flowVariant === "A" && msg2) {
+    await delay(2000);
+    const sms2 = await sendSms({ to: input.phone, content: msg2 });
+    console.log(`[submitQuote] SMS2 (Flow A availability) sent: ${sms2.success}`);
+  }
+  // Flow B: SMS 2 (price reveal + 9am/1pm offer) is sent in the AVAILABILITY stage handler
+  // when the lead replies with a specific day — NOT immediately after SMS 1.
+
   // ── Step 4: Create conversation session ──────────────────────────────────
   const now = Date.now();
-  const initialHistory = JSON.stringify([
-    { role: "assistant", content: msg1, ts: now },
-  ]);
+  const historyEntries = flowVariant === "A" && msg2
+    ? [
+        { role: "assistant", content: msg1, ts: now },
+        { role: "assistant", content: msg2, ts: now + 1 },
+      ]
+    : [
+        { role: "assistant", content: msg1, ts: now },
+      ];
+  const initialHistory = JSON.stringify(historyEntries);
 
   // Always create a new session row — same phone can submit again months later
   try {
     await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
       leadName: input.name,
-      stage: "AVAILABILITY",
+      stage: initialStage as any,
       quotedPrice: price,
       serviceType: input.serviceType,
       bedrooms: input.bedrooms,
@@ -1993,6 +2056,7 @@ async function processQuoteInBackground(
       utmContent: input.utmContent ?? null,
       gclid: input.gclid ?? null,
       leadSource: "form",
+      smsFlow: flowVariant,
     });
   } catch (dbErr) {
     console.error("[submitQuote] Failed to create conversation session:", dbErr);

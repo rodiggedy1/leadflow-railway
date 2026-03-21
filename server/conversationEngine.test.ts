@@ -132,8 +132,9 @@ describe("processLeadReply — State Machine", () => {
   });
 
   // Stage: QUOTE_SENT → any reply → AVAILABILITY
-  it("QUOTE_SENT: any reply advances to AVAILABILITY without calling LLM", async () => {
-    const ctx = makeContext({ stage: "QUOTE_SENT" });
+  // ── QUOTE_SENT: Flow A (Madison) — availability question sent immediately ──
+  it("QUOTE_SENT (Flow A): any reply advances to AVAILABILITY without calling LLM", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "A" });
     const result = await processLeadReply("ok thanks", ctx);
 
     expect(result.nextStage).toBe("AVAILABILITY");
@@ -142,8 +143,8 @@ describe("processLeadReply — State Machine", () => {
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  it("QUOTE_SENT: includes extras upsell line when extras are in context", async () => {
-    const ctx = makeContext({ stage: "QUOTE_SENT", extras: ["clean_inside_oven"] });
+  it("QUOTE_SENT (Flow A): includes extras upsell line when extras are in context", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "A", extras: ["clean_inside_oven"] });
     const result = await processLeadReply("sounds good", ctx);
 
     expect(result.nextStage).toBe("AVAILABILITY");
@@ -153,12 +154,32 @@ describe("processLeadReply — State Machine", () => {
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  it("QUOTE_SENT: no upsell line when no extras selected", async () => {
-    const ctx = makeContext({ stage: "QUOTE_SENT", extras: [] });
+  it("QUOTE_SENT (Flow A): no upsell line when no extras selected", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "A", extras: [] });
     const result = await processLeadReply("thanks", ctx);
 
     expect(result.nextStage).toBe("AVAILABILITY");
     expect(result.reply).not.toContain("while we're there");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  // ── QUOTE_SENT: Flow B (Jade) — re-ask for day if no day mentioned ──
+  it("QUOTE_SENT (Flow B): no day mentioned → re-asks for day, stays in AVAILABILITY", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "B" });
+    const result = await processLeadReply("ok thanks", ctx);
+
+    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.reply).toContain("day");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  it("QUOTE_SENT (Flow B): day mentioned → advances to SLOT_CHOICE with price reveal", async () => {
+    const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "B" });
+    const result = await processLeadReply("Friday works for me", ctx);
+
+    expect(result.nextStage).toBe("SLOT_CHOICE");
+    // Price reveal should be in the reply
+    expect(result.reply).toContain("$130");
     expect(mockLLM).not.toHaveBeenCalled();
   });
 

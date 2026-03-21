@@ -221,6 +221,8 @@ export function registerWebhookRoutes(app: Express) {
         // Lead source context (used by Bark leads to skip qualification)
         leadSource: session.leadSource ?? "form",
         barkQA: session.barkQA ?? undefined,
+        // SMS flow variant assigned at lead creation ("A" = Madison, "B" = Jade)
+        smsFlow: session.smsFlow ?? "B",
       };
 
       // ── QUALITY_RATING: Post-job 1-5 star rating flow ───────────────────────────

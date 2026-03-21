@@ -481,6 +481,26 @@ function buildFallbackQuoteMessage(firstName: string): string {
   return `Hey ${firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking?`;
 }
 
+/**
+ * SMS 1 in Flow A (Madison): price upfront + value note.
+ * Sent with Madison's headshot photo as MMS.
+ */
+export function buildMadisonQuoteMessage(params: QuoteMessageParams): string {
+  const { leadName, bedrooms, bathrooms, serviceType, price, extras } = params;
+  const firstName = leadName.split(" ")[0] ?? leadName;
+  const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
+  const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
+  const basePrice = parseInt(price, 10) || 0;
+  const grandTotal = basePrice + extrasTotal;
+  if (resolvedExtras.length === 0) {
+    return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
+  }
+  const extrasLines = resolvedExtras
+    .map(e => `  + ${e.label}: $${e.price}`)
+    .join("\n");
+  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black.\n\nYour quote:\n  ${serviceType} (${bedrooms} / ${bathrooms}): $${price}\n${extrasLines}\n  ─────────────\n  Total: $${grandTotal}\n\nOur fully insured team handles everything — including your selected add-ons!`;
+}
+
 function buildFallbackOffScript(nextAction: string): string {
   return `Great question — our team can cover that on your confirmation call! ${nextAction}`;
 }

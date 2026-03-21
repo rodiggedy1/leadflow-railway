@@ -372,6 +372,13 @@
       "when": 1774056245571,
       "tag": "0052_adorable_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1774101023684,
+      "tag": "0053_lush_tenebrous",
+      "breakpoints": true
     }
   ]
 }

@@ -212,6 +212,15 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
   smsOptOut: int("smsOptOut").default(0).notNull(),
 
+  /**
+   * Which SMS conversation flow was assigned to this lead at creation time.
+   * "A" = Madison flow (price upfront + availability question)
+   * "B" = Jade flow (greeting + day ask → price reveal → lock in)
+   * Stored here so mid-conversation flow-setting changes don't disrupt active threads.
+   */
+  smsFlow: varchar("smsFlow", { length: 5 }).default("B"),
+
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

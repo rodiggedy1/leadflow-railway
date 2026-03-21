@@ -1733,3 +1733,34 @@
 - [ ] TIME_PREF stage: when lead picks 9am or 1pm, send SMS 3 (lock in + notes ask + call confirmation)
 - [ ] Update brand system prompt: rename Madison → Jade
 - [ ] Off-script replies handled smartly at every stage before continuing the flow
+
+## Jade SMS Script Fix
+
+- [ ] Lock AVAILABILITY stage to hardcoded Jade SMS 2 (price reveal + 9am/1pm) — no AI improvisation
+- [ ] Lock SLOT_CHOICE stage to hardcoded Jade SMS 3 (lock in + notes + call question) — no AI improvisation
+- [ ] Fix stage order: address collected AFTER time confirmed (SLOT_CHOICE → ADDRESS → CONFIRMATION)
+
+## A/B SMS Flow System
+
+- [ ] Preserve original Madison flow as Flow A (flowA module)
+- [ ] Keep new Jade flow as Flow B (flowB module)
+- [ ] Add smsFlow field to settings schema (values: "A" | "B" | "split")
+- [ ] Wire flow selector in conversationEngine and routers based on setting
+- [ ] Add SMS Flow selector UI to Settings page (Flow A / Flow B / 50-50 split)
+- [ ] Fix Jade flow: QUOTE_SENT day detection skips straight to SMS 2
+- [ ] Fix Jade flow: CONFIRMATION handles notes replies gracefully, never asks for address
+
+## A/B SMS Flow System — COMPLETED
+
+- [x] Add `smsFlow` column to `conversation_sessions` table (stores "A" or "B" per session)
+- [x] Add `smsFlow` setting to `appSettings` (default "B"; options: "A", "B", "split")
+- [x] Run DB migration: `pnpm db:push`
+- [x] Add `smsFlow` field to `ConversationContext` type in aiService.ts
+- [x] Add `buildMadisonQuoteMessage` function to aiService.ts (Flow A: price upfront in SMS 1)
+- [x] Update `QUOTE_SENT` handler in conversationEngine.ts to branch on `smsFlow` (A = availability question, B = Jade day-ask)
+- [x] Update `processQuoteInBackground` in routers.ts to read `smsFlow` setting and send correct SMS 1 (Flow A: Madison photo MMS + availability question, Flow B: Jade greeting)
+- [x] Update webhooks.ts to pass `smsFlow` from session into `ConversationContext`
+- [x] Add SMS Flow A/B/Split selector card to SettingsPage.tsx with SMS previews
+- [x] Fix CONFIRMATION stage: add wrong-path detection for unclear replies (existing customer exits to DONE)
+- [x] Update tests: QUOTE_SENT tests now explicitly set `smsFlow: "A"` or `"B"`; added 2 new Flow B tests
+- [x] 625/625 tests pass

@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` ADD `smsFlow` varchar(5) DEFAULT 'B';
