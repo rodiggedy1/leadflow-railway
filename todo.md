@@ -1702,3 +1702,6 @@
 - [ ] Wire cleaner portal status (on_the_way/arrived/done) to tracker page via polling
 - [x] Fix tracker page: Done step shows "5" instead of checkmark
 - [x] Fix tracker page: clicking stars does nothing (rating submission broken)
+- [ ] Wire 5-star tracker rating to send Google Review SMS
+- [ ] Make post-5-star SMS template editable in Settings
+- [ ] Add resend option to Send Tracker Link button on job cards

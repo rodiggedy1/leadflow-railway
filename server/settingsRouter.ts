@@ -36,6 +36,13 @@ const DEFAULT_SETTINGS = [
     fieldType: "toggle",
   },
   {
+    key: "googleReviewSmsTemplate",
+    value: "Hi {firstName}! 🌟 Thank you so much for the 5-star rating! We'd love it if you could share your experience on Google — it helps us a ton: {reviewLink}",
+    label: "Google Review SMS Template",
+    description: "Message sent after a 5-star tracker rating. Use {firstName} for the customer's name and {reviewLink} for the Google Review URL.",
+    fieldType: "textarea",
+  },
+  {
     key: "businessPhone",
     value: "(202) 888-5362",
     label: "Business Phone Number",

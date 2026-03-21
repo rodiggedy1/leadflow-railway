@@ -15,8 +15,8 @@ import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs } from "../drizzle/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { cleanerJobs, appSettings } from "../drizzle/schema";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 
@@ -83,7 +83,12 @@ export const trackerRouter = router({
 
       // Verify token exists and rating not yet submitted
       const jobs = await db
-        .select({ id: cleanerJobs.id, customerRating: cleanerJobs.customerRating })
+        .select({
+          id: cleanerJobs.id,
+          customerRating: cleanerJobs.customerRating,
+          customerName: cleanerJobs.customerName,
+          customerPhone: cleanerJobs.customerPhone,
+        })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.trackerToken, input.token))
         .limit(1);
@@ -98,6 +103,33 @@ export const trackerRouter = router({
         .update(cleanerJobs)
         .set({ customerRating: input.rating })
         .where(eq(cleanerJobs.id, job.id));
+
+      // ── Send Google Review SMS on 5-star rating ─────────────────────────────
+      if (input.rating === 5 && job.customerPhone) {
+        try {
+          const settingRows = await db
+            .select({ key: appSettings.key, value: appSettings.value })
+            .from(appSettings)
+            .where(inArray(appSettings.key, ["autoGoogleReviewOnFiveStar", "googleReviewUrl", "googleReviewSmsTemplate"]));
+
+          const settingsMap = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
+          const autoEnabled = settingsMap["autoGoogleReviewOnFiveStar"] === "true";
+          const reviewUrl = settingsMap["googleReviewUrl"] ?? "";
+          const template = settingsMap["googleReviewSmsTemplate"] ??
+            "Hi {firstName}! 🌟 Thank you for the 5-star rating! We'd love a Google review: {reviewLink}";
+
+          if (autoEnabled && reviewUrl) {
+            const firstName = (job.customerName ?? "there").split(" ")[0] ?? "there";
+            const message = template
+              .replace(/\{firstName\}/g, firstName)
+              .replace(/\{reviewLink\}/g, reviewUrl);
+            await sendSms({ to: job.customerPhone, content: message });
+          }
+        } catch (err) {
+          // Non-fatal — rating was already saved, just log the SMS failure
+          console.error("[Tracker] Failed to send Google Review SMS:", err);
+        }
+      }
 
       return { success: true };
     }),

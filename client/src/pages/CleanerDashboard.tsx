@@ -502,34 +502,55 @@ function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => 
 
 function SendTrackerLinkButton({ job }: { job: JobRow }) {
   const [sent, setSent] = useState(false);
+  const [resending, setResending] = useState(false);
   const send = trpc.tracker.sendSingleLink.useMutation({
     onSuccess: () => {
       setSent(true);
+      setResending(false);
       toast.success("Tracker link sent", { description: `Sent to ${job.customerPhone ?? "customer"}` });
     },
-    onError: (err) => toast.error("Failed to send", { description: err.message }),
+    onError: (err) => {
+      setResending(false);
+      toast.error("Failed to send", { description: err.message });
+    },
   });
 
   if (!job.customerPhone) return null;
+
+  if (sent && !resending) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="flex items-center gap-1.5 text-xs text-emerald-600">
+          <CheckCircle2 className="w-3 h-3" />
+          Tracker Sent
+        </span>
+        <button
+          className="text-xs text-sky-500 hover:text-sky-700 underline underline-offset-2 transition-colors"
+          onClick={() => {
+            setResending(true);
+            send.mutate({ cleanerJobId: job.id });
+          }}
+        >
+          Resend
+        </button>
+      </div>
+    );
+  }
 
   return (
     <Button
       variant="outline"
       size="sm"
-      className={`gap-1.5 text-xs ${
-        sent ? "border-emerald-400 text-emerald-600" : "border-sky-300 text-sky-600 hover:bg-sky-50"
-      }`}
-      disabled={send.isPending || sent}
+      className="gap-1.5 text-xs border-sky-300 text-sky-600 hover:bg-sky-50"
+      disabled={send.isPending}
       onClick={() => send.mutate({ cleanerJobId: job.id })}
     >
       {send.isPending ? (
         <Loader2 className="w-3 h-3 animate-spin" />
-      ) : sent ? (
-        <CheckCircle2 className="w-3 h-3" />
       ) : (
         <ExternalLink className="w-3 h-3" />
       )}
-      {sent ? "Tracker Sent" : "Send Tracker Link"}
+      {send.isPending ? "Sending..." : "Send Tracker Link"}
     </Button>
   );
 }
