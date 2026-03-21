@@ -168,7 +168,7 @@ describe("notifyNewLeadViaCall", () => {
     expect(body.assistant.firstMessage).toContain("Bonus for most leads closed this month");
   });
 
-  it("uses a female voice (rachel)", async () => {
+  it("uses the Sarah female voice (EXAVITQu4vr4xnSDxMaL)", async () => {
     const insideHours = new Date("2026-01-15T15:00:00.000Z");
     const OriginalDate = globalThis.Date;
     vi.spyOn(globalThis, "Date").mockImplementation((...args: unknown[]) => {
@@ -180,7 +180,7 @@ describe("notifyNewLeadViaCall", () => {
 
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.assistant.voice.voiceId).toBe("rachel");
+    expect(body.assistant.voice.voiceId).toBe("EXAVITQu4vr4xnSDxMaL");
     expect(body.assistant.voice.provider).toBe("11labs");
   });
 

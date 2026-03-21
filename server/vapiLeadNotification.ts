@@ -145,10 +145,12 @@ export async function notifyNewLeadViaCall(
         },
         voice: {
           provider: "11labs",
-          voiceId: "rachel", // clear female voice
+          voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — warm, professional female voice (same as main assistant)
+          stability: 0.5,
+          similarityBoost: 0.75,
+          style: 0.3,
+          useSpeakerBoost: true,
         },
-        endCallMessage: "Got it, good luck!",
-        endCallPhrases: ["goodbye", "thanks", "ok", "got it", "thank you"],
         maxDurationSeconds: 45,
       },
     };

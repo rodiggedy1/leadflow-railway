@@ -1902,3 +1902,6 @@
 - [x] Fix doubled words in TTS script ("bedrooms bedrooms", "bathrooms bathrooms")
 - [x] Switch voice to female (ElevenLabs rachel)
 - [x] Update script to: "New lead alert from {name}. Check the lead platform now and respond in the next 30 seconds. Bonus for most leads closed this month."
+
+## VAPI Call Hang-Up Bug Fix — March 21
+- [x] Fix: call hangs up immediately — root cause was invalid voice ID "rachel"; switched to known-working Sarah voice (EXAVITQu4vr4xnSDxMaL), removed endCallPhrases/endCallMessage
