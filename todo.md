@@ -1929,3 +1929,9 @@
 - [x] UI: Lead Source Intelligence table (CPL, booked, revenue, ROAS, AI note per source)
 - [x] Time range filter: Today / 7 Days / 30 Days
 - [x] 747/747 tests pass
+
+## AI Command Center Fixes — March 21
+- [x] Fix pipeline value: sum of estimated revenue for all non-booked sessions in the pipeline
+- [x] Move "AI Center" nav tab to first position in AdminHeader
+- [x] Improve Hot Leads Queue design: color-coded cards (red/amber/gray), stage badges, SMS+Call buttons with intent-matched colors
+- [x] Fix Speed to Lead: renamed to "Speed to First Contact", shows avg first contact time, under-2-min %, and leads contacted count

@@ -216,14 +216,13 @@ export const commandCenterRouter = router({
 
       const bookedRevenue = bookedSessions.reduce((sum, s) => sum + calcRevenue(s), 0);
 
-      // Pipeline value: all non-cold, non-lost, non-booked leads × avg quoted price
+      // Pipeline value: sum of estimated revenue for all active (non-booked, non-lost, non-cold) sessions
+      // This mirrors the Pipeline page — total value of leads still in play
+      const PIPELINE_EXCLUDE = new Set(["BOOKED", "NOT_INTERESTED", "COLD", "DONE", "REVIEW_REQUESTED", "REVIEW_DONE", "QUALITY_RATING_DONE"]);
       const pipelineSessions = sessions.filter(s =>
-        !["BOOKED", "NOT_INTERESTED", "COLD", "REVIEW_REQUESTED", "REVIEW_DONE", "QUALITY_RATING_DONE"].includes(s.stage)
+        !PIPELINE_EXCLUDE.has(s.stage) && s.isBooked !== 1
       );
-      const avgQuotedPrice = sessions
-        .filter(s => s.quotedPrice)
-        .reduce((sum, s, _, arr) => sum + parseFloat(s.quotedPrice ?? "0") / arr.length, 0);
-      const pipelineValue = Math.round(pipelineSessions.length * (avgQuotedPrice || 180));
+      const pipelineValue = Math.round(pipelineSessions.reduce((sum, s) => sum + calcRevenue(s), 0));
 
       // Response rate: sessions that got past QUOTE_SENT stage
       const respondedStages = ["AVAILABILITY", "SLOT_CHOICE", "TIME_PREF", "ADDRESS", "CONFIRMATION", "CALL_SCHEDULED", "DONE", "BOOKED"];
@@ -572,15 +571,11 @@ export const commandCenterRouter = router({
         ? Math.round((contactedUnder2Min / sessions.length) * 100)
         : 0;
 
-      const avgFollowUpAttempts = sessions.length > 0
-        ? parseFloat((sessions.reduce((sum, s) => sum + (s.nudgeCount ?? 0), 0) / sessions.length).toFixed(1))
-        : 0;
-
       return {
         avgFirstResponseMinutes,
         contactedUnder2MinPct,
-        avgFollowUpAttempts,
         totalLeads: sessions.length,
+        contactedCount: withResponse.length,
       };
     }),
 

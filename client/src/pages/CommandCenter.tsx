@@ -286,6 +286,18 @@ function FunnelRow({
 
 // ─── Hot Lead Card ────────────────────────────────────────────────────────────
 
+const stageColors: Record<string, string> = {
+  CALL_SCHEDULED: "bg-purple-100 text-purple-700",
+  CONFIRMATION: "bg-teal-100 text-teal-700",
+  ADDRESS: "bg-indigo-100 text-indigo-700",
+  SLOT_CHOICE: "bg-orange-100 text-orange-700",
+  TIME_PREF: "bg-amber-100 text-amber-700",
+  AVAILABILITY: "bg-yellow-100 text-yellow-700",
+  QUOTE_SENT: "bg-blue-100 text-blue-700",
+  UNHANDLED: "bg-red-100 text-red-700",
+  COLD: "bg-gray-100 text-gray-500",
+};
+
 function HotLeadCard({
   lead,
   onSms,
@@ -309,52 +321,72 @@ function HotLeadCard({
   smsSending: boolean;
   callSending: boolean;
 }) {
-  const scoreColor =
-    lead.intentScore >= 80 ? "text-red-600 bg-red-50 border-red-100" :
-    lead.intentScore >= 60 ? "text-amber-600 bg-amber-50 border-amber-100" :
-    "text-gray-600 bg-gray-50 border-gray-100";
+  const isHot = lead.intentScore >= 80;
+  const isWarm = lead.intentScore >= 60;
+  const scoreBg = isHot ? "bg-red-500" : isWarm ? "bg-amber-500" : "bg-gray-400";
+  const stageCls = stageColors[lead.stage] ?? "bg-gray-100 text-gray-500";
 
   return (
-    <div className="flex items-start gap-4 py-4 border-b border-gray-50 last:border-0">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className="font-semibold text-sm text-gray-900">{lead.name}</span>
-          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{lead.source}</span>
-          <span className="text-xs text-gray-400">{lead.serviceType}</span>
+    <div className={`rounded-xl border p-4 mb-3 last:mb-0 transition-all ${
+      isHot ? "border-red-200 bg-red-50/40" :
+      isWarm ? "border-amber-200 bg-amber-50/30" :
+      "border-gray-100 bg-white"
+    }`}>
+      <div className="flex items-start gap-3">
+        {/* Intent score badge */}
+        <div className={`${scoreBg} rounded-xl text-white text-center shrink-0 w-12 py-2`}>
+          <div className="text-xl font-bold leading-none">{lead.intentScore}</div>
+          <div className="text-[9px] font-semibold opacity-80 mt-0.5 tracking-wide">INTENT</div>
         </div>
-        {lead.context && (
-          <p className="text-xs text-gray-500 leading-relaxed mb-1 line-clamp-2">{lead.context}</p>
-        )}
-        <p className="text-xs font-medium text-gray-700">
-          <span className="text-gray-400">Next: </span>{lead.nextBestAction}
-        </p>
-      </div>
-      <div className="flex flex-col items-end gap-2 shrink-0">
-        <div className={`text-lg font-bold px-2 py-0.5 rounded-lg border ${scoreColor}`}>
-          {lead.intentScore}
-          <span className="text-[10px] font-normal ml-0.5 block text-center leading-none">intent</span>
-        </div>
-        <div className="flex gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 w-7 p-0"
-            title="Send SMS"
-            onClick={() => onSms(lead.id, lead.name)}
-            disabled={smsSending}
-          >
-            {smsSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <MessageSquare className="w-3 h-3" />}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 w-7 p-0"
-            title="Trigger call alert"
-            onClick={() => onCall(lead.id, lead.name)}
-            disabled={callSending}
-          >
-            {callSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
-          </Button>
+
+        {/* Lead info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+            <span className="font-bold text-sm text-gray-900">{lead.name}</span>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${stageCls}`}>
+              {lead.stage.replace(/_/g, " ")}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{lead.source}</span>
+            {lead.serviceType && (
+              <span className="text-xs text-gray-400">{lead.serviceType}</span>
+            )}
+          </div>
+          {lead.context && (
+            <p className="text-xs text-gray-500 leading-relaxed mb-2 line-clamp-2">{lead.context}</p>
+          )}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100/80">
+            <p className="text-xs font-semibold text-gray-700 flex-1 min-w-0 truncate">
+              <span className="text-gray-400 font-normal">Next: </span>{lead.nextBestAction}
+            </p>
+            <div className="flex gap-1.5 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 gap-1 text-xs bg-white"
+                onClick={() => onSms(lead.id, lead.name)}
+                disabled={smsSending}
+              >
+                {smsSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <MessageSquare className="w-3 h-3" />}
+                SMS
+              </Button>
+              <Button
+                size="sm"
+                className={`h-7 px-2.5 gap-1 text-xs ${
+                  isHot ? "bg-red-500 hover:bg-red-600 text-white border-0" :
+                  isWarm ? "bg-amber-500 hover:bg-amber-600 text-white border-0" :
+                  "bg-white"
+                }`}
+                variant={isHot || isWarm ? "default" : "outline"}
+                onClick={() => onCall(lead.id, lead.name)}
+                disabled={callSending}
+              >
+                {callSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+                Call
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -722,27 +754,32 @@ export default function CommandCenter() {
         {/* ── Speed to Lead + Revenue Forecast ─────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-          {/* Speed to Lead */}
+          {/* Speed to First Contact */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h2 className="font-bold text-gray-900 mb-4">Speed to Lead</h2>
+            <div className="mb-4">
+              <h2 className="font-bold text-gray-900">Speed to First Contact</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Time from lead arrival to first outbound SMS.</p>
+            </div>
             {speedQuery.isLoading ? (
               <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-12 rounded bg-gray-100 animate-pulse" />
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="h-16 rounded bg-gray-100 animate-pulse" />
                 ))}
               </div>
             ) : speed ? (
               <div className="space-y-3">
-                {[
-                  { label: "Average first response", value: `${speed.avgFirstResponseMinutes} min` },
-                  { label: "Contacted under 2 min", value: `${speed.contactedUnder2MinPct}%` },
-                  { label: "Avg follow-up attempts", value: `${speed.avgFollowUpAttempts}` },
-                ].map(item => (
-                  <div key={item.label} className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">{item.label}</p>
-                    <p className="text-xl font-bold text-gray-900">{item.value}</p>
-                  </div>
-                ))}
+                <div className="bg-gray-900 rounded-xl p-4 text-white">
+                  <p className="text-xs text-gray-400 mb-1">Avg first contact</p>
+                  <p className="text-3xl font-bold">{speed.avgFirstResponseMinutes} <span className="text-base font-normal text-gray-400">min</span></p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">Contacted under 2 min</p>
+                  <p className="text-xl font-bold text-gray-900">{speed.contactedUnder2MinPct}%</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">Leads contacted</p>
+                  <p className="text-xl font-bold text-gray-900">{speed.contactedCount} <span className="text-sm font-normal text-gray-400">of {speed.totalLeads}</span></p>
+                </div>
               </div>
             ) : null}
           </div>

@@ -262,6 +262,13 @@ interface NavEntry {
 
 const NAV_ENTRIES: NavEntry[] = [
   {
+    id: "command-center",
+    label: "AI Center",
+    icon: <BrainCircuit className="w-3.5 h-3.5" />,
+    href: "/admin/command-center",
+    tabId: "command-center",
+  },
+  {
     id: "leads",
     label: "Leads",
     icon: <Phone className="w-3.5 h-3.5" />,
@@ -316,13 +323,6 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: <Briefcase className="w-3.5 h-3.5" />,
     href: "/admin/quality",
     tabId: "quality",
-  },
-  {
-    id: "command-center",
-    label: "AI Center",
-    icon: <BrainCircuit className="w-3.5 h-3.5" />,
-    href: "/admin/command-center",
-    tabId: "command-center",
   },
   {
     id: "settings",
