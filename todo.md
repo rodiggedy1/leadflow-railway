@@ -1700,3 +1700,5 @@
 - [ ] tRPC procedures: getTrackerJob (public, by token), submitTrackerRating
 - [ ] 8 AM cron: text tracker link to all customers with a job today
 - [ ] Wire cleaner portal status (on_the_way/arrived/done) to tracker page via polling
+- [x] Fix tracker page: Done step shows "5" instead of checkmark
+- [x] Fix tracker page: clicking stars does nothing (rating submission broken)

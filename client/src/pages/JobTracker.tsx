@@ -115,7 +115,13 @@ function StarRating({
   const handleStarClick = (star: number) => {
     if (submitted) return;
     setSelected(star);
-    setShowComment(true);
+    if (star >= 4) {
+      // Auto-submit for high ratings — no friction
+      submitRating.mutate({ token, rating: star });
+    } else {
+      // Show comment box for lower ratings to capture feedback
+      setShowComment(true);
+    }
   };
 
   const handleSubmit = () => {
@@ -366,14 +372,14 @@ export default function JobTracker() {
                   <div key={step.key} className="flex flex-col items-center gap-1.5 z-10">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300
-                        ${done
+                        ${done || (active && config.step === 4)
                           ? "bg-emerald-500 text-white"
                           : active
                           ? `bg-white/10 border-2 border-white/60 ${config.color} ring-2 ring-white/20`
                           : "bg-white/5 text-white/20 border border-white/10"
                         }`}
                     >
-                      {done ? "✓" : idx + 1}
+                      {done || (active && config.step === 4) ? "✓" : idx + 1}
                     </div>
                     <span
                       className={`text-[10px] font-medium tracking-wide ${
