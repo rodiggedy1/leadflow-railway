@@ -98,7 +98,7 @@ import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/component
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
 import DailyRecapModal, { hasShownToday, markShownToday } from "@/components/DailyRecapModal";
-import { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
+import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
 /**
@@ -2138,7 +2138,13 @@ export default function AdminDashboard() {
   }, []);
 
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
-  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "leaderboard" | "callbacks">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "leaderboard" | "callbacks">(() => {
+    if (typeof window !== "undefined") {
+      const t = new URLSearchParams(window.location.search).get("tab");
+      if (t === "pipeline" || t === "agents" || t === "leaderboard" || t === "callbacks") return t;
+    }
+    return "leads";
+  });
   const [showSimulator, setShowSimulator] = useState(false);
   const [showCompletedCallbacks, setShowCompletedCallbacks] = useState(false);
   const { data: callbackList, refetch: refetchCallbacks } = trpc.voice.listCallbacks.useQuery(
@@ -2276,29 +2282,11 @@ export default function AdminDashboard() {
       {/* Daily recap modal — shows once per day after login */}
       {showRecap && <DailyRecapModal onClose={handleCloseRecap} />}
 
-      {/* Top bar */}
-      <header className="hj-header sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: "#c8ff00" }}
-            >
-              <span className="text-black text-sm font-bold">J</span>
-            </div>
-            <div>
-              <h1 className="font-bold text-lg leading-tight" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.02em' }}>
-                HeyJade
-              </h1>
-              <p className="text-xs" style={{ color: '#888888' }}>Leads Dashboard</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Status pills — 3 system status only */}
-            <WidgetHealthBadge />
-            <WebhookHealthBadge />
-            <SyncHealthBadge />
+      {/* Top bar — unified AdminHeader (includes AI Center + all nav) */}
+      <AdminHeader
+        activeTab={activeTab === "callbacks" ? "callbacks" : activeTab === "agents" ? "agents" : activeTab === "leaderboard" ? "leaderboard" : activeTab === "pipeline" ? "pipeline" : "leads"}
+        rightExtra={
+          <>
             {unhandledCount > 0 && activeTab === "leads" && (
               <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-xs font-semibold px-3 py-1.5 rounded-full">
                 ⚠ {unhandledCount} need{unhandledCount === 1 ? "s" : ""} review
@@ -2310,17 +2298,9 @@ export default function AdminDashboard() {
                 Refresh
               </Button>
             )}
-            <NotificationBell />
-            <PreviewAgentButton />
-          </div>
-        </div>
-        {/* Tab navigation */}
-        <AdminDashboardNav
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          callbackCount={callbackList?.filter(c => !c.completed).length ?? 0}
-        />
-      </header>
+          </>
+        }
+      />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === "agents" && <AgentManagement />}

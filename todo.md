@@ -1951,3 +1951,7 @@
 
 ## AI Command Center — Clickable Links (March 21)
 - [x] AI pulse cards and action feed items now show "View leads →" links that open /admin?stage=COLD|QUOTE_SENT|UNHANDLED|CALL_SCHEDULED with the correct filter pre-applied; AdminDashboard reads the stage param from URL on mount
+
+## Nav Bug Fixes — March 21
+- [x] Fix: AI Center nav link disappears on some pages — root cause was AdminDashboard had its own duplicate nav (AdminDashboardNav) that didn't include AI Center; replaced with unified AdminHeader
+- [x] Fix: dropdown menus (Staff, Campaigns) don't open from sub-pages — fixed by replacing AdminDashboardNav (setActiveTab buttons) with AdminHeader (<a href> links); also made AdminDashboard read tab from URL params on mount
