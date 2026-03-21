@@ -101,6 +101,12 @@ export const conversationStages = [
    * QUALITY_RATING_DONE → Rating flow complete (thank-you sent, conversation closed).
    */
   "QUALITY_RATING_DONE",
+  /**
+   * COLD → Lead received 2+ automated nudges with no reply. All automated follow-ups
+   * are stopped. Surfaced in the "Dead Leads" column on the Kanban board.
+   * Leads can be manually re-engaged by an agent at any time.
+   */
+  "COLD",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -193,6 +199,11 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   followUpMessage: text("followUpMessage"),
   /** Whether the scheduled follow-up SMS has already been sent */
   followUpSent: int("followUpSent").default(0).notNull(),
+  /**
+   * Number of automated silence nudges sent to this lead without a customer reply.
+   * When this reaches 2, the lead is moved to COLD and all follow-ups stop.
+   */
+  nudgeCount: int("nudgeCount").default(0).notNull(),
 
   // ── Language / Multilingual fields ────────────────────────────────────────
   /**

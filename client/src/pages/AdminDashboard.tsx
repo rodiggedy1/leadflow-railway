@@ -453,7 +453,8 @@ type Stage =
   | "NOT_INTERESTED"
   | "FUTURE_BOOKING"
   | "FOLLOW_UP_SCHEDULED"
-  | "WIDGET_SIZING";
+  | "WIDGET_SIZING"
+  | "COLD";
 
 const STAGE_CONFIG: Record<
   Stage,
@@ -549,6 +550,13 @@ const STAGE_CONFIG: Record<
     bgColor: "#e0f2fe",
     borderColor: "#bae6fd",
     order: 0,
+  },
+  COLD: {
+    label: "Cold ❄️",
+    textColor: "#334155",
+    bgColor: "#f1f5f9",
+    borderColor: "#cbd5e1",
+    order: 13,
   },
 };
 
@@ -1357,6 +1365,7 @@ function ConversationDrawer({
                           "NOT_INTERESTED",
                           "FUTURE_BOOKING",
                           "FOLLOW_UP_SCHEDULED",
+                          "COLD",
                         ] as const).map(s => (
                           <SelectItem key={s} value={s} className="text-xs">
                             {STAGE_CONFIG[s as Stage]?.label ?? s}

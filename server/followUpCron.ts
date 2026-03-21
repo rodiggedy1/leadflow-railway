@@ -35,6 +35,10 @@ const ACTIVE_STAGES = [
   "WIDGET_SIZING",
 ];
 
+// Maximum number of automated silence nudges before a lead is moved to COLD.
+// After this many nudges with no customer reply, all automated follow-ups stop.
+const MAX_NUDGES_BEFORE_COLD = 2;
+
 const DEFAULT_CIRCLE_BACK_MESSAGE =
   "Hi, just circling back on this. We have some availability and would love to get you scheduled!";
 
@@ -172,11 +176,14 @@ Example: "Hey ${firstName}, just circling back — can we help get this set up f
       const smsResult = await sendSms({ to: session.leadPhone, content: nudgeMessage });
 
       if (smsResult.success) {
-        // Update history and mark auto follow-up as sent
+        // Update history and increment nudgeCount
         let history: any[] = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
         history.push({ role: "assistant", content: nudgeMessage, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
+
+        const newNudgeCount = (session.nudgeCount ?? 0) + 1;
+        const goingCold = newNudgeCount >= MAX_NUDGES_BEFORE_COLD;
 
         // autoFollowUpSent was already set to 1 atomically before sending (race-condition guard above)
         await db
@@ -184,16 +191,29 @@ Example: "Hey ${firstName}, just circling back — can we help get this set up f
           .set({
             lastAiMessageAt: new Date(),
             messageHistory: JSON.stringify(history),
+            nudgeCount: newNudgeCount,
+            // Move to COLD when nudge cap is reached — stops all future auto follow-ups
+            ...(goingCold ? { stage: "COLD" as any } : {}),
           })
           .where(eq(conversationSessions.id, session.id));
 
-        console.log(`[SilenceFollowUp] Sent nudge to ${session.leadPhone} (session ${session.id}): "${nudgeMessage}"`);
-        logActivity({
-          eventType: "silence_nudge",
-          title: `Auto-nudge sent to ${firstName}`,
-          body: nudgeMessage.length > 120 ? nudgeMessage.slice(0, 120) + "…" : nudgeMessage,
-          meta: { sessionId: session.id, leadPhone: session.leadPhone, leadName: session.leadName, stage: session.stage },
-        }).catch(() => {});
+        if (goingCold) {
+          console.log(`[SilenceFollowUp] Lead ${session.leadPhone} (session ${session.id}) moved to COLD after ${newNudgeCount} nudges with no reply.`);
+          logActivity({
+            eventType: "lead_cold",
+            title: `${firstName} moved to Cold`,
+            body: `Received ${newNudgeCount} automated nudges with no reply. Conversation paused.`,
+            meta: { sessionId: session.id, leadPhone: session.leadPhone, leadName: session.leadName, nudgeCount: newNudgeCount },
+          }).catch(() => {});
+        } else {
+          console.log(`[SilenceFollowUp] Sent nudge #${newNudgeCount} to ${session.leadPhone} (session ${session.id}): "${nudgeMessage}"`);
+          logActivity({
+            eventType: "silence_nudge",
+            title: `Auto-nudge #${newNudgeCount} sent to ${firstName}`,
+            body: nudgeMessage.length > 120 ? nudgeMessage.slice(0, 120) + "…" : nudgeMessage,
+            meta: { sessionId: session.id, leadPhone: session.leadPhone, leadName: session.leadName, stage: session.stage, nudgeCount: newNudgeCount },
+          }).catch(() => {});
+        }
         sent++;
       } else {
         console.error(`[SilenceFollowUp] Failed to send nudge to ${session.leadPhone}:`, smsResult.error);

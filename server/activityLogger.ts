@@ -13,6 +13,7 @@ export type ActivityEventType =
   | "lead_reply"
   | "ai_sms_sent"
   | "silence_nudge"
+  | "lead_cold"
   | "scheduled_followup"
   | "always_on_batch"
   | "nightly_sync"

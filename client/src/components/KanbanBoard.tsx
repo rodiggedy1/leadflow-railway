@@ -112,6 +112,16 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     headerBg: "bg-gray-50/60",
     countBg: "bg-gray-200 text-gray-600",
   },
+  {
+    id: "dead",
+    label: "Dead Leads",
+    stages: ["COLD"],
+    targetStage: "COLD",
+    accentClass: "border-t-slate-500",
+    accentHex: "#f1f5f9",
+    headerBg: "bg-slate-50/60",
+    countBg: "bg-slate-200 text-slate-600",
+  },
 ];
 
 const STAGE_TO_COLUMN: Record<string, string> = {};

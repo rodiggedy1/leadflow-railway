@@ -198,4 +198,97 @@ describe("runSilenceFollowUp", () => {
     expect(result.sent).toBe(2);
     expect(sendSms).toHaveBeenCalledTimes(2);
   });
+
+  // ── COLD stage tests ────────────────────────────────────────────────────────
+
+  it("moves lead to COLD when nudgeCount reaches 2 (MAX_NUDGES_BEFORE_COLD)", async () => {
+    // This session has already received 1 nudge; this run will be the 2nd → COLD
+    const session = makeSession({ nudgeCount: 1 } as any);
+    selectMock.mockResolvedValue([session]);
+    updateMock.mockResolvedValue({ rowsAffected: 1 });
+
+    const result = await runSilenceFollowUp();
+
+    expect(result.sent).toBe(1);
+
+    // The final DB update must include stage: "COLD" and nudgeCount: 2
+    const allSetCalls = mockDb.update.mock.results
+      .map((_: any, i: number) => mockDb.update.mock.instances[i])
+      .concat([]);
+
+    // Find the set() call that includes stage: "COLD"
+    const setCalls: any[] = [];
+    mockDb.update.mock.calls.forEach((_: any, i: number) => {
+      const setFn = mockDb.update.mock.results[i]?.value?.set;
+      if (setFn) setCalls.push(...setFn.mock?.calls ?? []);
+    });
+
+    // Verify the update chain was called with COLD stage
+    // The set() is chained: db.update(...).set({...}).where(...)
+    // We check the set mock on the update chain
+    const updateChain = mockDb.update.mock.results.find(
+      (r: any) => r?.value?.set?.mock?.calls?.some((c: any[]) => c[0]?.stage === "COLD")
+    );
+    expect(updateChain).toBeDefined();
+  });
+
+  it("does NOT move lead to COLD on first nudge (nudgeCount 0 → 1)", async () => {
+    const session = makeSession({ nudgeCount: 0 } as any);
+    selectMock.mockResolvedValue([session]);
+    updateMock.mockResolvedValue({ rowsAffected: 1 });
+
+    await runSilenceFollowUp();
+
+    // No update should include stage: "COLD"
+    const coldUpdate = mockDb.update.mock.results.find(
+      (r: any) => r?.value?.set?.mock?.calls?.some((c: any[]) => c[0]?.stage === "COLD")
+    );
+    expect(coldUpdate).toBeUndefined();
+  });
+
+  it("increments nudgeCount on each successful nudge", async () => {
+    const session = makeSession({ nudgeCount: 0 } as any);
+    selectMock.mockResolvedValue([session]);
+    updateMock.mockResolvedValue({ rowsAffected: 1 });
+
+    await runSilenceFollowUp();
+
+    // Find the set() call that includes nudgeCount
+    const nudgeCountUpdate = mockDb.update.mock.results.find(
+      (r: any) => r?.value?.set?.mock?.calls?.some((c: any[]) => c[0]?.nudgeCount === 1)
+    );
+    expect(nudgeCountUpdate).toBeDefined();
+  });
+
+  it("logs lead_cold activity event when moving to COLD", async () => {
+    const session = makeSession({ nudgeCount: 1 } as any);
+    selectMock.mockResolvedValue([session]);
+    updateMock.mockResolvedValue({ rowsAffected: 1 });
+
+    await runSilenceFollowUp();
+
+    const coldLogCall = (logActivity as any).mock.calls.find(
+      (c: any[]) => c[0]?.eventType === "lead_cold"
+    );
+    expect(coldLogCall).toBeDefined();
+    expect(coldLogCall[0].title).toContain("Cold");
+  });
+
+  it("logs silence_nudge (not lead_cold) on first nudge", async () => {
+    const session = makeSession({ nudgeCount: 0 } as any);
+    selectMock.mockResolvedValue([session]);
+    updateMock.mockResolvedValue({ rowsAffected: 1 });
+
+    await runSilenceFollowUp();
+
+    const nudgeLogCall = (logActivity as any).mock.calls.find(
+      (c: any[]) => c[0]?.eventType === "silence_nudge"
+    );
+    expect(nudgeLogCall).toBeDefined();
+
+    const coldLogCall = (logActivity as any).mock.calls.find(
+      (c: any[]) => c[0]?.eventType === "lead_cold"
+    );
+    expect(coldLogCall).toBeUndefined();
+  });
 });

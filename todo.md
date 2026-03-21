@@ -1855,3 +1855,10 @@
 
 ## Leads Page Sort Bug — March 21 (round 4)
 - [x] Fix: automated follow-up messages bump leads to top of leads list — sort now uses lastCustomerReplyAt (role:"user" only), not lastActivityAt (any message). 7 new tests added. 678/678 pass.
+
+## Cold Stage / Dead Leads — March 21
+- [x] Add COLD to stage enum in drizzle/schema.ts and migrate DB (migration 0054, nudgeCount INT column added)
+- [x] Update followUpCron: after 2+ nudges with no customer reply, set stage=COLD and stop follow-ups (MAX_NUDGES_BEFORE_COLD=2)
+- [x] Add Dead Leads column to Kanban board (slate accent, COLD stage leads)
+- [x] Update stage badge color for COLD in leads list (slate/ice blue, ❄️ label, order 13)
+- [x] Write tests for COLD stage promotion logic (5 new tests, 683/683 pass)
