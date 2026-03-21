@@ -145,8 +145,8 @@ function StarRating({
     return (
       <div className="text-center py-6">
         <div className="text-4xl mb-3">🙏</div>
-        <p className="text-white font-semibold text-lg">Thank you for your feedback!</p>
-        <p className="text-white/50 text-sm mt-1">Your rating helps us improve.</p>
+        <p className="text-white font-semibold text-lg">Thank you, {firstName}!</p>
+        <p className="text-white/50 text-sm mt-1">We appreciate it. See you next time! 🖤</p>
         <div className="flex justify-center gap-1 mt-4">
           {[1, 2, 3, 4, 5].map((s) => (
             <span
