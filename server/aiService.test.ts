@@ -44,14 +44,16 @@ describe("generateQuoteMessage", () => {
     price: "130",
   };
 
-  it("always returns the static template with first name, service, price, and brand name", async () => {
+  it("SMS 1: Jade greeting asks for a day (no price in SMS 1)", async () => {
     const result = await generateQuoteMessage(params);
-    expect(result).toContain("$130");
+    // New Jade flow: SMS 1 is a greeting + day ask. Price is revealed in SMS 2.
     expect(result).toContain("Sarah");
+    expect(result).toContain("Jade");
     expect(result).toContain("Maids in Black");
-    expect(result).toContain("Standard Cleaning");
-    expect(result).toContain("Madison here");
-    // Should NOT call the LLM — it's a static template now
+    expect(result).toContain("day");
+    // Price is NOT in SMS 1 — it's in SMS 2 (buildJadePriceReveal)
+    expect(result).not.toContain("$130");
+    // Should NOT call the LLM — it's a static template
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
@@ -59,12 +61,6 @@ describe("generateQuoteMessage", () => {
     const result = await generateQuoteMessage(params);
     expect(result).toContain("Sarah");
     expect(result).not.toContain("Johnson");
-  });
-
-  it("includes home size in the message", async () => {
-    const result = await generateQuoteMessage(params);
-    expect(result).toContain("2 Bedrooms");
-    expect(result).toContain("1 Bathroom");
   });
 
   it("always returns a consistent format regardless of params", async () => {

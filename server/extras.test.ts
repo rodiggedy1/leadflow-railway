@@ -31,7 +31,8 @@ describe("EXTRAS_LIST", () => {
 });
 
 describe("generateQuoteMessage", () => {
-  it("shows itemized breakdown with total when extras are provided", async () => {
+  // New Jade flow: SMS 1 is a greeting + day ask. Price/extras are revealed in SMS 2 (buildJadePriceReveal).
+  it("SMS 1: Jade greeting with first name and day ask (no price)", async () => {
     const msg = await generateQuoteMessage({
       leadName: "Jane Smith",
       bedrooms: "2 Bedrooms",
@@ -41,16 +42,15 @@ describe("generateQuoteMessage", () => {
       extras: ["clean_inside_oven", "load_of_laundry"],
     });
     expect(msg).toContain("Jane");
-    // Base price line
-    expect(msg).toContain("$209");
-    // Extras lines
-    expect(msg).toContain("Clean Inside Oven: $30");
-    expect(msg).toContain("Load of Laundry: $20");
-    // Grand total: 209 + 30 + 20 = 259
-    expect(msg).toContain("Total: $259");
+    expect(msg).toContain("Jade");
+    expect(msg).toContain("Maids in Black");
+    expect(msg).toContain("day");
+    // Price is NOT in SMS 1 — revealed in SMS 2
+    expect(msg).not.toContain("$209");
+    expect(msg).not.toContain("Total:");
   });
 
-  it("shows plain message when no extras are selected", async () => {
+  it("SMS 1: no price shown when no extras selected", async () => {
     const msg = await generateQuoteMessage({
       leadName: "John Doe",
       bedrooms: "3 Bedrooms",
@@ -60,12 +60,12 @@ describe("generateQuoteMessage", () => {
       extras: [],
     });
     expect(msg).toContain("John");
-    expect(msg).toContain("$319");
-    // No itemized breakdown
+    // Price is NOT in SMS 1
+    expect(msg).not.toContain("$319");
     expect(msg).not.toContain("Total:");
   });
 
-  it("shows plain message when extras is undefined", async () => {
+  it("SMS 1: no total shown when extras is undefined", async () => {
     const msg = await generateQuoteMessage({
       leadName: "Alice",
       bedrooms: "1 Bedroom",
@@ -73,20 +73,25 @@ describe("generateQuoteMessage", () => {
       serviceType: "Standard Cleaning",
       price: "179",
     });
+    // SMS 1 never shows a total — price is in SMS 2
     expect(msg).not.toContain("Total:");
+    expect(msg).not.toContain("$179");
   });
 
-  it("calculates grand total correctly for multiple extras", async () => {
-    const msg = await generateQuoteMessage({
-      leadName: "Bob",
+  it("buildJadePriceReveal: calculates grand total correctly for multiple extras", async () => {
+    // Price/extras are revealed in SMS 2 via buildJadePriceReveal, not generateQuoteMessage
+    const { buildJadePriceReveal } = await import("./aiService");
+    const msg = buildJadePriceReveal({
+      firstName: "Bob",
       bedrooms: "2 Bedrooms",
       bathrooms: "1 Bathroom",
-      serviceType: "Standard Cleaning",
       price: "209",
       extras: ["clean_inside_cabinets", "green_cleaning", "wash_dishes"],
+      day: "Friday",
     });
     // 209 + 30 + 20 + 20 = 279
-    expect(msg).toContain("Total: $279");
+    expect(msg).toContain("$279");
+    expect(msg).toContain("Friday at 9am or 1pm");
   });
 });
 

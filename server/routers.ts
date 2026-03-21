@@ -1945,7 +1945,7 @@ async function processQuoteInBackground(
     console.error("[submitQuote] Secondary alert SMS failed:", err)
   );
 
-  // ── Step 2: Generate AI quote messages (with fallback) ────────────────────
+  // ── Step 2: Generate SMS 1 — Jade greeting + day ask (no price yet) ────────
   const msg1 = await generateQuoteMessage({
     leadName: input.name,
     bedrooms: input.bedrooms,
@@ -1954,23 +1954,13 @@ async function processQuoteInBackground(
     price,
     extras: input.extras,
   });
-  const msg2 = await generatePricingFollowUp({
-    leadName: input.name,
-    bedrooms: input.bedrooms,
-    bathrooms: input.bathrooms,
-    serviceType: input.serviceType,
-    price,
-  });
 
-  // ── Step 3: Send SMS #1: Quote + price + value note to lead ───────────────
-  const MADISON_PHOTO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/madison-headshot-SPXr6KHGViveW2LxjwfyqN.png";
-  const sms1 = await sendSms({ to: input.phone, content: msg1, mediaUrl: MADISON_PHOTO_URL });
+  // ── Step 3: Send SMS #1 to lead ───────────────────────────────────────────
+  // Note: No photo MMS on SMS 1 — Jade's intro is conversational, not a headshot
+  const sms1 = await sendSms({ to: input.phone, content: msg1 });
   console.log(`[submitQuote] SMS1 sent: ${sms1.success}`);
-
-  // ── Step 4: Send SMS #2: Availability question (natural delay) ────────────
-  await delay(2000);
-  const sms2 = await sendSms({ to: input.phone, content: msg2 });
-  console.log(`[submitQuote] SMS2 sent: ${sms2.success}`);
+  // SMS 2 (price reveal + 9am/1pm offer) is sent in the AVAILABILITY stage handler
+  // when the lead replies with a specific day — NOT immediately after SMS 1.
 
   const db = await getDb();
   if (!db) {
@@ -1978,11 +1968,10 @@ async function processQuoteInBackground(
     return;
   }
 
-  // ── Step 5: Create/update conversation session ────────────────────────────
+  // ── Step 4: Create conversation session ──────────────────────────────────
   const now = Date.now();
   const initialHistory = JSON.stringify([
     { role: "assistant", content: msg1, ts: now },
-    { role: "assistant", content: msg2, ts: now + 1 },
   ]);
 
   // Always create a new session row — same phone can submit again months later

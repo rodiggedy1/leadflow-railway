@@ -1723,3 +1723,13 @@
 - [x] Remove "By clicking Next I agree to Terms of Use / Privacy Policy" disclaimer from quote form
 - [x] Replace placeholder SVG icon with real MIB logo in quote form header
 - [x] Compress IMG_5328.gif to WebM/MP4 and embed as video loop above review grid in QuoteForm
+- [x] Rewrite quote form SMS flow to new Jade 3-message script: greeting+day ask → price reveal+slot offer → lock in+notes+call confirm
+
+## New Jade SMS Flow (Quote Form)
+
+- [ ] SMS 1: Replace Madison intro with Jade greeting + day ask (no price in first message)
+- [ ] Remove immediate SMS 2 send from processQuoteInBackground (SMS 2 now triggered by lead reply)
+- [ ] AVAILABILITY stage: when lead replies with a day, send price reveal + supplies note + 9am/1pm offer on that specific day
+- [ ] TIME_PREF stage: when lead picks 9am or 1pm, send SMS 3 (lock in + notes ask + call confirmation)
+- [ ] Update brand system prompt: rename Madison → Jade
+- [ ] Off-script replies handled smartly at every stage before continuing the flow

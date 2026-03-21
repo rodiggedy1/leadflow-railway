@@ -42,7 +42,7 @@ function makeContext(overrides: Partial<ConversationContext> = {}): Conversation
 
 // ─── Message builder tests ────────────────────────────────────────────────────
 describe("Message Builders", () => {
-  it("buildQuoteMessage includes first name and price", () => {
+  it("buildQuoteMessage is the Jade greeting (no price in SMS 1)", () => {
     const msg = buildQuoteMessage({
       leadName: "John Smith",
       quotedPrice: "155",
@@ -51,8 +51,10 @@ describe("Message Builders", () => {
       bathrooms: "1 Bathroom",
     });
     expect(msg).toContain("John");
-    expect(msg).toContain("$155");
+    expect(msg).toContain("Jade");
     expect(msg).toContain("Maids in Black");
+    // SMS 1 does NOT contain the price — price is revealed in SMS 2
+    expect(msg).not.toContain("$155");
   });
 
   it("buildPricingFollowUp includes price and service type", () => {
@@ -160,22 +162,21 @@ describe("processLeadReply — State Machine", () => {
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  // Stage: AVAILABILITY → yes → SLOT_CHOICE
-  it("AVAILABILITY: positive reply advances to SLOT_CHOICE", async () => {
+  // Stage: AVAILABILITY → day mentioned → SLOT_CHOICE (Jade SMS 2: price reveal + 9am/1pm offer)
+  it("AVAILABILITY: reply with a specific day advances to SLOT_CHOICE with price reveal", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns intent "yes"
+    // Call 2: parseLeadReply returns a specific day
     mockLLM.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ intent: "yes", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+      choices: [{ message: { content: JSON.stringify({ intent: "specific_day", extractedSlot: "Friday", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
     const ctx = makeContext({ stage: "AVAILABILITY" });
-    const result = await processLeadReply("yes that works!", ctx);
+    const result = await processLeadReply("Friday works for me", ctx);
 
     expect(result.nextStage).toBe("SLOT_CHOICE");
-    // Dynamic slots — verify the slot choice structure is correct
-    expect(result.reply).toContain("I can reserve");
-    expect(result.reply).toContain("Which would you prefer");
+    // SMS 2 should contain price and 9am/1pm offer
+    expect(result.reply).toContain("9am or 1pm");
   });
 
   // Stage: AVAILABILITY → hard opt-out → DONE
@@ -210,41 +211,42 @@ describe("processLeadReply — State Machine", () => {
     expect(result.reply).toContain("openings");
   });
 
-  // Stage: SLOT_CHOICE → slot1 → ADDRESS
-  it("SLOT_CHOICE: 'slot1' reply captures first offered slot and advances to ADDRESS", async () => {
+  // Stage: SLOT_CHOICE → 9am pick → CONFIRMATION (Jade SMS 3: lock in + notes + call question)
+  it("SLOT_CHOICE: '9am' reply locks in the slot and advances to CONFIRMATION", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns slot1
+    // Call 2: parseLeadReply (not needed for 9am regex match, but provide fallback)
     mockLLM.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ intent: "slot1", extractedSlot: "Friday, March 13", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+      choices: [{ message: { content: JSON.stringify({ intent: "slot1", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
-    const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Friday, March 13", "Saturday, March 14"] });
-    const result = await processLeadReply("friday works", ctx);
+    const ctx = makeContext({ stage: "SLOT_CHOICE", selectedSlot: "Friday" });
+    const result = await processLeadReply("9am works", ctx);
 
-    expect(result.nextStage).toBe("TIME_PREF");
-    expect(result.extractedData?.selectedSlot).toBe("Friday, March 13");
-    expect(result.reply.toLowerCase()).toContain("morning");  // asks morning or afternoon
+    expect(result.nextStage).toBe("CONFIRMATION");
+    expect(result.extractedData?.selectedSlot).toContain("9am");
+    // SMS 3: lock in + notes + call question
+    expect(result.reply).toContain("✅");
+    expect(result.reply.toLowerCase()).toContain("call");
   });
 
-  // Stage: SLOT_CHOICE → slot2 → ADDRESS
-  it("SLOT_CHOICE: 'slot2' reply captures second offered slot and advances to ADDRESS", async () => {
+  // Stage: SLOT_CHOICE → 1pm pick → CONFIRMATION
+  it("SLOT_CHOICE: '1pm' reply locks in the slot and advances to CONFIRMATION", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns slot2
     mockLLM.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ intent: "slot2", extractedSlot: "Saturday, March 14", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
+      choices: [{ message: { content: JSON.stringify({ intent: "slot2", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
-    const ctx = makeContext({ stage: "SLOT_CHOICE", offeredSlots: ["Friday, March 13", "Saturday, March 14"] });
-    const result = await processLeadReply("saturday works", ctx);
+    const ctx = makeContext({ stage: "SLOT_CHOICE", selectedSlot: "Friday" });
+    const result = await processLeadReply("1pm please", ctx);
 
-    expect(result.nextStage).toBe("TIME_PREF");
-    expect(result.extractedData?.selectedSlot).toBe("Saturday, March 14");
+    expect(result.nextStage).toBe("CONFIRMATION");
+    expect(result.extractedData?.selectedSlot).toContain("1pm");
   });
 
-  // Stage: SLOT_CHOICE → custom date → ADDRESS (accept any date)
-  it("SLOT_CHOICE: custom date request advances to ADDRESS", async () => {
+  // Stage: SLOT_CHOICE → custom date/time → CONFIRMATION
+  it("SLOT_CHOICE: custom date/time request advances to CONFIRMATION", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
     // Call 2: parseLeadReply returns custom_date
@@ -252,13 +254,13 @@ describe("processLeadReply — State Machine", () => {
       choices: [{ message: { content: JSON.stringify({ intent: "custom_date", extractedSlot: "Monday at 10AM", extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
 
-    const ctx = makeContext({ stage: "SLOT_CHOICE" });
+    const ctx = makeContext({ stage: "SLOT_CHOICE", selectedSlot: "Monday" });
     const result = await processLeadReply("Can I do Monday at 10am instead?", ctx);
 
-    expect(result.nextStage).toBe("TIME_PREF");
+    expect(result.nextStage).toBe("CONFIRMATION");
     expect(result.extractedData?.selectedSlot).toBe("Monday at 10AM");
-    expect(result.reply).toContain("Monday at 10AM");
-    expect(result.reply.toLowerCase()).toContain("morning");  // asks morning or afternoon
+    // SMS 3: lock in message
+    expect(result.reply).toContain("✅");
   });
 
   // Stage: SLOT_CHOICE → unclear → re-prompt

@@ -17,7 +17,7 @@ import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 
 // ─── Brand System Prompt ──────────────────────────────────────────────────────
 
-const BRAND_SYSTEM_PROMPT = `You are Madison, the AI assistant for Maids in Black, a professional home cleaning service serving the Washington DC Metro Area (DC, MD, VA).
+const BRAND_SYSTEM_PROMPT = `You are Jade, the AI assistant for Maids in Black, a professional home cleaning service serving the Washington DC Metro Area (DC, MD, VA).
 
 YOUR ROLE:
 You help convert leads into booked cleaning appointments via SMS. You are warm, professional, and concise.
@@ -56,19 +56,45 @@ export interface QuoteMessageParams {
 }
 
 /**
- * Generates the initial quote SMS.
- * Uses a consistent static template for reliability — no AI variation.
- * Format: "Hi [Name]! Thanks for reaching out to Maids in Black. Your [service] quote for [beds]/[baths] is $[price] — our fully insured team handles everything."
+ * Generates the initial quote SMS (SMS 1 in the new Jade flow).
+ * Jade greets the lead and asks what day they're thinking — no price in this message.
+ * Price is revealed in SMS 2 after the lead replies with a day.
  */
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
-  const { leadName, bedrooms, bathrooms, serviceType, price, extras } = params;
+  const { leadName } = params;
   const firstName = leadName.split(" ")[0] ?? leadName;
-  return buildFallbackQuoteMessage(firstName, bedrooms, bathrooms, serviceType, price, extras);
+  return buildFallbackQuoteMessage(firstName);
 }
 
 /**
- * Generates the availability follow-up message (sent right after the quote).
- * Uses dynamic rolling slots (next 2 available days, skipping Sundays).
+ * Generates SMS 2 in the new Jade flow: price reveal + supplies note + 9am/1pm offer.
+ * Called from the AVAILABILITY stage handler when the lead replies with a specific day.
+ */
+export function buildJadePriceReveal(params: {
+  firstName: string;
+  bedrooms: string;
+  bathrooms: string;
+  price: string;
+  extras?: string[] | null;
+  day: string; // the specific day the lead mentioned
+}): string {
+  const { firstName: _firstName, bedrooms, bathrooms, price, extras, day } = params;
+  const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
+  const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
+  const basePrice = parseInt(price, 10) || 0;
+  const grandTotal = basePrice + extrasTotal;
+  const totalDisplay = grandTotal > basePrice ? `$${grandTotal}` : `$${price}`;
+
+  const extrasNote = resolvedExtras.length > 0
+    ? `\n\nThat includes your add-ons (${resolvedExtras.map(e => e.label).join(", ")}).`
+    : "";
+
+  return `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
+}
+
+/**
+ * @deprecated — kept for backwards compatibility with Bark/widget flows.
+ * The new Jade quote form flow uses buildJadePriceReveal() instead.
  */
 export async function generatePricingFollowUp(params: QuoteMessageParams): Promise<string> {
   const slots = getNextAvailableSlots(2);
@@ -448,28 +474,11 @@ Instructions:
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
-function buildFallbackQuoteMessage(
-  firstName: string,
-  bedrooms: string,
-  bathrooms: string,
-  serviceType: string,
-  price: string,
-  extras?: string[]
-): string {
-  const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
-  const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
-  const basePrice = parseInt(price, 10) || 0;
-  const grandTotal = basePrice + extrasTotal;
-
-  if (resolvedExtras.length === 0) {
-    return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
-  }
-
-  const extrasLines = resolvedExtras
-    .map(e => `  + ${e.label}: $${e.price}`)
-    .join("\n");
-
-  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black.\n\nYour quote:\n  ${serviceType} (${bedrooms} / ${bathrooms}): $${price}\n${extrasLines}\n  ─────────────\n  Total: $${grandTotal}\n\nOur fully insured team handles everything — including your selected add-ons!`;
+/**
+ * SMS 1 in the new Jade flow: greeting + ask for day. No price yet.
+ */
+function buildFallbackQuoteMessage(firstName: string): string {
+  return `Hey ${firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking?`;
 }
 
 function buildFallbackOffScript(nextAction: string): string {

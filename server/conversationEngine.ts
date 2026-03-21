@@ -26,6 +26,7 @@ import {
   handleObjection,
   detectObjection,
   handlePostBookingReply,
+  buildJadePriceReveal,
 } from "./aiService";
 import { notifyAgentOfLead } from "./agentNotification";
 import { getTemplate } from "./messageTemplateRouter";
@@ -83,7 +84,7 @@ export interface StageResult {
 
 export function buildQuoteMessage(ctx: Pick<ConversationContext, "leadName" | "quotedPrice" | "bedrooms" | "bathrooms" | "serviceType">): string {
   const firstName = ctx.leadName.split(" ")[0] ?? ctx.leadName;
-  return `Hi ${firstName}! Thanks for requesting a quote with Maids in Black. Based on your ${ctx.bedrooms} / ${ctx.bathrooms} home, here's your estimate: $${ctx.quotedPrice}.`;
+  return `Hey ${firstName}! Jade here from Maids in Black \uD83D\uDE0A Got your request \u2014 we'd love to help. What day were you thinking?`;
 }
 
 export function buildPricingFollowUp(ctx: Pick<ConversationContext, "serviceType" | "quotedPrice">): string {
@@ -155,6 +156,14 @@ export function buildAddressRequestAfterTimePref(slot: string, timePref: string)
 export function buildConfirmationMessage(slot: string, address: string): string {
   // slot is now a full label like "Friday, March 13" — use it directly
   return `Perfect — I've reserved ${slot} for you at ${address}.\n\nWe just do a quick 60-second confirmation call to finalize the booking and make sure we have everything correct.\n\nShould we call you now or in a few minutes?`;
+}
+
+/**
+ * SMS 3 in the new Jade flow: lock in the slot, ask for notes, offer call now or in a few minutes.
+ * Sent when the lead picks 9am or 1pm from the SLOT_CHOICE stage.
+ */
+export function buildJadeLockIn(slotWithTime: string): string {
+  return `Perfect, locking that in for you now ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`;
 }
 
 export function buildCallScheduledMessage(preference: string): string {
@@ -802,27 +811,28 @@ async function _processLeadReplyCore(
       const mentionedDay = ALL_DAY_NAMES.find(d => replyLower.includes(d));
 
       if (mentionedDay) {
-        // Try to match against one of the offered slots first
+        // Determine the display label for the day
+        let dayLabel: string;
         if (slot1 && slot1.shortLabel.toLowerCase() === mentionedDay) {
-          return {
-            reply: buildTimePrefMessage(slot1.label),
-            nextStage: "TIME_PREF",
-            extractedData: { selectedSlot: slot1.label },
-          };
+          dayLabel = slot1.label;
+        } else if (slot2 && slot2.shortLabel.toLowerCase() === mentionedDay) {
+          dayLabel = slot2.label;
+        } else {
+          dayLabel = mentionedDay.charAt(0).toUpperCase() + mentionedDay.slice(1);
         }
-        if (slot2 && slot2.shortLabel.toLowerCase() === mentionedDay) {
-          return {
-            reply: buildTimePrefMessage(slot2.label),
-            nextStage: "TIME_PREF",
-            extractedData: { selectedSlot: slot2.label },
-          };
-        }
-        // They mentioned a day not in the offered slots — treat as custom date request
-        const capitalizedDay = mentionedDay.charAt(0).toUpperCase() + mentionedDay.slice(1);
+        // SMS 2: price reveal + supplies note + 9am/1pm offer on the specific day
+        const firstName = context.leadName.split(" ")[0] ?? context.leadName;
         return {
-          reply: buildTimePrefMessage(capitalizedDay),
-          nextStage: "TIME_PREF",
-          extractedData: { selectedSlot: capitalizedDay },
+          reply: buildJadePriceReveal({
+            firstName,
+            bedrooms: context.bedrooms,
+            bathrooms: context.bathrooms,
+            price: context.quotedPrice,
+            extras: context.extras,
+            day: dayLabel,
+          }),
+          nextStage: "SLOT_CHOICE",
+          extractedData: { selectedSlot: dayLabel },
         };
       }
 
@@ -865,14 +875,22 @@ async function _processLeadReplyCore(
         const dayLower = parsed.extractedSlot.toLowerCase();
         const matchedSlot = dynamicSlotsForAvail.find(s => s.shortLabel.toLowerCase() === dayLower);
         const slotLabel = matchedSlot?.label ?? parsed.extractedSlot;
+        const firstName = context.leadName.split(" ")[0] ?? context.leadName;
         return {
-          reply: buildTimePrefMessage(slotLabel),
-          nextStage: "TIME_PREF",
+          reply: buildJadePriceReveal({
+            firstName,
+            bedrooms: context.bedrooms,
+            bathrooms: context.bathrooms,
+            price: context.quotedPrice,
+            extras: context.extras,
+            day: slotLabel,
+          }),
+          nextStage: "SLOT_CHOICE",
           extractedData: { selectedSlot: slotLabel },
         };
       }
 
-      // Step 5: Unclear, "not now", soft no, or questions → re-engage with slot options
+      // Step 5: Unclear, "not now", soft no, or questions → re-engage by asking what day works
       // NEVER give up — always try to move them toward booking
       if (parsed.intent === "unclear" || parsed.intent === "no") {
         const slots = getNextAvailableSlots(2);
@@ -884,42 +902,43 @@ async function _processLeadReplyCore(
         };
       }
 
-      // Step 6: Positive reply — show slot choice
+      // Step 6: Positive reply but no specific day — ask what day works
       return {
-        reply: buildSlotChoiceMessage(),
-        nextStage: "SLOT_CHOICE",
+        reply: `Great! What day were you thinking? We have openings most days this week. 📅`,
+        nextStage: "AVAILABILITY",
       };
-    } // ── Stage 3: Slot choice ──────────────────────────────────────────────────
+    }
+
+    // ── Stage 3: Slot choice (9am or 1pm pick) ───────────────────────────────
+    // In the new Jade flow, SLOT_CHOICE is reached after the lead replies with a day.
+    // The lead is now choosing between 9am or 1pm on their chosen day.
     case "SLOT_CHOICE": {
       const parsed = await parseLeadReply(stage, leadReply, context);
 
-      // Get the dynamic slots that were offered (or fall back to computing fresh ones)
-      const dynamicSlots = getNextAvailableSlots(2);
-      const slot1Label = context.offeredSlots?.[0] ?? dynamicSlots[0]?.label ?? "the first date";
-      const slot2Label = context.offeredSlots?.[1] ?? dynamicSlots[1]?.label ?? "the second date";
+      // Detect 9am / 1pm pick (or morning/afternoon equivalent)
+      const replyLowerSlot = leadReply.toLowerCase();
+      const picked9am = /\b(9|9am|9\s*am|morning|first|early)\b/.test(replyLowerSlot);
+      const picked1pm = /\b(1|1pm|1\s*pm|afternoon|second|later)\b/.test(replyLowerSlot);
 
-      if (parsed.intent === "slot1") {
+      const chosenDay = context.selectedSlot ?? "your chosen day";
+
+      if (picked9am || picked1pm || parsed.intent === "slot1" || parsed.intent === "slot2") {
+        const timeLabel = (picked9am || parsed.intent === "slot1") ? "9am" : "1pm";
+        const slotWithTime = `${chosenDay} at ${timeLabel}`;
+        // SMS 3: lock in + notes + call question
         return {
-          reply: buildTimePrefMessage(slot1Label),
-          nextStage: "TIME_PREF",
-          extractedData: { selectedSlot: slot1Label },
+          reply: buildJadeLockIn(slotWithTime),
+          nextStage: "CONFIRMATION",
+          extractedData: { selectedSlot: slotWithTime },
         };
       }
 
-      if (parsed.intent === "slot2") {
-        return {
-          reply: buildTimePrefMessage(slot2Label),
-          nextStage: "TIME_PREF",
-          extractedData: { selectedSlot: slot2Label },
-        };
-      }
-
-      // Custom date/time request — accept it enthusiastically and advance to TIME_PREF
+      // Custom date/time request — accept it and send SMS 3
       if (parsed.intent === "custom_date" || parsed.extractedSlot) {
         const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
         return {
-          reply: buildTimePrefMessage(requestedSlot),
-          nextStage: "TIME_PREF",
+          reply: buildJadeLockIn(requestedSlot),
+          nextStage: "CONFIRMATION",
           extractedData: { selectedSlot: requestedSlot },
         };
       }
