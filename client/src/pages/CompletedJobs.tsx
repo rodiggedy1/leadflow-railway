@@ -1308,7 +1308,7 @@ export default function CompletedJobs() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-1">
             <a
-              href="/admin"
+              href="/admin/command-center"
               className="text-sm font-medium hover:underline"
               style={{ color: "#000000" }}
             >

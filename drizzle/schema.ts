@@ -1095,3 +1095,21 @@ export const appSettings = mysqlTable("app_settings", {
 });
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = typeof appSettings.$inferInsert;
+
+// ── AI Insights Cache ─────────────────────────────────────────────────────────
+/**
+ * Caches LLM-generated AI insights (pulse cards + action feed) so the Command Center
+ * loads instantly. Each row is keyed by range ("today" | "7d" | "30d").
+ * The server refreshes stale entries (>30 min old) in the background.
+ */
+export const aiInsightsCache = mysqlTable("ai_insights_cache", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Time range key: "today" | "7d" | "30d" */
+  rangeKey: varchar("rangeKey", { length: 10 }).notNull().unique(),
+  /** Full JSON payload: { pulseCards, actionFeed, generatedAt } */
+  payload: text("payload").notNull(),
+  /** UTC timestamp when this cache entry was last generated */
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+});
+export type AiInsightsCache = typeof aiInsightsCache.$inferSelect;
+export type InsertAiInsightsCache = typeof aiInsightsCache.$inferInsert;

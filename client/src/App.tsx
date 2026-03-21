@@ -38,7 +38,8 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
     <Switch>
       <Route path={"/"} component={Home} />
-      <Route path={"/admin"} component={AdminDashboard} />
+      <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
+      <Route path={"/admin/leads"} component={AdminDashboard} />
       <Route path={"/agent"} component={AgentDashboard} />
       <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
       <Route path={"/admin/completed-jobs"} component={CompletedJobs} />

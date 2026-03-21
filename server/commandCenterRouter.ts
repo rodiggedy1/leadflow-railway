@@ -18,6 +18,7 @@ import {
   conversationSessions,
   activityLog,
   leadCallLogs,
+  aiInsightsCache,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, lte, ne, sql, isNotNull, or, isNull } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
@@ -606,6 +607,50 @@ export const commandCenterRouter = router({
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
+      // ── Cache check: serve instantly if cache is <30 min old ──────────────
+      const CACHE_TTL_MS = 30 * 60 * 1000;
+      const cached = await db
+        .select()
+        .from(aiInsightsCache)
+        .where(eq(aiInsightsCache.rangeKey, input.range))
+        .limit(1);
+
+      const cacheHit = cached[0];
+      const cacheAge = cacheHit
+        ? Date.now() - (cacheHit.generatedAt instanceof Date
+            ? cacheHit.generatedAt.getTime()
+            : new Date(cacheHit.generatedAt as unknown as string).getTime())
+        : Infinity;
+
+      if (cacheHit && cacheAge < CACHE_TTL_MS) {
+        try {
+          return JSON.parse(cacheHit.payload) as {
+            pulse: Array<{ type: string; title: string; body: string; metric: string; action: string; linkStage: string }>;
+            actionFeed: Array<{ id: string; title: string; description: string; estimatedValue: string; actionType: string; urgency: string; linkStage: string }>;
+          };
+        } catch { /* fall through to regenerate */ }
+      }
+
+      // Helper to persist result to cache after generation
+      const saveToCache = async (result: object) => {
+        try {
+          const payload = JSON.stringify(result);
+          if (cacheHit) {
+            await db.update(aiInsightsCache)
+              .set({ payload, generatedAt: new Date() })
+              .where(eq(aiInsightsCache.rangeKey, input.range));
+          } else {
+            await db.insert(aiInsightsCache).values({
+              rangeKey: input.range,
+              payload,
+              generatedAt: new Date(),
+            });
+          }
+        } catch (e) {
+          console.error("[CommandCenter] Cache save error:", e);
+        }
+      };
+
       const since = getWindowStart(input.range);
 
       // Gather metrics for LLM context
@@ -808,6 +853,8 @@ Rules:
         const content = typeof rawContent === 'string' ? rawContent : null;
         if (!content) throw new Error("No LLM response");
         const parsed = JSON.parse(content);
+        // Save to cache in background (don't await — don't block response)
+        void saveToCache(parsed);
         return parsed as {
           pulse: Array<{ type: string; title: string; body: string; metric: string; action: string; linkStage: string }>;
           actionFeed: Array<{ id: string; title: string; description: string; estimatedValue: string; actionType: string; urgency: string; linkStage: string }>;
@@ -815,7 +862,7 @@ Rules:
       } catch (err) {
         // Fallback static insights if LLM fails
         console.error("[CommandCenter] AI insights error:", err);
-        return {
+        const fallback = {
           pulse: [
             { type: "alert", title: "Response time check", body: `Average first reply is ${avgResponseMin} minutes. Leads replying within 5 minutes convert 3.7x better.`, metric: `${avgResponseMin} min avg`, action: "Review unhandled leads and ensure AI is responding", linkStage: "UNHANDLED" },
             { type: "opportunity", title: "Reactivation pool ready", body: `${reactivationPool.length} cold leads from the last 90 days match your service area. A targeted SMS could recover several bookings.`, metric: `${reactivationPool.length} leads`, action: "Launch a reactivation campaign", linkStage: "COLD" },
@@ -828,6 +875,8 @@ Rules:
             { id: "reactivate_pool", title: "Reactivate old leads", description: `${reactivationPool.length} cold leads from last 90 days haven't been re-engaged.`, estimatedValue: "+3 bookings est.", actionType: "reactivate", urgency: "medium", linkStage: "COLD" },
           ],
         };
+        void saveToCache(fallback);
+        return fallback;
       }
     }),
 

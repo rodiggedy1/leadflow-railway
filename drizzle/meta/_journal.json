@@ -393,6 +393,13 @@
       "when": 1774129057717,
       "tag": "0055_military_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1774136456058,
+      "tag": "0056_dry_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

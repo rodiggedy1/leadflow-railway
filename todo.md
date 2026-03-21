@@ -1955,3 +1955,8 @@
 ## Nav Bug Fixes — March 21
 - [x] Fix: AI Center nav link disappears on some pages — root cause was AdminDashboard had its own duplicate nav (AdminDashboardNav) that didn't include AI Center; replaced with unified AdminHeader
 - [x] Fix: dropdown menus (Staff, Campaigns) don't open from sub-pages — fixed by replacing AdminDashboardNav (setActiveTab buttons) with AdminHeader (<a href> links); also made AdminDashboard read tab from URL params on mount
+
+## Admin Default + AI Insights Cache — March 21
+- [x] Default admin landing page to /admin/command-center (redirect from /admin, all nav links updated)
+- [x] Add ai_insights_cache table to DB schema (migrated)
+- [x] getAiInsights: serve cached insights instantly if <30min old; regenerate and save to cache on miss/expiry

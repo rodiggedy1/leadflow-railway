@@ -272,14 +272,14 @@ const NAV_ENTRIES: NavEntry[] = [
     id: "leads",
     label: "Leads",
     icon: <Phone className="w-3.5 h-3.5" />,
-    href: "/admin",
+    href: "/admin/leads",
     tabId: "leads",
   },
   {
     id: "pipeline",
     label: "Pipeline",
     icon: <Columns className="w-3.5 h-3.5" />,
-    href: "/admin?tab=pipeline",
+    href: "/admin/leads?tab=pipeline",
     tabId: "pipeline",
   },
   {
@@ -287,7 +287,7 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "Voice",
     icon: <Mic className="w-3.5 h-3.5" />,
     children: [
-      { id: "callbacks", label: "Callbacks", href: "/admin?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
+      { id: "callbacks", label: "Callbacks", href: "/admin/leads?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
       { id: "calls",     label: "All Calls", href: "/admin/calls",          icon: <Mic className="w-3.5 h-3.5" /> },
     ],
   },
@@ -296,8 +296,8 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "Staff",
     icon: <Users className="w-3.5 h-3.5" />,
     children: [
-      { id: "agents",      label: "Team",        href: "/admin?tab=agents",      icon: <Users className="w-3.5 h-3.5" /> },
-      { id: "leaderboard", label: "Leaderboard", href: "/admin?tab=leaderboard", icon: <Trophy className="w-3.5 h-3.5" /> },
+      { id: "agents",      label: "Team",        href: "/admin/leads?tab=agents",      icon: <Users className="w-3.5 h-3.5" /> },
+      { id: "leaderboard", label: "Leaderboard", href: "/admin/leads?tab=leaderboard", icon: <Trophy className="w-3.5 h-3.5" /> },
     ],
   },
   {
@@ -425,7 +425,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
     <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#E5E5E5" }}>
       {/* Logo row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-        <a href="/admin" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <a href="/admin/command-center" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: "#AAFF00" }}
