@@ -1862,3 +1862,6 @@
 - [x] Add Dead Leads column to Kanban board (slate accent, COLD stage leads)
 - [x] Update stage badge color for COLD in leads list (slate/ice blue, ❄️ label, order 13)
 - [x] Write tests for COLD stage promotion logic (5 new tests, 683/683 pass)
+
+## Kanban Cleanup — March 21
+- [x] Remove Lost column, merge NOT_INTERESTED into Dead Leads column
