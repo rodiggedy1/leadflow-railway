@@ -759,6 +759,16 @@ export default function QuoteForm() {
         </a>
       </div>
 
+      {/* Trust Header */}
+      <div className="w-full max-w-2xl mb-4">
+        <img
+          src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/trust-header_af20df71.png"
+          alt="Maids in Black — BBB Accredited Business · Google Rated 4.8 · Trustpilot 5 Stars"
+          className="w-full h-auto rounded-2xl"
+          style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+        />
+      </div>
+
       {/* Card */}
       <div
         className="w-full max-w-2xl bg-white rounded-2xl overflow-hidden"

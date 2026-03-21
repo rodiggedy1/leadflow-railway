@@ -1710,3 +1710,7 @@
 
 - [x] Send tracker link SMS to 302-981-6191 (Jane Sample test job)
 - [x] Low-rating alert: send owner SMS to 302-981-6191 when customer submits 1-3 stars on tracker
+
+## Quote Form Trust Signals
+
+- [x] Add trust-signal header to QuoteForm: Maids in Black logo, BBB badge, Google 4.8 rating, Trustpilot 5 stars
