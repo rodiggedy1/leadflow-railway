@@ -94,9 +94,9 @@ const DEFAULT_SETTINGS = [
   },
   {
     key: "flowB_sms4",
-    value: "Perfect, locking that in for you now ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?",
+    value: "Perfect — I've reserved {slot} for you at {address}. ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?",
     label: "Flow B — SMS 4: Lock-In + Notes + Call Question",
-    description: "Sent after the lead provides their address. Use {slot} for the booked time slot.",
+    description: "Sent after the lead provides their address. Use {slot} for the booked time slot and {address} for the address.",
     fieldType: "textarea",
   },
   {

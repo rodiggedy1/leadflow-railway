@@ -178,11 +178,12 @@ export function buildConfirmationMessage(slot: string, address: string): string 
  * SMS 3 in the new Jade flow: lock in the slot, ask for notes, offer call now or in a few minutes.
  * Sent when the lead picks 9am or 1pm from the SLOT_CHOICE stage.
  */
-export async function buildJadeLockIn(slotWithTime: string): Promise<string> {
+export async function buildJadeLockIn(slotWithTime: string, address?: string): Promise<string> {
+  const addr = address ?? "your location";
   return getFlowTemplate(
     "flowB_sms4",
-    `Perfect, locking that in for you now ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`,
-    { "{slot}": slotWithTime }
+    `Perfect — I've reserved ${slotWithTime} for you at ${addr}. ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`,
+    { "{slot}": slotWithTime, "{address}": addr }
   );
 }
 
@@ -1021,7 +1022,7 @@ async function _processLeadReplyCore(
         // If address already on file (reactivation/always-on), skip address step
         if (context.address && context.address.length >= 5) {
           return {
-            reply: await buildJadeLockIn(slotWithTime),
+            reply: await buildJadeLockIn(slotWithTime, context.address),
             nextStage: "CONFIRMATION",
             extractedData: { selectedSlot: slotWithTime },
           };
@@ -1040,7 +1041,7 @@ async function _processLeadReplyCore(
         const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
         if (context.address && context.address.length >= 5) {
           return {
-            reply: await buildJadeLockIn(requestedSlot),
+            reply: await buildJadeLockIn(requestedSlot, context.address),
             nextStage: "CONFIRMATION",
             extractedData: { selectedSlot: requestedSlot },
           };
@@ -1152,7 +1153,7 @@ async function _processLeadReplyCore(
       const flowVariantAddr = (context.smsFlow ?? "B").toUpperCase();
       if (flowVariantAddr === "B") {
         return {
-          reply: await buildJadeLockIn(slot),
+          reply: await buildJadeLockIn(slot, address),
           nextStage: "CONFIRMATION",
           extractedData: { address },
         };

@@ -1786,3 +1786,9 @@
 - [x] Wire {firstName} placeholder into the Jade address request builder
 - [x] Updated live DB value directly
 - [x] 626/626 tests pass
+
+## Jade SMS 4 Lock-In Update — COMPLETED
+- [x] Update flowB_sms4 to include {slot} and {address} in the confirmation line
+- [x] Wire {slot} and {address} into buildJadeLockIn function
+- [x] Updated live DB value
+- [x] 626/626 tests pass
