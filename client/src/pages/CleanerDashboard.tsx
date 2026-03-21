@@ -374,6 +374,8 @@ type JobRow = {
   serviceDateTime: string | null;
   bookingStatus: string | null;
   bookingId: number | null;
+  trackerToken: string | null;
+  customerPhone: string | null;
   cleanerAssignment: {
     id: number;
     completedJobId: number;
@@ -495,6 +497,40 @@ function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => 
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function SendTrackerLinkButton({ job }: { job: JobRow }) {
+  const [sent, setSent] = useState(false);
+  const send = trpc.tracker.sendSingleLink.useMutation({
+    onSuccess: () => {
+      setSent(true);
+      toast.success("Tracker link sent", { description: `Sent to ${job.customerPhone ?? "customer"}` });
+    },
+    onError: (err) => toast.error("Failed to send", { description: err.message }),
+  });
+
+  if (!job.customerPhone) return null;
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className={`gap-1.5 text-xs ${
+        sent ? "border-emerald-400 text-emerald-600" : "border-sky-300 text-sky-600 hover:bg-sky-50"
+      }`}
+      disabled={send.isPending || sent}
+      onClick={() => send.mutate({ cleanerJobId: job.id })}
+    >
+      {send.isPending ? (
+        <Loader2 className="w-3 h-3 animate-spin" />
+      ) : sent ? (
+        <CheckCircle2 className="w-3 h-3" />
+      ) : (
+        <ExternalLink className="w-3 h-3" />
+      )}
+      {sent ? "Tracker Sent" : "Send Tracker Link"}
+    </Button>
   );
 }
 
@@ -730,6 +766,9 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                 Assign cleaner first
               </Button>
             )}
+
+            {/* Send Tracker Link button */}
+            <SendTrackerLinkButton job={job} />
           </div>
         </div>
       </CardContent>
@@ -925,7 +964,7 @@ export default function CleanerDashboard() {
     for (const job of jobs) {
       const key = job.cleanerAssignment?.cleanerName ?? "Unassigned";
       if (!record[key]) record[key] = [];
-      record[key].push(job);
+      record[key].push(job as unknown as JobRow);
     }
     // Sort each group by serviceDateTime
     Object.values(record).forEach((group) => {
@@ -1152,7 +1191,7 @@ export default function CleanerDashboard() {
             /* ── By Time view ── */
             <div className="space-y-3">
               {jobs.map((job) => (
-                <JobCard key={job.id} job={job} onRefetch={refetch} />
+                <JobCard key={job.id} job={job as unknown as JobRow} onRefetch={refetch} />
               ))}
             </div>
           ) : (

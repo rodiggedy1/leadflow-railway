@@ -792,6 +792,8 @@ export const qualityRouter = router({
         serviceDateTime: cj.serviceDateTime ?? null,
         bookingStatus: cj.bookingStatus ?? null,
         bookingId: cj.bookingId ?? null,
+        trackerToken: cj.trackerToken ?? null,
+        customerPhone: cj.customerPhone ?? null,
         // The cleanerAssignment is the cleanerJob row itself (already has all pay/rating fields)
         cleanerAssignment: {
           id: cj.id,

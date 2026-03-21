@@ -1047,3 +1047,25 @@ export const campaignApprovalBatches = mysqlTable("campaign_approval_batches", {
 });
 export type CampaignApprovalBatch = typeof campaignApprovalBatches.$inferSelect;
 export type InsertCampaignApprovalBatch = typeof campaignApprovalBatches.$inferInsert;
+
+// ── App Settings ─────────────────────────────────────────────────────────────
+/**
+ * Key-value store for admin-configurable business settings.
+ * Each row is a single setting identified by its key.
+ */
+export const appSettings = mysqlTable("app_settings", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Unique setting key, e.g. "googleReviewUrl", "trackerSmsTemplate" */
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  /** Setting value as text (booleans stored as "true"/"false") */
+  value: text("value").notNull(),
+  /** Human-readable label shown in the settings UI */
+  label: varchar("label", { length: 200 }).notNull(),
+  /** Optional description shown below the field */
+  description: text("description"),
+  /** Field type hint for the UI: "text" | "textarea" | "toggle" | "url" */
+  fieldType: varchar("fieldType", { length: 20 }).default("text").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = typeof appSettings.$inferInsert;

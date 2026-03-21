@@ -35,6 +35,7 @@ import {
   ChevronDown,
   Smile,
   Briefcase,
+  Settings,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -235,7 +236,8 @@ export type AdminTab =
   | "always-on"
   | "campaign-approval"
   | "completed-jobs"
-  | "quality";
+  | "quality"
+  | "settings";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -312,6 +314,13 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: <Briefcase className="w-3.5 h-3.5" />,
     href: "/admin/quality",
     tabId: "quality",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: <Settings className="w-3.5 h-3.5" />,
+    href: "/admin/settings",
+    tabId: "settings",
   },
 ];
 
