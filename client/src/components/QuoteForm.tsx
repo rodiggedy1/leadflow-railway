@@ -29,13 +29,13 @@ function TrustStrip() {
           className="text-sm font-medium leading-snug"
           style={{ color: "#3D1F14", fontFamily: "'DM Sans', sans-serif" }}
         >
-          200% Happy Clean Guarantee
+          Satisfaction Guaranteed — Every Clean
         </p>
         <p
           className="text-xs mt-0.5"
           style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
         >
-          Not happy? We re-clean free — or refund you
+          Not satisfied? We re-clean free within 24 hours — no hassle
         </p>
       </div>
     </div>
@@ -1111,6 +1111,96 @@ export default function QuoteForm() {
                         {[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-xs">★</span>)}
                       </div>
                       <p className="text-xs font-semibold" style={{ color: "#1E1E1E" }}>20 Five Star Reviews</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scrolling Reviews Carousel */}
+                <div className="mt-6 mb-2">
+                  <div className="h-px w-full mb-6" style={{ background: "linear-gradient(90deg, transparent, #E8D0C8, transparent)" }} />
+                  <p className="text-center text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "#9A7060" }}>What Our Customers Say</p>
+                  <div className="overflow-hidden" style={{ maskImage: "linear-gradient(90deg, transparent, black 10%, black 90%, transparent)" }}>
+                    <div
+                      className="flex gap-4"
+                      style={{
+                        animation: "reviewScroll 28s linear infinite",
+                        width: "max-content",
+                      }}
+                    >
+                      {[
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/latoya-p-avatar-XLBYUXc3KuciStnRnix296.webp",
+                          name: "Latoya P",
+                          text: "After trying out Handybook and a few of the cleaners on Groupon, I hired MIB again after being disappointed with the caliber of other cleaning services. Pricey? Yes. ",
+                          bold: "Worth every penny? Yes.",
+                        },
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/justin-c-avatar-jBUe9mH22ypGjBhpawoe4Q.webp",
+                          name: "Justin C",
+                          text: "I let Maids In Black come and do a full cleaning job on my house, and ",
+                          bold: "damn was I ever impressed with the results.",
+                          after: " I can totally see myself using them again.",
+                        },
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/erin-t-avatar-7wr4kHbfK7GSQFeojTRXVV.webp",
+                          name: "Erin T",
+                          text: "This company is so awesome! I've had them clean my house at least 5 or 6 times. They've ",
+                          bold: "always been on time",
+                          after: " and will call when they're nearby.",
+                        },
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/bonnie-p-avatar-HWhWZqQnnS6gGAVjrfhomP.webp",
+                          name: "Bonnie P",
+                          text: "I've been using MIB for about a year and my experience has been very similar to other reviewers'. The office ",
+                          bold: "customer service is tremendous.",
+                        },
+                        // duplicate set for seamless loop
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/latoya-p-avatar-XLBYUXc3KuciStnRnix296.webp",
+                          name: "Latoya P",
+                          text: "After trying out Handybook and a few of the cleaners on Groupon, I hired MIB again after being disappointed with the caliber of other cleaning services. Pricey? Yes. ",
+                          bold: "Worth every penny? Yes.",
+                        },
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/justin-c-avatar-jBUe9mH22ypGjBhpawoe4Q.webp",
+                          name: "Justin C",
+                          text: "I let Maids In Black come and do a full cleaning job on my house, and ",
+                          bold: "damn was I ever impressed with the results.",
+                          after: " I can totally see myself using them again.",
+                        },
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/erin-t-avatar-7wr4kHbfK7GSQFeojTRXVV.webp",
+                          name: "Erin T",
+                          text: "This company is so awesome! I've had them clean my house at least 5 or 6 times. They've ",
+                          bold: "always been on time",
+                          after: " and will call when they're nearby.",
+                        },
+                        {
+                          avatar: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/bonnie-p-avatar-HWhWZqQnnS6gGAVjrfhomP.webp",
+                          name: "Bonnie P",
+                          text: "I've been using MIB for about a year and my experience has been very similar to other reviewers'. The office ",
+                          bold: "customer service is tremendous.",
+                        },
+                      ].map((r, i) => (
+                        <div
+                          key={i}
+                          className="flex-shrink-0 rounded-xl p-4 text-left"
+                          style={{ width: "260px", background: "#FFF8F5", border: "1px solid #F0D8CC" }}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <img src={r.avatar} alt={r.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" style={{ border: "2px solid #F0C8B8" }} />
+                            <div>
+                              <p className="text-xs font-bold" style={{ color: "#E8603C" }}>{r.name}</p>
+                              <div className="flex gap-0.5">
+                                {[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-xs">★</span>)}
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-xs leading-relaxed" style={{ color: "#3A2A20" }}>
+                            &ldquo;{r.text}<strong>{r.bold}</strong>{r.after ?? ""}&rdquo;
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

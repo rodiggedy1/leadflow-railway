@@ -1715,3 +1715,5 @@
 
 - [x] Add trust-signal header to QuoteForm: Maids in Black logo, BBB badge, Google 4.8 rating, Trustpilot 5 stars
 - [x] Add testimonial + multi-platform review grid (Google, Facebook, Angi, Yelp) below the quote submit button
+- [x] Replace "200% Happy Clean Guarantee" with better trust message
+- [x] Add auto-scrolling review carousel (Latoya P, Justin C, Erin T, Bonnie P) with realistic avatars
