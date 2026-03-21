@@ -1845,8 +1845,9 @@ export type AppRouter = typeof appRouter;
 
 /**
  * Handles the widget lead submission (name + phone only).
- * Sends a sizing question SMS and creates a WIDGET_SIZING session.
- * The conversation engine handles the reply to extract rooms and send a quote.
+ * Reads the widgetSmsFlow setting to determine which persona (Madison or Jade) to use.
+ * Sends a persona-specific sizing question SMS and creates a WIDGET_SIZING session
+ * with the correct smsFlow assigned so the V2 engine routes correctly on reply.
  */
 async function processWidgetLeadInBackground(input: {
   name: string;
@@ -1858,9 +1859,9 @@ async function processWidgetLeadInBackground(input: {
   gclid?: string;
 }): Promise<void> {
   const normalizedPhone = normalizePhone(input.phone);
-  const firstName = input.name.trim().split(" ")[0] ?? input.name.trim();
+  const firstName = toTitleCase(input.name).split(" ")[0] ?? toTitleCase(input.name);
 
-  // ── Step 1: Send admin alert ──────────────────────────────────────────────
+  // ── Step 1: Send admin alert ──────────────────────────────────────────
   const alertMsg = `New Widget Lead - Maids in Black\n\nName: ${input.name}\nPhone: ${normalizedPhone}\nSource: ${input.utmSource ?? "direct"}`;
   sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
     console.error("[submitWidgetLead] CS alert SMS failed:", err)
@@ -1869,17 +1870,54 @@ async function processWidgetLeadInBackground(input: {
     console.error("[submitWidgetLead] Secondary alert SMS failed:", err)
   );
 
-  // ── Step 2: Send sizing question SMS ─────────────────────────────────────
-  const sizingMsg = `Hi ${firstName}! \uD83D\uDC4B Thanks for reaching out to Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
-  const smsResult = await sendSms({ to: normalizedPhone, content: sizingMsg });
-  console.log(`[submitWidgetLead] Sizing SMS sent: ${smsResult.success}`);
-
-  // ── Step 3: Create conversation session ──────────────────────────────────
+  // ── Step 2: Read widgetSmsFlow setting to determine persona ───────────────────
   const db = await getDb();
   if (!db) {
     console.warn("[submitWidgetLead] No DB — skipping session save");
     return;
   }
+
+  let flowVariant = "B"; // Default to Jade
+  try {
+    const { appSettings } = await import("../drizzle/schema");
+    const settingRows = await db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, "widgetSmsFlow"))
+      .limit(1);
+    const rawFlow = settingRows[0]?.value ?? "B";
+    if (rawFlow === "split") {
+      flowVariant = Math.random() < 0.5 ? "A" : "B";
+    } else {
+      flowVariant = rawFlow.toUpperCase() === "A" ? "A" : "B";
+    }
+  } catch (err) {
+    console.warn("[submitWidgetLead] Could not read widgetSmsFlow setting, defaulting to B:", err);
+  }
+
+  // ── Step 3: Build persona-specific sizing SMS ──────────────────────────────
+  // Read from DB template so Settings edits are respected
+  const { getFlowTemplate } = await import("./settingsRouter");
+  let sizingMsg: string;
+  if (flowVariant === "A") {
+    sizingMsg = await getFlowTemplate(
+      "widgetFlowA_sms1",
+      `Hi ${firstName}! \uD83D\uDC4B Madison here from Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`,
+      { "{firstName}": firstName }
+    );
+  } else {
+    sizingMsg = await getFlowTemplate(
+      "widgetFlowB_sms1",
+      `Hey ${firstName}! Jade here from Maids in Black \uD83D\uDE0A To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`,
+      { "{firstName}": firstName }
+    );
+  }
+
+  // ── Step 4: Send sizing question SMS ─────────────────────────────────────
+  const smsResult = await sendSms({ to: normalizedPhone, content: sizingMsg });
+  console.log(`[submitWidgetLead] Sizing SMS (Flow ${flowVariant}) sent: ${smsResult.success}`);
+
+  // ── Step 5: Create conversation session with correct smsFlow ──────────────────
   const now = Date.now();
   const initialHistory = JSON.stringify([
     { role: "assistant", content: sizingMsg, ts: now },
@@ -1901,7 +1939,9 @@ async function processWidgetLeadInBackground(input: {
       utmContent: input.utmContent ?? null,
       gclid: input.gclid ?? null,
       leadSource: "widget",
+      smsFlow: flowVariant,
     });
+    console.log(`[submitWidgetLead] Session created: WIDGET_SIZING, Flow ${flowVariant}`);
   } catch (dbErr) {
     console.error("[submitWidgetLead] Failed to create conversation session:", dbErr);
   }

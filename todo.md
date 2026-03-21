@@ -1838,3 +1838,14 @@
 ## Nudge Bug Fixes
 - [x] Bug 1: Leads who never reply to SMS 1 never get nudged (lastAiMessageAt=NULL) — fixed by adding createdAt fallback in the WHERE clause: if lastAiMessageAt IS NULL and createdAt is 5+ min ago, still nudge
 - [x] Bug 2: Already implemented — webhooks.ts line 341 resets autoFollowUpSent=0 on every stage advance (except terminal stages)
+## Widget Dual-Flow (Madison + Jade) — March 21
+- [x] Add widgetSmsFlow setting to settingsRouter.ts (A / B / split, defaults to B)
+- [x] Add widgetFlowB_sms1 and widgetFlowA_sms1 DB templates for persona-specific sizing SMS
+- [x] Update processWidgetLeadInBackground to read widgetSmsFlow and assign smsFlow to session
+- [x] Widget now sends Jade sizing SMS (Flow B) or Madison sizing SMS (Flow A) based on setting
+- [x] Update V2 engine WIDGET_SIZING stage instructions for both Flow A and Flow B with clearer persona context
+- [x] Add Widget SMS tab to SettingsPage.tsx (Form / Widget / General tab structure)
+- [x] Widget tab has same flow selector + conversation preview + editable templates as Form tab
+- [x] Widget conversation preview shows sizing SMS 1 then continues with shared flow templates
+- [x] Widget tab shows info banner explaining widget does NOT collect bedrooms/bathrooms upfront
+- [x] 671/671 tests pass (42 widget lead tests: phone normalization, Flow A/B SMS, routing, session shape, persona distinction)

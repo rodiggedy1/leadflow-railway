@@ -113,6 +113,30 @@ const DEFAULT_SETTINGS = [
     description: "Sent when the lead says to call in a few minutes. Use {firstName} for the lead's first name.",
     fieldType: "textarea",
   },
+  // ── Widget SMS Flow Selector ──────────────────────────────────────────────
+  {
+    key: "widgetSmsFlow",
+    value: "B",
+    label: "Widget SMS Conversation Flow",
+    description: "Flow A (Madison): asks for bedrooms/bathrooms, then sends price upfront with Madison's photo. Flow B (Jade): asks for bedrooms/bathrooms, then greets and asks for day before revealing price. Split: randomly assigns A or B to each widget lead.",
+    fieldType: "select",
+  },
+  // ── Widget Flow B (Jade) SMS Templates ───────────────────────────────────
+  {
+    key: "widgetFlowB_sms1",
+    value: "Hey {firstName}! Jade here from Maids in Black 😊 To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)",
+    label: "Widget Flow B — SMS 1: Sizing Question (Jade)",
+    description: "Sent immediately after the widget lead submits their name and phone. Asks for home size. Use {firstName} for the lead's first name.",
+    fieldType: "textarea",
+  },
+  // ── Widget Flow A (Madison) SMS Templates ────────────────────────────────
+  {
+    key: "widgetFlowA_sms1",
+    value: "Hi {firstName}! 👋 Madison here from Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)",
+    label: "Widget Flow A — SMS 1: Sizing Question (Madison)",
+    description: "Sent immediately after the widget lead submits their name and phone. Asks for home size. Use {firstName} for the lead's first name.",
+    fieldType: "textarea",
+  },
   // ── Flow A (Madison) SMS Templates ────────────────────────────────────────
   {
     key: "flowA_sms1",

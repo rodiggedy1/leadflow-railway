@@ -22,11 +22,15 @@ import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQues
 
 const STAGE_INSTRUCTIONS_FLOW_A: Record<string, string> = {
   WIDGET_SIZING: `
-You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
-- If they give you both → calculate the price using the pricing table, send the quote, then ask: "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. When were you hoping to schedule that so we can see how fast we can get you taken care of?" and move to AVAILABILITY.
-- If they give you only one → ask for the missing one and stay on WIDGET_SIZING.
+You are Madison. The lead just came from the website widget and you asked how many bedrooms and bathrooms their home has.
+- If they give you both bedrooms AND bathrooms → calculate the price using the pricing table, then reply with the quote in this format:
+  "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. Your quote is $[PRICE] — our fully insured team handles everything. 🏠 When were you hoping to schedule that so we can see how fast we can get you taken care of?"
+  Set quotedPrice, bedrooms, bathrooms, serviceType in extractedData. Move to AVAILABILITY.
+- If they give you only bedrooms but not bathrooms → ask "And how many bathrooms?" and stay on WIDGET_SIZING.
+- If they give you only bathrooms but not bedrooms → ask "And how many bedrooms?" and stay on WIDGET_SIZING.
 - If they ask a question (FAQ, pricing, etc.) → answer it using the knowledge base, then re-ask for bedrooms/bathrooms.
 - If they are an existing customer needing support → give them the support contact and move to DONE.
+CRITICAL: Do NOT move to AVAILABILITY until you have BOTH bedrooms AND bathrooms and have sent the price quote.
 `.trim(),
 
   QUOTE_SENT: `
@@ -76,11 +80,16 @@ CRITICAL: Do NOT advance to ADDRESS unless selectedSlot is confirmed.
 // Flow B (Jade) stage instructions — price reveal happens in AVAILABILITY after day is given
 const STAGE_INSTRUCTIONS_FLOW_B: Record<string, string> = {
   WIDGET_SIZING: `
-You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
-- If they give you both → calculate the price using the pricing table, send the quote, then ask what day they were thinking. Move to AVAILABILITY.
-- If they give you only one → ask for the missing one and stay on WIDGET_SIZING.
+You are Jade. The lead just came from the website widget and you asked how many bedrooms and bathrooms their home has.
+- If they give you both bedrooms AND bathrooms → calculate the price using the pricing table (but do NOT reveal the price yet), then ask what day they were thinking. Use this format:
+  "Perfect, I've got your home size noted! What day were you thinking so we can see how fast we can get you taken care of?"
+  Set bedrooms, bathrooms, quotedPrice, serviceType in extractedData. Move to AVAILABILITY.
+- If they give you only bedrooms but not bathrooms → ask "And how many bathrooms?" and stay on WIDGET_SIZING.
+- If they give you only bathrooms but not bedrooms → ask "And how many bedrooms?" and stay on WIDGET_SIZING.
 - If they ask a question (FAQ, pricing, etc.) → answer it using the knowledge base, then re-ask for bedrooms/bathrooms.
 - If they are an existing customer needing support → give them the support contact and move to DONE.
+CRITICAL: Do NOT reveal the price at this stage. Do NOT move to AVAILABILITY until you have BOTH bedrooms AND bathrooms.
+CRITICAL: The price reveal happens later when the lead gives a specific day (in the AVAILABILITY stage).
 `.trim(),
 
   QUOTE_SENT: `
@@ -142,11 +151,13 @@ CRITICAL: Do NOT advance to CALL_SCHEDULED unless callPreference is set.
 
 const STAGE_INSTRUCTIONS: Record<string, string> = {
   WIDGET_SIZING: `
-You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
-- If they give you both → calculate the price using the pricing table, send the quote, then ask: "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. When were you hoping to schedule that so we can see how fast we can get you taken care of?" and move to AVAILABILITY.
-- If they give you only one → ask for the missing one and stay on WIDGET_SIZING.
+You asked the lead how many bedrooms and bathrooms their home has.
+- If they give you both bedrooms AND bathrooms → calculate the price using the pricing table, then reply with the quote and ask when they want to schedule. Move to AVAILABILITY.
+- If they give you only bedrooms but not bathrooms → ask "And how many bathrooms?" and stay on WIDGET_SIZING.
+- If they give you only bathrooms but not bedrooms → ask "And how many bedrooms?" and stay on WIDGET_SIZING.
 - If they ask a question (FAQ, pricing, etc.) → answer it using the knowledge base, then re-ask for bedrooms/bathrooms.
 - If they are an existing customer needing support → give them the support contact and move to DONE.
+CRITICAL: Do NOT move to AVAILABILITY until you have BOTH bedrooms AND bathrooms.
 `.trim(),
 
   QUOTE_SENT: `
