@@ -1960,3 +1960,7 @@
 - [x] Default admin landing page to /admin/command-center (redirect from /admin, all nav links updated)
 - [x] Add ai_insights_cache table to DB schema (migrated)
 - [x] getAiInsights: serve cached insights instantly if <30min old; regenerate and save to cache on miss/expiry
+
+## AI Insights Benchmark Fix — March 21
+- [x] Update LLM system prompt with home cleaning industry benchmarks (conversion 15-25% avg / 30-40% good / 40%+ excellent, speed to contact, ROAS, CPL, repeat booking rate, reactivation rate)
+- [x] Clear AI insights cache so next load regenerates with corrected benchmarks
