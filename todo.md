@@ -1820,3 +1820,7 @@
 
 ## Bug: flowB_sms2 missing supplies line
 - [x] DB template for flowB_sms2 is missing "Just so you know upfront: we bring all our own supplies..." line — root cause was V2 engine LLM prompt (QUOTE_SENT + AVAILABILITY) showing a shortened format without the supplies line. Fixed both stage instructions to include the full 4-paragraph format with supplies line.
+
+## Bug: V2 engine ignores DB templates, LLM writes its own messages
+- [x] V2 engine price reveal (QUOTE_SENT/AVAILABILITY → SLOT_CHOICE): override LLM reply with buildJadePriceReveal() so DB template is used
+- [x] V2 engine lock-in (ADDRESS → CONFIRMATION): override LLM reply with buildJadeLockIn() so DB template is used

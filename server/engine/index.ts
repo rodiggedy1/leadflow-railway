@@ -32,6 +32,8 @@ import type { LLMDecision } from "./schema";
 import { LLM_DECISION_JSON_SCHEMA } from "./schema";
 import { buildSystemPrompt, buildUserMessage } from "./prompt";
 import { enforceRules } from "./rules";
+import { buildJadePriceReveal } from "../aiService";
+import { buildJadeLockIn } from "../conversationEngine";
 
 // ─── Fallback replies (if LLM fails entirely) ─────────────────────────────────
 
@@ -98,9 +100,44 @@ export async function processLeadReplyV2(
 
   console.log(`[Engine] Stage: ${context.stage} → ${decision.nextStage} | Reasoning: ${decision.reasoning}`);
 
+  // ── Override reply with DB templates for Flow B scripted messages ─────────
+  // The LLM decides the stage transition and extracts data; we use the DB
+  // template for the actual SMS text so Settings edits are always respected.
+  let finalReply = decision.reply;
+
+  if (context.smsFlow === "B" || !context.smsFlow) {
+    // Price reveal: LLM moved to SLOT_CHOICE → use buildJadePriceReveal
+    if (decision.nextStage === "SLOT_CHOICE" &&
+        (context.stage === "QUOTE_SENT" || context.stage === "AVAILABILITY")) {
+      const slot = decision.extractedData.selectedSlot ?? "this week";
+      const bedrooms  = decision.extractedData.bedrooms  ?? context.bedrooms  ?? "?";
+      const bathrooms = decision.extractedData.bathrooms ?? context.bathrooms ?? "?";
+      const price     = decision.extractedData.quotedPrice ?? context.quotedPrice ?? "?";
+      const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+      try {
+        finalReply = await buildJadePriceReveal({ firstName, bedrooms, bathrooms, price, day: slot, extras: context.extras });
+        console.log("[Engine] Overrode price reveal with DB template.");
+      } catch (err) {
+        console.error("[Engine] buildJadePriceReveal failed, using LLM reply:", err);
+      }
+    }
+
+    // Lock-in confirmation: LLM moved to CONFIRMATION → use buildJadeLockIn
+    if (decision.nextStage === "CONFIRMATION" && context.stage === "ADDRESS") {
+      const slot    = decision.extractedData.selectedSlot ?? context.selectedSlot ?? "your slot";
+      const address = decision.extractedData.address      ?? context.address      ?? "your location";
+      try {
+        finalReply = await buildJadeLockIn(slot, address);
+        console.log("[Engine] Overrode lock-in with DB template.");
+      } catch (err) {
+        console.error("[Engine] buildJadeLockIn failed, using LLM reply:", err);
+      }
+    }
+  }
+
   // ── Build StageResult ─────────────────────────────────────────────────────
   return {
-    reply: decision.reply,
+    reply: finalReply,
     nextStage: decision.nextStage,
     extractedData: {
       selectedSlot:   decision.extractedData.selectedSlot   ?? undefined,
