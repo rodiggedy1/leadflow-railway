@@ -187,6 +187,21 @@ const DEFAULT_SETTINGS = [
     description: "Sent when the lead says to call in a few minutes.",
     fieldType: "textarea",
   },
+  // ── Call Notification Settings ──────────────────────────────────────────────
+  {
+    key: "callAlertEnabled",
+    value: "true",
+    label: "Enable VAPI Call Notification",
+    description: "When enabled, the system places an automated call to the alert phone number whenever a new lead arrives (7am–7pm ET only).",
+    fieldType: "toggle",
+  },
+  {
+    key: "callAlertPhone",
+    value: "+13029816191",
+    label: "Call Alert Phone Number",
+    description: "The phone number to call when a new lead arrives. Must be in E.164 format, e.g. +12025551234.",
+    fieldType: "text",
+  },
   // ── Email Lead (Mailgun inbound) SMS Templates ────────────────────────────
   {
     key: "emailFlowA_sms1",

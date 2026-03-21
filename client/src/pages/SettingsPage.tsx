@@ -24,6 +24,7 @@ import {
   Settings, Link, MessageSquare, Star, Phone, Building2,
   Save, Loader2, CheckCircle2, ToggleLeft, ToggleRight, Bell,
   FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText, Mail,
+  PhoneCall,
 } from "lucide-react";
 
 // ── Section config ────────────────────────────────────────────────────────────
@@ -900,6 +901,40 @@ export default function SettingsPage() {
                     </CardContent>
                   </Card>
                 ))}
+
+                {/* ── Call Notification Card ──────────────────────────── */}
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <PhoneCall className="w-4 h-4 text-[#E8735A]" />
+                      Call Notifications
+                    </CardTitle>
+                    <CardDescription className="text-xs text-gray-500">
+                      When enabled, an automated call is placed to the alert number every time a new lead arrives (7am–7pm ET only). The call uses the Sarah voice and reads a short script with the lead's name.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5 divide-y divide-gray-100">
+                    {["callAlertEnabled", "callAlertPhone"].map((key, idx) => {
+                      const setting = serverSettings[key];
+                      if (!setting) return null;
+                      const localValue = localEdits[key] ?? setting.value;
+                      return (
+                        <div key={key} className={idx > 0 ? "pt-5" : ""}>
+                          <SettingField
+                            settingKey={key}
+                            savedValue={setting.value}
+                            localValue={localValue}
+                            label={setting.label}
+                            description={setting.description}
+                            fieldType={setting.fieldType}
+                            onLocalChange={handleLocalChange}
+                            onSave={handleSave}
+                          />
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
 
                 {serverSettings["trackerSmsTemplate"] && (
                   <Card className="border border-dashed border-gray-300 bg-gray-50/50">

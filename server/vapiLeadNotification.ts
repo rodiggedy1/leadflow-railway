@@ -10,6 +10,7 @@
  */
 
 import { ENV } from "./_core/env";
+import { getSetting } from "./settingsRouter";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -114,19 +115,32 @@ export async function notifyNewLeadViaCall(
     return false;
   }
 
+  // Read live settings from DB (falls back to hardcoded defaults if DB unavailable)
+  const [enabledStr, phoneFromDb] = await Promise.all([
+    getSetting("callAlertEnabled", "true"),
+    getSetting("callAlertPhone", LEAD_ALERT_CALL_NUMBER),
+  ]);
+
+  if (enabledStr !== "true") {
+    console.log("[VapiAlert] Call notification disabled in settings — skipping");
+    return false;
+  }
+
+  const callTo = phoneFromDb.trim() || LEAD_ALERT_CALL_NUMBER;
+
   if (!isWithinBusinessHours()) {
     console.log("[VapiAlert] Outside business hours (7am–7pm ET) — skipping call notification");
     return false;
   }
 
   const script = buildLeadAlertScript(details);
-  console.log(`[VapiAlert] Placing call to ${LEAD_ALERT_CALL_NUMBER} with script: "${script}"`);
+  console.log(`[VapiAlert] Placing call to ${callTo} with script: "${script}"`);
 
   try {
     const callPayload = {
       phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
       customer: {
-        number: LEAD_ALERT_CALL_NUMBER,
+        number: callTo,
       },
       assistant: {
         // One-shot TTS assistant: reads the script and hangs up

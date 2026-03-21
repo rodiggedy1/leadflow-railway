@@ -1908,3 +1908,9 @@
 
 ## VAPI Script Update — March 21
 - [x] Update script to: "Hi Maids in Black crew, this is a notification. New lead alert from [Name]. Check the lead platform now and respond in the next 30 seconds. Bonus for most leads closed this month. Good luck."
+
+## Admin Settings: Call Notification Toggle — March 21
+- [x] Add callAlertEnabled and callAlertPhone to DEFAULT_SETTINGS (auto-seeded on first access)
+- [x] Wire notifyNewLeadViaCall to read callAlertEnabled/callAlertPhone from DB at call time (falls back to hardcoded defaults if DB unavailable)
+- [x] Admin Settings UI: "Call Notifications" card in General tab with enable/disable toggle and phone number input
+- [x] 747/747 tests pass (existing getSetting coverage applies)
