@@ -176,20 +176,23 @@ export function startInternalCron(): void {
   }, { timezone: "America/New_York" });
 
   // ── Tracker link SMS: 8 AM ET daily ────────────────────────────────────────
-  // Texts each customer with a job today a link to their real-time tracker page.
-  cron.schedule("0 0 8 * * *", async () => {
-    console.log("[InternalCron] Running TrackerLinkSend...");
-    try {
-      const result = await sendTrackerLinksForToday();
-      const summary = `date: ${result.date}, sent: ${result.sent}, skipped: ${result.skipped}, errors: ${result.errors.length}`;
-      console.log(`[InternalCron] TrackerLinkSend — ${summary}`);
-      await recordHeartbeat("tracker-link-send", summary, result.sent > 0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] TrackerLinkSend failed:", msg);
-      await recordHeartbeat("tracker-link-send", `error: ${msg}`, false);
-    }
-  }, { timezone: "America/New_York" });
+  // DISABLED: SMS sending is paused while the tracker page is being tested.
+  // To re-enable, uncomment the cron.schedule block below.
+  //
+  // cron.schedule("0 0 8 * * *", async () => {
+  //   console.log("[InternalCron] Running TrackerLinkSend...");
+  //   try {
+  //     const result = await sendTrackerLinksForToday();
+  //     const summary = `date: ${result.date}, sent: ${result.sent}, skipped: ${result.skipped}, errors: ${result.errors.length}`;
+  //     console.log(`[InternalCron] TrackerLinkSend — ${summary}`);
+  //     await recordHeartbeat("tracker-link-send", summary, result.sent > 0);
+  //   } catch (err) {
+  //     const msg = err instanceof Error ? err.message : String(err);
+  //     console.error("[InternalCron] TrackerLinkSend failed:", msg);
+  //     await recordHeartbeat("tracker-link-send", `error: ${msg}`, false);
+  //   }
+  // }, { timezone: "America/New_York" });
+  console.log("[InternalCron] TrackerLinkSend: DISABLED (testing mode)");
 
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
