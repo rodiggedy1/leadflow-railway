@@ -1948,3 +1948,6 @@
 
 ## AI Insights Fix — March 21 (Round 4)
 - [x] Fix getAiInsights LLM prompt: now uses same 10-min cap as getSpeedToLead — cron nudges no longer inflate the avg passed to the LLM
+
+## AI Command Center — Clickable Links (March 21)
+- [x] AI pulse cards and action feed items now show "View leads →" links that open /admin?stage=COLD|QUOTE_SENT|UNHANDLED|CALL_SCHEDULED with the correct filter pre-applied; AdminDashboard reads the stage param from URL on mount

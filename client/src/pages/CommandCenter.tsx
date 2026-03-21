@@ -156,12 +156,14 @@ function PulseCard({
   body,
   metric,
   action,
+  linkStage,
 }: {
   type: string;
   title: string;
   body: string;
   metric: string;
   action: string;
+  linkStage?: string;
 }) {
   const style = pulseStyles[type as keyof typeof pulseStyles] ?? pulseStyles.opportunity;
   return (
@@ -173,8 +175,16 @@ function PulseCard({
       <div className={`text-base font-bold leading-snug ${style.titleColor}`}>{title}</div>
       <div className={`text-sm leading-relaxed ${style.bodyColor}`}>{body}</div>
       <div className={`text-sm ${style.metricColor}`}>{metric}</div>
-      <div className={`text-xs ${style.actionColor} mt-auto`}>
-        <span className="font-medium">Suggested move:</span> {action}
+      <div className={`text-xs ${style.actionColor} mt-auto flex items-center justify-between gap-2`}>
+        <span><span className="font-medium">Suggested move:</span> {action}</span>
+        {linkStage && linkStage !== "all" && (
+          <a
+            href={`/admin?stage=${linkStage}`}
+            className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:opacity-70 transition-opacity"
+          >
+            View leads →
+          </a>
+        )}
       </div>
     </div>
   );
@@ -202,6 +212,7 @@ function ActionFeedItem({
   estimatedValue,
   actionType,
   urgency,
+  linkStage,
   onExecute,
   executing,
 }: {
@@ -211,6 +222,7 @@ function ActionFeedItem({
   estimatedValue: string;
   actionType: string;
   urgency: string;
+  linkStage?: string;
   onExecute: (id: string, actionType: string) => void;
   executing: boolean;
 }) {
@@ -222,6 +234,14 @@ function ActionFeedItem({
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${urgencyBadge[urgency as keyof typeof urgencyBadge] ?? urgencyBadge.low}`}>
             {urgency}
           </span>
+          {linkStage && linkStage !== "all" && (
+            <a
+              href={`/admin?stage=${linkStage}`}
+              className="text-xs text-violet-600 font-medium hover:underline"
+            >
+              View leads →
+            </a>
+          )}
         </div>
         <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
       </div>

@@ -747,7 +747,8 @@ Rules:
 - Be specific with numbers from the metrics provided
 - Keep titles short and punchy
 - estimatedValue must be a string like "+$1,260 est." or "+4 bookings est."
-- actionType must be one of the four values listed`,
+- actionType must be one of the four values listed
+- linkStage: for pulse cards and action items, set to the most relevant pipeline stage to filter by when the user wants to see the leads (e.g. "COLD", "QUOTE_SENT", "UNHANDLED", "CALL_SCHEDULED", "all"). Use "all" if no specific stage applies.`,
             },
             {
               role: "user",
@@ -772,8 +773,9 @@ Rules:
                         body: { type: "string" },
                         metric: { type: "string" },
                         action: { type: "string" },
+                        linkStage: { type: "string" },
                       },
-                      required: ["type", "title", "body", "metric", "action"],
+                        required: ["type", "title", "body", "metric", "action", "linkStage"],
                       additionalProperties: false,
                     },
                   },
@@ -788,8 +790,9 @@ Rules:
                         estimatedValue: { type: "string" },
                         actionType: { type: "string" },
                         urgency: { type: "string" },
+                        linkStage: { type: "string" },
                       },
-                      required: ["id", "title", "description", "estimatedValue", "actionType", "urgency"],
+                        required: ["id", "title", "description", "estimatedValue", "actionType", "urgency", "linkStage"],
                       additionalProperties: false,
                     },
                   },
@@ -806,69 +809,23 @@ Rules:
         if (!content) throw new Error("No LLM response");
         const parsed = JSON.parse(content);
         return parsed as {
-          pulse: Array<{ type: string; title: string; body: string; metric: string; action: string }>;
-          actionFeed: Array<{ id: string; title: string; description: string; estimatedValue: string; actionType: string; urgency: string }>;
+          pulse: Array<{ type: string; title: string; body: string; metric: string; action: string; linkStage: string }>;
+          actionFeed: Array<{ id: string; title: string; description: string; estimatedValue: string; actionType: string; urgency: string; linkStage: string }>;
         };
       } catch (err) {
         // Fallback static insights if LLM fails
         console.error("[CommandCenter] AI insights error:", err);
         return {
           pulse: [
-            {
-              type: "alert",
-              title: "Response time check",
-              body: `Average first reply is ${avgResponseMin} minutes. Leads replying within 5 minutes convert 3.7x better.`,
-              metric: `${avgResponseMin} min avg`,
-              action: "Review unhandled leads and ensure AI is responding",
-            },
-            {
-              type: "opportunity",
-              title: "Reactivation pool ready",
-              body: `${reactivationPool.length} cold leads from the last 90 days match your service area. A targeted SMS could recover several bookings.`,
-              metric: `${reactivationPool.length} leads`,
-              action: "Launch a reactivation campaign",
-            },
-            {
-              type: "revenue",
-              title: "Pipeline value",
-              body: `${quoteSent.length} leads have received a quote but haven't replied yet. A follow-up SMS now could convert several.`,
-              metric: `${quoteSent.length} open quotes`,
-              action: "Send follow-up SMS to all open quotes",
-            },
+            { type: "alert", title: "Response time check", body: `Average first reply is ${avgResponseMin} minutes. Leads replying within 5 minutes convert 3.7x better.`, metric: `${avgResponseMin} min avg`, action: "Review unhandled leads and ensure AI is responding", linkStage: "UNHANDLED" },
+            { type: "opportunity", title: "Reactivation pool ready", body: `${reactivationPool.length} cold leads from the last 90 days match your service area. A targeted SMS could recover several bookings.`, metric: `${reactivationPool.length} leads`, action: "Launch a reactivation campaign", linkStage: "COLD" },
+            { type: "revenue", title: "Pipeline value", body: `${quoteSent.length} leads have received a quote but haven't replied yet. A follow-up SMS now could convert several.`, metric: `${quoteSent.length} open quotes`, action: "Send follow-up SMS to all open quotes", linkStage: "QUOTE_SENT" },
           ],
           actionFeed: [
-            {
-              id: "call_hot",
-              title: `Call ${callScheduled.length} hot leads`,
-              description: `${callScheduled.length} leads are in CALL_SCHEDULED stage and expecting your call.`,
-              estimatedValue: `+${callScheduled.length * 180} est.`,
-              actionType: "trigger_call",
-              urgency: "high",
-            },
-            {
-              id: "followup_cold",
-              title: "Send follow-up to cold leads",
-              description: `${cold.length} leads went cold without booking. A reactivation SMS could recover some.`,
-              estimatedValue: "+2 bookings est.",
-              actionType: "send_sms",
-              urgency: "medium",
-            },
-            {
-              id: "review_unhandled",
-              title: "Review unhandled conversations",
-              description: `${unhandled.length} conversations need manual review — AI couldn't parse the reply.`,
-              estimatedValue: "+1 booking est.",
-              actionType: "review_leads",
-              urgency: unhandled.length > 0 ? "high" : "low",
-            },
-            {
-              id: "reactivate_pool",
-              title: "Reactivate old leads",
-              description: `${reactivationPool.length} cold leads from last 90 days haven't been re-engaged.`,
-              estimatedValue: "+3 bookings est.",
-              actionType: "reactivate",
-              urgency: "medium",
-            },
+            { id: "call_hot", title: `Call ${callScheduled.length} hot leads`, description: `${callScheduled.length} leads are in CALL_SCHEDULED stage and expecting your call.`, estimatedValue: `+${callScheduled.length * 180} est.`, actionType: "trigger_call", urgency: "high", linkStage: "CALL_SCHEDULED" },
+            { id: "followup_cold", title: "Send follow-up to cold leads", description: `${cold.length} leads went cold without booking. A reactivation SMS could recover some.`, estimatedValue: "+2 bookings est.", actionType: "send_sms", urgency: "medium", linkStage: "COLD" },
+            { id: "review_unhandled", title: "Review unhandled conversations", description: `${unhandled.length} conversations need manual review — AI couldn't parse the reply.`, estimatedValue: "+1 booking est.", actionType: "review_leads", urgency: unhandled.length > 0 ? "high" : "low", linkStage: "UNHANDLED" },
+            { id: "reactivate_pool", title: "Reactivate old leads", description: `${reactivationPool.length} cold leads from last 90 days haven't been re-engaged.`, estimatedValue: "+3 bookings est.", actionType: "reactivate", urgency: "medium", linkStage: "COLD" },
           ],
         };
       }

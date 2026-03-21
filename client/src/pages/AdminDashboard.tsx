@@ -2149,7 +2149,14 @@ export default function AdminDashboard() {
     onSuccess: () => refetchCallbacks(),
   });
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState<string>("all");
+  // Read initial stage filter from URL param: /admin?stage=COLD
+  const [stageFilter, setStageFilter] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("stage");
+      if (p) return p;
+    }
+    return "all";
+  });
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
