@@ -396,7 +396,7 @@ function HotLeadCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CommandCenter() {
-  const [range, setRange] = useState<Range>("today");
+  const [range, setRange] = useState<Range>("30d");
   const [executingAction, setExecutingAction] = useState<string | null>(null);
   const [smsSending, setSmsSending] = useState<number | null>(null);
   const [callSending, setCallSending] = useState<number | null>(null);
@@ -425,6 +425,10 @@ export default function CommandCenter() {
   const insightsQuery = trpc.commandCenter.getAiInsights.useQuery(
     { range },
     { staleTime: 120_000 }
+  );
+  const convIntelQuery = trpc.commandCenter.getConversationIntelligence.useQuery(
+    { range },
+    { staleTime: 300_000 }
   );
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -503,23 +507,83 @@ export default function CommandCenter() {
   const speed = speedQuery.data;
   const insights = insightsQuery.data;
 
+  const convIntel = convIntelQuery.data;
   const rangeLabel = { today: "Today", "7d": "7 Days", "30d": "30 Days" };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminHeader activeTab="command-center" />
 
+      {/* ── AI Pulse Hero ─────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-gray-950 via-gray-900 to-gray-800 border-b border-gray-700">
+        {/* Animated rings */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-[600px] h-[600px] rounded-full border border-white/5 animate-[spin_20s_linear_infinite]" />
+          <div className="absolute w-[400px] h-[400px] rounded-full border border-white/5 animate-[spin_15s_linear_infinite_reverse]" />
+          <div className="absolute w-[200px] h-[200px] rounded-full border border-white/5 animate-[spin_10s_linear_infinite]" />
+        </div>
+        {/* Pulsing glow dot */}
+        <div className="absolute top-6 right-8 flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+          </span>
+          <span className="text-xs text-emerald-400 font-medium tracking-wide">AI monitoring live</span>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 relative z-10">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                  <BrainCircuit className="w-6 h-6 text-white" />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-gray-900" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">AI Lead Command Center</p>
+                <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">Maids in Black</h1>
+              </div>
+            </div>
+            <div className="sm:ml-auto flex flex-wrap items-center gap-3">
+              {/* Live KPI pills */}
+              {stats && (
+                <>
+                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
+                    <Flame className="w-3.5 h-3.5 text-orange-400" />
+                    <span className="text-xs text-white font-medium">{stats.totalLeads} leads</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-xs text-white font-medium">{stats.bookedJobs} booked</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-violet-400" />
+                    <span className="text-xs text-white font-medium">{fmtDollar(stats.pipelineValue)} pipeline</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          {/* Insight ticker */}
+          {insights?.pulse && insights.pulse.length > 0 && (
+            <div className="mt-4 flex items-start gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-3 max-w-2xl">
+              <Activity className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-gray-300 leading-relaxed">
+                <span className="text-violet-300 font-semibold">AI: </span>
+                {insights.pulse[0].body}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
-        {/* ── Page Header ──────────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-1">AI Lead Command Center</p>
-            <h1 className="text-2xl font-bold text-gray-900">Maids in Black — Leads Dashboard</h1>
-            <p className="text-sm text-gray-400 mt-0.5">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
-            </p>
-          </div>
+        {/* ── Page Sub-Header (range + refresh) ────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-sm text-gray-400">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
+          </p>
           <div className="flex items-center gap-2">
             {(["today", "7d", "30d"] as Range[]).map(r => (
               <button
@@ -542,6 +606,7 @@ export default function CommandCenter() {
                 statsQuery.refetch();
                 insightsQuery.refetch();
                 hotLeadsQuery.refetch();
+                convIntelQuery.refetch();
               }}
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -811,6 +876,77 @@ export default function CommandCenter() {
               </div>
             ) : null}
           </div>
+        </div>
+
+        {/* ── Conversation Intelligence ─────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <BrainCircuit className="w-4 h-4 text-violet-500" />
+                <h2 className="font-bold text-gray-900">Conversation Intelligence</h2>
+              </div>
+              <p className="text-xs text-gray-400">AI reads objections, urgency, and close likelihood from SMS conversations.</p>
+            </div>
+            {convIntelQuery.isFetching && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Analyzing...
+              </div>
+            )}
+          </div>
+          {convIntelQuery.isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-28 rounded-xl bg-gray-100 animate-pulse" />
+              ))}
+            </div>
+          ) : convIntel && convIntel.objections.length > 0 ? (
+            <div className="space-y-4">
+              {/* Objection cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {convIntel.objections.map((obj, i) => {
+                  const barColors = ["bg-gray-900", "bg-gray-700", "bg-gray-500", "bg-gray-400", "bg-gray-300"];
+                  return (
+                    <div key={i} className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 transition-colors">
+                      <div className="flex items-start justify-between mb-2">
+                        <span className="font-semibold text-sm text-gray-900">{obj.label}</span>
+                        <span className="text-sm font-bold text-gray-700 shrink-0 ml-2">{obj.pct}%</span>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-3">
+                        <div
+                          className={`h-1.5 rounded-full ${barColors[i] ?? "bg-gray-300"} transition-all`}
+                          style={{ width: `${Math.min(obj.pct, 100)}%` }}
+                        />
+                      </div>
+                      {/* Coaching tip */}
+                      <p className="text-xs text-violet-700 bg-violet-50 rounded-lg px-2.5 py-2 leading-relaxed mb-2">
+                        <span className="font-semibold">Tip: </span>{obj.tip}
+                      </p>
+                      {/* Example quote */}
+                      {obj.example && (
+                        <p className="text-xs text-gray-400 italic">&ldquo;{obj.example}&rdquo;</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Top insight */}
+              {convIntel.topInsight && (
+                <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                  <Lightbulb className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-xs font-semibold text-amber-700">AI finding</span>
+                    <p className="text-sm text-gray-700 mt-0.5 leading-relaxed">{convIntel.topInsight}</p>
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-gray-400">{convIntel.totalMessagesAnalyzed} messages analyzed</p>
+            </div>
+          ) : convIntel ? (
+            <div className="text-sm text-gray-400 py-8 text-center">{convIntel.topInsight}</div>
+          ) : null}
         </div>
 
         {/* ── Lead Source Intelligence ──────────────────────────────────────── */}

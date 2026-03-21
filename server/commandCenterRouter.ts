@@ -233,15 +233,22 @@ export const commandCenterRouter = router({
       const conversionRate = totalLeads > 0 ? parseFloat(((bookedSessions.length / totalLeads) * 100).toFixed(1)) : 0;
       const prevConversionRate = prevLeads > 0 ? parseFloat(((prevBooked / prevLeads) * 100).toFixed(1)) : 0;
 
-      // Speed to lead: avg time from createdAt to first AI message
-      const speedSessions = sessions.filter(s => s.lastAiMessageAt);
+      // Speed to first contact: only sessions where lastAiMessageAt is within 10 min of createdAt
+      // (lastAiMessageAt is updated on every outbound SMS including cron nudges, so cap at 10 min)
+      const speedSessions = sessions.filter(s => {
+        if (!s.lastAiMessageAt) return false;
+        const created = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
+        const replied = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
+        const diffMin = (replied - created) / 60000;
+        return diffMin >= 0 && diffMin <= 10;
+      });
       const avgResponseMinutes = speedSessions.length > 0
-        ? Math.round(
-            speedSessions.reduce((sum, s) => {
+        ? parseFloat(
+            (speedSessions.reduce((sum, s) => {
               const created = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
               const replied = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
               return sum + Math.max(0, (replied - created) / 60000);
-            }, 0) / speedSessions.length
+            }, 0) / speedSessions.length).toFixed(1)
           )
         : 0;
 
@@ -550,18 +557,28 @@ export const commandCenterRouter = router({
           )
         );
 
-      const withResponse = sessions.filter(s => s.lastAiMessageAt);
-      const avgFirstResponseMinutes = withResponse.length > 0
-        ? Math.round(
-            withResponse.reduce((sum, s) => {
+      // Only count sessions where lastAiMessageAt is within 10 minutes of createdAt.
+      // lastAiMessageAt is updated on EVERY outbound SMS (including cron nudges days later),
+      // so filtering to <=10 min isolates the true first-contact speed.
+      const withFirstContact = sessions.filter(s => {
+        if (!s.lastAiMessageAt) return false;
+        const created = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
+        const replied = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
+        const diffMin = (replied - created) / 60000;
+        return diffMin >= 0 && diffMin <= 10;
+      });
+
+      const avgFirstResponseMinutes = withFirstContact.length > 0
+        ? parseFloat(
+            (withFirstContact.reduce((sum, s) => {
               const created = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
               const replied = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
               return sum + Math.max(0, (replied - created) / 60000);
-            }, 0) / withResponse.length
+            }, 0) / withFirstContact.length).toFixed(1)
           )
         : 0;
 
-      const contactedUnder2Min = withResponse.filter(s => {
+      const contactedUnder2Min = withFirstContact.filter(s => {
         const created = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
         const replied = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
         return (replied - created) / 60000 < 2;
@@ -575,7 +592,7 @@ export const commandCenterRouter = router({
         avgFirstResponseMinutes,
         contactedUnder2MinPct,
         totalLeads: sessions.length,
-        contactedCount: withResponse.length,
+        contactedCount: withFirstContact.length,
       };
     }),
 
@@ -961,5 +978,122 @@ Rules:
       }
 
       return { success: true, sent, failed, total: sessions.length };
+    }),
+
+  /**
+   * Conversation Intelligence: LLM-analyzed objections from SMS message history.
+   * Reads recent inbound lead messages and identifies top stall reasons with coaching tips.
+   */
+  getConversationIntelligence: adminAgentProcedure
+    .input(z.object({ range: z.enum(["today", "7d", "30d"]).default("30d") }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const since = getWindowStart(input.range);
+
+      // Pull message histories from recent sessions
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          stage: conversationSessions.stage,
+          messageHistory: conversationSessions.messageHistory,
+          isBooked: conversationSessions.isBooked,
+          serviceType: conversationSessions.serviceType,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, since),
+            ne(conversationSessions.leadSource, "review")
+          )
+        )
+        .limit(200);
+
+      // Extract inbound (lead) messages from message histories
+      const leadMessages: string[] = [];
+      for (const s of sessions) {
+        try {
+          const history: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? "[]");
+          for (const msg of history) {
+            if (msg.role === "user" && msg.content && msg.content.trim().length > 5) {
+              leadMessages.push(msg.content.trim());
+            }
+          }
+        } catch { /* skip malformed */ }
+      }
+
+      if (leadMessages.length === 0) {
+        return {
+          objections: [],
+          topInsight: "Not enough conversation data yet. Check back after more leads have replied.",
+          totalMessagesAnalyzed: 0,
+        };
+      }
+
+      // Sample up to 150 messages to keep LLM context manageable
+      const sample = leadMessages.slice(0, 150);
+      const totalLeads = sessions.length;
+      const bookedCount = sessions.filter(s => s.isBooked === 1 || s.stage === "BOOKED").length;
+
+      const prompt = `You are a sales coach analyzing SMS conversations for Maids in Black, a cleaning service in Washington DC.
+
+Here are ${sample.length} inbound messages from leads (replies to our quote SMS):
+
+${sample.map((m, i) => `${i + 1}. "${m}"`).join("\n")}
+
+Context: ${totalLeads} leads total, ${bookedCount} booked (${totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0}% conversion).
+
+Analyze these messages and identify the top 5 objections or stall reasons that are preventing bookings. For each, provide:
+1. A short label (2-4 words, e.g. "Too expensive")
+2. An estimated percentage of leads affected (rough estimate)
+3. A 1-sentence coaching tip for the sales team on how to handle it
+4. A representative example quote from the messages (exact or paraphrased)
+
+Also provide one overall insight about what's most impacting conversion.
+
+Respond in JSON with this exact schema:
+{
+  "objections": [
+    {
+      "label": string,
+      "pct": number,
+      "tip": string,
+      "example": string
+    }
+  ],
+  "topInsight": string
+}`;
+
+      try {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are a sales coach. Respond only with valid JSON." },
+            { role: "user", content: prompt },
+          ],
+          response_format: { type: "json_object" } as any,
+        });
+
+        const rawContent = response?.choices?.[0]?.message?.content ?? "{}";
+        const raw = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+        const parsed = JSON.parse(raw);
+        return {
+          objections: (parsed.objections ?? []).slice(0, 5) as Array<{
+            label: string;
+            pct: number;
+            tip: string;
+            example: string;
+          }>,
+          topInsight: parsed.topInsight ?? "",
+          totalMessagesAnalyzed: sample.length,
+        };
+      } catch (err) {
+        console.error("[getConversationIntelligence] LLM error:", err);
+        return {
+          objections: [],
+          topInsight: "Analysis temporarily unavailable.",
+          totalMessagesAnalyzed: sample.length,
+        };
+      }
     }),
 });

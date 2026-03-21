@@ -1935,3 +1935,9 @@
 - [x] Move "AI Center" nav tab to first position in AdminHeader
 - [x] Improve Hot Leads Queue design: color-coded cards (red/amber/gray), stage badges, SMS+Call buttons with intent-matched colors
 - [x] Fix Speed to Lead: renamed to "Speed to First Contact", shows avg first contact time, under-2-min %, and leads contacted count
+
+## AI Command Center Improvements — March 21 (Round 2)
+- [x] Fix speed-to-first-contact: cap to sessions where lastAiMessageAt is within 10 min of createdAt (cron nudges were inflating the number)
+- [x] Default range to 30 days
+- [x] Add AI pulse hero section: dark gradient header with animated rings, pulsing green dot, live KPI pills, AI insight ticker
+- [x] Add Conversation Intelligence panel: LLM-analyzed top 5 objections with % bars, coaching tips, example quotes, and top insight callout
