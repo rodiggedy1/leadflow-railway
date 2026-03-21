@@ -237,7 +237,7 @@ function ETADisplay({ etaTimestamp }: { etaTimestamp: number | null | undefined 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 const DC_MAP_URL =
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/dc-night-map_7cb31538.jpg";
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/dc-night-landmarks_cb3aa568.jpg";
 
 export default function JobTracker() {
   const params = useParams<{ token: string }>();
