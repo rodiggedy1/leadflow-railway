@@ -238,24 +238,69 @@ export async function getAlwaysOnGroups(): Promise<AlwaysOnGroup[]> {
  *
  * Logic:
  * 1. Load all active groups
- * 2. Load all completedJobs not already enrolled in any group
- * 3. For each job, compute eligibility
- * 4. Insert enrollment row for eligible jobs
- * 5. Update group totalEnrolled counter
+ * 2. Re-evaluate PENDING enrollments — promote to higher-priority group if they've aged up
+ *    (e.g. new-one-time → lapsed-one-time at day 21, lapsed-one-time → dormant at day 180)
+ * 3. Load all completedJobs not yet enrolled in any group
+ * 4. For each job, compute eligibility and insert enrollment row
+ * 5. Update group totalEnrolled counters
  *
- * Returns a summary of how many contacts were enrolled per group.
+ * Returns a summary of how many contacts were newly enrolled or promoted per group.
  */
 export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<Record<AlwaysOnGroupType, number>> {
   await seedDefaultGroups();
   const db = await getDb();
   if (!db) return { "new-one-time": 0, "lapsed-one-time": 0, "lapsed-recurring": 0, dormant: 0 };
 
-  const groups = await db.select().from(alwaysOnGroups).where(eq(alwaysOnGroups.isActive, 1));
-  if (groups.length === 0) return { "new-one-time": 0, "lapsed-one-time": 0, "lapsed-recurring": 0, dormant: 0 };
+  // Load ALL groups (not just active) so we can promote into any group
+  const allGroups = await db.select().from(alwaysOnGroups);
+  const allGroupMap = Object.fromEntries(allGroups.map((g: AlwaysOnGroup) => [g.groupType, g])) as Record<string, AlwaysOnGroup>;
 
-  const groupMap = Object.fromEntries(groups.map((g: AlwaysOnGroup) => [g.groupType, g])) as Record<string, AlwaysOnGroup>;
+  const activeGroups = allGroups.filter((g: AlwaysOnGroup) => g.isActive === 1);
+  if (activeGroups.length === 0) return { "new-one-time": 0, "lapsed-one-time": 0, "lapsed-recurring": 0, dormant: 0 };
 
-  // Find phones already enrolled in any always-on group (to skip duplicates)
+  const promoted: Record<AlwaysOnGroupType, number> = {
+    "new-one-time": 0,
+    "lapsed-one-time": 0,
+    "lapsed-recurring": 0,
+    dormant: 0,
+  };
+
+  // ── Step 1: Re-evaluate PENDING enrollments and promote if they've aged up ──
+  // Only PENDING contacts (not yet messaged) are eligible for promotion.
+  // Once a message is sent (SENT/REPLIED/BOOKED/OPTED_OUT), they stay in their group.
+  const pendingEnrollments = await db
+    .select()
+    .from(alwaysOnEnrollments)
+    .where(eq(alwaysOnEnrollments.status, "PENDING"));
+
+  for (const enrollment of pendingEnrollments) {
+    if (!enrollment.jobDate) continue;
+    const result = computeEligibleGroup(enrollment.jobDate, enrollment.frequency, nowMs);
+    if (!result.eligible) continue;
+
+    // If the correct group is different from the current group, promote
+    const currentGroup = allGroups.find((g: AlwaysOnGroup) => g.id === enrollment.groupId);
+    if (!currentGroup || currentGroup.groupType === result.groupType) continue;
+
+    // Only promote to higher-priority groups (dormant > lapsed-recurring > lapsed-one-time > new-one-time)
+    const priorityOrder: AlwaysOnGroupType[] = ["new-one-time", "lapsed-one-time", "lapsed-recurring", "dormant"];
+    const currentPriority = priorityOrder.indexOf(currentGroup.groupType as AlwaysOnGroupType);
+    const newPriority = priorityOrder.indexOf(result.groupType);
+    if (newPriority <= currentPriority) continue; // don't demote
+
+    const targetGroup = allGroupMap[result.groupType];
+    if (!targetGroup) continue;
+
+    // Move the enrollment to the new group
+    await db
+      .update(alwaysOnEnrollments)
+      .set({ groupId: targetGroup.id })
+      .where(eq(alwaysOnEnrollments.id, enrollment.id));
+
+    promoted[result.groupType]++;
+  }
+
+  // ── Step 2: Enroll newly eligible phones not yet in any group ──
   const alreadyEnrolledPhones = await db
     .selectDistinct({ phone: alwaysOnEnrollments.phone })
     .from(alwaysOnEnrollments);
@@ -289,7 +334,7 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
     const result = computeEligibleGroup(job.jobDate, job.frequency, nowMs);
     if (!result.eligible) continue;
 
-    const group = groupMap[result.groupType];
+    const group = allGroupMap[result.groupType];
     if (!group) continue;
 
     await db.insert(alwaysOnEnrollments).values({
@@ -308,10 +353,10 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
     enrolled[result.groupType]++;
   }
 
-  // Update totalEnrolled counters
+  // ── Step 3: Update totalEnrolled counters ──
   for (const [groupType, count] of Object.entries(enrolled)) {
     if (count > 0) {
-      const group = groupMap[groupType];
+      const group = allGroupMap[groupType];
       if (group) {
         await db
           .update(alwaysOnGroups)

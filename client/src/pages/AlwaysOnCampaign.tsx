@@ -543,21 +543,30 @@ function GroupCard({ group, onUpdated }: {
                       <TableHead>Name</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Frequency</TableHead>
-                      <TableHead>Job Date</TableHead>
-                      <TableHead>Enrolled</TableHead>
+                      <TableHead>Last Service</TableHead>
+                      <TableHead>Days Since</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Conversation</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {contactsData.contacts.map((c) => (
+                    {contactsData.contacts.map((c) => {
+                      const daysSince = c.jobDate
+                        ? Math.floor((Date.now() - new Date(c.jobDate + "T00:00:00Z").getTime()) / (1000 * 60 * 60 * 24))
+                        : null;
+                      const urgencyColor = daysSince === null ? "text-gray-400"
+                        : daysSince <= 7 ? "text-green-600 font-semibold"
+                        : daysSince <= 20 ? "text-amber-600 font-semibold"
+                        : daysSince <= 60 ? "text-orange-600"
+                        : "text-gray-500";
+                      return (
                       <TableRow key={c.id}>
                         <TableCell className="font-medium">{c.name || c.firstName || "—"}</TableCell>
                         <TableCell className="font-mono text-sm">{c.phone}</TableCell>
                         <TableCell className="text-sm text-gray-600">{c.frequency || "—"}</TableCell>
                         <TableCell className="text-sm text-gray-600">{c.jobDate || "—"}</TableCell>
-                        <TableCell className="text-sm text-gray-500">
-                          {c.enrolledAt ? new Date(c.enrolledAt).toLocaleDateString() : "—"}
+                        <TableCell className={`text-sm ${urgencyColor}`}>
+                          {daysSince !== null ? `${daysSince}d ago` : "—"}
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[c.status] || "bg-gray-100 text-gray-600"}`}>
@@ -580,7 +589,8 @@ function GroupCard({ group, onUpdated }: {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

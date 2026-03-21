@@ -1687,3 +1687,8 @@
 - [x] Build campaign approval workflow: pending batch preview, approve/reject, gated send
 - [x] Add Approvals nav item under Campaigns dropdown in AdminHeader
 - [x] Shift nightly sync from 10 PM to noon ET
+- [x] Audit eligibility engine: ensure every customer is in exactly one group (no gaps except active recurring)
+- [x] Fix any eligibility gaps so customers move seamlessly between groups over time
+- [x] Sort contacts table by job date descending
+- [x] Add "Days since service" column to contacts table
+- [x] Activate New One-Time Customers group (isActive = 1)

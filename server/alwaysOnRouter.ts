@@ -69,7 +69,7 @@ export const alwaysOnRouter = router({
         .select()
         .from(alwaysOnEnrollments)
         .where(and(...conditions))
-        .orderBy(desc(alwaysOnEnrollments.enrolledAt))
+        .orderBy(desc(alwaysOnEnrollments.jobDate), desc(alwaysOnEnrollments.enrolledAt))
         .limit(input.limit)
         .offset(input.offset);
 
