@@ -174,9 +174,8 @@ function GroupCard({ group, onUpdated }: {
     onError: (e) => toast.error(e.message),
   });
 
-  // Contacts table shows only responders (REPLIED + BOOKED) by default.
-  // The full send list is visible in the stats cards above.
-  const [contactStatusFilter, setContactStatusFilter] = useState<"responded" | "all">("responded");
+  // Contacts table shows all enrolled contacts by default.
+  const [contactStatusFilter, setContactStatusFilter] = useState<"responded" | "all">("all");
 
   // We fetch REPLIED and BOOKED in two separate queries and merge, OR use "all" for the full list.
   const { data: repliedData, isLoading: repliedLoading } =
@@ -507,24 +506,24 @@ function GroupCard({ group, onUpdated }: {
               {/* Filter toggle */}
               <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
                 <button
-                  onClick={() => { setContactStatusFilter("responded"); setContactPage(0); }}
+                  onClick={() => { setContactStatusFilter("all"); setContactPage(0); }}
                   className={`px-2.5 py-1 font-medium transition-colors ${
+                    contactStatusFilter === "all"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  All Enrolled
+                </button>
+                <button
+                  onClick={() => { setContactStatusFilter("responded"); setContactPage(0); }}
+                  className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
                     contactStatusFilter === "responded"
                       ? "bg-blue-600 text-white"
                       : "bg-white text-gray-500 hover:bg-gray-50"
                   }`}
                 >
                   Responded
-                </button>
-                <button
-                  onClick={() => { setContactStatusFilter("all"); setContactPage(0); }}
-                  className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
-                    contactStatusFilter === "all"
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-gray-500 hover:bg-gray-50"
-                  }`}
-                >
-                  All Sent
                 </button>
               </div>
             </div>
@@ -614,7 +613,9 @@ function GroupCard({ group, onUpdated }: {
             </>
           ) : (
             <div className="p-8 text-center text-gray-400 text-sm">
-              No contacts enrolled yet. Run the nightly sync or click "Enroll Now" to populate this group.
+              {contactStatusFilter === "responded"
+                ? "No responders yet — no one has replied to this campaign."
+                : "No contacts enrolled yet. Run the nightly sync or click \"Enroll Now\" to populate this group."}
             </div>
           )}
         </div>
