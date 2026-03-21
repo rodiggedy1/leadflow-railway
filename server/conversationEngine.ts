@@ -182,7 +182,7 @@ export async function buildJadeLockIn(slotWithTime: string, address?: string): P
   const addr = address ?? "your location";
   return getFlowTemplate(
     "flowB_sms4",
-    `Perfect — I've reserved ${slotWithTime} for you at ${addr}. ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`,
+    `Perfect — I've reserved ${slotWithTime} for you at ${addr}. ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\n\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`,
     { "{slot}": slotWithTime, "{address}": addr }
   );
 }

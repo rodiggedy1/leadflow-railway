@@ -1803,3 +1803,14 @@
 ## Bug Fixes — March 21
 - [x] Fix Jade flow AVAILABILITY handler — V2 engine now uses Flow B stage instructions (price reveal + 9am/1pm in AVAILABILITY); buildUserMessage uses correct Jade/Madison persona; 16 new Flow A/B routing tests added (642/642 tests pass)
 - [x] Fix exit intent monitor triggering during form submission — added isSubmittingRef check and step=="extras" guard
+
+## LLM Decision Logging + Webhook Integration Tests — In Progress
+- [ ] Add ai_decision_logs table to DB schema (sessionId, stage, stageFrom, stageTo, leadReply, llmReply, reasoning, violations, smsFlow, createdAt)
+- [ ] Wire logging into V2 engine — write one row after every LLM call (success or fallback)
+- [ ] Add admin UI to view LLM decision log for a session (conversation replay)
+- [ ] Write webhook integration tests: mock sendSms + DB, fire POST /api/webhooks/openphone, assert SMS content matches expected script for Flow B full sequence
+- [ ] Write webhook integration tests: Flow A full sequence (AVAILABILITY → SLOT_CHOICE → ADDRESS → CONFIRMATION → CALL_SCHEDULED)
+
+## SMS Formatting Fix — Flow B ADDRESS stage
+- [x] Fix lock-in confirmation message: add newline between "anything like that)" and "We'll do a quick 60-sec call..." so it doesn't run together
+- [x] Fix price reveal message: add blank line between "no hidden fees or surprises." and "I've got [DAY] at 9am or 1pm" — fixed in DB (flowB_sms2 already had double \n), fallback in aiService.ts, and LLM prompt instructions in prompt.ts

@@ -94,7 +94,7 @@ export async function buildJadePriceReveal(params: {
     ? `\n\nThat includes your add-ons (${resolvedExtras.map(e => e.label).join(", ")}).`
     : "";
 
-  const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
+  const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\n\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
 
   // Use template from DB; substitute dynamic values. extrasNote is appended to the fallback only.
   const template = await getFlowTemplate(
