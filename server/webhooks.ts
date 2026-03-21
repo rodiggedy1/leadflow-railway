@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -267,11 +267,19 @@ export function registerWebhookRoutes(app: Express) {
       // ── STOP / opt-out detection (before LLM, TCPA compliance) ────────────────
       const isStopReply = /^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(inboundText.trim());
       if (isStopReply) {
-        console.log(`[Webhook] STOP received from ${fromPhone} — marking smsOptOut=1 and ending conversation.`);
+        console.log(`[Webhook] STOP received from ${fromPhone} — marking smsOptOut=1, OPTED_OUT on all enrollments, and ending conversation.`);
+        // Mark the conversation session as opted out
         await db
           .update(conversationSessions)
           .set({ smsOptOut: 1, stage: "DONE", messageHistory: JSON.stringify(history) })
           .where(eq(conversationSessions.id, session.id));
+        // Mark ALL always-on enrollments for this phone as OPTED_OUT (global opt-out).
+        // This ensures the phone is excluded from all future campaign batches across all groups.
+        await db
+          .update(alwaysOnEnrollments)
+          .set({ status: "OPTED_OUT" })
+          .where(eq(alwaysOnEnrollments.phone, fromPhone))
+          .catch((err: unknown) => console.error("[Webhook] Failed to mark always-on enrollments OPTED_OUT:", err));
         // Send the required STOP acknowledgement (TCPA compliance)
         await sendSms({
           to: fromPhone,

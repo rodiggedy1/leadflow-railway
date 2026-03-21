@@ -1692,3 +1692,6 @@
 - [x] Sort contacts table by job date descending
 - [x] Add "Days since service" column to contacts table
 - [x] Activate New One-Time Customers group (isActive = 1)
+- [x] Global opt-out: exclude OPTED_OUT phones from all future enrollments across all groups
+- [x] Ensure STOP/UNSUBSCRIBE webhook handler marks enrollment as OPTED_OUT
+- [x] Write tests for global opt-out exclusion logic

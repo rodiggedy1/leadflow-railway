@@ -36,10 +36,11 @@ import {
   alwaysOnGroups,
   alwaysOnEnrollments,
   completedJobs,
+  conversationSessions,
   type AlwaysOnGroupType,
   type AlwaysOnGroup,
 } from "../drizzle/schema";
-import { eq, notInArray, sql } from "drizzle-orm";
+import { eq, notInArray, sql, or, inArray } from "drizzle-orm";
 
 // ─── Frequency window mapping ─────────────────────────────────────────────────
 
@@ -194,6 +195,43 @@ export const DEFAULT_GROUP_SEEDS: Array<{
   },
 ];
 
+// ─── Global opt-out helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns a Set of phone numbers that have opted out of SMS across any channel:
+ *   1. alwaysOnEnrollments where status = 'OPTED_OUT'
+ *   2. conversationSessions where smsOptOut = 1
+ *   3. completedJobs where status = 'OPTED_OUT' (review flow STOP)
+ *
+ * These phones must never be enrolled in any always-on group, and any existing
+ * PENDING enrollment for these phones should be marked OPTED_OUT.
+ */
+export async function getGlobalOptOutPhones(): Promise<Set<string>> {
+  const db = await getDb();
+  if (!db) return new Set();
+
+  const [alwaysOnOptOuts, sessionOptOuts, jobOptOuts] = await Promise.all([
+    db
+      .selectDistinct({ phone: alwaysOnEnrollments.phone })
+      .from(alwaysOnEnrollments)
+      .where(eq(alwaysOnEnrollments.status, "OPTED_OUT")),
+    db
+      .selectDistinct({ phone: conversationSessions.leadPhone })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.smsOptOut, 1)),
+    db
+      .selectDistinct({ phone: completedJobs.phone })
+      .from(completedJobs)
+      .where(eq(completedJobs.status, "OPTED_OUT")),
+  ]);
+
+  const phones = new Set<string>();
+  for (const r of alwaysOnOptOuts) if (r.phone) phones.add(r.phone);
+  for (const r of sessionOptOuts) if (r.phone) phones.add(r.phone);
+  for (const r of jobOptOuts) if (r.phone) phones.add(r.phone);
+  return phones;
+}
+
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
 /**
@@ -265,6 +303,25 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
     dormant: 0,
   };
 
+  // ── Step 0: Build global opt-out set and mark any PENDING opted-out enrollments ──
+  // Collects opted-out phones from all three channels: always-on, conversation sessions, completed jobs.
+  const globalOptOutPhones = await getGlobalOptOutPhones();
+
+  // Mark any PENDING enrollments for opted-out phones as OPTED_OUT so they are
+  // excluded from future batches and don't appear in the approval queue.
+  if (globalOptOutPhones.size > 0) {
+    const optOutArray = Array.from(globalOptOutPhones);
+    await db
+      .update(alwaysOnEnrollments)
+      .set({ status: "OPTED_OUT" })
+      .where(
+        sql`${alwaysOnEnrollments.status} = 'PENDING' AND ${alwaysOnEnrollments.phone} IN (${sql.join(
+          optOutArray.map(p => sql`${p}`),
+          sql`, `
+        )})`
+      );
+  }
+
   // ── Step 1: Re-evaluate PENDING enrollments and promote if they've aged up ──
   // Only PENDING contacts (not yet messaged) are eligible for promotion.
   // Once a message is sent (SENT/REPLIED/BOOKED/OPTED_OUT), they stay in their group.
@@ -274,6 +331,8 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
     .where(eq(alwaysOnEnrollments.status, "PENDING"));
 
   for (const enrollment of pendingEnrollments) {
+    // Skip globally opted-out phones
+    if (globalOptOutPhones.has(enrollment.phone)) continue;
     if (!enrollment.jobDate) continue;
     const result = computeEligibleGroup(enrollment.jobDate, enrollment.frequency, nowMs);
     if (!result.eligible) continue;
@@ -306,6 +365,8 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
     .from(alwaysOnEnrollments);
 
   const excludePhones = new Set(alreadyEnrolledPhones.map((r: { phone: string }) => r.phone));
+  // Also exclude globally opted-out phones from new enrollments
+  for (const phone of Array.from(globalOptOutPhones)) excludePhones.add(phone);
 
   // Fetch all completed jobs not yet enrolled by phone
   const allJobs = await db.select().from(completedJobs);
