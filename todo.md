@@ -1714,3 +1714,4 @@
 ## Quote Form Trust Signals
 
 - [x] Add trust-signal header to QuoteForm: Maids in Black logo, BBB badge, Google 4.8 rating, Trustpilot 5 stars
+- [x] Add testimonial + multi-platform review grid (Google, Facebook, Angi, Yelp) below the quote submit button
