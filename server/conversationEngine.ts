@@ -207,10 +207,12 @@ export async function buildConfirmationMessageAsync(slot: string, address: strin
   );
 }
 
-export async function buildJadeAddressRequest(): Promise<string> {
+export async function buildJadeAddressRequest(firstName?: string): Promise<string> {
+  const name = firstName ?? "there";
   return getFlowTemplate(
     "flowB_sms3",
-    `What's the address for the cleaning?`
+    `Awesome ${name}, what's the address for service?`,
+    { "{firstName}": name }
   );
 }
 
@@ -1025,8 +1027,9 @@ async function _processLeadReplyCore(
           };
         }
         // SMS 3: ask for address
+        const firstName1 = context.leadName?.split(" ")[0] ?? context.leadName;
         return {
-          reply: await buildJadeAddressRequest(),
+          reply: await buildJadeAddressRequest(firstName1),
           nextStage: "ADDRESS",
           extractedData: { selectedSlot: slotWithTime },
         };
@@ -1042,8 +1045,9 @@ async function _processLeadReplyCore(
             extractedData: { selectedSlot: requestedSlot },
           };
         }
+        const firstName2 = context.leadName?.split(" ")[0] ?? context.leadName;
         return {
-          reply: await buildJadeAddressRequest(),
+          reply: await buildJadeAddressRequest(firstName2),
           nextStage: "ADDRESS",
           extractedData: { selectedSlot: requestedSlot },
         };

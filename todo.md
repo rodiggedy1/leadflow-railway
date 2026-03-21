@@ -1780,3 +1780,9 @@
 - [x] Wire getFlowTemplate into buildAvailabilityMessage, buildTimePrefMessage, buildAddressRequestAfterTimePref in conversationEngine.ts
 - [x] Settings page renders all Flow A SMS steps (1-6) as editable textareas
 - [x] 626/626 tests pass
+
+## Jade SMS 3 Template Update — COMPLETED
+- [x] Update flowB_sms3 default to "Awesome {firstName}, what's the address for service?"
+- [x] Wire {firstName} placeholder into the Jade address request builder
+- [x] Updated live DB value directly
+- [x] 626/626 tests pass

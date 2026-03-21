@@ -87,9 +87,9 @@ const DEFAULT_SETTINGS = [
   },
   {
     key: "flowB_sms3",
-    value: "What's the address for the cleaning?",
+    value: "Awesome {firstName}, what's the address for service?",
     label: "Flow B — SMS 3: Address Request",
-    description: "Sent after the lead picks a time (9am or 1pm).",
+    description: "Sent after the lead picks a time (9am or 1pm). Use {firstName} for the lead's first name.",
     fieldType: "textarea",
   },
   {
