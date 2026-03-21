@@ -643,14 +643,21 @@ export const commandCenterRouter = router({
       const quoteSent = sessions.filter(s => s.stage === "QUOTE_SENT");
       const bookedRevenue = booked.reduce((sum, s) => sum + calcRevenue(s), 0);
 
-      // Response time
-      const withResponse = sessions.filter(s => s.lastAiMessageAt);
-      const avgResponseMin = withResponse.length > 0
-        ? Math.round(withResponse.reduce((sum, s) => {
+      // Response time — cap to sessions where first SMS arrived within 10 min of creation
+      // (prevents cron nudges from inflating the average)
+      const TEN_MIN_MS = 10 * 60 * 1000;
+      const withFirstContact = sessions.filter(s => {
+        if (!s.lastAiMessageAt) return false;
+        const c = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
+        const r = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
+        return (r - c) <= TEN_MIN_MS;
+      });
+      const avgResponseMin = withFirstContact.length > 0
+        ? Math.round(withFirstContact.reduce((sum, s) => {
             const c = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
             const r = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
             return sum + Math.max(0, (r - c) / 60000);
-          }, 0) / withResponse.length)
+          }, 0) / withFirstContact.length)
         : 0;
 
       // Source breakdown

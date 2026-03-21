@@ -1945,3 +1945,6 @@
 ## AI Command Center Fixes — March 21 (Round 3)
 - [x] Remove dark hero banner, replace with light white header with violet AI icon, pulsing green live dot, and light KPI pills
 - [x] Fix avg contact time in hero: now uses speed.avgFirstResponseMinutes (capped 10-min window), not stats.avgResponseMinutes
+
+## AI Insights Fix — March 21 (Round 4)
+- [x] Fix getAiInsights LLM prompt: now uses same 10-min cap as getSpeedToLead — cron nudges no longer inflate the avg passed to the LLM
