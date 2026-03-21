@@ -30,6 +30,7 @@ import {
 } from "./aiService";
 import { notifyAgentOfLead } from "./agentNotification";
 import { getTemplate } from "./messageTemplateRouter";
+import { getFlowTemplate } from "./settingsRouter";
 import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
 
 export interface ConversationContext {
@@ -169,15 +170,40 @@ export function buildConfirmationMessage(slot: string, address: string): string 
  * SMS 3 in the new Jade flow: lock in the slot, ask for notes, offer call now or in a few minutes.
  * Sent when the lead picks 9am or 1pm from the SLOT_CHOICE stage.
  */
-export function buildJadeLockIn(slotWithTime: string): string {
-  return `Perfect, locking that in for you now ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`;
+export async function buildJadeLockIn(slotWithTime: string): Promise<string> {
+  return getFlowTemplate(
+    "flowB_sms4",
+    `Perfect, locking that in for you now ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?`,
+    { "{slot}": slotWithTime }
+  );
 }
 
-export function buildCallScheduledMessage(preference: string): string {
+export async function buildCallScheduledMessage(preference: string): Promise<string> {
   if (preference === "now") {
-    return `Perfect! Expect a call from us shortly. We look forward to serving you! 🏠✨`;
+    return getFlowTemplate(
+      "flowB_sms5",
+      `Perfect! Expect a call from us shortly. We look forward to serving you! 🏠✨`
+    );
   }
-  return `No problem! We'll give you a call in a few minutes. Talk soon! 🏠✨`;
+  return getFlowTemplate(
+    "flowB_sms5_later",
+    `No problem! We'll give you a call in a few minutes. Talk soon! 🏠✨`
+  );
+}
+
+export async function buildConfirmationMessageAsync(slot: string, address: string): Promise<string> {
+  return getFlowTemplate(
+    "flowA_sms5",
+    `Perfect — I've reserved ${slot} for you at ${address}.\n\nWe just do a quick 60-second confirmation call to finalize the booking and make sure we have everything correct.\n\nShould we call you now or in a few minutes?`,
+    { "{slot}": slot, "{address}": address }
+  );
+}
+
+export async function buildJadeAddressRequest(): Promise<string> {
+  return getFlowTemplate(
+    "flowB_sms3",
+    `What's the address for the cleaning?`
+  );
 }
 
 // ─── Infrastructure-level language handling ──────────────────────────────────────────────────
@@ -789,7 +815,7 @@ async function _processLeadReplyCore(
       }
       const firstName = context.leadName.split(" ")[0] ?? context.leadName;
       return {
-        reply: buildJadePriceReveal({
+        reply: await buildJadePriceReveal({
           firstName,
           bedrooms: context.bedrooms,
           bathrooms: context.bathrooms,
@@ -880,7 +906,7 @@ async function _processLeadReplyCore(
         // SMS 2: price reveal + supplies note + 9am/1pm offer on the specific day
         const firstName = context.leadName.split(" ")[0] ?? context.leadName;
         return {
-          reply: buildJadePriceReveal({
+          reply: await buildJadePriceReveal({
             firstName,
             bedrooms: context.bedrooms,
             bathrooms: context.bathrooms,
@@ -934,7 +960,7 @@ async function _processLeadReplyCore(
         const slotLabel = matchedSlot?.label ?? parsed.extractedSlot;
         const firstName = context.leadName.split(" ")[0] ?? context.leadName;
         return {
-          reply: buildJadePriceReveal({
+          reply: await buildJadePriceReveal({
             firstName,
             bedrooms: context.bedrooms,
             bathrooms: context.bathrooms,
@@ -982,20 +1008,35 @@ async function _processLeadReplyCore(
       if (picked9am || picked1pm || parsed.intent === "slot1" || parsed.intent === "slot2") {
         const timeLabel = (picked9am || parsed.intent === "slot1") ? "9am" : "1pm";
         const slotWithTime = `${chosenDay} at ${timeLabel}`;
-        // SMS 3: lock in + notes + call question
+        // If address already on file (reactivation/always-on), skip address step
+        if (context.address && context.address.length >= 5) {
+          return {
+            reply: await buildJadeLockIn(slotWithTime),
+            nextStage: "CONFIRMATION",
+            extractedData: { selectedSlot: slotWithTime },
+          };
+        }
+        // SMS 3: ask for address
         return {
-          reply: buildJadeLockIn(slotWithTime),
-          nextStage: "CONFIRMATION",
+          reply: await buildJadeAddressRequest(),
+          nextStage: "ADDRESS",
           extractedData: { selectedSlot: slotWithTime },
         };
       }
 
-      // Custom date/time request — accept it and send SMS 3
+      // Custom date/time request — ask for address
       if (parsed.intent === "custom_date" || parsed.extractedSlot) {
         const requestedSlot = parsed.extractedSlot ?? leadReply.trim();
+        if (context.address && context.address.length >= 5) {
+          return {
+            reply: await buildJadeLockIn(requestedSlot),
+            nextStage: "CONFIRMATION",
+            extractedData: { selectedSlot: requestedSlot },
+          };
+        }
         return {
-          reply: buildJadeLockIn(requestedSlot),
-          nextStage: "CONFIRMATION",
+          reply: await buildJadeAddressRequest(),
+          nextStage: "ADDRESS",
           extractedData: { selectedSlot: requestedSlot },
         };
       }
@@ -1094,8 +1135,18 @@ async function _processLeadReplyCore(
           nextStage: offScript.isWrongPath ? "DONE" : "ADDRESS",
         };
       }
+      // Jade flow (B): after address, send lock-in + notes + call question
+      // Madison flow (A): after address, send confirmation with slot + address + call question
+      const flowVariantAddr = (context.smsFlow ?? "B").toUpperCase();
+      if (flowVariantAddr === "B") {
+        return {
+          reply: await buildJadeLockIn(slot),
+          nextStage: "CONFIRMATION",
+          extractedData: { address },
+        };
+      }
       return {
-        reply: buildConfirmationMessage(slot, address),
+        reply: await buildConfirmationMessageAsync(slot, address),
         nextStage: "CONFIRMATION",
         extractedData: { address },
       };
@@ -1122,7 +1173,7 @@ async function _processLeadReplyCore(
         );
 
         return {
-          reply: buildCallScheduledMessage(pref),
+          reply: await buildCallScheduledMessage(pref),
           nextStage: "CALL_SCHEDULED",
           extractedData: { callPreference: pref },
         };

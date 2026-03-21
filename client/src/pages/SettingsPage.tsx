@@ -406,6 +406,54 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
+            {/* Flow B SMS Templates */}
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#E8735A]" />
+                  Flow B — Jade SMS Scripts
+                </CardTitle>
+                <CardDescription className="text-xs text-gray-500">
+                  Edit the messages sent in each step of the Jade flow. Use placeholders like <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code> — they are replaced automatically.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 divide-y divide-gray-100">
+                {["flowB_sms1", "flowB_sms2", "flowB_sms3", "flowB_sms4", "flowB_sms5", "flowB_sms5_later"].map((key, idx) => {
+                  const setting = settingsByKey[key];
+                  if (!setting) return null;
+                  return (
+                    <div key={key} className={idx > 0 ? "pt-5" : ""}>
+                      <SettingField setting={setting} onSave={handleSave} />
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Flow A SMS Templates */}
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <User className="w-4 h-4 text-blue-500" />
+                  Flow A — Madison SMS Scripts
+                </CardTitle>
+                <CardDescription className="text-xs text-gray-500">
+                  Edit the messages sent in each step of the Madison flow. Use placeholders like <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code> — they are replaced automatically.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 divide-y divide-gray-100">
+                {["flowA_sms1", "flowA_sms2", "flowA_sms3", "flowA_sms4", "flowA_sms5", "flowA_sms6", "flowA_sms6_later"].map((key, idx) => {
+                  const setting = settingsByKey[key];
+                  if (!setting) return null;
+                  return (
+                    <div key={key} className={idx > 0 ? "pt-5" : ""}>
+                      <SettingField setting={setting} onSave={handleSave} />
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
             {/* Other settings sections */}
             {SECTIONS.map((section) => (
               <Card key={section.title} className="border border-gray-200 shadow-sm">

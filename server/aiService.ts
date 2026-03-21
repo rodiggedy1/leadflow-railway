@@ -14,6 +14,7 @@ import { invokeLLM } from "./_core/llm";
 import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQuestion } from "./availability";
 import { resolveExtras } from "../shared/extras";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
+import { getFlowTemplate } from "./settingsRouter";
 
 // ─── Brand System Prompt ──────────────────────────────────────────────────────
 
@@ -63,22 +64,26 @@ export interface QuoteMessageParams {
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
   const { leadName } = params;
   const firstName = leadName.split(" ")[0] ?? leadName;
-  return buildFallbackQuoteMessage(firstName);
+  return getFlowTemplate(
+    "flowB_sms1",
+    buildFallbackQuoteMessage(firstName),
+    { "{firstName}": firstName }
+  );
 }
 
 /**
  * Generates SMS 2 in the new Jade flow: price reveal + supplies note + 9am/1pm offer.
  * Called from the AVAILABILITY stage handler when the lead replies with a specific day.
  */
-export function buildJadePriceReveal(params: {
+export async function buildJadePriceReveal(params: {
   firstName: string;
   bedrooms: string;
   bathrooms: string;
   price: string;
   extras?: string[] | null;
   day: string; // the specific day the lead mentioned
-}): string {
-  const { firstName: _firstName, bedrooms, bathrooms, price, extras, day } = params;
+}): Promise<string> {
+  const { firstName, bedrooms, bathrooms, price, extras, day } = params;
   const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
   const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
   const basePrice = parseInt(price, 10) || 0;
@@ -89,7 +94,21 @@ export function buildJadePriceReveal(params: {
     ? `\n\nThat includes your add-ons (${resolvedExtras.map(e => e.label).join(", ")}).`
     : "";
 
-  return `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
+  const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
+
+  // Use template from DB; substitute dynamic values. extrasNote is appended to the fallback only.
+  const template = await getFlowTemplate(
+    "flowB_sms2",
+    fallback,
+    {
+      "{firstName}": firstName,
+      "{bedrooms}": bedrooms,
+      "{bathrooms}": bathrooms,
+      "{price}": totalDisplay,
+      "{day}": day,
+    }
+  );
+  return template;
 }
 
 /**
@@ -485,20 +504,30 @@ function buildFallbackQuoteMessage(firstName: string): string {
  * SMS 1 in Flow A (Madison): price upfront + value note.
  * Sent with Madison's headshot photo as MMS.
  */
-export function buildMadisonQuoteMessage(params: QuoteMessageParams): string {
+export async function buildMadisonQuoteMessage(params: QuoteMessageParams): Promise<string> {
   const { leadName, bedrooms, bathrooms, serviceType, price, extras } = params;
   const firstName = leadName.split(" ")[0] ?? leadName;
   const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
   const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
   const basePrice = parseInt(price, 10) || 0;
   const grandTotal = basePrice + extrasTotal;
-  if (resolvedExtras.length === 0) {
-    return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`;
-  }
-  const extrasLines = resolvedExtras
-    .map(e => `  + ${e.label}: $${e.price}`)
-    .join("\n");
-  return `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black.\n\nYour quote:\n  ${serviceType} (${bedrooms} / ${bathrooms}): $${price}\n${extrasLines}\n  ─────────────\n  Total: $${grandTotal}\n\nOur fully insured team handles everything — including your selected add-ons!`;
+  const totalDisplay = resolvedExtras.length > 0 ? `$${grandTotal}` : `$${price}`;
+
+  const fallback = resolvedExtras.length === 0
+    ? `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black. Your ${serviceType} quote for a ${bedrooms} / ${bathrooms} home is $${price} — our fully insured team handles everything.`
+    : `Hi ${firstName}! Madison here, thanks for reaching out to Maids in Black.\n\nYour quote:\n  ${serviceType} (${bedrooms} / ${bathrooms}): $${price}\n${resolvedExtras.map(e => `  + ${e.label}: $${e.price}`).join("\n")}\n  ─────────────\n  Total: $${grandTotal}\n\nOur fully insured team handles everything — including your selected add-ons!`;
+
+  return getFlowTemplate(
+    "flowA_sms1",
+    fallback,
+    {
+      "{firstName}": firstName,
+      "{serviceType}": serviceType,
+      "{bedrooms}": bedrooms,
+      "{bathrooms}": bathrooms,
+      "{price}": totalDisplay,
+    }
+  );
 }
 
 function buildFallbackOffScript(nextAction: string): string {

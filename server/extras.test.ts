@@ -81,7 +81,7 @@ describe("generateQuoteMessage", () => {
   it("buildJadePriceReveal: calculates grand total correctly for multiple extras", async () => {
     // Price/extras are revealed in SMS 2 via buildJadePriceReveal, not generateQuoteMessage
     const { buildJadePriceReveal } = await import("./aiService");
-    const msg = buildJadePriceReveal({
+    const msg = await buildJadePriceReveal({
       firstName: "Bob",
       bedrooms: "2 Bedrooms",
       bathrooms: "1 Bathroom",

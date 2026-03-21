@@ -1764,3 +1764,12 @@
 - [x] Fix CONFIRMATION stage: add wrong-path detection for unclear replies (existing customer exits to DONE)
 - [x] Update tests: QUOTE_SENT tests now explicitly set `smsFlow: "A"` or `"B"`; added 2 new Flow B tests
 - [x] 625/625 tests pass
+
+## Editable SMS Flow Templates in Settings — COMPLETED
+
+- [x] Show all SMS messages per flow (not just 2) in the Settings preview
+- [x] Make each SMS step editable as a textarea with save button
+- [x] Store custom templates in appSettings DB (flowB_sms1-5, flowA_sms1-6)
+- [x] Wire saved templates into conversation engine and routers via getFlowTemplate helper
+- [x] Add address capture to Jade flow (SLOT_CHOICE → ADDRESS → CONFIRMATION)
+- [x] 626/626 tests pass

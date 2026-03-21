@@ -1980,7 +1980,7 @@ async function processQuoteInBackground(
 
   if (flowVariant === "A") {
     // ── Flow A (Madison): SMS 1 = price upfront + value note (with photo), SMS 2 = availability question ──
-    msg1 = buildMadisonQuoteMessage({
+    msg1 = await buildMadisonQuoteMessage({
       leadName: input.name,
       bedrooms: input.bedrooms,
       bathrooms: input.bathrooms,
