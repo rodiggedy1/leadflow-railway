@@ -27,6 +27,7 @@ import { qualityRouter } from "./qualityRouter";
 import { cleanerRouter } from "./cleanerRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
+import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -1900,6 +1901,15 @@ async function processWidgetLeadInBackground(input: {
     console.error("[submitWidgetLead] Secondary alert SMS failed:", err)
   );
 
+  // ── Step 1b: VAPI call notification to CS team (fire-and-forget) ─────────
+  // Widget leads don't have room counts yet — use placeholder text
+  notifyNewLeadViaCall({
+    name: firstName,
+    serviceType: "home cleaning",
+    bedrooms: "unknown",
+    bathrooms: "unknown",
+  }).catch(err => console.error("[submitWidgetLead] VAPI call notification failed:", err));
+
   // ── Step 2: Read widgetSmsFlow setting to determine persona ───────────────────
   const db = await getDb();
   if (!db) {
@@ -2014,6 +2024,14 @@ async function processQuoteInBackground(
   sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err =>
     console.error("[submitQuote] Secondary alert SMS failed:", err)
   );
+
+  // ── Step 1b: VAPI call notification to CS team (fire-and-forget) ─────────
+  notifyNewLeadViaCall({
+    name: toTitleCase(input.name),
+    serviceType: input.serviceType,
+    bedrooms: input.bedrooms,
+    bathrooms: input.bathrooms,
+  }).catch(err => console.error("[submitQuote] VAPI call notification failed:", err));
 
   // ── Step 2: Read smsFlow setting to determine which flow to use ────────────
   const db = await getDb();

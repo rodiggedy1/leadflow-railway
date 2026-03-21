@@ -1890,3 +1890,10 @@
 - [x] Idempotency guard in webhooks.ts: skip processing if msg.id === session.lastProcessedMessageId
 - [x] Persist lastProcessedMessageId in the DB update after each successful processing
 - [x] 15 new idempotency tests (723/723 pass)
+
+## VAPI Lead Call Notification — March 21
+- [x] Build vapiCallNotification service: outbound call to 302-981-6191 (test) with lead summary TTS
+- [x] Business hours guard: only call between 7am–7pm ET
+- [x] TTS script: "New lead alert. {name} requested a {serviceType} for {bedrooms}, {bathrooms}. Claim it in Heyjade and call right away."
+- [x] Wire into form and widget lead submission flows (fire-and-forget)
+- [x] Write tests for business hours guard and TTS script generation (21 tests, all pass)
