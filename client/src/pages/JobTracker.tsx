@@ -103,17 +103,20 @@ function StarRating({
   const [hovered, setHovered] = useState(0);
   const [selected, setSelected] = useState(existingRating ?? 0);
   const [submitted, setSubmitted] = useState(!!existingRating);
+  const [lastSubmitted, setLastSubmitted] = useState(existingRating ?? 0);
   const [comment, setComment] = useState("");
   const [showComment, setShowComment] = useState(false);
 
   const submitRating = trpc.tracker.submitRating.useMutation({
     onSuccess: () => {
       setSubmitted(true);
+      setLastSubmitted(selected);
+      setShowComment(false);
+      setComment("");
     },
   });
 
   const handleStarClick = (star: number) => {
-    if (submitted) return;
     setSelected(star);
     if (star >= 4) {
       // Auto-submit for high ratings — no friction
@@ -125,7 +128,7 @@ function StarRating({
   };
 
   const handleSubmit = () => {
-    if (!selected || submitted) return;
+    if (!selected) return;
     submitRating.mutate({ token, rating: selected, comment: comment || undefined });
   };
 
@@ -140,13 +143,23 @@ function StarRating({
             <span
               key={s}
               className={`text-2xl transition-all ${
-                s <= (existingRating ?? selected) ? "opacity-100" : "opacity-20"
+                s <= lastSubmitted ? "opacity-100" : "opacity-20"
               }`}
             >
               ★
             </span>
           ))}
         </div>
+        <button
+          className="mt-4 text-xs text-white/30 hover:text-white/60 underline underline-offset-2 transition-colors"
+          onClick={() => {
+            setSubmitted(false);
+            setShowComment(false);
+            setComment("");
+          }}
+        >
+          Change rating
+        </button>
       </div>
     );
   }

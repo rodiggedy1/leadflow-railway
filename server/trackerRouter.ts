@@ -95,10 +95,8 @@ export const trackerRouter = router({
 
       if (!jobs.length) throw new Error("Invalid tracker token");
       const job = jobs[0]!;
-      if (job.customerRating !== null) {
-        return { success: false, message: "Rating already submitted" };
-      }
 
+      // Allow re-rating — customers can update their rating at any time
       await db
         .update(cleanerJobs)
         .set({ customerRating: input.rating })
