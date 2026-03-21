@@ -514,8 +514,8 @@ Instructions:
 /**
  * SMS 1 in the new Jade flow: greeting + ask for day. No price yet.
  */
-function buildFallbackQuoteMessage(firstName: string): string {
-  return `Hey ${firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking so we can see how fast we can get you taken care of?`;
+function buildFallbackQuoteMessage(_firstName: string): string {
+  return `Awesome, we'd love to help! What day were you thinking so we can see how fast we can get you taken care of?`;
 }
 
 /**

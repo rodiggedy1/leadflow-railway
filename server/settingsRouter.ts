@@ -73,7 +73,7 @@ const DEFAULT_SETTINGS = [
   // ── Flow B (Jade) SMS Templates ───────────────────────────────────────────
   {
     key: "flowB_sms1",
-    value: "Hey {firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking so we can see how fast we can get you taken care of?",
+    value: "Awesome, we'd love to help! What day were you thinking so we can see how fast we can get you taken care of?",
     label: "Flow B — SMS 1: Greeting",
     description: "Sent immediately after the lead submits the quote form. Use {firstName} for the lead's first name.",
     fieldType: "textarea",

@@ -44,12 +44,11 @@ describe("generateQuoteMessage", () => {
     price: "130",
   };
 
-  it("SMS 1: Jade greeting asks for a day (no price in SMS 1)", async () => {
+  it("SMS 1: Jade day-ask (no price, no Jade re-intro)", async () => {
     const result = await generateQuoteMessage(params);
-    // New Jade flow: SMS 1 is a greeting + day ask. Price is revealed in SMS 2.
-    expect(result).toContain("Sarah");
-    expect(result).toContain("Jade");
-    expect(result).toContain("Maids in Black");
+    // flowB_sms1 is the day-ask sent after the form submit.
+    // It no longer re-introduces Jade (she already introduced herself in the widget sizing SMS
+    // or is implied by context). It just asks for a day.
     expect(result).toContain("day");
     // Price is NOT in SMS 1 — it's in SMS 2 (buildJadePriceReveal)
     expect(result).not.toContain("$130");
@@ -57,10 +56,12 @@ describe("generateQuoteMessage", () => {
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  it("uses first name only (not full name)", async () => {
+  it("does not re-introduce Jade in the day-ask SMS", async () => {
     const result = await generateQuoteMessage(params);
-    expect(result).toContain("Sarah");
-    expect(result).not.toContain("Johnson");
+    // The greeting + intro is in the widget sizing SMS (widgetFlowB_sms1).
+    // flowB_sms1 should NOT say 'Jade here' again.
+    expect(result).not.toContain("Jade here");
+    expect(result).not.toContain("Got your request");
   });
 
   it("always returns a consistent format regardless of params", async () => {

@@ -92,7 +92,7 @@ export interface StageResult {
 
 export function buildQuoteMessage(ctx: Pick<ConversationContext, "leadName" | "quotedPrice" | "bedrooms" | "bathrooms" | "serviceType">): string {
   const firstName = ctx.leadName.split(" ")[0] ?? ctx.leadName;
-  return `Hey ${firstName}! Jade here from Maids in Black \uD83D\uDE0A Got your request \u2014 we'd love to help. What day were you thinking?`;
+  return `Awesome, we'd love to help! What day were you thinking so we can see how fast we can get you taken care of?`;
 }
 
 export function buildPricingFollowUp(ctx: Pick<ConversationContext, "serviceType" | "quotedPrice">): string {

@@ -42,7 +42,7 @@ function makeContext(overrides: Partial<ConversationContext> = {}): Conversation
 
 // ─── Message builder tests ────────────────────────────────────────────────────
 describe("Message Builders", () => {
-  it("buildQuoteMessage is the Jade greeting (no price in SMS 1)", () => {
+  it("buildQuoteMessage is the Jade day-ask (no price, no re-intro)", () => {
     const msg = buildQuoteMessage({
       leadName: "John Smith",
       quotedPrice: "155",
@@ -50,9 +50,11 @@ describe("Message Builders", () => {
       bedrooms: "2 Bedrooms",
       bathrooms: "1 Bathroom",
     });
-    expect(msg).toContain("John");
-    expect(msg).toContain("Jade");
-    expect(msg).toContain("Maids in Black");
+    // flowB_sms1 no longer re-introduces Jade — just asks for a day.
+    // Jade's intro is in widgetFlowB_sms1 (widget sizing SMS) or the form context.
+    expect(msg).toContain("day");
+    expect(msg).not.toContain("Jade here");
+    expect(msg).not.toContain("Got your request");
     // SMS 1 does NOT contain the price — price is revealed in SMS 2
     expect(msg).not.toContain("$155");
   });

@@ -6,9 +6,13 @@
  *   1. Form SMS — flow selector + templates for the quote form (Madison / Jade)
  *   2. Widget SMS — flow selector + templates for the chat widget (Madison / Jade)
  *   3. General — Google Review URL, tracker SMS, business info, etc.
+ *
+ * Key design: `localEdits` is lifted to the page level so the conversation
+ * preview and the textarea fields always read from the same source — edits
+ * in the textarea update the preview in real-time before saving.
  */
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +26,7 @@ import {
   FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText,
 } from "lucide-react";
 
-// ── Section config — groups settings visually ────────────────────────────────
+// ── Section config ────────────────────────────────────────────────────────────
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
   googleReviewUrl: <Link className="w-4 h-4" />,
@@ -51,7 +55,7 @@ const SECTIONS = [
   },
 ];
 
-// ── SMS Flow Selector ─────────────────────────────────────────────────────────
+// ── Flow options ──────────────────────────────────────────────────────────────
 
 const FLOW_OPTIONS = [
   {
@@ -89,7 +93,7 @@ const WIDGET_FLOW_OPTIONS = [
     value: "B",
     label: "Flow B — Jade",
     icon: <Sparkles className="w-4 h-4" />,
-    description: "Widget leads get Jade. Asks for bedrooms/bathrooms, then greets and asks for day — price is revealed only after the lead replies with a day.",
+    description: "Widget leads get Jade. Asks for bedrooms/bathrooms, then asks for day — price is revealed only after the lead replies with a day.",
     color: "coral",
   },
   {
@@ -101,7 +105,8 @@ const WIDGET_FLOW_OPTIONS = [
   },
 ];
 
-// Sample data substitution for preview
+// ── Preview variable substitution ────────────────────────────────────────────
+
 function applyPreviewVars(template: string): string {
   return template
     .replace(/\{firstName\}/g, "Sarah")
@@ -118,7 +123,8 @@ function applyPreviewVars(template: string): string {
     .replace(/\{extrasLine\}/g, " (including clean inside oven)");
 }
 
-// Full conversation thread definitions per flow
+// ── Conversation thread definitions ──────────────────────────────────────────
+
 type ConvoItem = { type: 'bot'; label: string; templateKey: string } | { type: 'lead'; text: string };
 
 const FLOW_B_CONVO: ConvoItem[] = [
@@ -146,37 +152,37 @@ const FLOW_A_CONVO: ConvoItem[] = [
   { type: 'bot', label: 'SMS 6', templateKey: 'flowA_sms6' },
 ];
 
-// Widget conversation threads — start with sizing question, then continue like form flows
+// Widget: starts with persona-specific sizing SMS, then continues with shared flow scripts
 const WIDGET_FLOW_B_CONVO: ConvoItem[] = [
   { type: 'bot', label: 'SMS 1', templateKey: 'widgetFlowB_sms1' },
   { type: 'lead', text: '3 bed / 2 bath' },
-  // After sizing, Jade asks for day (AVAILABILITY stage — uses flowB_sms1 logic but via LLM)
-  { type: 'bot', label: 'Day ask', templateKey: 'flowB_sms1' },
+  { type: 'bot', label: 'SMS 2', templateKey: 'flowB_sms1' },
   { type: 'lead', text: 'Thursday works!' },
-  { type: 'bot', label: 'Price reveal', templateKey: 'flowB_sms2' },
+  { type: 'bot', label: 'SMS 3', templateKey: 'flowB_sms2' },
   { type: 'lead', text: '9am please' },
-  { type: 'bot', label: 'Address ask', templateKey: 'flowB_sms3' },
+  { type: 'bot', label: 'SMS 4', templateKey: 'flowB_sms3' },
   { type: 'lead', text: '123 Main St, DC 20001' },
-  { type: 'bot', label: 'Lock-in', templateKey: 'flowB_sms4' },
+  { type: 'bot', label: 'SMS 5', templateKey: 'flowB_sms4' },
   { type: 'lead', text: 'Call me now!' },
-  { type: 'bot', label: 'Confirmed', templateKey: 'flowB_sms5' },
+  { type: 'bot', label: 'SMS 6', templateKey: 'flowB_sms5' },
 ];
 
 const WIDGET_FLOW_A_CONVO: ConvoItem[] = [
   { type: 'bot', label: 'SMS 1', templateKey: 'widgetFlowA_sms1' },
   { type: 'lead', text: '3 bed / 2 bath' },
-  // After sizing, Madison sends price + availability (via LLM using flowA templates)
-  { type: 'bot', label: 'Price + avail', templateKey: 'flowA_sms1' },
-  { type: 'bot', label: 'Slot offer', templateKey: 'flowA_sms2' },
+  { type: 'bot', label: 'SMS 2', templateKey: 'flowA_sms1' },
+  { type: 'bot', label: 'SMS 3', templateKey: 'flowA_sms2' },
   { type: 'lead', text: 'Thursday works for me!' },
-  { type: 'bot', label: 'Time pref', templateKey: 'flowA_sms3' },
+  { type: 'bot', label: 'SMS 4', templateKey: 'flowA_sms3' },
   { type: 'lead', text: 'Morning please' },
-  { type: 'bot', label: 'Address ask', templateKey: 'flowA_sms4' },
+  { type: 'bot', label: 'SMS 5', templateKey: 'flowA_sms4' },
   { type: 'lead', text: '123 Main St, DC 20001' },
-  { type: 'bot', label: 'Confirmation', templateKey: 'flowA_sms5' },
+  { type: 'bot', label: 'SMS 6', templateKey: 'flowA_sms5' },
   { type: 'lead', text: 'Call me now!' },
-  { type: 'bot', label: 'Confirmed', templateKey: 'flowA_sms6' },
+  { type: 'bot', label: 'SMS 7', templateKey: 'flowA_sms6' },
 ];
+
+// ── Color map ─────────────────────────────────────────────────────────────────
 
 const FLOW_COLOR_MAP: Record<string, { bg: string; border: string; text: string; badge: string }> = {
   blue: {
@@ -199,35 +205,29 @@ const FLOW_COLOR_MAP: Record<string, { bg: string; border: string; text: string;
   },
 };
 
+// ── SMS Flow Selector ─────────────────────────────────────────────────────────
+// Reads from `effectiveValues` (merged server + local edits) so the preview
+// always matches what's in the textarea below.
+
 function SmsFlowSelector({
   currentValue,
   onSave,
-  settingsByKey,
+  effectiveValues,
   flowOptions,
   flowAConvo,
   flowBConvo,
-  settingKey,
-  label,
-  description,
 }: {
   currentValue: string;
   onSave: (value: string) => Promise<void>;
-  settingsByKey: Record<string, { key: string; value: string; label: string; description: string | null; fieldType: string }>;
+  effectiveValues: Record<string, string>;
   flowOptions: typeof FLOW_OPTIONS;
   flowAConvo: ConvoItem[];
   flowBConvo: ConvoItem[];
-  settingKey: string;
-  label: string;
-  description: string;
 }) {
   const [selected, setSelected] = useState(currentValue);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const isDirty = selected !== currentValue;
-
-  const handleSelect = (value: string) => {
-    setSelected(value);
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -240,11 +240,10 @@ function SmsFlowSelector({
     }
   };
 
-  // Pick the right conversation thread based on selected flow
   const convoThread: ConvoItem[] | null =
     selected === "A" ? flowAConvo :
     selected === "B" ? flowBConvo :
-    null; // split — show both
+    null;
 
   return (
     <div className="space-y-4">
@@ -257,14 +256,13 @@ function SmsFlowSelector({
             <button
               key={option.value}
               type="button"
-              onClick={() => handleSelect(option.value)}
+              onClick={() => setSelected(option.value)}
               className={`relative text-left rounded-xl border-2 p-4 transition-all cursor-pointer
                 ${isActive
                   ? `${colors.bg} ${colors.border} shadow-sm`
                   : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                 }`}
             >
-              {/* Active indicator */}
               {isActive && (
                 <span className={`absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full ${colors.badge}`}>
                   Active
@@ -280,7 +278,7 @@ function SmsFlowSelector({
         })}
       </div>
 
-      {/* Full conversation thread preview */}
+      {/* Conversation preview */}
       {convoThread ? (
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Full Conversation Preview</p>
@@ -295,8 +293,8 @@ function SmsFlowSelector({
                   </div>
                 );
               }
-              const templateValue = settingsByKey[item.templateKey]?.value ?? "";
-              const previewText = applyPreviewVars(templateValue);
+              const rawValue = effectiveValues[item.templateKey] ?? "";
+              const previewText = applyPreviewVars(rawValue);
               return (
                 <div key={idx} className="flex items-start gap-2">
                   <span className="text-xs text-gray-400 w-16 shrink-0 pt-1.5">{item.label}</span>
@@ -316,7 +314,6 @@ function SmsFlowSelector({
         </div>
       )}
 
-      {/* Save button */}
       {isDirty && (
         <div className="flex items-center gap-3">
           <Button
@@ -328,7 +325,7 @@ function SmsFlowSelector({
             {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
             Save Flow Setting
           </Button>
-          <span className="text-xs text-gray-400">Changes apply to new leads only — active conversations keep their assigned flow.</span>
+          <span className="text-xs text-gray-400">Changes apply to new leads only.</span>
         </div>
       )}
       {saved && (
@@ -340,7 +337,7 @@ function SmsFlowSelector({
   );
 }
 
-// ── Toggle component ─────────────────────────────────────────────────────────
+// ── Toggle field ──────────────────────────────────────────────────────────────
 
 function ToggleField({
   value,
@@ -370,24 +367,36 @@ function ToggleField({
   );
 }
 
-// ── Single setting field ─────────────────────────────────────────────────────
+// ── Single setting field ──────────────────────────────────────────────────────
+// Calls onLocalChange on every keystroke so the preview stays in sync.
 
 function SettingField({
-  setting,
+  settingKey,
+  savedValue,
+  localValue,
+  label,
+  description,
+  fieldType,
+  onLocalChange,
   onSave,
 }: {
-  setting: { key: string; value: string; label: string; description: string | null; fieldType: string };
+  settingKey: string;
+  savedValue: string;
+  localValue: string;
+  label: string;
+  description: string | null;
+  fieldType: string;
+  onLocalChange: (key: string, value: string) => void;
   onSave: (key: string, value: string) => Promise<void>;
 }) {
-  const [localValue, setLocalValue] = useState(setting.value);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const isDirty = localValue !== setting.value;
+  const isDirty = localValue !== savedValue;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(setting.key, localValue);
+      await onSave(settingKey, localValue);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -395,12 +404,11 @@ function SettingField({
     }
   };
 
-  // Auto-save toggles immediately
   const handleToggleChange = async (v: string) => {
-    setLocalValue(v);
+    onLocalChange(settingKey, v);
     setSaving(true);
     try {
-      await onSave(setting.key, v);
+      await onSave(settingKey, v);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -411,27 +419,27 @@ function SettingField({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="text-[#E8735A]">{SECTION_ICONS[setting.key]}</span>
-        <label className="text-sm font-semibold text-gray-800">{setting.label}</label>
+        <span className="text-[#E8735A]">{SECTION_ICONS[settingKey]}</span>
+        <label className="text-sm font-semibold text-gray-800">{label}</label>
         {saved && (
           <span className="flex items-center gap-1 text-emerald-600 text-xs font-medium">
             <CheckCircle2 className="w-3 h-3" /> Saved
           </span>
         )}
       </div>
-      {setting.description && (
-        <p className="text-xs text-gray-500 leading-relaxed">{setting.description}</p>
+      {description && (
+        <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
       )}
-      {setting.fieldType === "toggle" ? (
+      {fieldType === "toggle" ? (
         <ToggleField value={localValue} onChange={handleToggleChange} />
-      ) : setting.fieldType === "textarea" ? (
+      ) : fieldType === "textarea" ? (
         <div className="space-y-2">
           <Textarea
             value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
+            onChange={(e) => onLocalChange(settingKey, e.target.value)}
             rows={3}
             className="text-sm font-mono resize-none"
-            placeholder={setting.label}
+            placeholder={label}
           />
           {isDirty && (
             <Button
@@ -449,10 +457,10 @@ function SettingField({
         <div className="flex gap-2">
           <Input
             value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
+            onChange={(e) => onLocalChange(settingKey, e.target.value)}
             className="text-sm"
-            placeholder={setting.label}
-            type={setting.fieldType === "url" ? "url" : "text"}
+            placeholder={label}
+            type={fieldType === "url" ? "url" : "text"}
           />
           {isDirty && (
             <Button
@@ -477,14 +485,18 @@ function SmsTemplateCard({
   description,
   icon,
   templateKeys,
-  settingsByKey,
+  serverSettings,
+  localEdits,
+  onLocalChange,
   onSave,
 }: {
   title: string;
   description: React.ReactNode;
   icon: React.ReactNode;
   templateKeys: string[];
-  settingsByKey: Record<string, { key: string; value: string; label: string; description: string | null; fieldType: string }>;
+  serverSettings: Record<string, { key: string; value: string; label: string; description: string | null; fieldType: string }>;
+  localEdits: Record<string, string>;
+  onLocalChange: (key: string, value: string) => void;
   onSave: (key: string, value: string) => Promise<void>;
 }) {
   return (
@@ -500,11 +512,21 @@ function SmsTemplateCard({
       </CardHeader>
       <CardContent className="space-y-5 divide-y divide-gray-100">
         {templateKeys.map((key, idx) => {
-          const setting = settingsByKey[key];
+          const setting = serverSettings[key];
           if (!setting) return null;
+          const localValue = localEdits[key] ?? setting.value;
           return (
             <div key={key} className={idx > 0 ? "pt-5" : ""}>
-              <SettingField setting={setting} onSave={onSave} />
+              <SettingField
+                settingKey={key}
+                savedValue={setting.value}
+                localValue={localValue}
+                label={setting.label}
+                description={setting.description}
+                fieldType={setting.fieldType}
+                onLocalChange={onLocalChange}
+                onSave={onSave}
+              />
             </div>
           );
         })}
@@ -513,7 +535,7 @@ function SmsTemplateCard({
   );
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 type SettingsTab = "form" | "widget" | "general";
 
@@ -522,18 +544,39 @@ export default function SettingsPage() {
   const updateSetting = trpc.settings.update.useMutation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("form");
 
+  // Lifted local edits — keyed by setting key, updated on every keystroke.
+  // The preview reads from effectiveValues which merges server + local edits.
+  const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
+
+  const handleLocalChange = useCallback((key: string, value: string) => {
+    setLocalEdits((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
   const handleSave = async (key: string, value: string) => {
     await updateSetting.mutateAsync({ key, value });
     await refetch();
+    // After saving, remove the local edit so the saved server value is used
+    setLocalEdits((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     toast.success("Setting saved");
   };
 
-  const settingsByKey = Object.fromEntries(
+  // serverSettings: keyed by setting key
+  const serverSettings = Object.fromEntries(
     (settings ?? []).map((s) => [s.key, s])
   );
 
-  const currentFormFlow = settingsByKey["smsFlow"]?.value ?? "B";
-  const currentWidgetFlow = settingsByKey["widgetSmsFlow"]?.value ?? "B";
+  // effectiveValues: local edit wins over server value — used by the preview
+  const effectiveValues: Record<string, string> = {};
+  for (const [key, s] of Object.entries(serverSettings)) {
+    effectiveValues[key] = localEdits[key] ?? s.value;
+  }
+
+  const currentFormFlow = effectiveValues["smsFlow"] ?? "B";
+  const currentWidgetFlow = effectiveValues["widgetSmsFlow"] ?? "B";
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "form", label: "Form SMS", icon: <FileText className="w-4 h-4" /> },
@@ -582,7 +625,7 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
-            {/* ── Form SMS Tab ───────────────────────────────────────────────── */}
+            {/* ── Form SMS Tab ─────────────────────────────────────────────── */}
             {activeTab === "form" && (
               <div className="space-y-6">
                 <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
@@ -591,7 +634,6 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                {/* Form Flow Selector */}
                 <Card className="border border-gray-200 shadow-sm">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
@@ -599,55 +641,54 @@ export default function SettingsPage() {
                       Form SMS Conversation Flow
                     </CardTitle>
                     <CardDescription className="text-xs text-gray-500">
-                      Choose which opening SMS script is sent to new quote form leads. Changes apply to new leads only — active conversations keep their assigned flow.
+                      Choose which opening SMS script is sent to new quote form leads. Changes apply to new leads only.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SmsFlowSelector
                       currentValue={currentFormFlow}
                       onSave={(value) => handleSave("smsFlow", value)}
-                      settingsByKey={settingsByKey}
+                      effectiveValues={effectiveValues}
                       flowOptions={FLOW_OPTIONS}
                       flowAConvo={FLOW_A_CONVO}
                       flowBConvo={FLOW_B_CONVO}
-                      settingKey="smsFlow"
-                      label="Form SMS Flow"
-                      description="Controls which flow new form leads receive."
                     />
                   </CardContent>
                 </Card>
 
-                {/* Flow B SMS Templates */}
                 <SmsTemplateCard
                   title="Flow B — Jade SMS Scripts"
                   description={
                     <>
-                      Edit the messages sent in each step of the Jade flow. Use placeholders like <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code> — they are replaced automatically.
+                      Edit the messages sent in each step of the Jade flow. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code> — they are replaced automatically.
                     </>
                   }
                   icon={<Sparkles className="w-4 h-4 text-[#E8735A]" />}
                   templateKeys={["flowB_sms1", "flowB_sms2", "flowB_sms3", "flowB_sms4", "flowB_sms5", "flowB_sms5_later"]}
-                  settingsByKey={settingsByKey}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
                   onSave={handleSave}
                 />
 
-                {/* Flow A SMS Templates */}
                 <SmsTemplateCard
                   title="Flow A — Madison SMS Scripts"
                   description={
                     <>
-                      Edit the messages sent in each step of the Madison flow. Use placeholders like <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code> — they are replaced automatically.
+                      Edit the messages sent in each step of the Madison flow. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code> — they are replaced automatically.
                     </>
                   }
                   icon={<User className="w-4 h-4 text-blue-500" />}
                   templateKeys={["flowA_sms1", "flowA_sms2", "flowA_sms3", "flowA_sms4", "flowA_sms5", "flowA_sms6", "flowA_sms6_later"]}
-                  settingsByKey={settingsByKey}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
                   onSave={handleSave}
                 />
               </div>
             )}
 
-            {/* ── Widget SMS Tab ─────────────────────────────────────────────── */}
+            {/* ── Widget SMS Tab ────────────────────────────────────────────── */}
             {activeTab === "widget" && (
               <div className="space-y-6">
                 <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
@@ -656,7 +697,6 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                {/* Widget Flow Selector */}
                 <Card className="border border-gray-200 shadow-sm">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
@@ -664,69 +704,69 @@ export default function SettingsPage() {
                       Widget SMS Conversation Flow
                     </CardTitle>
                     <CardDescription className="text-xs text-gray-500">
-                      Choose which persona greets widget leads. Changes apply to new widget leads only — active conversations keep their assigned flow.
+                      Choose which persona greets widget leads. Changes apply to new widget leads only.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SmsFlowSelector
                       currentValue={currentWidgetFlow}
                       onSave={(value) => handleSave("widgetSmsFlow", value)}
-                      settingsByKey={settingsByKey}
+                      effectiveValues={effectiveValues}
                       flowOptions={WIDGET_FLOW_OPTIONS}
                       flowAConvo={WIDGET_FLOW_A_CONVO}
                       flowBConvo={WIDGET_FLOW_B_CONVO}
-                      settingKey="widgetSmsFlow"
-                      label="Widget SMS Flow"
-                      description="Controls which flow new widget leads receive."
                     />
                   </CardContent>
                 </Card>
 
-                {/* Widget Sizing SMS Templates */}
                 <SmsTemplateCard
                   title="Widget SMS 1 — Sizing Question"
                   description={
                     <>
-                      The very first SMS sent to widget leads asking for their home size. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code> for the lead's first name. The rest of the conversation (price reveal, scheduling, etc.) uses the shared Flow A or Flow B scripts below.
+                      The very first SMS sent to widget leads asking for their home size. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code> for the lead's first name. The rest of the conversation uses the shared Flow A or Flow B scripts below.
                     </>
                   }
                   icon={<MessageCircle className="w-4 h-4 text-emerald-600" />}
                   templateKeys={["widgetFlowB_sms1", "widgetFlowA_sms1"]}
-                  settingsByKey={settingsByKey}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
                   onSave={handleSave}
                 />
 
-                {/* Shared Flow B templates (used after sizing in widget Jade flow) */}
                 <SmsTemplateCard
                   title="Widget Flow B — Jade Scripts (after sizing)"
                   description={
                     <>
-                      After the lead replies with their home size, the Jade widget flow uses these same scripts as the form Jade flow. Edit them here or in the Form SMS tab — they are shared. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>.
+                      After the lead replies with their home size, the Jade widget flow uses these same scripts as the form Jade flow. Edits here also update the Form SMS tab. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>.
                     </>
                   }
                   icon={<Sparkles className="w-4 h-4 text-[#E8735A]" />}
                   templateKeys={["flowB_sms1", "flowB_sms2", "flowB_sms3", "flowB_sms4", "flowB_sms5", "flowB_sms5_later"]}
-                  settingsByKey={settingsByKey}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
                   onSave={handleSave}
                 />
 
-                {/* Shared Flow A templates (used after sizing in widget Madison flow) */}
                 <SmsTemplateCard
                   title="Widget Flow A — Madison Scripts (after sizing)"
                   description={
                     <>
-                      After the lead replies with their home size, the Madison widget flow uses these same scripts as the form Madison flow. Edit them here or in the Form SMS tab — they are shared. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code>.
+                      After the lead replies with their home size, the Madison widget flow uses these same scripts as the form Madison flow. Edits here also update the Form SMS tab. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code>.
                     </>
                   }
                   icon={<User className="w-4 h-4 text-blue-500" />}
                   templateKeys={["flowA_sms1", "flowA_sms2", "flowA_sms3", "flowA_sms4", "flowA_sms5", "flowA_sms6", "flowA_sms6_later"]}
-                  settingsByKey={settingsByKey}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
                   onSave={handleSave}
                 />
               </div>
             )}
 
-            {/* ── General Tab ────────────────────────────────────────────────── */}
+            {/* ── General Tab ───────────────────────────────────────────────── */}
             {activeTab === "general" && (
               <div className="space-y-6">
                 {SECTIONS.map((section) => (
@@ -741,11 +781,21 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent className="space-y-5 divide-y divide-gray-100">
                       {section.keys.map((key, idx) => {
-                        const setting = settingsByKey[key];
+                        const setting = serverSettings[key];
                         if (!setting) return null;
+                        const localValue = localEdits[key] ?? setting.value;
                         return (
                           <div key={key} className={idx > 0 ? "pt-5" : ""}>
-                            <SettingField setting={setting} onSave={handleSave} />
+                            <SettingField
+                              settingKey={key}
+                              savedValue={setting.value}
+                              localValue={localValue}
+                              label={setting.label}
+                              description={setting.description}
+                              fieldType={setting.fieldType}
+                              onLocalChange={handleLocalChange}
+                              onSave={handleSave}
+                            />
                           </div>
                         );
                       })}
@@ -753,8 +803,7 @@ export default function SettingsPage() {
                   </Card>
                 ))}
 
-                {/* Tracker SMS placeholder preview */}
-                {settingsByKey["trackerSmsTemplate"] && (
+                {serverSettings["trackerSmsTemplate"] && (
                   <Card className="border border-dashed border-gray-300 bg-gray-50/50">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-semibold text-gray-600 flex items-center gap-2">
@@ -769,7 +818,7 @@ export default function SettingsPage() {
                             <span className="text-xs">🧹</span>
                           </div>
                           <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2 text-xs text-gray-700 leading-relaxed">
-                            {settingsByKey["trackerSmsTemplate"].value
+                            {(localEdits["trackerSmsTemplate"] ?? serverSettings["trackerSmsTemplate"].value)
                               .replace("{firstName}", "Sarah")
                               .replace("{trackerLink}", "quote.maidinblack.com/track/abc123")}
                           </div>

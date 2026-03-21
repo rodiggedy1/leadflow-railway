@@ -32,7 +32,7 @@ describe("EXTRAS_LIST", () => {
 
 describe("generateQuoteMessage", () => {
   // New Jade flow: SMS 1 is a greeting + day ask. Price/extras are revealed in SMS 2 (buildJadePriceReveal).
-  it("SMS 1: Jade greeting with first name and day ask (no price)", async () => {
+  it("SMS 1: Jade day-ask (no price, no re-intro)", async () => {
     const msg = await generateQuoteMessage({
       leadName: "Jane Smith",
       bedrooms: "2 Bedrooms",
@@ -41,10 +41,10 @@ describe("generateQuoteMessage", () => {
       price: "209",
       extras: ["clean_inside_oven", "load_of_laundry"],
     });
-    expect(msg).toContain("Jane");
-    expect(msg).toContain("Jade");
-    expect(msg).toContain("Maids in Black");
+    // flowB_sms1 no longer re-introduces Jade — just asks for a day.
     expect(msg).toContain("day");
+    expect(msg).not.toContain("Jade here");
+    expect(msg).not.toContain("Got your request");
     // Price is NOT in SMS 1 — revealed in SMS 2
     expect(msg).not.toContain("$209");
     expect(msg).not.toContain("Total:");
@@ -59,7 +59,8 @@ describe("generateQuoteMessage", () => {
       price: "319",
       extras: [],
     });
-    expect(msg).toContain("John");
+    // flowB_sms1 is the day-ask — no price, no firstName in this version
+    expect(msg).toContain("day");
     // Price is NOT in SMS 1
     expect(msg).not.toContain("$319");
     expect(msg).not.toContain("Total:");

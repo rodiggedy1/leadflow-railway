@@ -1849,3 +1849,6 @@
 - [x] Widget conversation preview shows sizing SMS 1 then continues with shared flow templates
 - [x] Widget tab shows info banner explaining widget does NOT collect bedrooms/bathrooms upfront
 - [x] 671/671 tests pass (42 widget lead tests: phone normalization, Flow A/B SMS, routing, session shape, persona distinction)
+## Widget Settings Bug Fixes — March 21 (round 3)
+- [x] Fix Widget SMS tab conversation preview not matching editable template text underneath — lifted localEdits state to page level so preview reads from same source as textarea in real-time
+- [x] Fix flowB_sms1 re-introducing Jade in second SMS — updated DB, seed, aiService.ts fallback, and conversationEngine.ts fallback to new script without Jade re-intro
