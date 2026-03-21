@@ -19,6 +19,9 @@ import { cleanerJobs, appSettings } from "../drizzle/schema";
 import { eq, and, isNull, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
+import { notifyOwner } from "./_core/notification";
+
+const OWNER_ALERT_NUMBER = "+13029816191"; // Owner's personal number for low-rating alerts
 
 /** Generate a URL-safe random token */
 function generateToken(): string {
@@ -88,6 +91,8 @@ export const trackerRouter = router({
           customerRating: cleanerJobs.customerRating,
           customerName: cleanerJobs.customerName,
           customerPhone: cleanerJobs.customerPhone,
+          jobDate: cleanerJobs.jobDate,
+          jobAddress: cleanerJobs.jobAddress,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.trackerToken, input.token))
@@ -101,6 +106,28 @@ export const trackerRouter = router({
         .update(cleanerJobs)
         .set({ customerRating: input.rating })
         .where(eq(cleanerJobs.id, job.id));
+
+      // ── Low-rating owner alert (1-3 stars) ────────────────────────────────
+      if (input.rating <= 3) {
+        try {
+          const stars = "★".repeat(input.rating) + "☆".repeat(5 - input.rating);
+          const firstName = (job.customerName ?? "Customer").split(" ")[0] ?? "Customer";
+          const alertMsg =
+            `⚠️ Low rating alert: ${firstName} left ${input.rating} star${input.rating === 1 ? "" : "s"} ${stars}` +
+            (input.comment ? `\nComment: "${input.comment}"` : "") +
+            `\nJob: ${job.jobDate ?? "unknown date"} — ${job.jobAddress ?? "no address"}` +
+            `\nPhone: ${job.customerPhone ?? "N/A"}`;
+
+          await Promise.all([
+            // In-app push notification to owner
+            notifyOwner({ title: `⚠️ ${input.rating}★ rating — ${firstName}`, content: alertMsg }),
+            // SMS alert to support line
+            sendSms({ to: OWNER_ALERT_NUMBER, content: alertMsg }),
+          ]);
+        } catch (err) {
+          console.error("[Tracker] Failed to send low-rating alert:", err);
+        }
+      }
 
       // ── Send Google Review SMS on 5-star rating ─────────────────────────────
       if (input.rating === 5 && job.customerPhone) {

@@ -1705,3 +1705,8 @@
 - [ ] Wire 5-star tracker rating to send Google Review SMS
 - [ ] Make post-5-star SMS template editable in Settings
 - [ ] Add resend option to Send Tracker Link button on job cards
+
+## Tracker SMS & Low-Rating Alert
+
+- [x] Send tracker link SMS to 302-981-6191 (Jane Sample test job)
+- [x] Low-rating alert: send owner SMS to 302-981-6191 when customer submits 1-3 stars on tracker
