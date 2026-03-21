@@ -1095,6 +1095,21 @@ export default function QuoteForm() {
                   {/* Divider */}
                   <div className="h-px w-full mb-6" style={{ background: "linear-gradient(90deg, transparent, #E8D0C8, transparent)" }} />
 
+                  {/* Animated review video */}
+                  <div className="w-full rounded-xl overflow-hidden mb-4" style={{ maxHeight: "200px" }}>
+                    <video
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                      style={{ display: "block" }}
+                    >
+                      <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
+                      <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
+                    </video>
+                  </div>
+
                   {/* Review platform grid */}
                   <div className="grid grid-cols-2 gap-3">
                     {/* Google */}
