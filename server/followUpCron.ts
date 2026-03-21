@@ -52,7 +52,8 @@ export async function runSilenceFollowUp(): Promise<{
 
   // Find sessions that:
   // - Are in an active stage
-  // - Had an AI message sent 5+ minutes ago
+  // - Either: AI sent a message 5+ minutes ago (normal flow)
+  //   OR: lastAiMessageAt is NULL but createdAt is 5+ minutes ago (lead never replied to SMS 1)
   // - Have NOT had an auto follow-up sent yet
   // - Are in AI mode (aiMode = 1)
   const allSessions = await db
@@ -64,9 +65,17 @@ export async function runSilenceFollowUp(): Promise<{
         or(
           ...ACTIVE_STAGES.map((s) => eq(conversationSessions.stage, s as any))
         ),
-        // AI sent a message at least 5 minutes ago
-        isNotNull(conversationSessions.lastAiMessageAt),
-        lte(conversationSessions.lastAiMessageAt, fiveMinutesAgo),
+        // 5+ minutes of silence: either AI replied 5+ min ago, OR never replied (use createdAt)
+        or(
+          and(
+            isNotNull(conversationSessions.lastAiMessageAt),
+            lte(conversationSessions.lastAiMessageAt, fiveMinutesAgo)
+          ),
+          and(
+            sql`${conversationSessions.lastAiMessageAt} IS NULL`,
+            lte(conversationSessions.createdAt, fiveMinutesAgo)
+          )
+        ),
         // No auto follow-up sent yet
         eq(conversationSessions.autoFollowUpSent, 0),
         // AI mode is on

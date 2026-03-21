@@ -1834,3 +1834,7 @@
 - [x] Duplicate nudge messages still firing — root cause: same phone resubmitted form creating multiple active sessions; fixed by superseding old sessions at form submission in routers.ts; added atomic DB claim guard in cron (UPDATE WHERE autoFollowUpSent=0, skip if rowsAffected=0); 7 new vitest tests in followUpCron.test.ts; 649/649 tests pass
 - [x] Settings SMS 1 preview — DB already had correct new text; updated seed value in settingsRouter.ts to match
 - [x] Extras inline in price reveal — {extrasLine} placeholder added to DB template and seed; buildJadePriceReveal passes formatted extras string (e.g. " (including clean inside oven)"); Settings preview shows sample extras
+
+## Nudge Bug Fixes
+- [x] Bug 1: Leads who never reply to SMS 1 never get nudged (lastAiMessageAt=NULL) — fixed by adding createdAt fallback in the WHERE clause: if lastAiMessageAt IS NULL and createdAt is 5+ min ago, still nudge
+- [x] Bug 2: Already implemented — webhooks.ts line 341 resets autoFollowUpSent=0 on every stage advance (except terminal stages)
