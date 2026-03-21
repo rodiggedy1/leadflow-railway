@@ -738,6 +738,62 @@ export const commandCenterRouter = router({
           )
         );
 
+      // ── Conversation Intelligence: extract lead messages for objection context ──
+      const allSessions = await db
+        .select({
+          messageHistory: conversationSessions.messageHistory,
+          stage: conversationSessions.stage,
+          isBooked: conversationSessions.isBooked,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, since),
+            ne(conversationSessions.leadSource, "review")
+          )
+        )
+        .limit(200);
+
+      const leadMessages: string[] = [];
+      for (const s of allSessions) {
+        try {
+          const history: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? "[]");
+          for (const msg of history) {
+            if (msg.role === "user" && msg.content && msg.content.trim().length > 5) {
+              leadMessages.push(msg.content.trim());
+            }
+          }
+        } catch { /* skip malformed */ }
+      }
+
+      // Quick LLM call to get top objections (lightweight — 50 messages max)
+      let topObjections: Array<{ label: string; pct: number; tip: string; example: string }> = [];
+      let conversationInsight = "";
+      if (leadMessages.length >= 5) {
+        try {
+          const sample = leadMessages.slice(0, 50);
+          const objResponse = await invokeLLM({
+            messages: [
+              { role: "system", content: "You are a sales coach. Respond only with valid JSON." },
+              {
+                role: "user",
+                content: `Analyze these ${sample.length} SMS replies from cleaning service leads and identify the top 3 objections. Respond with JSON: {"objections":[{"label":string,"pct":number,"tip":string,"example":string}],"topInsight":string}\n\n${sample.map((m, i) => `${i + 1}. "${m}"`).join("\n")}`,
+              },
+            ],
+            response_format: { type: "json_object" } as any,
+          });
+          const rawObjContent = objResponse?.choices?.[0]?.message?.content ?? "{}";
+          const rawObj = typeof rawObjContent === "string" ? rawObjContent : JSON.stringify(rawObjContent);
+          const parsedObj = JSON.parse(rawObj);
+          topObjections = (parsedObj.objections ?? []).slice(0, 3);
+          conversationInsight = parsedObj.topInsight ?? "";
+        } catch { /* non-blocking — skip if fails */ }
+      }
+
+      const objectionContext = topObjections.length > 0
+        ? `\nTOP OBJECTIONS FROM SMS CONVERSATIONS:\n${topObjections.map(o => `- "${o.label}" (~${o.pct}% of leads): ${o.tip} Example: "${o.example}"`).join("\n")}\nOVERALL CONVERSATION INSIGHT: ${conversationInsight}`
+        : "";
+
       const metricsContext = `
 BUSINESS: Maids in Black — home cleaning service, Washington DC Metro Area.
 PERIOD: ${input.range === "today" ? "Today" : input.range === "7d" ? "Last 7 days" : "Last 30 days"}
@@ -755,7 +811,7 @@ KEY METRICS:
 
 LEAD SOURCES: ${JSON.stringify(sourceCount)}
 BOOKED BY SOURCE: ${JSON.stringify(sourceBooked)}
-SERVICE TYPES: ${JSON.stringify(serviceCount)}
+SERVICE TYPES: ${JSON.stringify(serviceCount)}${objectionContext}
 `.trim();
 
       try {
@@ -812,7 +868,12 @@ Rules:
 - Keep titles short and punchy
 - estimatedValue must be a string like "+$1,260 est." or "+4 bookings est."
 - actionType must be one of the four values listed
-- linkStage: for pulse cards and action items, set to the most relevant pipeline stage to filter by when the user wants to see the leads (e.g. "COLD", "QUOTE_SENT", "UNHANDLED", "CALL_SCHEDULED", "all"). Use "all" if no specific stage applies.`,
+- linkStage: for pulse cards and action items, set to the most relevant pipeline stage to filter by when the user wants to see the leads (e.g. "COLD", "QUOTE_SENT", "UNHANDLED", "CALL_SCHEDULED", "all"). Use "all" if no specific stage applies.
+
+If TOP OBJECTIONS are provided in the metrics:
+- Reference the top objection in at least one pulse card or action feed item
+- For the action item addressing the top objection, include a specific 1-sentence rebuttal script the team can use in the description (e.g. "Reply: 'We offer a satisfaction guarantee — if it's not perfect, we come back free.'")
+- If multiple objections are present, suggest a different rebuttal script for each in the action feed`,
             },
             {
               role: "user",

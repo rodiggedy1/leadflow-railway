@@ -1964,3 +1964,8 @@
 ## AI Insights Benchmark Fix — March 21
 - [x] Update LLM system prompt with home cleaning industry benchmarks (conversion 15-25% avg / 30-40% good / 40%+ excellent, speed to contact, ROAS, CPL, repeat booking rate, reactivation rate)
 - [x] Clear AI insights cache so next load regenerates with corrected benchmarks
+
+## AI Insights: Conversation Intelligence Context — March 21
+- [x] In getAiInsights: run lightweight objection-detection LLM call (50 messages max) and inject top 3 objections + tips + examples into metricsContext
+- [x] Update system prompt: AI now references top objection in pulse/action cards and includes specific 1-sentence rebuttal scripts in action feed descriptions
+- [x] Cache cleared so next load regenerates with full conversation intelligence context
