@@ -151,6 +151,118 @@ describe("lastActivity derivation", () => {
   });
 });
 
+// ── lastCustomerReplyAt derivation (sort key — inbound only) ────────────────
+// Mirrors the new logic in leads.list: walk backwards through history and
+// return the ts of the most recent role:"user" message.
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function deriveLastCustomerReplyAt(
+  messageHistoryJson: string,
+  lastCalledAt: Date | null,
+  sessionUpdatedAt: Date
+): Date | null {
+  let lastCustomerReplyAt: Date | null = null;
+
+  try {
+    const history: ChatMessage[] = JSON.parse(messageHistoryJson ?? "[]");
+    for (let i = history.length - 1; i >= 0; i--) {
+      const msg = history[i];
+      if (msg.role === "user" && msg.ts) {
+        const tsDiff = sessionUpdatedAt.getTime() - msg.ts;
+        lastCustomerReplyAt = tsDiff > THIRTY_DAYS_MS
+          ? null
+          : new Date(msg.ts);
+        break;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Calls are inbound interactions — also count as customer replies
+  if (lastCalledAt && (!lastCustomerReplyAt || lastCalledAt > lastCustomerReplyAt)) {
+    lastCustomerReplyAt = lastCalledAt;
+  }
+
+  return lastCustomerReplyAt;
+}
+
+describe("lastCustomerReplyAt derivation (sort key)", () => {
+  it("returns null when there are no user messages", () => {
+    const now = new Date();
+    const history: ChatMessage[] = [
+      { role: "assistant", content: "Hi! Madison here...", ts: now.getTime() - 1000 },
+    ];
+    const result = deriveLastCustomerReplyAt(JSON.stringify(history), null, now);
+    expect(result).toBeNull();
+  });
+
+  it("returns the ts of the most recent user message", () => {
+    const now = Date.now();
+    const userTs = now - 5000;
+    const history: ChatMessage[] = [
+      { role: "assistant", content: "Hi!", ts: now - 10000 },
+      { role: "user", content: "Thursday works!", ts: userTs },
+      { role: "assistant", content: "Great, 9am or 1pm?", ts: now - 2000 },
+    ];
+    const result = deriveLastCustomerReplyAt(JSON.stringify(history), null, new Date(now));
+    expect(result).toEqual(new Date(userTs));
+  });
+
+  it("automated follow-up (role:assistant) does NOT update the sort key", () => {
+    const now = Date.now();
+    const userTs = now - 86400000; // customer replied 1 day ago
+    const followUpTs = now - 1000;  // follow-up sent 1 second ago
+    const history: ChatMessage[] = [
+      { role: "assistant", content: "Hi!", ts: now - 90000000 },
+      { role: "user", content: "Thursday works!", ts: userTs },
+      // Automated follow-up — should NOT move the sort key
+      { role: "assistant", content: "Hey, just circling back!", ts: followUpTs },
+    ];
+    const result = deriveLastCustomerReplyAt(JSON.stringify(history), null, new Date(now));
+    // Sort key should be the user reply, NOT the follow-up
+    expect(result).toEqual(new Date(userTs));
+    expect(result?.getTime()).not.toBe(followUpTs);
+  });
+
+  it("returns null for empty history with no calls", () => {
+    const result = deriveLastCustomerReplyAt("[]", null, new Date());
+    expect(result).toBeNull();
+  });
+
+  it("counts calls as customer replies", () => {
+    const now = Date.now();
+    const callAt = new Date(now - 3000);
+    const history: ChatMessage[] = [
+      { role: "assistant", content: "Hi!", ts: now - 10000 },
+    ];
+    const result = deriveLastCustomerReplyAt(JSON.stringify(history), callAt, new Date(now));
+    expect(result).toEqual(callAt);
+  });
+
+  it("prefers the most recent between user message and call", () => {
+    const now = Date.now();
+    const userTs = now - 5000;
+    const callAt = new Date(now - 1000); // call is more recent
+    const history: ChatMessage[] = [
+      { role: "user", content: "Thursday works!", ts: userTs },
+    ];
+    const result = deriveLastCustomerReplyAt(JSON.stringify(history), callAt, new Date(now));
+    expect(result).toEqual(callAt);
+  });
+
+  it("ignores stale user message ts (>30 days older than updatedAt)", () => {
+    const staleTs = new Date("2025-01-01T00:00:00Z").getTime();
+    const sessionUpdatedAt = new Date("2026-03-21T00:00:00Z"); // >30 days later
+    const history: ChatMessage[] = [
+      { role: "user", content: "Thursday works!", ts: staleTs },
+    ];
+    const result = deriveLastCustomerReplyAt(JSON.stringify(history), null, sessionUpdatedAt);
+    expect(result).toBeNull();
+  });
+});
+
 // ── dailyTrend date bucketing ─────────────────────────────────────────────────
 
 function buildLast7Days(): string[] {

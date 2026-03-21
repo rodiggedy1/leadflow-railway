@@ -118,30 +118,36 @@ export const appRouter = router({
           .orderBy(desc(conversationSessions.createdAt))
           .limit(500);
 
-        // Derive lastActivity from messageHistory (most recent SMS) or lastCalledAt
+        // Derive lastActivity from messageHistory (most recent SMS) or lastCalledAt.
+        // TWO separate timestamps are tracked:
+        //   lastActivityAt  — the most recent message of ANY kind (shown in the UI "Last Activity" column)
+        //   lastCustomerReplyAt — the most recent INBOUND (role:"user") message (used for sort order)
+        //
+        // Automated follow-up messages (role:"assistant") update lastActivityAt so the
+        // "Last Activity" column shows the nudge text, but they do NOT update
+        // lastCustomerReplyAt — so they cannot bump a lead to the top of the list.
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
         const mapped = sessions.map(s => {
           let lastActivityText: string | null = null;
           let lastActivityAt: Date | null = null;
           let lastActivityType: "sms" | "call" | null = null;
+          let lastCustomerReplyAt: Date | null = null; // sort key — inbound only
 
-          // Parse message history to find the most recent message
+          // Parse message history
           try {
             const history: Array<{ role: string; content: string; ts?: number }> =
               JSON.parse(s.messageHistory ?? "[]");
             if (history.length > 0) {
+              // ── Last activity (any message — for display) ──────────────────
               const last = history[history.length - 1];
               lastActivityText = typeof last.content === "string"
                 ? last.content.slice(0, 100)
                 : null;
-              // Sanity-guard: if the stored ts is more than 30 days older than
-              // the session's own updatedAt, it's corrupt data (e.g. a test call
-              // with a wrong clock). Fall back to updatedAt so the dashboard
-              // never shows a wildly stale timestamp.
               if (last.ts) {
                 const sessionUpdatedMs = s.updatedAt instanceof Date
                   ? s.updatedAt.getTime()
                   : new Date(s.updatedAt as string).getTime();
-                const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
                 const tsDiff = sessionUpdatedMs - last.ts;
                 lastActivityAt = tsDiff > THIRTY_DAYS_MS
                   ? s.updatedAt  // ts is suspiciously old — use session updatedAt
@@ -150,30 +156,53 @@ export const appRouter = router({
                 lastActivityAt = s.updatedAt;
               }
               lastActivityType = "sms";
+
+              // ── Last CUSTOMER reply (role:"user" only — for sort order) ───
+              // Walk backwards to find the most recent inbound message.
+              // Automated follow-ups (role:"assistant") are intentionally skipped
+              // so they cannot bump a lead to the top of the list.
+              for (let i = history.length - 1; i >= 0; i--) {
+                const msg = history[i];
+                if (msg.role === "user" && msg.ts) {
+                  const sessionUpdatedMs = s.updatedAt instanceof Date
+                    ? s.updatedAt.getTime()
+                    : new Date(s.updatedAt as string).getTime();
+                  const tsDiff = sessionUpdatedMs - msg.ts;
+                  lastCustomerReplyAt = tsDiff > THIRTY_DAYS_MS
+                    ? null  // suspiciously old — treat as no reply
+                    : new Date(msg.ts);
+                  break;
+                }
+              }
             }
           } catch {
             // ignore parse errors
           }
 
-          // If the most recent call log is newer than the last SMS, prefer it
+          // If the most recent call log is newer than the last SMS, prefer it for display
           if (s.lastCalledAt && (!lastActivityAt || s.lastCalledAt > lastActivityAt)) {
             lastActivityText = `Call: ${s.lastCalledByAgentName ?? "agent"}`;
             lastActivityAt = s.lastCalledAt;
             lastActivityType = "call";
+            // Calls are inbound interactions — also update the sort key
+            if (!lastCustomerReplyAt || s.lastCalledAt > lastCustomerReplyAt) {
+              lastCustomerReplyAt = s.lastCalledAt;
+            }
           }
 
-          return { ...s, lastActivityText, lastActivityAt, lastActivityType };
+          return { ...s, lastActivityText, lastActivityAt, lastActivityType, lastCustomerReplyAt };
         });
 
-        // Sort by lastActivityAt descending so the most recently active lead
-        // is always at the top. Falls back to createdAt for sessions with no
-        // message history yet.
+        // Sort by lastCustomerReplyAt descending — only inbound customer replies
+        // (or calls) move a lead to the top. Automated follow-up messages do NOT
+        // change the sort position. Falls back to createdAt for new leads with no
+        // customer reply yet.
         mapped.sort((a, b) => {
-          const aTime = a.lastActivityAt
-            ? (a.lastActivityAt instanceof Date ? a.lastActivityAt.getTime() : new Date(a.lastActivityAt as string).getTime())
+          const aTime = a.lastCustomerReplyAt
+            ? (a.lastCustomerReplyAt instanceof Date ? a.lastCustomerReplyAt.getTime() : new Date(a.lastCustomerReplyAt as string).getTime())
             : (a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt as string).getTime());
-          const bTime = b.lastActivityAt
-            ? (b.lastActivityAt instanceof Date ? b.lastActivityAt.getTime() : new Date(b.lastActivityAt as string).getTime())
+          const bTime = b.lastCustomerReplyAt
+            ? (b.lastCustomerReplyAt instanceof Date ? b.lastCustomerReplyAt.getTime() : new Date(b.lastCustomerReplyAt as string).getTime())
             : (b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt as string).getTime());
           return bTime - aTime;
         });

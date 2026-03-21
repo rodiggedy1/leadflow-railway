@@ -1852,3 +1852,6 @@
 ## Widget Settings Bug Fixes — March 21 (round 3)
 - [x] Fix Widget SMS tab conversation preview not matching editable template text underneath — lifted localEdits state to page level so preview reads from same source as textarea in real-time
 - [x] Fix flowB_sms1 re-introducing Jade in second SMS — updated DB, seed, aiService.ts fallback, and conversationEngine.ts fallback to new script without Jade re-intro
+
+## Leads Page Sort Bug — March 21 (round 4)
+- [x] Fix: automated follow-up messages bump leads to top of leads list — sort now uses lastCustomerReplyAt (role:"user" only), not lastActivityAt (any message). 7 new tests added. 678/678 pass.
