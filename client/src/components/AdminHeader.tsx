@@ -442,7 +442,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
 
       {/* Tab navigation */}
       <div
-        className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t overflow-x-visible"
+        className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 border-t overflow-x-auto scrollbar-none"
         style={{ borderColor: "#E5E5E5" }}
       >
         {NAV_ENTRIES.map((entry) => {

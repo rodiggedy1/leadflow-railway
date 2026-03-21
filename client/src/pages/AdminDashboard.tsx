@@ -68,6 +68,7 @@ import {
   PhoneIncoming,
   Star,
   ClipboardCheck,
+  Settings,
 } from "lucide-react";
 import {
   Dialog,
@@ -345,6 +346,10 @@ function AdminDashboardNav({
       {/* Jobs */}
       <a href="/admin/quality" className={tabCls} style={tabStyle(false)}>
         <ClipboardCheck className="w-3.5 h-3.5" /> Jobs
+      </a>
+      {/* Settings */}
+      <a href="/admin/settings" className={tabCls} style={tabStyle(false)}>
+        <Settings className="w-3.5 h-3.5" /> Settings
       </a>
     </div>
   );
