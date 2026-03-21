@@ -1887,7 +1887,7 @@ async function processWidgetLeadInBackground(input: {
   try {
     await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
-      leadName: input.name.trim(),
+      leadName: toTitleCase(input.name),
       stage: "WIDGET_SIZING",
       quotedPrice: null,
       serviceType: null,
@@ -2041,7 +2041,7 @@ async function processQuoteInBackground(
   try {
     await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
-      leadName: input.name,
+      leadName: toTitleCase(input.name),
       stage: initialStage as any,
       quotedPrice: price,
       serviceType: input.serviceType,
@@ -2136,6 +2136,15 @@ export function isValidUSPhone(phone: string): boolean {
  * Handles inputs like: "7259009272", "725-900-9272", "(725) 900-9272", "+17259009272"
  * Returns null for non-US or invalid numbers.
  */
+/** Normalize name casing: "ROHAN" → "Rohan", "rohan smith" → "Rohan Smith" */
+export function toTitleCase(str: string): string {
+  return str
+    .trim()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function normalizePhone(phone: string): string {
   const local = extractUSDigits(phone);
   if (local) return `+1${local}`;

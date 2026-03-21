@@ -1824,3 +1824,8 @@
 ## Bug: V2 engine ignores DB templates, LLM writes its own messages
 - [x] V2 engine price reveal (QUOTE_SENT/AVAILABILITY → SLOT_CHOICE): override LLM reply with buildJadePriceReveal() so DB template is used
 - [x] V2 engine lock-in (ADDRESS → CONFIRMATION): override LLM reply with buildJadeLockIn() so DB template is used
+
+## SMS Fixes — March 21 (minor)
+- [x] Normalize lead name to title case (ROHAN → Rohan, rohan → Rohan) — toTitleCase() added to routers.ts, applied at both DB save points (widget + quote form) and in generateQuoteMessage/buildJadePriceReveal
+- [x] Fix double $$ in price display — DB template has "$" before {price}, so now passing priceForTemplate (number only) to substitution map
+- [x] Update Flow B SMS 1 (Jade greeting) — updated fallback in aiService.ts and DB flowB_sms1 template to new script with "so we can see how fast we can get you taken care of?"

@@ -63,7 +63,9 @@ export interface QuoteMessageParams {
  */
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
   const { leadName } = params;
-  const firstName = leadName.split(" ")[0] ?? leadName;
+  const rawFirst = leadName.split(" ")[0] ?? leadName;
+  // Normalize to title case so ROHAN → Rohan, rohan → Rohan
+  const firstName = rawFirst.charAt(0).toUpperCase() + rawFirst.slice(1).toLowerCase();
   return getFlowTemplate(
     "flowB_sms1",
     buildFallbackQuoteMessage(firstName),
@@ -75,6 +77,15 @@ export async function generateQuoteMessage(params: QuoteMessageParams): Promise<
  * Generates SMS 2 in the new Jade flow: price reveal + supplies note + 9am/1pm offer.
  * Called from the AVAILABILITY stage handler when the lead replies with a specific day.
  */
+/** Normalize any casing to Title Case: "ROHAN" → "Rohan", "rohan" → "Rohan" */
+function toTitleCase(str: string): string {
+  return str
+    .trim()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export async function buildJadePriceReveal(params: {
   firstName: string;
   bedrooms: string;
@@ -84,11 +95,15 @@ export async function buildJadePriceReveal(params: {
   day: string; // the specific day the lead mentioned
 }): Promise<string> {
   const { firstName, bedrooms, bathrooms, price, extras, day } = params;
+  const normalizedFirstName = toTitleCase(firstName);
   const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
   const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
   const basePrice = parseInt(price, 10) || 0;
   const grandTotal = basePrice + extrasTotal;
+  // totalDisplay has $ prefix for the fallback string; priceForTemplate is just the number
+  // because the DB template already has "$" before the {price} placeholder.
   const totalDisplay = grandTotal > basePrice ? `$${grandTotal}` : `$${price}`;
+  const priceForTemplate = grandTotal > basePrice ? `${grandTotal}` : `${price}`;
 
   const extrasNote = resolvedExtras.length > 0
     ? `\n\nThat includes your add-ons (${resolvedExtras.map(e => e.label).join(", ")}).`
@@ -96,15 +111,16 @@ export async function buildJadePriceReveal(params: {
 
   const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹${extrasNote}\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises.\n\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
 
-  // Use template from DB; substitute dynamic values. extrasNote is appended to the fallback only.
+  // Use template from DB; substitute dynamic values.
+  // NOTE: {price} in the DB template already has "$" before it, so pass the number only.
   const template = await getFlowTemplate(
     "flowB_sms2",
     fallback,
     {
-      "{firstName}": firstName,
+      "{firstName}": normalizedFirstName,
       "{bedrooms}": bedrooms,
       "{bathrooms}": bathrooms,
-      "{price}": totalDisplay,
+      "{price}": priceForTemplate,
       "{day}": day,
     }
   );
@@ -497,7 +513,7 @@ Instructions:
  * SMS 1 in the new Jade flow: greeting + ask for day. No price yet.
  */
 function buildFallbackQuoteMessage(firstName: string): string {
-  return `Hey ${firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking?`;
+  return `Hey ${firstName}! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking so we can see how fast we can get you taken care of?`;
 }
 
 /**
