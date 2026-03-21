@@ -22,6 +22,7 @@ const CleanerDashboard = lazy(() => import("./pages/CleanerDashboard"));
 const CleanerPortal = lazy(() => import("./pages/CleanerPortal"));
 const JobTracker = lazy(() => import("./pages/JobTracker"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -50,6 +51,7 @@ function Router() {
       <Route path={"/cleaner"} component={CleanerPortal} />
       <Route path={"/track/:token"} component={JobTracker} />
       <Route path={"/admin/settings"} component={SettingsPage} />
+      <Route path={"/admin/command-center"} component={CommandCenter} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

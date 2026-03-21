@@ -36,6 +36,7 @@ import {
   Smile,
   Briefcase,
   Settings,
+  BrainCircuit,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -237,6 +238,7 @@ export type AdminTab =
   | "campaign-approval"
   | "completed-jobs"
   | "quality"
+  | "command-center"
   | "settings";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
@@ -314,6 +316,13 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: <Briefcase className="w-3.5 h-3.5" />,
     href: "/admin/quality",
     tabId: "quality",
+  },
+  {
+    id: "command-center",
+    label: "AI Center",
+    icon: <BrainCircuit className="w-3.5 h-3.5" />,
+    href: "/admin/command-center",
+    tabId: "command-center",
   },
   {
     id: "settings",

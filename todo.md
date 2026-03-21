@@ -1914,3 +1914,18 @@
 - [x] Wire notifyNewLeadViaCall to read callAlertEnabled/callAlertPhone from DB at call time (falls back to hardcoded defaults if DB unavailable)
 - [x] Admin Settings UI: "Call Notifications" card in General tab with enable/disable toggle and phone number input
 - [x] 747/747 tests pass (existing getSetting coverage applies)
+
+## AI Command Center — March 21
+- [x] Backend: commandCenterRouter with getDashboardStats, getFunnelBreakdown, getHotLeads, getAiInsights (LLM-powered), getLeadSourceIntelligence, getSpeedToLead
+- [x] Backend: one-click action procedures: executeLeadAction (per-lead SMS/call), executeBulkAction (reactivate pool, followup cold, followup quote sent)
+- [x] Frontend: /admin/command-center route and nav link ("AI Center" with BrainCircuit icon)
+- [x] UI: KPI stat cards row (New Leads, Booked, Revenue, Response Rate, Lead→Booking, Pipeline Value)
+- [x] UI: Today Pulse section (AI-generated primary alert, opportunity, hidden revenue cards)
+- [x] UI: AI Action Feed (ranked actionable recommendations with one-click execute buttons)
+- [x] UI: Lead Funnel Breakdown (stage-by-stage with drop-off rates)
+- [x] UI: Hot Leads Queue (ranked by intent score, next-best-action, one-click call/SMS per lead)
+- [x] UI: Speed to Lead panel (avg first response, contacted under 2min %, follow-up attempts)
+- [x] UI: Revenue Forecast panel (pipeline value, close probability, booked revenue)
+- [x] UI: Lead Source Intelligence table (CPL, booked, revenue, ROAS, AI note per source)
+- [x] Time range filter: Today / 7 Days / 30 Days
+- [x] 747/747 tests pass
