@@ -137,9 +137,15 @@ export function buildExtrasUpsellLine(extras: string[] | null | undefined): stri
   return phrases[firstKey] ?? `We'll also take care of your ${label} while we're there ✨`;
 }
 
-export function buildAvailabilityMessage(extras?: string[] | null): string {
+export async function buildAvailabilityMessage(extras?: string[] | null): Promise<string> {
   const slots = getNextAvailableSlots(2);
-  const baseMsg = formatAvailabilityQuestion(slots);
+  const slot1 = slots[0]?.shortLabel ?? "Thursday afternoon";
+  const slot2 = slots[1]?.shortLabel ?? "Saturday morning";
+  const fallback = formatAvailabilityQuestion(slots);
+  const baseMsg = await getFlowTemplate("flowA_sms2", fallback, {
+    "{slot1}": slot1,
+    "{slot2}": slot2,
+  });
   const upsell = buildExtrasUpsellLine(extras);
   return upsell ? `${baseMsg}\n\n${upsell}.` : baseMsg;
 }
@@ -153,12 +159,14 @@ export function buildAddressRequestMessage(slot: string): string {
   return `Perfect 👍\n\nWhat's the address for the cleaning?`;
 }
 
-export function buildTimePrefMessage(slot: string): string {
-  return `Great — ${slot} it is! 🗓️\n\nWould morning or afternoon work better for you?`;
+export async function buildTimePrefMessage(slot: string): Promise<string> {
+  const fallback = `Great — ${slot} it is! 🗓️\n\nWould morning or afternoon work better for you?`;
+  return getFlowTemplate("flowA_sms3", fallback, { "{slot}": slot });
 }
 
-export function buildAddressRequestAfterTimePref(slot: string, timePref: string): string {
-  return `${timePref} works! What's the address for the cleaning?`;
+export async function buildAddressRequestAfterTimePref(slot: string, timePref: string): Promise<string> {
+  const fallback = `${timePref} works! What's the address for the cleaning?`;
+  return getFlowTemplate("flowA_sms4", fallback, { "{slot}": slot, "{timePref}": timePref });
 }
 
 export function buildConfirmationMessage(slot: string, address: string): string {
@@ -517,7 +525,7 @@ async function handleReactivationReply(
 
   // Any other reply — treat as engagement and move to availability
   return {
-    reply: buildAvailabilityMessage(context.extras),
+    reply: await buildAvailabilityMessage(context.extras),
     nextStage: "AVAILABILITY",
   };
 }
@@ -784,7 +792,7 @@ async function _processLeadReplyCore(
     if (flowVariant === "A") {
       // Flow A (Madison): any reply → send availability question
       return {
-        reply: buildAvailabilityMessage(context.extras),
+        reply: await buildAvailabilityMessage(context.extras),
         nextStage: "AVAILABILITY",
       };
     }
@@ -852,7 +860,7 @@ async function _processLeadReplyCore(
     const readyNow = /\b(ready|book|schedule|let'?s do it|when can|available|yes|yeah|sure|ok|okay)\b/.test(lower);
     if (readyNow) {
       return {
-        reply: buildAvailabilityMessage(context.extras),
+        reply: await buildAvailabilityMessage(context.extras),
         nextStage: "AVAILABILITY",
       };
     }
@@ -1102,7 +1110,7 @@ async function _processLeadReplyCore(
       }
 
       return {
-        reply: buildAddressRequestAfterTimePref(slot, timePref),
+        reply: await buildAddressRequestAfterTimePref(slot, timePref),
         nextStage: "ADDRESS",
         extractedData: { selectedSlot: slotWithTime },
       };
@@ -1366,7 +1374,7 @@ async function resumeStageAfterLanguageConfirm(
     case "QUOTE_SENT":
     case "AVAILABILITY":
     case "REACTIVATION":
-      englishMsg = buildAvailabilityMessage(context.extras);
+      englishMsg = await buildAvailabilityMessage(context.extras);
       nextStage = "AVAILABILITY";
       break;
     case "SLOT_CHOICE":
@@ -1374,7 +1382,7 @@ async function resumeStageAfterLanguageConfirm(
       nextStage = "SLOT_CHOICE";
       break;
     case "TIME_PREF":
-      englishMsg = buildTimePrefMessage(context.selectedSlot || "your slot");
+      englishMsg = await buildTimePrefMessage(context.selectedSlot || "your slot");
       nextStage = "TIME_PREF";
       break;
     case "ADDRESS":
@@ -1391,7 +1399,7 @@ async function resumeStageAfterLanguageConfirm(
         englishMsg = `To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
         nextStage = "WIDGET_SIZING";
       } else {
-        englishMsg = buildAvailabilityMessage(context.extras);
+        englishMsg = await buildAvailabilityMessage(context.extras);
         nextStage = "AVAILABILITY";
       }
   }

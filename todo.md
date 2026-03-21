@@ -1773,3 +1773,10 @@
 - [x] Wire saved templates into conversation engine and routers via getFlowTemplate helper
 - [x] Add address capture to Jade flow (SLOT_CHOICE → ADDRESS → CONFIRMATION)
 - [x] 626/626 tests pass
+
+## Flow A SMS 2-4 Editable Templates — COMPLETED
+
+- [x] Add flowA_sms2 (availability question), flowA_sms3 (time preference ask), flowA_sms4 (address request) defaults to settingsRouter
+- [x] Wire getFlowTemplate into buildAvailabilityMessage, buildTimePrefMessage, buildAddressRequestAfterTimePref in conversationEngine.ts
+- [x] Settings page renders all Flow A SMS steps (1-6) as editable textareas
+- [x] 626/626 tests pass

@@ -66,30 +66,31 @@ describe("Message Builders", () => {
     expect(msg).toContain("standard cleaning");
   });
 
-  it("buildAvailabilityMessage mentions two upcoming days (no extras)", () => {
-    const msg = buildAvailabilityMessage();
+  it("buildAvailabilityMessage mentions two upcoming days (no extras)", async () => {
+    const msg = await buildAvailabilityMessage();
     // Dynamic slots — verify it's a well-formed availability question
     expect(msg).toContain("openings");
-    expect(msg).toContain("Would one of those work");
+    // Template may use either phrasing depending on DB value vs fallback
+    expect(msg.toLowerCase()).toMatch(/work|prefer/);
     // No upsell line when no extras
     expect(msg).not.toContain("while we're there");
   });
 
-  it("buildAvailabilityMessage appends upsell line when extras are provided", () => {
-    const msg = buildAvailabilityMessage(["clean_inside_oven"]);
+  it("buildAvailabilityMessage appends upsell line when extras are provided", async () => {
+    const msg = await buildAvailabilityMessage(["clean_inside_oven"]);
     expect(msg).toContain("openings");
     expect(msg).toContain("oven");
     expect(msg).toContain("while we're there");
   });
 
-  it("buildAvailabilityMessage uses fallback phrase for unknown extra key", () => {
-    const msg = buildAvailabilityMessage(["some_unknown_extra"]);
+  it("buildAvailabilityMessage uses fallback phrase for unknown extra key", async () => {
+    const msg = await buildAvailabilityMessage(["some_unknown_extra"]);
     expect(msg).toContain("while we're there");
     expect(msg).toContain("some unknown extra");
   });
 
-  it("buildAvailabilityMessage uses first extra when multiple are selected", () => {
-    const msg = buildAvailabilityMessage(["load_of_laundry", "wash_dishes"]);
+  it("buildAvailabilityMessage uses first extra when multiple are selected", async () => {
+    const msg = await buildAvailabilityMessage(["load_of_laundry", "wash_dishes"]);
     expect(msg).toContain("laundry");
     // Only one upsell line
     expect(msg.split("while we're there").length).toBe(2);
