@@ -101,16 +101,16 @@ const DEFAULT_SETTINGS = [
   },
   {
     key: "flowB_sms5",
-    value: "Perfect! Expect a call from us shortly. We look forward to serving you! 🏠✨",
+    value: "Perfect {firstName}! Expect a call from us shortly. We look forward to serving you! 🏠✨",
     label: "Flow B — SMS 5: Call Confirmed (Now)",
-    description: "Sent when the lead says to call now.",
+    description: "Sent when the lead says to call now. Use {firstName} for the lead's first name.",
     fieldType: "textarea",
   },
   {
     key: "flowB_sms5_later",
-    value: "No problem! We'll give you a call in a few minutes. Talk soon! 🏠✨",
+    value: "No problem {firstName}! We'll give you a call in a few minutes. Talk soon! 🏠✨",
     label: "Flow B — SMS 5: Call Confirmed (Few Minutes)",
-    description: "Sent when the lead says to call in a few minutes.",
+    description: "Sent when the lead says to call in a few minutes. Use {firstName} for the lead's first name.",
     fieldType: "textarea",
   },
   // ── Flow A (Madison) SMS Templates ────────────────────────────────────────

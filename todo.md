@@ -1792,3 +1792,10 @@
 - [x] Wire {slot} and {address} into buildJadeLockIn function
 - [x] Updated live DB value
 - [x] 626/626 tests pass
+
+## Jade SMS 5 Personalization — COMPLETED
+- [x] Add {firstName} to flowB_sms5 and flowB_sms5_later templates
+- [x] Wire {firstName} into buildCallScheduledMessage
+- [x] Pass firstName from CONFIRMATION stage call site
+- [x] Updated live DB values
+- [x] 626/626 tests pass

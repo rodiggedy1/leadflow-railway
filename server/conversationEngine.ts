@@ -187,16 +187,20 @@ export async function buildJadeLockIn(slotWithTime: string, address?: string): P
   );
 }
 
-export async function buildCallScheduledMessage(preference: string): Promise<string> {
+export async function buildCallScheduledMessage(preference: string, firstName?: string): Promise<string> {
+  const name = firstName ?? "";
+  const vars = name ? { "{firstName}": name } : { "{firstName}": "" };
   if (preference === "now") {
     return getFlowTemplate(
       "flowB_sms5",
-      `Perfect! Expect a call from us shortly. We look forward to serving you! 🏠✨`
+      `Perfect ${name ? name + "! " : ""}Expect a call from us shortly. We look forward to serving you! 🏠✨`,
+      vars
     );
   }
   return getFlowTemplate(
     "flowB_sms5_later",
-    `No problem! We'll give you a call in a few minutes. Talk soon! 🏠✨`
+    `No problem${name ? " " + name : ""}! We'll give you a call in a few minutes. Talk soon! 🏠✨`,
+    vars
   );
 }
 
@@ -1185,8 +1189,9 @@ async function _processLeadReplyCore(
           console.error("[ConversationEngine] Agent notification failed:", err)
         );
 
+        const firstName = context.leadName?.split(" ")[0] ?? context.leadName;
         return {
-          reply: await buildCallScheduledMessage(pref),
+          reply: await buildCallScheduledMessage(pref, firstName),
           nextStage: "CALL_SCHEDULED",
           extractedData: { callPreference: pref },
         };
