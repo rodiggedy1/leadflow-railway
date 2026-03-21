@@ -1040,10 +1040,12 @@ export default function QuoteForm() {
                       It&rsquo;s the best decision I&rsquo;ve made all year.&rdquo;
                     </p>
                     <div className="flex items-center justify-center gap-3">
-                      {/* Avatar placeholder */}
-                      <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-amber-100 flex items-center justify-center" style={{ border: "2px solid #F0C8B8" }}>
-                        <span className="text-xl">👩</span>
-                      </div>
+                      <img
+                        src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/ashley-purcell-avatar-CGJ4RKtHyaaPCwppin6rnR.webp"
+                        alt="Ashley Purcell"
+                        className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                        style={{ border: "2px solid #F0C8B8" }}
+                      />
                       <div className="text-left">
                         <p className="font-bold text-sm" style={{ color: "#1E1E1E", fontFamily: "'DM Sans', sans-serif" }}>Ashley Purcell</p>
                         <div className="flex gap-0.5 mt-0.5">
