@@ -563,10 +563,15 @@ export default function QuoteForm() {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) &&
     form.phone.replace(/\D/g, "").length === 10;
 
-  // Exit-intent: fire once when mouse leaves the top of the viewport, only if not submitted
+  // Ref to track submitting state inside exit-intent handler (avoids declaration ordering issue)
+  const isSubmittingRef = useRef(false);
+
+  // Exit-intent: fire once when mouse leaves the top of the viewport, only if not submitted/submitting
   useEffect(() => {
     const handleMouseLeave = (e: MouseEvent) => {
       if (submitted) return;
+      if (isSubmittingRef.current) return; // don’t fire during form submission
+      if (step === "extras") return; // don’t fire on the extras step (user is still engaged)
       if (exitShownRef.current) return;
       if (e.clientY <= 10) {
         exitShownRef.current = true;
@@ -575,7 +580,7 @@ export default function QuoteForm() {
     };
     document.addEventListener("mouseleave", handleMouseLeave);
     return () => document.removeEventListener("mouseleave", handleMouseLeave);
-  }, [submitted]);
+  }, [submitted, step]);
 
   // Track this page visit once per browser session
   const trackPageView = trpc.leads.trackPageView.useMutation();
@@ -728,6 +733,9 @@ export default function QuoteForm() {
   };
 
   const isSubmitting = submitMutation.isPending;
+
+  // Keep the exit-intent ref in sync with the submitting state
+  isSubmittingRef.current = isSubmitting;
 
   return (
     <div

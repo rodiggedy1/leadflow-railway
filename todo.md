@@ -1799,3 +1799,7 @@
 - [x] Pass firstName from CONFIRMATION stage call site
 - [x] Updated live DB values
 - [x] 626/626 tests pass
+
+## Bug Fixes — March 21
+- [x] Fix Jade flow AVAILABILITY handler — V2 engine now uses Flow B stage instructions (price reveal + 9am/1pm in AVAILABILITY); buildUserMessage uses correct Jade/Madison persona; 16 new Flow A/B routing tests added (642/642 tests pass)
+- [x] Fix exit intent monitor triggering during form submission — added isSubmittingRef check and step=="extras" guard

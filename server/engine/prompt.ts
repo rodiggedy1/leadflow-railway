@@ -20,6 +20,126 @@ import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQues
 // ─── Stage Descriptions ───────────────────────────────────────────────────────
 // Human-readable instructions for what the LLM should do in each stage.
 
+const STAGE_INSTRUCTIONS_FLOW_A: Record<string, string> = {
+  WIDGET_SIZING: `
+You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
+- If they give you both → calculate the price using the pricing table, send the quote, then ask: "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. When were you hoping to schedule that so we can see how fast we can get you taken care of?" and move to AVAILABILITY.
+- If they give you only one → ask for the missing one and stay on WIDGET_SIZING.
+- If they ask a question (FAQ, pricing, etc.) → answer it using the knowledge base, then re-ask for bedrooms/bathrooms.
+- If they are an existing customer needing support → give them the support contact and move to DONE.
+`.trim(),
+
+  QUOTE_SENT: `
+The lead just received their quote. They may reply with anything.
+- If they say yes/ready/let's go → ask: "Got it, you need a [service type] for your [X-bedroom, Y-bathroom] home. When were you hoping to schedule that so we can see how fast we can get you taken care of?" and move to AVAILABILITY.
+- If they ask about recurring pricing → give the recurring price breakdown, then ask when they want to schedule using the same "Got it..." format.
+- If they ask any question → answer it using the knowledge base, then ask when they want to schedule.
+- If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
+- If they opt out → acknowledge politely, move to DONE.
+`.trim(),
+
+  AVAILABILITY: `
+You are asking when the lead would like to schedule their service.
+
+IMPORTANT — BARK LEADS: If the lead source is Bark.com (leadSource = "bark"), the job details (bedrooms, bathrooms, service type, price) are already known from their Bark Q&A. Do NOT ask sizing questions. Skip straight to scheduling: ask when they'd like to schedule their cleaning.
+
+When FIRST asking about availability (transitioning from QUOTE_SENT or WIDGET_SIZING), use this format:
+"Got it, [briefly echo what they need — e.g. 'you need a standard cleaning for your 2-bedroom home' or 'you need your HVAC serviced']. When were you hoping to schedule that so we can see how fast we can get you taken care of?"
+
+Do NOT offer specific days upfront. Let them tell you when they want it first.
+
+HONOURING THE LEAD'S PREFERENCE (CRITICAL):
+- If the lead's reply already contains a specific day, date, or timeframe (e.g. "tomorrow", "this afternoon", "Thursday", "next Monday", "this week") → resolve it to the actual calendar date using TODAY'S DATE above, set it as selectedSlot, and move to SLOT_CHOICE. Do NOT offer the available slots — the lead already told you when they want it.
+- ONLY offer the available slots (Thursday/Friday etc.) if the lead says something vague like "as soon as possible", "whenever", "this week" with no specific day, or asks you to pick.
+- If they say "tomorrow morning" → resolve "tomorrow" using TODAY'S DATE, set selectedSlot to that date + ", morning" (e.g. "Wednesday, March 19, morning"), move to SLOT_CHOICE.
+  - If they say "this afternoon" → selectedSlot = today's date + ", afternoon", move to SLOT_CHOICE.
+
+- If they say "as soon as possible" or "this week" with no specific day → tell them the next available slots and ask which works.
+- If they ask about recurring pricing → answer with the full recurring price breakdown (weekly/biweekly/monthly), then re-ask when they want to schedule.
+- If they ask any other question → answer it, then re-ask when they want to schedule. Stay on AVAILABILITY.
+- If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
+- If they opt out → acknowledge politely, move to DONE.
+CRITICAL: Do NOT advance to SLOT_CHOICE unless selectedSlot is set.
+CRITICAL: NEVER ignore a specific day/time the lead already stated. Honour their preference immediately.
+`.trim(),
+
+  SLOT_CHOICE: `
+You offered specific time slot options. You are waiting for the lead to pick one.
+- If they pick a slot → confirm it, move to ADDRESS.
+- If they ask a question → answer it, then re-ask which slot they prefer. Stay on SLOT_CHOICE.
+- If they want a different time → ask for their preference, stay on TIME_PREF.
+- If they opt out → acknowledge politely, move to DONE.
+CRITICAL: Do NOT advance to ADDRESS unless selectedSlot is confirmed.
+`.trim(),
+};
+
+// Flow B (Jade) stage instructions — price reveal happens in AVAILABILITY after day is given
+const STAGE_INSTRUCTIONS_FLOW_B: Record<string, string> = {
+  WIDGET_SIZING: `
+You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
+- If they give you both → calculate the price using the pricing table, send the quote, then ask what day they were thinking. Move to AVAILABILITY.
+- If they give you only one → ask for the missing one and stay on WIDGET_SIZING.
+- If they ask a question (FAQ, pricing, etc.) → answer it using the knowledge base, then re-ask for bedrooms/bathrooms.
+- If they are an existing customer needing support → give them the support contact and move to DONE.
+`.trim(),
+
+  QUOTE_SENT: `
+You are Jade. The lead just received your greeting asking what day they were thinking.
+- If they give a specific day (e.g. "Thursday", "tomorrow", "Friday") → reveal the price and offer 9am or 1pm on that day. Use this exact format:
+  "Perfect. We handle a lot of [X] bed / [Y] bath homes — no problem at all.\n\nFor a home like yours, most clients land around $[PRICE]. That covers everything, no hidden fees.\nI've got [DAY] at 9am or 1pm — which one should I lock in?"
+  Set selectedSlot to the day they mentioned, move to SLOT_CHOICE.
+- If they say "as soon as possible" or "this week" with no specific day → ask what specific day works best for them. Stay on AVAILABILITY.
+- If they ask about recurring pricing → give the recurring price breakdown, then ask what day works.
+- If they ask any question → answer it, then ask what day they were thinking. Stay on AVAILABILITY.
+- If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
+- If they opt out → acknowledge politely, move to DONE.
+CRITICAL: When they give a day, ALWAYS reveal the price AND offer 9am/1pm in the same message. Never just confirm the day without the price reveal.
+`.trim(),
+
+  AVAILABILITY: `
+You are Jade. You asked the lead what day they were thinking.
+- If they give a specific day (e.g. "Thursday", "tomorrow", "Friday") → reveal the price and offer 9am or 1pm on that day. Use this exact format:
+  "Perfect. We handle a lot of [X] bed / [Y] bath homes — no problem at all.\n\nFor a home like yours, most clients land around $[PRICE]. That covers everything, no hidden fees.\nI've got [DAY] at 9am or 1pm — which one should I lock in?"
+  Set selectedSlot to the day they mentioned, move to SLOT_CHOICE.
+- If they say "as soon as possible" or "this week" with no specific day → ask what specific day works best for them. Stay on AVAILABILITY.
+- If they ask about recurring pricing → give the recurring price breakdown, then ask what day works.
+- If they ask any question → answer it, then ask what day they were thinking. Stay on AVAILABILITY.
+- If they want a future date (weeks away) → acknowledge, move to FUTURE_BOOKING.
+- If they opt out → acknowledge politely, move to DONE.
+CRITICAL: When they give a day, ALWAYS reveal the price AND offer 9am/1pm in the same message. Never just confirm the day without the price reveal.
+`.trim(),
+
+  SLOT_CHOICE: `
+You are Jade. The lead just received the price reveal and was offered 9am or 1pm.
+- If they pick 9am or 1pm (or say morning/afternoon) → ask for their address. Use this format:
+  "Awesome [FIRST NAME], what's the address for service?"
+  Set selectedSlot to "[DAY] at [TIME]", move to ADDRESS.
+- If they ask a question → answer it, then re-ask which time they prefer. Stay on SLOT_CHOICE.
+- If they want a different day → ask what day works, move back to AVAILABILITY.
+- If they opt out → acknowledge politely, move to DONE.
+CRITICAL: Do NOT skip the address step. After they pick a time, ALWAYS ask for their address.
+`.trim(),
+
+  ADDRESS: `
+You are Jade. The slot is confirmed. You asked for the home address.
+- If they give a street address → send the lock-in confirmation in this exact format:
+  "Perfect — I've reserved [SLOT] for you at [ADDRESS]. ✅\nAnything I should pass to the team? (pets, gate code, anything like that)\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?"
+  Move to CONFIRMATION.
+- If they ask a question → answer it, then re-ask for the address. Stay on ADDRESS.
+- If they give something that is clearly not an address → ask again. Stay on ADDRESS.
+CRITICAL: Do NOT advance to CONFIRMATION unless address is a real street address (at least 10 characters).
+`.trim(),
+
+  CONFIRMATION: `
+You are Jade. You asked if they want a call now or in a few minutes.
+- If they say now → say "Perfect [FIRST NAME]! Expect a call from us shortly. We look forward to serving you! 🏠✨" and set callPreference to "now", move to CALL_SCHEDULED.
+- If they say a few minutes / later → say "No problem [FIRST NAME]! We'll give you a call in a few minutes. Talk soon! 🏠✨" and set callPreference to "few_minutes", move to CALL_SCHEDULED.
+- If they leave notes (pets, gate code, special instructions) → acknowledge with "Got it, I'll pass that along!" and re-ask about the call. Stay on CONFIRMATION.
+- If they ask a question → answer it, then re-ask about the call. Stay on CONFIRMATION.
+CRITICAL: Do NOT advance to CALL_SCHEDULED unless callPreference is set.
+`.trim(),
+};
+
 const STAGE_INSTRUCTIONS: Record<string, string> = {
   WIDGET_SIZING: `
 You are waiting for the lead to tell you how many bedrooms and bathrooms their home has.
@@ -134,7 +254,11 @@ export interface PromptContext {
 
 export function buildSystemPrompt(ctx: ConversationContext): string {
   const contract = getStageContract(ctx.stage);
-  const stageInstructions = STAGE_INSTRUCTIONS[ctx.stage] ?? contract.description;
+  // Pick stage instructions based on smsFlow — Flow B (Jade) has different scripts
+  const isFlowB = ctx.smsFlow === "B";
+  const flowInstructions = isFlowB ? STAGE_INSTRUCTIONS_FLOW_B : STAGE_INSTRUCTIONS_FLOW_A;
+  const stageInstructions = flowInstructions[ctx.stage] ?? STAGE_INSTRUCTIONS[ctx.stage] ?? contract.description;
+  const persona = isFlowB ? "Jade" : "Madison";
   const firstName = ctx.leadName?.split(" ")[0] ?? ctx.leadName ?? "the lead";
 
   // Build pricing context — include full breakdown if we know their home size
@@ -158,7 +282,7 @@ export function buildSystemPrompt(ctx: ConversationContext): string {
   });
   const tomorrowSlot = slots[0]; // first available slot = tomorrow (or next business day)
 
-  return `You are Madison, the AI booking assistant for Maids in Black — a professional home cleaning service in the Washington DC Metro Area (DC, MD, VA).
+  return `You are ${persona}, the AI booking assistant for Maids in Black — a professional home cleaning service in the Washington DC Metro Area (DC, MD, VA).
 
 ## YOUR ROLE
 You help convert leads into booked cleaning appointments via SMS. You are warm, professional, and concise.
@@ -182,6 +306,7 @@ You help convert leads into booked cleaning appointments via SMS. You are warm, 
 ## CURRENT CONVERSATION STATE
 - Lead name: ${ctx.leadName}
 - Current stage: ${ctx.stage}
+- SMS flow: ${ctx.smsFlow === "B" ? "Flow B (Jade)" : "Flow A (Madison)"}
 - Bedrooms: ${ctx.bedrooms || "not yet provided"}
 - Bathrooms: ${ctx.bathrooms || "not yet provided"}
 - Quoted price: ${ctx.quotedPrice ? `$${ctx.quotedPrice}` : "not yet quoted"}
@@ -237,10 +362,11 @@ Schema:
 }
 
 export function buildUserMessage(ctx: ConversationContext, leadReply: string): string {
+  const persona = ctx.smsFlow === "B" ? "Jade" : "Madison";
   // Include recent message history for context
   const recentHistory = (ctx.messageHistory ?? [])
     .slice(-6) // Last 3 exchanges
-    .map(m => `${m.role === "assistant" ? "Madison" : firstName(ctx.leadName)}: ${m.content}`)
+    .map(m => `${m.role === "assistant" ? persona : firstName(ctx.leadName)}: ${m.content}`)
     .join("\n");
 
   return recentHistory
