@@ -61,8 +61,6 @@ const FLOW_OPTIONS = [
     label: "Flow A — Madison",
     icon: <User className="w-4 h-4" />,
     description: "All new leads get Flow A. Price upfront in SMS 1 with Madison's photo, followed immediately by an availability question.",
-    sms1Preview: `Hi Sarah! Madison here, thanks for reaching out to Maids in Black. Your Standard Cleaning quote for a 3 bed / 2 bath home is $180 — our fully insured team handles everything.`,
-    sms2Preview: `Are you available Thursday afternoon or Saturday morning? We'd love to get you scheduled! 🗓️`,
     color: "blue",
   },
   {
@@ -70,8 +68,6 @@ const FLOW_OPTIONS = [
     label: "Flow B — Jade",
     icon: <Sparkles className="w-4 h-4" />,
     description: "All new leads get Flow B. Friendly greeting + day ask first — price is revealed only after the lead replies with a day.",
-    sms1Preview: `Hey Sarah! Jade here from Maids in Black 😊 Got your request — we'd love to help. What day were you thinking?`,
-    sms2Preview: `Perfect. We handle a lot of 3 bed / 2 bath homes — no problem at all.\n\nFor a home like yours, most clients land around $180. That covers everything, no hidden fees.\nI've got Thursday at 9am or 1pm — which one should I lock in?`,
     color: "coral",
   },
   {
@@ -79,10 +75,52 @@ const FLOW_OPTIONS = [
     label: "A/B Test (50/50)",
     icon: <Shuffle className="w-4 h-4" />,
     description: "Each new lead is randomly assigned Flow A or Flow B. Use this to compare conversion rates between the two scripts. Each lead's flow is locked in at creation.",
-    sms1Preview: null,
-    sms2Preview: null,
     color: "purple",
   },
+];
+
+// Sample data substitution for preview
+function applyPreviewVars(template: string): string {
+  return template
+    .replace(/\{firstName\}/g, "Sarah")
+    .replace(/\{bedrooms\}/g, "3 bed")
+    .replace(/\{bathrooms\}/g, "2 bath")
+    .replace(/\{serviceType\}/g, "Standard Cleaning")
+    .replace(/\{price\}/g, "$180")
+    .replace(/\{day\}/g, "Thursday")
+    .replace(/\{slot\}/g, "Thursday at 9am")
+    .replace(/\{slot1\}/g, "Thursday afternoon")
+    .replace(/\{slot2\}/g, "Saturday morning")
+    .replace(/\{timePref\}/g, "Morning")
+    .replace(/\{address\}/g, "123 Main St, DC 20001");
+}
+
+// Full conversation thread definitions per flow
+type ConvoItem = { type: 'bot'; label: string; templateKey: string } | { type: 'lead'; text: string };
+
+const FLOW_B_CONVO: ConvoItem[] = [
+  { type: 'bot', label: 'SMS 1', templateKey: 'flowB_sms1' },
+  { type: 'lead', text: 'Thursday works!' },
+  { type: 'bot', label: 'SMS 2', templateKey: 'flowB_sms2' },
+  { type: 'lead', text: '9am please' },
+  { type: 'bot', label: 'SMS 3', templateKey: 'flowB_sms3' },
+  { type: 'lead', text: '123 Main St, DC 20001' },
+  { type: 'bot', label: 'SMS 4', templateKey: 'flowB_sms4' },
+  { type: 'lead', text: 'Call me now!' },
+  { type: 'bot', label: 'SMS 5', templateKey: 'flowB_sms5' },
+];
+
+const FLOW_A_CONVO: ConvoItem[] = [
+  { type: 'bot', label: 'SMS 1', templateKey: 'flowA_sms1' },
+  { type: 'bot', label: 'SMS 2', templateKey: 'flowA_sms2' },
+  { type: 'lead', text: 'Thursday works for me!' },
+  { type: 'bot', label: 'SMS 3', templateKey: 'flowA_sms3' },
+  { type: 'lead', text: 'Morning please' },
+  { type: 'bot', label: 'SMS 4', templateKey: 'flowA_sms4' },
+  { type: 'lead', text: '123 Main St, DC 20001' },
+  { type: 'bot', label: 'SMS 5', templateKey: 'flowA_sms5' },
+  { type: 'lead', text: 'Call me now!' },
+  { type: 'bot', label: 'SMS 6', templateKey: 'flowA_sms6' },
 ];
 
 const FLOW_COLOR_MAP: Record<string, { bg: string; border: string; text: string; badge: string }> = {
@@ -109,9 +147,11 @@ const FLOW_COLOR_MAP: Record<string, { bg: string; border: string; text: string;
 function SmsFlowSelector({
   currentValue,
   onSave,
+  settingsByKey,
 }: {
   currentValue: string;
   onSave: (value: string) => Promise<void>;
+  settingsByKey: Record<string, { key: string; value: string; label: string; description: string | null; fieldType: string }>;
 }) {
   const [selected, setSelected] = useState(currentValue);
   const [saving, setSaving] = useState(false);
@@ -133,7 +173,11 @@ function SmsFlowSelector({
     }
   };
 
-  const selectedOption = FLOW_OPTIONS.find(o => o.value === selected);
+  // Pick the right conversation thread based on selected flow
+  const convoThread: ConvoItem[] | null =
+    selected === "A" ? FLOW_A_CONVO :
+    selected === "B" ? FLOW_B_CONVO :
+    null; // split — show both
 
   return (
     <div className="space-y-4">
@@ -169,27 +213,39 @@ function SmsFlowSelector({
         })}
       </div>
 
-      {/* SMS Preview for selected flow */}
-      {selectedOption && selectedOption.sms1Preview && (
+      {/* Full conversation thread preview */}
+      {convoThread ? (
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">SMS Preview</p>
-          <div className="space-y-2">
-            <div className="flex items-start gap-2">
-              <span className="text-xs text-gray-400 w-12 shrink-0 pt-1">SMS 1</span>
-              <div className="bg-white rounded-2xl rounded-tl-sm border border-gray-200 px-3 py-2 text-xs text-gray-700 leading-relaxed max-w-xs whitespace-pre-line">
-                {selectedOption.sms1Preview}
-              </div>
-            </div>
-            {selectedOption.sms2Preview && (
-              <div className="flex items-start gap-2">
-                <span className="text-xs text-gray-400 w-12 shrink-0 pt-1">SMS 2</span>
-                <div className="bg-white rounded-2xl rounded-tl-sm border border-gray-200 px-3 py-2 text-xs text-gray-700 leading-relaxed max-w-xs whitespace-pre-line">
-                  {selectedOption.sms2Preview}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Full Conversation Preview</p>
+          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+            {convoThread.map((item, idx) => {
+              if (item.type === 'lead') {
+                return (
+                  <div key={idx} className="flex justify-end">
+                    <div className="bg-[#E8735A]/10 border border-[#E8735A]/20 rounded-2xl rounded-tr-sm px-3 py-2 text-xs text-gray-700 leading-relaxed max-w-[75%] whitespace-pre-line">
+                      {item.text}
+                    </div>
+                  </div>
+                );
+              }
+              const templateValue = settingsByKey[item.templateKey]?.value ?? "";
+              const previewText = applyPreviewVars(templateValue);
+              return (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className="text-xs text-gray-400 w-12 shrink-0 pt-1.5">{item.label}</span>
+                  <div className="bg-white rounded-2xl rounded-tl-sm border border-gray-200 px-3 py-2 text-xs text-gray-700 leading-relaxed max-w-[75%] whitespace-pre-line">
+                    {previewText || <span className="text-gray-400 italic">Loading...</span>}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
-          <p className="text-xs text-gray-400">Preview with sample data (Sarah, 3 bed / 2 bath, $180).</p>
+          <p className="text-xs text-gray-400">Preview with sample data (Sarah, 3 bed / 2 bath, $180, Thursday). Edits to the scripts below update this preview instantly.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Full Conversation Preview</p>
+          <p className="text-xs text-gray-500">In A/B Test mode, each lead is randomly assigned Flow A or Flow B. Select Flow A or Flow B above to preview that script.</p>
         </div>
       )}
 
@@ -402,6 +458,7 @@ export default function SettingsPage() {
                 <SmsFlowSelector
                   currentValue={currentFlow}
                   onSave={(value) => handleSave("smsFlow", value)}
+                  settingsByKey={settingsByKey}
                 />
               </CardContent>
             </Card>
