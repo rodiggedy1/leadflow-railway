@@ -1718,3 +1718,4 @@
 - [x] Replace "200% Happy Clean Guarantee" with better trust message
 - [x] Add auto-scrolling review carousel (Latoya P, Justin C, Erin T, Bonnie P) with realistic avatars
 - [x] Move scrolling review carousel to replace Ashley Purcell static testimonial; remove Ashley block
+- [x] Redesign quote form top: integrate logo + trust badges into the card header, remove floating image above card
