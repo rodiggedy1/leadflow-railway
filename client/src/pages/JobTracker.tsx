@@ -32,56 +32,63 @@ interface StatusConfig {
   step: number;
 }
 
-const STATUS_CONFIG: Record<string, StatusConfig> = {
-  scheduled: {
-    label: "Confirmed for Today",
+type StatusConfigFn = (firstName: string) => StatusConfig;
+
+const STATUS_CONFIG_FN: Record<string, StatusConfigFn> = {
+  scheduled: (name) => ({
+    label: `Hi ${name}! You're confirmed for today`,
     sublabel: "Your team is getting ready",
     emoji: "📋",
     color: "text-blue-400",
     glow: "shadow-blue-500/30",
     step: 0,
-  },
-  on_the_way: {
-    label: "On the Way",
-    sublabel: "Your team is heading to you now",
+  }),
+  on_the_way: (name) => ({
+    label: `${name}, your team is on the way!`,
+    sublabel: "They're heading to you now",
     emoji: "🚗",
     color: "text-amber-400",
     glow: "shadow-amber-500/30",
     step: 1,
-  },
-  arrived: {
-    label: "Arrived",
+  }),
+  arrived: (name) => ({
+    label: `${name}, your team has arrived!`,
     sublabel: "Your team is at the door",
     emoji: "🏠",
     color: "text-orange-400",
     glow: "shadow-orange-500/30",
     step: 2,
-  },
-  in_progress: {
-    label: "Cleaning in Progress",
+  }),
+  in_progress: (name) => ({
+    label: `${name}, cleaning is in progress`,
     sublabel: "Your home is being taken care of",
     emoji: "🧹",
     color: "text-emerald-400",
     glow: "shadow-emerald-500/30",
     step: 3,
-  },
-  completed: {
-    label: "All Done!",
-    sublabel: "Your home is sparkling clean",
+  }),
+  completed: (name) => ({
+    label: `All done, ${name}!`,
+    sublabel: "Your home is sparkling clean ✨",
     emoji: "✨",
     color: "text-emerald-300",
     glow: "shadow-emerald-400/40",
     step: 4,
-  },
-  issue_at_property: {
-    label: "Heads Up",
+  }),
+  issue_at_property: (name) => ({
+    label: `${name}, heads up`,
     sublabel: "Your team noted an issue",
     emoji: "⚠️",
     color: "text-red-400",
     glow: "shadow-red-500/30",
     step: 2,
-  },
+  }),
 };
+
+// Keep a static fallback for cases where firstName isn't available yet
+const STATUS_CONFIG: Record<string, StatusConfig> = Object.fromEntries(
+  Object.entries(STATUS_CONFIG_FN).map(([k, fn]) => [k, fn("there")])
+);
 
 const STEPS = [
   { key: "scheduled", label: "Confirmed" },
@@ -285,10 +292,10 @@ export default function JobTracker() {
   }
 
   const statusKey = (job.jobStatus as string) ?? "scheduled";
-  const config = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.scheduled;
-  const currentStep = config.step;
-
   const firstName = job.customerName?.split(" ")[0] ?? "there";
+  const configFn = STATUS_CONFIG_FN[statusKey] ?? STATUS_CONFIG_FN.scheduled;
+  const config = configFn!(firstName);
+  const currentStep = config.step;
   const teamDisplay = job.teamName ?? job.cleanerName ?? "Your Team";
 
   const serviceTime = job.serviceDateTime
