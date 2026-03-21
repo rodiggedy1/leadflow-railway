@@ -103,9 +103,11 @@ const STEPS = [
 function StarRating({
   token,
   existingRating,
+  firstName,
 }: {
   token: string;
   existingRating: number | null | undefined;
+  firstName: string;
 }) {
   const [hovered, setHovered] = useState(0);
   const [selected, setSelected] = useState(existingRating ?? 0);
@@ -174,7 +176,7 @@ function StarRating({
   return (
     <div className="text-center">
       <p className="text-white/70 text-sm mb-4 font-medium tracking-wide uppercase">
-        How was your clean?
+        How did we do, {firstName}?
       </p>
 
       {/* Stars */}
@@ -490,7 +492,7 @@ export default function JobTracker() {
         {/* Rating Card — show after completed, or always for engagement */}
         {(isComplete || true) && (
           <div className="bg-[#141414] rounded-2xl p-5 border border-white/5">
-            <StarRating token={token} existingRating={job.customerRating} />
+            <StarRating token={token} existingRating={job.customerRating} firstName={firstName} />
           </div>
         )}
 
