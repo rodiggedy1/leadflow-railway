@@ -63,9 +63,11 @@ export function isWithinBusinessHours(now: Date = new Date()): boolean {
 export function buildLeadAlertScript(details: LeadAlertDetails): string {
   const { name } = details;
   return (
+    `Hi Maids in Black crew, this is a notification. ` +
     `New lead alert from ${name}. ` +
     `Check the lead platform now and respond in the next 30 seconds. ` +
-    `Bonus for most leads closed this month.`
+    `Bonus for most leads closed this month. ` +
+    `Good luck.`
   );
 }
 

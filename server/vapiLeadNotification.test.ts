@@ -66,9 +66,14 @@ describe("isWithinBusinessHours", () => {
 // ─── buildLeadAlertScript ─────────────────────────────────────────────────────
 
 describe("buildLeadAlertScript", () => {
-  it("starts with 'New lead alert from'", () => {
+  it("starts with the Maids in Black crew intro", () => {
     const script = buildLeadAlertScript({ name: "Sarah" });
-    expect(script.startsWith("New lead alert from Sarah")).toBe(true);
+    expect(script.startsWith("Hi Maids in Black crew")).toBe(true);
+  });
+
+  it("includes 'New lead alert from' with the lead name", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).toContain("New lead alert from Sarah");
   });
 
   it("includes the lead's name", () => {
@@ -95,6 +100,11 @@ describe("buildLeadAlertScript", () => {
     const script = buildLeadAlertScript({ name: "Sarah" });
     expect(script).not.toContain("bedroom");
     expect(script).not.toContain("bathroom");
+  });
+
+  it("ends with 'Good luck'", () => {
+    const script = buildLeadAlertScript({ name: "Sarah" });
+    expect(script).toContain("Good luck");
   });
 
   it("does NOT include 'Heyjade' (old CTA removed)", () => {

@@ -1905,3 +1905,6 @@
 
 ## VAPI Call Hang-Up Bug Fix — March 21
 - [x] Fix: call hangs up immediately — root cause was invalid voice ID "rachel"; switched to known-working Sarah voice (EXAVITQu4vr4xnSDxMaL), removed endCallPhrases/endCallMessage
+
+## VAPI Script Update — March 21
+- [x] Update script to: "Hi Maids in Black crew, this is a notification. New lead alert from [Name]. Check the lead platform now and respond in the next 30 seconds. Bonus for most leads closed this month. Good luck."
