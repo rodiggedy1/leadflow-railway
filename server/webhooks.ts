@@ -37,11 +37,15 @@ import { handleReviewReplyForJob } from "./reviewRouter";
 import { handleRatingReply } from "./qualityRouter";
 import { logActivity } from "./activityLogger";
 import { registerBarkWebhookRoute } from "./barkWebhook";
+import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { ENV } from "./_core/env";
 
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
   registerBarkWebhookRoute(app);
+
+  // Email lead integration (Mailgun inbound)
+  registerEmailLeadWebhookRoute(app);
 
   app.post("/api/webhooks/openphone", async (req, res) => {
     // Acknowledge immediately — OpenPhone expects a 200 within 5 seconds
@@ -66,8 +70,16 @@ export function registerWebhookRoutes(app: Express) {
       // Guard: only process messages addressed to THIS project's phone number.
       // Prevents cross-project contamination when multiple projects share the same
       // OpenPhone account or the same webhook URL receives events from other numbers.
+      //
+      // Three cases:
+      //   1. Env is set + payload has ID + they match → allow
+      //   2. Env is set + payload has ID + they differ → block (wrong number)
+      //   3. Env is set + payload has NO ID            → allow (older API versions omit it)
+      //   4. Env is NOT set                            → allow all (misconfigured — log a warning)
       const configuredNumberId = ENV.openPhoneNumberId;
-      if (configuredNumberId && msg.phoneNumberId && msg.phoneNumberId !== configuredNumberId) {
+      if (!configuredNumberId) {
+        console.warn("[Webhook] OPENPHONE_PHONE_NUMBER_ID is not set — processing messages from ALL numbers. Set this env var to filter by number.");
+      } else if (msg.phoneNumberId && msg.phoneNumberId !== configuredNumberId) {
         console.log(`[Webhook] Skipping: phoneNumberId ${msg.phoneNumberId} does not match configured ${configuredNumberId}`);
         return;
       }
@@ -75,6 +87,10 @@ export function registerWebhookRoutes(app: Express) {
       const rawPhone: string = msg.from;
       // OpenPhone uses 'text' field; fall back to 'body' for compatibility
       const inboundText: string = msg.text ?? msg.body ?? "";
+
+      // Idempotency key: OpenPhone has at-least-once delivery semantics and may
+      // retry the same event. Use the message ID to deduplicate.
+      const inboundMessageId: string | undefined = msg.id;
 
       if (!rawPhone || !inboundText.trim()) {
         console.warn(`[Webhook] Skipping: empty phone or text (phone=${rawPhone}, text=${inboundText})`);
@@ -122,6 +138,14 @@ export function registerWebhookRoutes(app: Express) {
       // Don't respond to completed conversations (only if no active session exists)
       if (session.stage === "DONE") {
         console.log(`[Webhook] All conversations for ${fromPhone} are DONE. Skipping.`);
+        return;
+      }
+
+      // ── Idempotency guard ─────────────────────────────────────────────────────
+      // OpenPhone uses at-least-once delivery — the same event can arrive 2-3x.
+      // If we've already processed this exact message ID for this session, skip.
+      if (inboundMessageId && session.lastProcessedMessageId === inboundMessageId) {
+        console.log(`[Webhook] Duplicate event detected — messageId ${inboundMessageId} already processed for session ${session.id}. Skipping.`);
         return;
       }
 
@@ -351,6 +375,8 @@ export function registerWebhookRoutes(app: Express) {
           ...(langUpdates.language !== undefined ? { language: langUpdates.language } : {}),
           // preLangStage: null clears it after confirmation; undefined means no change
           ...(langUpdates.preLangStage !== undefined ? { preLangStage: langUpdates.preLangStage } : {}),
+          // Idempotency: record the message ID we just processed so duplicate events are dropped
+          ...(inboundMessageId ? { lastProcessedMessageId: inboundMessageId } : {}),
         })
         .where(eq(conversationSessions.id, session.id));
 

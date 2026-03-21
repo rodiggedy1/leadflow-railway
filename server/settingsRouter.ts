@@ -187,6 +187,14 @@ const DEFAULT_SETTINGS = [
     description: "Sent when the lead says to call in a few minutes.",
     fieldType: "textarea",
   },
+  // ── Email Lead (Mailgun inbound) SMS Templates ────────────────────────────
+  {
+    key: "emailFlowA_sms1",
+    value: "Hi {firstName}! 👋 Madison here from Maids in Black. I saw your request for {frequency} {serviceType} — your quote for a {bedrooms} bed / {bathrooms} bath home is ${price}. Our fully insured team handles everything. 🏠",
+    label: "Email Lead — SMS 1: Opening Message (Madison)",
+    description: "Sent immediately when an email lead arrives via Mailgun. Use {firstName}, {frequency}, {serviceType}, {bedrooms}, {bathrooms}, {price}.",
+    fieldType: "textarea",
+  },
 ] as const;
 
 async function seedDefaultSettings() {

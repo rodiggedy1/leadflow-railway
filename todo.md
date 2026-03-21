@@ -1865,3 +1865,28 @@
 
 ## Kanban Cleanup — March 21
 - [x] Remove Lost column, merge NOT_INTERESTED into Dead Leads column
+
+## Webhook Phone Filter Fix — March 21
+- [ ] Set OPENPHONE_PHONE_NUMBER_ID secret so webhook ignores messages from 240-226-3130
+- [ ] Harden phoneNumberId guard to also block messages when phoneNumberId is missing from payload but env is set
+
+## Email Lead Integration (Mailgun Inbound) — March 21
+- [x] Build email lead parser: strip numeric suffixes ("BiWeekly 0.85" → "BiWeekly"), map word-form numbers ("Two 179" → "2 Bedrooms"), map cleaning types (BiWeekly → Standard Cleaning + Bi-Weekly frequency)
+- [x] Build /api/webhooks/email-lead Mailgun inbound endpoint with HMAC signature verification
+- [x] Lead processing pipeline: parse email body → price job → create session (leadSource="email") → fire SMS flow A (Madison) → alert CS team
+- [x] Add emailFlowA_sms1 template to DEFAULT_SETTINGS and seed to DB
+- [x] Add Email Leads tab to Settings page with conversation preview and editable templates
+- [x] Write 25 tests for email lead parser (708/708 pass)
+- [ ] Set MAILGUN_WEBHOOK_SIGNING_KEY secret once Mailgun domain is verified
+- [ ] Set up Gmail forwarding rule: from zapiermail.com → leads@mg.heyeverywhere.com
+
+## Duplicate SMS Bug — March 21
+- [ ] Find root cause: same CONFIRMATION message sent 3x for single inbound reply
+- [ ] Implement idempotency guard to prevent duplicate webhook processing
+
+## Duplicate SMS Bug Fix — March 21
+- [x] Root cause: OpenPhone at-least-once delivery fired the same message.received event 2-3x for the same inbound SMS
+- [x] Added lastProcessedMessageId column (migration 0055) to conversationSessions
+- [x] Idempotency guard in webhooks.ts: skip processing if msg.id === session.lastProcessedMessageId
+- [x] Persist lastProcessedMessageId in the DB update after each successful processing
+- [x] 15 new idempotency tests (723/723 pass)

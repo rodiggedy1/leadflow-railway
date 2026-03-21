@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import {
   Settings, Link, MessageSquare, Star, Phone, Building2,
   Save, Loader2, CheckCircle2, ToggleLeft, ToggleRight, Bell,
-  FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText,
+  FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText, Mail,
 } from "lucide-react";
 
 // ── Section config ────────────────────────────────────────────────────────────
@@ -126,6 +126,20 @@ function applyPreviewVars(template: string): string {
 // ── Conversation thread definitions ──────────────────────────────────────────
 
 type ConvoItem = { type: 'bot'; label: string; templateKey: string } | { type: 'lead'; text: string };
+
+// Email leads: SMS 1 is the email-specific intro, then uses shared Flow A scripts
+const EMAIL_LEAD_CONVO: ConvoItem[] = [
+  { type: 'bot', label: 'SMS 1', templateKey: 'emailFlowA_sms1' },
+  { type: 'bot', label: 'SMS 2', templateKey: 'flowA_sms2' },
+  { type: 'lead', text: 'Thursday works for me!' },
+  { type: 'bot', label: 'SMS 3', templateKey: 'flowA_sms3' },
+  { type: 'lead', text: 'Morning please' },
+  { type: 'bot', label: 'SMS 4', templateKey: 'flowA_sms4' },
+  { type: 'lead', text: '123 Main St, DC 20001' },
+  { type: 'bot', label: 'SMS 5', templateKey: 'flowA_sms5' },
+  { type: 'lead', text: 'Call me now!' },
+  { type: 'bot', label: 'SMS 6', templateKey: 'flowA_sms6' },
+];
 
 const FLOW_B_CONVO: ConvoItem[] = [
   { type: 'bot', label: 'SMS 1', templateKey: 'flowB_sms1' },
@@ -537,7 +551,7 @@ function SmsTemplateCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type SettingsTab = "form" | "widget" | "general";
+type SettingsTab = "form" | "widget" | "email" | "general";
 
 export default function SettingsPage() {
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
@@ -581,6 +595,7 @@ export default function SettingsPage() {
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "form", label: "Form SMS", icon: <FileText className="w-4 h-4" /> },
     { id: "widget", label: "Widget SMS", icon: <MessageCircle className="w-4 h-4" /> },
+    { id: "email", label: "Email Leads", icon: <Mail className="w-4 h-4" /> },
     { id: "general", label: "General", icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -766,7 +781,90 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ── General Tab ───────────────────────────────────────────────── */}
+                {/* ── Email Leads Tab ───────────────────────────────────── */}
+            {activeTab === "email" && (
+              <div className="space-y-6">
+                <div className="rounded-xl bg-violet-50 border border-violet-100 px-4 py-3">
+                  <p className="text-xs text-violet-700 leading-relaxed">
+                    <strong>Email Leads</strong> — these scripts are sent to leads that arrive via email (forwarded through Mailgun from <code className="bg-violet-100 px-1 rounded">support@maidsinblacksupport.com</code>). The email already contains the service type, bedrooms, and bathrooms, so SMS 1 can include the price immediately — just like the quote form.
+                  </p>
+                </div>
+
+                {/* Conversation preview */}
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-violet-500" />
+                      Email Lead Conversation Flow
+                    </CardTitle>
+                    <CardDescription className="text-xs text-gray-500">
+                      Email leads always use the Madison (Flow A) script — price + availability upfront. The conversation continues with the shared Flow A scripts.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Full Conversation Preview</p>
+                      <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+                        {EMAIL_LEAD_CONVO.map((item, idx) => {
+                          if (item.type === 'lead') {
+                            return (
+                              <div key={idx} className="flex justify-end">
+                                <div className="bg-[#E8735A]/10 border border-[#E8735A]/20 rounded-2xl rounded-tr-sm px-3 py-2 text-xs text-gray-700 leading-relaxed max-w-[75%] whitespace-pre-line">
+                                  {item.text}
+                                </div>
+                              </div>
+                            );
+                          }
+                          const rawValue = effectiveValues[item.templateKey] ?? "";
+                          const previewText = applyPreviewVars(rawValue);
+                          return (
+                            <div key={idx} className="flex items-start gap-2">
+                              <span className="text-xs text-gray-400 w-16 shrink-0 pt-1.5">{item.label}</span>
+                              <div className="bg-white rounded-2xl rounded-tl-sm border border-gray-200 px-3 py-2 text-xs text-gray-700 leading-relaxed max-w-[75%] whitespace-pre-line">
+                                {previewText || <span className="text-gray-400 italic">Loading...</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-gray-400">Preview with sample data (Sarah, Bi-Weekly, 2 bed / 1 bath, $180, Thursday). Edits to the scripts below update this preview instantly.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <SmsTemplateCard
+                  title="Email Lead SMS 1 — Opening Message"
+                  description={
+                    <>
+                      The first SMS sent when an email lead arrives. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{serviceType}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{bedrooms}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{bathrooms}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{frequency}'}</code> — they are replaced automatically.
+                    </>
+                  }
+                  icon={<Mail className="w-4 h-4 text-violet-500" />}
+                  templateKeys={["emailFlowA_sms1"]}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
+                  onSave={handleSave}
+                />
+
+                <SmsTemplateCard
+                  title="Flow A — Madison Scripts (SMS 2 onward)"
+                  description={
+                    <>
+                      After SMS 1, email leads continue with the shared Madison flow. Edits here also update the Form SMS and Widget SMS tabs. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code>.
+                    </>
+                  }
+                  icon={<User className="w-4 h-4 text-blue-500" />}
+                  templateKeys={["flowA_sms2", "flowA_sms3", "flowA_sms4", "flowA_sms5", "flowA_sms6", "flowA_sms6_later"]}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
+                  onSave={handleSave}
+                />
+              </div>
+            )}
+
+            {/* ── General Tab ──────────────────────────────────────────── */}
             {activeTab === "general" && (
               <div className="space-y-6">
                 {SECTIONS.map((section) => (

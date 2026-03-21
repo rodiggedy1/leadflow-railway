@@ -386,6 +386,13 @@
       "when": 1774117819971,
       "tag": "0054_round_reptil",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1774129057717,
+      "tag": "0055_military_boomer",
+      "breakpoints": true
     }
   ]
 }

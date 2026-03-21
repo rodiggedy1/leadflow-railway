@@ -14,4 +14,5 @@ export const ENV = {
   launch27Subdomain: process.env.LAUNCH27_TENANT ?? process.env.LAUNCH27_SUBDOMAIN ?? "maidsinblack",
   vapiPrivateKey: process.env.VAPI_PRIVATE_KEY ?? "",
   vapiPublicKey: process.env.VAPI_PUBLIC_KEY ?? "",
+  mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? "",
 };

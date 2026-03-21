@@ -231,6 +231,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
   smsFlow: varchar("smsFlow", { length: 5 }).default("B"),
 
+  /**
+   * The OpenPhone message ID of the last inbound message that was processed.
+   * Used as an idempotency key to prevent duplicate processing when OpenPhone
+   * delivers the same webhook event more than once (at-least-once delivery).
+   */
+  lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
