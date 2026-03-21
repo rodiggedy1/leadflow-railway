@@ -1154,31 +1154,6 @@ export default function QuoteForm() {
                   </div>
                 </div>
 
-                {/* Legal */}
-                <div className="animate-fade-slide-up delay-7 text-center">
-                  <p
-                    className="text-xs leading-relaxed"
-                    style={{ color: "#9A7060", fontFamily: "'DM Sans', sans-serif" }}
-                  >
-                    By clicking "Next" I agree to the{" "}
-                    <a
-                      href="#"
-                      style={{ color: "#E8603C", textDecoration: "underline" }}
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      Terms of Use
-                    </a>
-                    . I understand information collected will be used as described in our{" "}
-                    <a
-                      href="#"
-                      style={{ color: "#E8603C", textDecoration: "underline" }}
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      Privacy Policy
-                    </a>
-                    .
-                  </p>
-                </div>
               </form>
             </>
           )}

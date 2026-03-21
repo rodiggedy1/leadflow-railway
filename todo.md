@@ -1720,3 +1720,4 @@
 - [x] Move scrolling review carousel to replace Ashley Purcell static testimonial; remove Ashley block
 - [x] Redesign quote form top: integrate logo + trust badges into the card header, remove floating image above card
 - [x] Remove duplicate trust badges — keep inline BBB/Google/Trustpilot text row, replace header image with logo-only (no badges in image)
+- [x] Remove "By clicking Next I agree to Terms of Use / Privacy Policy" disclaimer from quote form
