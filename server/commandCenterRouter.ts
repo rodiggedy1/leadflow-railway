@@ -1199,11 +1199,19 @@ Respond in JSON with this exact schema:
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
-      // Get tomorrow's date string
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split("T")[0];
-      const tomorrowLabel = tomorrow.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+      // Get tomorrow's date string in Eastern time (business timezone).
+      // Using toISOString() would give UTC and could be a day ahead after 8 PM ET.
+      const EASTERN_TZ = "America/New_York";
+      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: EASTERN_TZ }));
+      const tomorrowET = new Date(nowET);
+      tomorrowET.setDate(tomorrowET.getDate() + 1);
+      // Build YYYY-MM-DD from local Eastern parts to avoid UTC offset shift
+      const tomorrowStr = [
+        tomorrowET.getFullYear(),
+        String(tomorrowET.getMonth() + 1).padStart(2, "0"),
+        String(tomorrowET.getDate()).padStart(2, "0"),
+      ].join("-");
+      const tomorrowLabel = tomorrowET.toLocaleDateString("en-US", { timeZone: EASTERN_TZ, weekday: "long", month: "short", day: "numeric" });
 
       // Fetch tomorrow's bookings from Launch27
       let bookedSlots = 0;
@@ -1213,14 +1221,23 @@ Respond in JSON with this exact schema:
       try {
         const result = await getCompletedBookingsForDate(tomorrowStr, { includeAll: true });
         bookedSlots = result.bookings.length;
-        // Estimate capacity: MIB typically runs 8–12 jobs/day across teams
-        totalSlots = Math.max(bookedSlots + 3, 10);
-        openSlots = totalSlots - bookedSlots;
+        // Derive capacity from unique active teams on tomorrow's schedule.
+        // Each team can handle ~4 jobs/day. If no bookings yet, fall back to
+        // a conservative 2-team baseline (8 slots).
+        const uniqueTeams = new Set(
+          result.bookings.flatMap(b => b.teams.map(t => t.id))
+        );
+        const teamCount = uniqueTeams.size || 2;
+        const slotsPerTeam = 4;
+        totalSlots = teamCount * slotsPerTeam;
+        openSlots = Math.max(totalSlots - bookedSlots, 0);
         scheduleNote = bookedSlots === 0
           ? `Tomorrow (${tomorrowLabel}) has no bookings yet — wide open schedule.`
+          : openSlots === 0
+          ? `Tomorrow (${tomorrowLabel}) is fully booked across ${teamCount} team${teamCount === 1 ? "" : "s"}.`
           : openSlots <= 2
-          ? `Tomorrow (${tomorrowLabel}) is nearly full — ${openSlots} slot${openSlots === 1 ? "" : "s"} left.`
-          : `Tomorrow (${tomorrowLabel}) has ${openSlots} open slot${openSlots === 1 ? "" : "s"} out of ~${totalSlots} capacity.`;
+          ? `Tomorrow (${tomorrowLabel}) is nearly full — ${openSlots} slot${openSlots === 1 ? "" : "s"} left across ${teamCount} team${teamCount === 1 ? "" : "s"}.`
+          : `Tomorrow (${tomorrowLabel}) has ${openSlots} open slot${openSlots === 1 ? "" : "s"} out of ${totalSlots} (${teamCount} team${teamCount === 1 ? "" : "s"} × ${slotsPerTeam} jobs each).`;
       } catch {
         scheduleNote = `Tomorrow (${tomorrowLabel}) — schedule data unavailable.`;
         openSlots = 3;

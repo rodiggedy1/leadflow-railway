@@ -1984,3 +1984,9 @@
 ## Outbound Campaigns Design + Logic Fix — March 22
 - [x] Backend: always return exactly 3 campaign cards (Tomorrow Slots, Re-engage Cold Leads, Follow Up on Open Quotes) — show 0 recipients if no matching leads
 - [x] UI: redesign Outbound Campaigns to match Command Center's clean gray/white aesthetic (remove hard violet/red/amber colors)
+
+## Outbound Campaigns — Popup + Editable SMS + Slots Fix — March 22
+- [x] Confirm popup gate: verify no SMS fires without confirmation dialog approval
+- [x] Add editable textarea to confirmation dialog so script can be tweaked before send
+- [x] Fix tomorrow slots capacity: trace where "X out of 15" comes from and use real Launch27 data
+- [x] Fix tomorrow date calculation to use Eastern time (not UTC) so it matches the business calendar

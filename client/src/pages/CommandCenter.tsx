@@ -433,6 +433,7 @@ export default function CommandCenter() {
     targetLeadIds: number[];
   } | null>(null);
   const [campaignFiring, setCampaignFiring] = useState(false);
+  const [editedScript, setEditedScript] = useState<string>("");
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const statsQuery = trpc.commandCenter.getDashboardStats.useQuery(
@@ -524,22 +525,24 @@ export default function CommandCenter() {
 
   const handleFireCampaign = useCallback(async () => {
     if (!campaignConfirm) return;
+    const scriptToSend = editedScript.trim() || campaignConfirm.script;
     setCampaignFiring(true);
     try {
       const result = await fireCampaignMutation.mutateAsync({
         campaignId: campaignConfirm.id,
         targetLeadIds: campaignConfirm.targetLeadIds,
-        script: campaignConfirm.script,
+        script: scriptToSend,
       });
       toast.success(`Campaign sent! ${result.sent} messages delivered${result.failed > 0 ? `, ${result.failed} failed` : ""}`);
       setCampaignConfirm(null);
+      setEditedScript("");
       campaignsQuery.refetch();
     } catch {
       toast.error("Campaign failed — check logs");
     } finally {
       setCampaignFiring(false);
     }
-  }, [campaignConfirm, fireCampaignMutation, campaignsQuery]);
+  }, [campaignConfirm, editedScript, fireCampaignMutation, campaignsQuery]);
 
   const handleLeadCall = useCallback(async (sessionId: number, name: string) => {
     setCallSending(sessionId);
@@ -804,14 +807,18 @@ export default function CommandCenter() {
                     {/* Fire button */}
                     <button
                       disabled={!hasLeads}
-                      onClick={() => hasLeads && setCampaignConfirm({
-                        id: campaign.id,
-                        title: campaign.title,
-                        script: campaign.script,
-                        recipientCount: campaign.recipientCount,
-                        estimatedRevenue: campaign.estimatedRevenue,
-                        targetLeadIds: campaign.targetLeadIds,
-                      })}
+                      onClick={() => {
+                        if (!hasLeads) return;
+                        setCampaignConfirm({
+                          id: campaign.id,
+                          title: campaign.title,
+                          script: campaign.script,
+                          recipientCount: campaign.recipientCount,
+                          estimatedRevenue: campaign.estimatedRevenue,
+                          targetLeadIds: campaign.targetLeadIds,
+                        });
+                        setEditedScript(campaign.script);
+                      }}
                       className={`w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
                         hasLeads
                           ? "bg-gray-900 hover:bg-gray-800 text-white cursor-pointer"
@@ -854,11 +861,24 @@ export default function CommandCenter() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-2">SMS Message</p>
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
-                    <p className="text-sm text-gray-700 leading-relaxed">{campaignConfirm.script}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500">SMS Message</p>
+                    <button
+                      type="button"
+                      onClick={() => setEditedScript(campaignConfirm.script)}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      Reset to default
+                    </button>
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">{"{{name}}"} will be replaced with each lead's first name.</p>
+                  <textarea
+                    value={editedScript}
+                    onChange={e => setEditedScript(e.target.value)}
+                    disabled={campaignFiring}
+                    rows={4}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-transparent disabled:opacity-50"
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">{"{{name}}"} will be replaced with each lead's first name.</p>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-gray-500 shrink-0 mt-0.5" />
