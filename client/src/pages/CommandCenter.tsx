@@ -433,6 +433,13 @@ export default function CommandCenter() {
     estimatedRevenue: number;
     targetLeadIds: number[];
     targetPhones: string[];
+    recipients: Array<{
+      name: string;
+      phone: string;
+      frequency: string | null;
+      lastBookingDate: string | null;
+      lastCampaignSmsDate: Date | null;
+    }>;
   } | null>(null);
   const [campaignFiring, setCampaignFiring] = useState(false);
   const [editedScript, setEditedScript] = useState<string>("");
@@ -821,6 +828,7 @@ export default function CommandCenter() {
                           estimatedRevenue: campaign.estimatedRevenue,
                           targetLeadIds: campaign.targetLeadIds,
                           targetPhones: campaign.targetPhones ?? [],
+                          recipients: campaign.recipients ?? [],
                         });
                         setEditedScript(campaign.script);
                       }}
@@ -842,7 +850,7 @@ export default function CommandCenter() {
 
         {/* ── Campaign Confirmation Dialog ──────────────────────────────────── */}
         <Dialog open={!!campaignConfirm} onOpenChange={open => !open && setCampaignConfirm(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Send className="w-4 h-4 text-gray-700" />
@@ -890,6 +898,46 @@ export default function CommandCenter() {
                   />
                   <p className="text-xs text-gray-400 mt-1.5">{"{{name}}"} will be replaced with each lead's first name.</p>
                 </div>
+                {/* Recipient detail table */}
+                {campaignConfirm.recipients && campaignConfirm.recipients.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-2">Recipients ({campaignConfirm.recipients.length})</p>
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="max-h-52 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Name</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Phone</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Frequency</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Last Booking</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Last Campaign SMS</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {campaignConfirm.recipients.map((r, i) => (
+                              <tr key={i} className="hover:bg-gray-50">
+                                <td className="px-3 py-2 text-gray-900 font-medium">{r.name}</td>
+                                <td className="px-3 py-2 text-gray-600">{r.phone}</td>
+                                <td className="px-3 py-2 text-gray-600">{r.frequency ?? <span className="text-gray-300">—</span>}</td>
+                                <td className="px-3 py-2 text-gray-600">
+                                  {r.lastBookingDate
+                                    ? new Date(r.lastBookingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                    : <span className="text-gray-300">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-gray-600">
+                                  {r.lastCampaignSmsDate
+                                    ? new Date(r.lastCampaignSmsDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                    : <span className="text-gray-400 italic">Never</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-gray-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-gray-600">This will immediately send SMS messages to all {campaignConfirm.recipientCount} leads. This action cannot be undone.</p>

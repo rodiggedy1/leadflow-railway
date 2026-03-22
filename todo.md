@@ -2012,3 +2012,7 @@
 
 ## Daily Pool Rotation — March 22
 - [x] Rotate lapsed customer pool daily: compute day-of-year offset so each day targets the next 100 unique customers (day 1 = 1–100, day 2 = 101–200, wraps at pool end)
+
+## Campaign Popup Recipient Details — March 22
+- [x] Backend: include recipient detail array in campaign cards (name, phone, frequency, lastBookingDate, lastCampaignSmsDate)
+- [x] UI: show scrollable recipient table in confirmation dialog (name, number, frequency, last booking, last campaign SMS)

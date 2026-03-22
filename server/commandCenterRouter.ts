@@ -1294,13 +1294,14 @@ Respond in JSON with this exact schema:
         ].join("-");
       })();
 
-      // Get one row per phone: the customer's most recent job date and name.
+      // Get one row per phone: the customer's most recent job date, name, and frequency.
       // Fetch up to 3500 so we can count the full pool, then cap the default send at 50.
       const lapsedCustomers = await db
         .select({
           phone: completedJobs.phone,
           firstName: completedJobs.firstName,
           serviceType: completedJobs.serviceType,
+          frequency: completedJobs.frequency,
           lastJobDate: sql<string>`MAX(${completedJobs.jobDate})`.as("lastJobDate"),
         })
         .from(completedJobs)
@@ -1310,17 +1311,22 @@ Respond in JSON with this exact schema:
             isNotNull(completedJobs.jobDate)
           )
         )
-        .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.serviceType)
+        .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.serviceType, completedJobs.frequency)
         .having(sql`MAX(${completedJobs.jobDate}) <= ${sixtyDaysAgoStr}`)
         .orderBy(sql`MAX(${completedJobs.jobDate}) DESC`)
         .limit(3500);
 
-      // Map to the same shape as stalledLeads for the recency filter
+      // Map to the same shape as stalledLeads for the recency filter,
+      // keeping the extra fields for the recipient preview table.
+      // Note: lastCampaignSmsDate is populated below after normalizePhone is declared.
       const coldLeads = lapsedCustomers.map(c => ({
         id: 0 as number, // no session id for past customers
         name: c.firstName ?? "Customer",
         phone: c.phone,
         serviceType: c.serviceType,
+        frequency: c.frequency ?? null,
+        lastJobDate: c.lastJobDate ?? null,
+        lastCampaignSmsDate: null as Date | null, // filled in below
         stage: "LAPSED" as string,
       }));
 
@@ -1348,6 +1354,31 @@ Respond in JSON with this exact schema:
       // Helper: normalize phone to E.164-ish for comparison
       const normalizePhone = (p: string | null) =>
         p ? p.replace(/\D/g, "") : "";
+
+      // Build a map of phone → last campaign SMS date from reactivationContacts
+      // (all-time, not just 7 days, so we can show it in the recipient preview table)
+      const allCampaignedRows = await db
+        .select({
+          phone: reactivationContacts.phone,
+          sentAt: reactivationContacts.sentAt,
+        })
+        .from(reactivationContacts)
+        .where(isNotNull(reactivationContacts.sentAt))
+        .orderBy(sql`${reactivationContacts.sentAt} DESC`);
+
+      const lastCampaignSmsMap = new Map<string, Date>();
+      for (const row of allCampaignedRows) {
+        const digits = normalizePhone(row.phone);
+        if (digits && !lastCampaignSmsMap.has(digits)) {
+          lastCampaignSmsMap.set(digits, row.sentAt as Date);
+        }
+      }
+
+      // Populate lastCampaignSmsDate on each coldLead
+      for (const lead of coldLeads) {
+        const digits = normalizePhone(lead.phone);
+        lead.lastCampaignSmsDate = lastCampaignSmsMap.get(digits) ?? null;
+      }
 
       const recentPhoneDigits = new Set(
         Array.from(recentlyCampaignedPhones).map(normalizePhone)
@@ -1413,6 +1444,13 @@ Respond in JSON with this exact schema:
         targetLeadIds: number[];
         targetPhones: string[]; // for lapsed customers who have no session id
         hasLeads: boolean;
+        recipients: Array<{
+          name: string;
+          phone: string;
+          frequency: string | null;
+          lastBookingDate: string | null;
+          lastCampaignSmsDate: Date | null;
+        }>;
       }> = [
         // Campaign 1: Fill Tomorrow's Open Slots — targets lapsed past customers
         // with an urgency script about the open slot tomorrow.
@@ -1432,6 +1470,13 @@ Respond in JSON with this exact schema:
           targetLeadIds: [],
           targetPhones: tomorrowTargets.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: tomorrowTargets.length > 0,
+          recipients: tomorrowTargets.map(l => ({
+            name: l.name,
+            phone: l.phone ?? "",
+            frequency: l.frequency ?? null,
+            lastBookingDate: l.lastJobDate ?? null,
+            lastCampaignSmsDate: l.lastCampaignSmsDate ?? null,
+          })),
         },
         // Campaign 2: Re-engage Lapsed Customers (haven't booked in 60+ days)
         {
@@ -1454,6 +1499,13 @@ Respond in JSON with this exact schema:
           targetLeadIds: [],
           targetPhones: coldOnly.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: coldOnly.length > 0,
+          recipients: coldOnly.map(l => ({
+            name: l.name,
+            phone: l.phone ?? "",
+            frequency: l.frequency ?? null,
+            lastBookingDate: l.lastJobDate ?? null,
+            lastCampaignSmsDate: l.lastCampaignSmsDate ?? null,
+          })),
         },
         // Campaign 3: Follow Up on Open Quotes
         {
@@ -1474,6 +1526,13 @@ Respond in JSON with this exact schema:
           targetLeadIds: stalledFunnelLeads.map(l => l.id),
           targetPhones: [],
           hasLeads: stalledFunnelLeads.length > 0,
+          recipients: stalledFunnelLeads.map(l => ({
+            name: l.name ?? "Lead",
+            phone: l.phone ?? "",
+            frequency: l.serviceType ?? null,
+            lastBookingDate: null,
+            lastCampaignSmsDate: null,
+          })),
         },
       ];
 
