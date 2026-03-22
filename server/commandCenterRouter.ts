@@ -1554,8 +1554,17 @@ Respond in JSON with this exact schema:
         return [...coldFiltered.slice(start), ...coldFiltered.slice(0, end % totalLapsed)];
       };
 
-      const tomorrowTargets = getWrappedSlice(dailyStart, 50);          // first 50 of today's batch
-      const coldOnly = getWrappedSlice(dailyStart + 50, 50);             // second 50 of today's batch
+      // Sort each batch by most recent last job date (2026 first, then 2025, etc.)
+      const sortByRecency = (arr: typeof coldFiltered) =>
+        [...arr].sort((a, b) => {
+          if (!a.lastJobDate && !b.lastJobDate) return 0;
+          if (!a.lastJobDate) return 1;
+          if (!b.lastJobDate) return -1;
+          return new Date(b.lastJobDate).getTime() - new Date(a.lastJobDate).getTime();
+        });
+
+      const tomorrowTargets = sortByRecency(getWrappedSlice(dailyStart, 50));          // first 50 of today's batch, most recent first
+      const coldOnly = sortByRecency(getWrappedSlice(dailyStart + 50, 50));             // second 50 of today's batch, most recent first
 
       // Human-readable batch label for UI (e.g. "#81–180 of 3,491")
       const batchStart = dailyStart + 1;
@@ -1883,6 +1892,57 @@ Respond in JSON with this exact schema:
       );
 
       return enriched;
+    }),
+
+  /**
+   * Save a custom SMS script for a campaign type so it persists across sessions.
+   * Stored in commandCenterCache with key "campaign_script:{campaignId}".
+   */
+  saveCampaignScript: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.string(), // e.g. "tomorrow_slots", "reactivation", "quote_followup"
+      script: z.string().max(1000),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const cacheKey = `campaign_script:${input.campaignId}`;
+      const existing = await db
+        .select()
+        .from(commandCenterCache)
+        .where(and(eq(commandCenterCache.cacheKey, cacheKey), eq(commandCenterCache.rangeKey, "none")))
+        .limit(1);
+
+      const payload = JSON.stringify({ script: input.script });
+      if (existing[0]) {
+        await db
+          .update(commandCenterCache)
+          .set({ payload, generatedAt: new Date() })
+          .where(and(eq(commandCenterCache.cacheKey, cacheKey), eq(commandCenterCache.rangeKey, "none")));
+      } else {
+        await db
+          .insert(commandCenterCache)
+          .values({ cacheKey, rangeKey: "none", payload, generatedAt: new Date() });
+      }
+
+      return { ok: true };
+    }),
+
+  /**
+   * Send a test SMS to a single phone number using the provided script.
+   * Replaces {{name}} with "Test" so the message looks realistic.
+   */
+  sendTestCampaignSms: adminAgentProcedure
+    .input(z.object({
+      phone: z.string().min(10),
+      script: z.string().max(1000),
+    }))
+    .mutation(async ({ input }) => {
+      const { sendSms } = await import("./openphone");
+      const message = input.script.replace(/\{\{name\}\}/g, "Test");
+      const result = await sendSms({ to: input.phone, content: message });
+      return { ok: result.success };
     }),
 });
 

@@ -563,6 +563,9 @@ export default function CommandCenter() {
   } | null>(null);
   const [campaignFiring, setCampaignFiring] = useState(false);
   const [editedScript, setEditedScript] = useState<string>("");
+  const [testPhone, setTestPhone] = useState<string>("");
+  const [showTestInput, setShowTestInput] = useState(false);
+  const [scriptSaved, setScriptSaved] = useState(false);
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const statsQuery = trpc.commandCenter.getDashboardStats.useQuery(
@@ -606,6 +609,18 @@ export default function CommandCenter() {
   const executeLeadAction = trpc.commandCenter.executeLeadAction.useMutation();
   const executeBulkAction = trpc.commandCenter.executeBulkAction.useMutation();
   const fireCampaignMutation = trpc.commandCenter.fireCampaign.useMutation();
+  const saveScriptMutation = trpc.commandCenter.saveCampaignScript.useMutation({
+    onSuccess: () => {
+      setScriptSaved(true);
+      setTimeout(() => setScriptSaved(false), 2500);
+      toast.success("Script saved");
+    },
+    onError: () => toast.error("Failed to save script"),
+  });
+  const sendTestMutation = trpc.commandCenter.sendTestCampaignSms.useMutation({
+    onSuccess: () => toast.success("Test SMS sent!"),
+    onError: () => toast.error("Failed to send test SMS"),
+  });
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -1022,12 +1037,51 @@ export default function CommandCenter() {
                   </div>
                   <textarea
                     value={editedScript}
-                    onChange={e => setEditedScript(e.target.value)}
+                    onChange={e => { setEditedScript(e.target.value); setScriptSaved(false); }}
                     disabled={campaignFiring}
                     rows={4}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-transparent disabled:opacity-50"
                   />
-                  <p className="text-xs text-gray-400 mt-1.5">{"{{name}}"} will be replaced with each lead's first name.</p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-xs text-gray-400">{"{{name}}"} will be replaced with each lead's first name.</p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowTestInput(v => !v)}
+                        disabled={campaignFiring}
+                        className="text-xs text-blue-500 hover:text-blue-700 transition-colors disabled:opacity-40"
+                      >
+                        Send Test
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => campaignConfirm && saveScriptMutation.mutate({ campaignId: campaignConfirm.id, script: editedScript })}
+                        disabled={campaignFiring || saveScriptMutation.isPending || scriptSaved}
+                        className="text-xs text-emerald-600 hover:text-emerald-800 transition-colors disabled:opacity-40"
+                      >
+                        {scriptSaved ? "✓ Saved" : saveScriptMutation.isPending ? "Saving…" : "Save Script"}
+                      </button>
+                    </div>
+                  </div>
+                  {showTestInput && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="tel"
+                        placeholder="Phone number (e.g. 2025551234)"
+                        value={testPhone}
+                        onChange={e => setTestPhone(e.target.value)}
+                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => sendTestMutation.mutate({ phone: testPhone, script: editedScript })}
+                        disabled={sendTestMutation.isPending || testPhone.replace(/\D/g, "").length < 10}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-40 transition-colors"
+                      >
+                        {sendTestMutation.isPending ? "Sending…" : "Send"}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {/* Recipient detail table */}
                 {campaignConfirm.recipients && campaignConfirm.recipients.length > 0 && (
@@ -1043,7 +1097,7 @@ export default function CommandCenter() {
                         <table className="w-full text-xs">
                           <thead className="bg-gray-50 sticky top-0">
                             <tr>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Name</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">First Name</th>
                               <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Phone</th>
                               <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Frequency</th>
                               <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Last Booking</th>
@@ -1054,7 +1108,7 @@ export default function CommandCenter() {
                           <tbody className="bg-white divide-y divide-gray-100">
                             {campaignConfirm.recipients.map((r, i) => (
                               <tr key={i} className="hover:bg-gray-50 group">
-                                <td className="px-3 py-2 text-gray-900 font-medium">{r.fullName || r.name}</td>
+                                <td className="px-3 py-2 text-gray-900 font-medium">{r.name}</td>
                                 <td className="px-3 py-2 text-gray-600">{r.phone}</td>
                                 <td className="px-3 py-2 text-gray-600">{r.frequency ?? <span className="text-gray-300">—</span>}</td>
                                 <td className="px-3 py-2 text-gray-600">

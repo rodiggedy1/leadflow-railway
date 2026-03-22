@@ -2059,3 +2059,9 @@
 - [x] Admin: reclean penalty toggle button on job detail view (apply/remove -$30)
 - [x] Cleaner: amber warning banner on job card when no photo uploaded and job is active
 - [x] Cleaner: allow uncompleting a completed job to upload photos (re-open for photo upload)
+
+## SMS Outbound Campaign Improvements — March 22
+- [x] Sort 50 recipients by most recent eligible (2026 first, then 2025, 2024, 2023)
+- [x] Add Save SMS button (edit and save without sending)
+- [x] Add Send Test button (send to a test number before full send)
+- [x] Fix name field to show first name only (not full name)
