@@ -145,6 +145,16 @@ const JOB_META: Record<string, { label: string; schedule: string; icon: React.Re
     schedule: "9 AM ET daily",
     icon: <Zap className="w-4 h-4 text-emerald-500" />,
   },
+  "tomorrow-sync": {
+    label: "Tomorrow's Schedule",
+    schedule: "9 PM ET daily",
+    icon: <Database className="w-4 h-4 text-indigo-500" />,
+  },
+  "today-sync": {
+    label: "Today's Schedule",
+    schedule: "Every hour 7 AM–8 PM ET",
+    icon: <Database className="w-4 h-4 text-teal-500" />,
+  },
 };
 
 function HeartbeatCard({ hb }: { hb: CronHeartbeat }) {
@@ -521,8 +531,8 @@ export default function SyncHealthPage() {
               {[0,1,2,3].map(i => <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />)}
             </div>
           ) : (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              {(["nightly-sync", "always-on-send", "silence-followup", "scheduled-followup"]).map((jobName) => {
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {(["nightly-sync", "tomorrow-sync", "today-sync", "always-on-send", "silence-followup", "scheduled-followup"]).map((jobName) => {
                 const hb = (heartbeats as CronHeartbeat[] | undefined)?.find(h => h.jobName === jobName) ?? {
                   jobName,
                   resultSummary: null,

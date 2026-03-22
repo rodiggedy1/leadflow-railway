@@ -2045,3 +2045,6 @@
 - [x] Build TrackerFlow admin page with SMS sequence previews, tracker page mockup, and editable messages
 - [x] Add TrackerFlow route to App.tsx and Jobs nav dropdown in AdminHeader
 - [x] Redesign Pipeline page: 4 columns (New Leads, Quoted, Follow Up, Booked), inspired by provided screenshot, light mode, stats bar at bottom
+
+## Cron Health Dashboard — March 22
+- [x] Add tomorrow-sync and today-sync to cron health dashboard (6 cards in 3-column grid)
