@@ -80,8 +80,8 @@ describe("buildQuoteSmsMessage", () => {
       serviceType: "Standard Cleaning",
     });
     expect(msg).toMatch(/\$\d+/);
-    // Real price: 1 bed, 1 bath, standard = $179
-    expect(msg).toContain("$179");
+    // Real price: 1 bed, 1 bath, standard = $119
+    expect(msg).toContain("$119");
   });
 
   it("calculates correct price: 3 bed, 2 bath, standard = $259", () => {

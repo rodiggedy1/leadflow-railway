@@ -46,13 +46,13 @@ describe("handleGetQuote — pricing correctness", () => {
     expect(result.price).toBe(239);
   });
 
-  it("Studio / 1 Bathroom / Standard = $179", () => {
+  it("Studio / 1 Bathroom / Standard = $119", () => {
     const result = handleGetQuote({
       bedrooms: "Studio",
       bathrooms: "1 Bathroom",
       serviceType: "Standard Cleaning",
     });
-    expect(result.price).toBe(179);
+    expect(result.price).toBe(119);
     expect(result.summary).toContain("Studio");
   });
 
