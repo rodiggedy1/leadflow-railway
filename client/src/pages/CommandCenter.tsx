@@ -429,8 +429,10 @@ export default function CommandCenter() {
     title: string;
     script: string;
     recipientCount: number;
+    totalPoolSize: number;
     estimatedRevenue: number;
     targetLeadIds: number[];
+    targetPhones: string[];
   } | null>(null);
   const [campaignFiring, setCampaignFiring] = useState(false);
   const [editedScript, setEditedScript] = useState<string>("");
@@ -531,6 +533,7 @@ export default function CommandCenter() {
       const result = await fireCampaignMutation.mutateAsync({
         campaignId: campaignConfirm.id,
         targetLeadIds: campaignConfirm.targetLeadIds,
+        targetPhones: campaignConfirm.targetPhones,
         script: scriptToSend,
       });
       toast.success(`Campaign sent! ${result.sent} messages delivered${result.failed > 0 ? `, ${result.failed} failed` : ""}`);
@@ -814,8 +817,10 @@ export default function CommandCenter() {
                           title: campaign.title,
                           script: campaign.script,
                           recipientCount: campaign.recipientCount,
+                          totalPoolSize: campaign.totalPoolSize ?? campaign.recipientCount,
                           estimatedRevenue: campaign.estimatedRevenue,
                           targetLeadIds: campaign.targetLeadIds,
+                          targetPhones: campaign.targetPhones ?? [],
                         });
                         setEditedScript(campaign.script);
                       }}
@@ -853,7 +858,12 @@ export default function CommandCenter() {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">Recipients</span>
-                    <span className="font-bold text-gray-900">{campaignConfirm.recipientCount} leads</span>
+                    <div className="text-right">
+                      <span className="font-bold text-gray-900">{campaignConfirm.recipientCount}</span>
+                      {campaignConfirm.totalPoolSize > campaignConfirm.recipientCount && (
+                        <span className="text-xs text-gray-400 ml-1">(top {campaignConfirm.recipientCount} of {campaignConfirm.totalPoolSize.toLocaleString()} eligible)</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">Est. Revenue</span>

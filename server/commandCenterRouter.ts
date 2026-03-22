@@ -1294,7 +1294,8 @@ Respond in JSON with this exact schema:
         ].join("-");
       })();
 
-      // Get one row per phone: the customer's most recent job date and name
+      // Get one row per phone: the customer's most recent job date and name.
+      // Fetch up to 3500 so we can count the full pool, then cap the default send at 50.
       const lapsedCustomers = await db
         .select({
           phone: completedJobs.phone,
@@ -1312,7 +1313,7 @@ Respond in JSON with this exact schema:
         .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.serviceType)
         .having(sql`MAX(${completedJobs.jobDate}) <= ${sixtyDaysAgoStr}`)
         .orderBy(sql`MAX(${completedJobs.jobDate}) DESC`)
-        .limit(100);
+        .limit(3500);
 
       // Map to the same shape as stalledLeads for the recency filter
       const coldLeads = lapsedCustomers.map(c => ({
@@ -1357,7 +1358,9 @@ Respond in JSON with this exact schema:
 
       // Segment leads for each campaign type (applying recency filter)
       const tomorrowTargets = stalledLeads.filter(notRecentlyCampaigned).slice(0, 30);
-      const coldOnly = coldLeads.filter(notRecentlyCampaigned).slice(0, 50);
+      const coldFiltered = coldLeads.filter(notRecentlyCampaigned);
+      const totalLapsed = coldFiltered.length; // full pool count for UI display
+      const coldOnly = coldFiltered.slice(0, 50); // default cap: send to top 50 most recent lapsers
       const stalledFunnelLeads = stalledLeads
         .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
         .filter(notRecentlyCampaigned)
@@ -1371,10 +1374,12 @@ Respond in JSON with this exact schema:
         subtitle: string;
         urgency: "high" | "medium" | "low";
         recipientCount: number;
+        totalPoolSize: number; // full eligible pool before the 50-cap
         estimatedRevenue: number;
         script: string;
         scheduleNote: string;
         targetLeadIds: number[];
+        targetPhones: string[]; // for lapsed customers who have no session id
         hasLeads: boolean;
       }> = [
         // Campaign 1: Fill Tomorrow's Open Slots
@@ -1385,28 +1390,32 @@ Respond in JSON with this exact schema:
           subtitle: scheduleNote,
           urgency: openSlots >= 4 ? "high" : openSlots >= 2 ? "medium" : "low",
           recipientCount: tomorrowTargets.length,
+          totalPoolSize: tomorrowTargets.length,
           estimatedRevenue: tomorrowTargets.length * 180 * 0.15,
           script: `Hi {{name}}! We have a last-minute opening on ${tomorrowLabel} for your cleaning. Want to lock it in? Reply YES and we'll confirm your slot right away! 🏠✨`,
           scheduleNote,
           targetLeadIds: tomorrowTargets.map(l => l.id),
+          targetPhones: [],
           hasLeads: tomorrowTargets.length > 0,
         },
-        // Campaign 2: Re-engage Cold Leads
+        // Campaign 2: Re-engage Lapsed Customers (haven't booked in 60+ days)
         {
           id: "reactivation",
           type: "reactivation",
-          title: `Re-engage Cold Leads`,
-          subtitle: coldOnly.length > 0
-            ? `${coldOnly.length} lead${coldOnly.length === 1 ? "" : "s"} went quiet — many just need one more nudge.`
-            : `No cold leads in the last 90 days — great retention!`,
-          urgency: coldOnly.length >= 10 ? "high" : coldOnly.length >= 3 ? "medium" : "low",
+          title: `Re-engage Lapsed Customers`,
+          subtitle: totalLapsed > 0
+            ? `${totalLapsed.toLocaleString()} past customers haven't booked in 60+ days. Sending to top 50 most recent.`
+            : `No lapsed customers right now — great retention!`,
+          urgency: totalLapsed >= 100 ? "high" : totalLapsed >= 20 ? "medium" : "low",
           recipientCount: coldOnly.length,
-          estimatedRevenue: coldOnly.length * 180 * 0.12,
-          script: `Hi {{name}}, it's Maids in Black! 👋 We still have your quote ready. Book this week and get priority scheduling. Want to move forward? Reply YES or call us anytime!`,
-          scheduleNote: coldOnly.length > 0
-            ? `${coldOnly.length} lead${coldOnly.length === 1 ? "" : "s"} went cold in the last 90 days.`
-            : `No cold leads right now.`,
-          targetLeadIds: coldOnly.map(l => l.id),
+          totalPoolSize: totalLapsed,
+          estimatedRevenue: coldOnly.length * 250 * 0.15, // past customers have higher avg value
+          script: `Hi {{name}}, it's Maids in Black! 🏠 We'd love to have you back. We're offering priority scheduling for returning customers this week — want to book a clean? Reply YES or just let us know a good time!`,
+          scheduleNote: totalLapsed > 0
+            ? `Sending to 50 of ${totalLapsed.toLocaleString()} eligible lapsed customers (60+ days since last job).`
+            : `No lapsed customers right now.`,
+          targetLeadIds: [],
+          targetPhones: coldOnly.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: coldOnly.length > 0,
         },
         // Campaign 3: Follow Up on Open Quotes
@@ -1424,7 +1433,9 @@ Respond in JSON with this exact schema:
           scheduleNote: stalledFunnelLeads.length > 0
             ? `${stalledFunnelLeads.length} lead${stalledFunnelLeads.length === 1 ? "" : "s"} are mid-funnel and haven't booked yet.`
             : `No stalled quotes right now.`,
+          totalPoolSize: stalledFunnelLeads.length,
           targetLeadIds: stalledFunnelLeads.map(l => l.id),
+          targetPhones: [],
           hasLeads: stalledFunnelLeads.length > 0,
         },
       ];
@@ -1440,49 +1451,98 @@ Respond in JSON with this exact schema:
 
   /**
    * fireCampaign — sends the campaign SMS to all target leads.
+   * Supports two modes:
+   *   - targetLeadIds: for active funnel leads (conversationSessions rows)
+   *   - targetPhones:  for lapsed past customers (completedJobs rows, no session id)
+   * All successful sends are logged to reactivationContacts so the 7-day recency
+   * filter catches them on future campaign loads.
    */
   fireCampaign: adminAgentProcedure
     .input(z.object({
       campaignId: z.string(),
       targetLeadIds: z.array(z.number()),
+      targetPhones: z.array(z.string()).optional().default([]),
       script: z.string(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
-      // Fetch lead details for personalization
-      const leads = await db
-        .select({
-          id: conversationSessions.id,
-          name: conversationSessions.leadName,
-          phone: conversationSessions.leadPhone,
-        })
-        .from(conversationSessions)
-        .where(
-          and(
-            isNotNull(conversationSessions.leadPhone),
-            sql`${conversationSessions.id} IN (${sql.join(input.targetLeadIds.map(id => sql`${id}`), sql`, `)})`
+      // Build the unified send list
+      type SendTarget = { phone: string; name: string; sourceId?: number };
+      const sendList: SendTarget[] = [];
+
+      // 1. Session-based leads (funnel leads)
+      if (input.targetLeadIds.length > 0) {
+        const leads = await db
+          .select({
+            id: conversationSessions.id,
+            name: conversationSessions.leadName,
+            phone: conversationSessions.leadPhone,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              isNotNull(conversationSessions.leadPhone),
+              sql`${conversationSessions.id} IN (${sql.join(input.targetLeadIds.map(id => sql`${id}`), sql`, `)})`
+            )
+          );
+        for (const l of leads) {
+          if (l.phone) sendList.push({ phone: l.phone, name: l.name ?? "", sourceId: l.id });
+        }
+      }
+
+      // 2. Phone-only targets (lapsed past customers from completedJobs)
+      if (input.targetPhones.length > 0) {
+        const pastCustomers = await db
+          .select({
+            phone: completedJobs.phone,
+            firstName: completedJobs.firstName,
+          })
+          .from(completedJobs)
+          .where(
+            sql`${completedJobs.phone} IN (${sql.join(input.targetPhones.map(p => sql`${p}`), sql`, `)})`
           )
-        );
+          .groupBy(completedJobs.phone, completedJobs.firstName);
+        for (const c of pastCustomers) {
+          sendList.push({ phone: c.phone, name: c.firstName ?? "" });
+        }
+      }
 
       let sent = 0;
       let failed = 0;
       const errors: string[] = [];
+      const sentPhones: string[] = [];
 
-      for (const lead of leads) {
-        if (!lead.phone) continue;
-        const name = (lead.name ?? "").split(" ")[0] || "there";
+      for (const target of sendList) {
+        const name = target.name.split(" ")[0] || "there";
         const personalizedScript = input.script.replace(/\{\{name\}\}/g, name);
         try {
-          await sendSms({ to: lead.phone, content: personalizedScript });
+          await sendSms({ to: target.phone, content: personalizedScript });
           sent++;
+          sentPhones.push(target.phone);
           // Small delay to avoid rate limiting
           await new Promise(r => setTimeout(r, 150));
         } catch (err) {
           failed++;
-          errors.push(`Lead ${lead.id}: ${String(err)}`);
+          errors.push(`${target.phone}: ${String(err)}`);
         }
+      }
+
+      // Log all successful sends to reactivationContacts so the 7-day recency
+      // filter catches them on future campaign loads.
+      if (sentPhones.length > 0) {
+        // Use a synthetic campaignId of -1 to distinguish Command Center blasts
+        // from full reactivation campaign runs (which have real campaignId rows).
+        const CC_CAMPAIGN_ID = -1;
+        await db.insert(reactivationContacts).values(
+          sentPhones.map(phone => ({
+            campaignId: CC_CAMPAIGN_ID,
+            phone,
+            status: "SENT" as const,
+            sentAt: new Date(),
+          }))
+        ).onDuplicateKeyUpdate({ set: { sentAt: new Date(), status: "SENT" as const } });
       }
 
       return { sent, failed, errors };

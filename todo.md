@@ -1999,3 +1999,7 @@
 
 ## Cold Leads Fix v2 — March 22
 - [x] Re-engage Cold Leads: target lapsed past customers from completedJobs who haven't booked in 60+ days (not conversationSessions stages)
+
+## Campaign Cap + Logging — March 22
+- [x] Cap Re-engage Cold Leads at 50 by default; backend returns totalLapsed count so UI can show "expand to send all N"
+- [x] Log every fireCampaign send to reactivationContacts so the 7-day recency filter catches Command Center blasts too
