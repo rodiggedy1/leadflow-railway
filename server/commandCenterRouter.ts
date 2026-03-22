@@ -1282,7 +1282,14 @@ Respond in JSON with this exact schema:
         )
         .limit(100);
 
-      // Build campaigns
+      // Segment leads for each campaign type
+      const tomorrowTargets = stalledLeads.slice(0, 30);
+      const coldOnly = coldLeads.slice(0, 50);
+      const stalledFunnelLeads = stalledLeads
+        .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
+        .slice(0, 30);
+
+      // Always return exactly 3 campaign cards — show 0 recipients if no matching leads
       const campaigns: Array<{
         id: string;
         type: "tomorrow_slots" | "reactivation" | "quote_followup";
@@ -1294,62 +1301,59 @@ Respond in JSON with this exact schema:
         script: string;
         scheduleNote: string;
         targetLeadIds: number[];
-      }> = [];
-
-      // Campaign 1: Tomorrow open slots — send to all stalled leads
-      if (openSlots >= 2) {
-        const tomorrowTargets = stalledLeads.slice(0, 30);
-        if (tomorrowTargets.length > 0) {
-          campaigns.push({
-            id: "tomorrow_slots",
-            type: "tomorrow_slots",
-            title: `Fill Tomorrow's Open Slots`,
-            subtitle: scheduleNote,
-            urgency: openSlots >= 4 ? "high" : "medium",
-            recipientCount: tomorrowTargets.length,
-            estimatedRevenue: tomorrowTargets.length * 180 * 0.15,
-            script: `Hi {{name}}! We have a last-minute opening ${tomorrowLabel === `tomorrow` ? `tomorrow` : `on ${tomorrowLabel}`} for your cleaning. Want to lock it in? Reply YES and we'll confirm your slot right away! 🏠✨`,
-            scheduleNote,
-            targetLeadIds: tomorrowTargets.map(l => l.id),
-          });
-        }
-      }
-
-      // Campaign 2: Re-engage cold leads (90-day window)
-      const coldOnly = coldLeads.slice(0, 50);
-      if (coldOnly.length >= 1) {
-        campaigns.push({
+        hasLeads: boolean;
+      }> = [
+        // Campaign 1: Fill Tomorrow's Open Slots
+        {
+          id: "tomorrow_slots",
+          type: "tomorrow_slots",
+          title: `Fill Tomorrow's Open Slots`,
+          subtitle: scheduleNote,
+          urgency: openSlots >= 4 ? "high" : openSlots >= 2 ? "medium" : "low",
+          recipientCount: tomorrowTargets.length,
+          estimatedRevenue: tomorrowTargets.length * 180 * 0.15,
+          script: `Hi {{name}}! We have a last-minute opening on ${tomorrowLabel} for your cleaning. Want to lock it in? Reply YES and we'll confirm your slot right away! 🏠✨`,
+          scheduleNote,
+          targetLeadIds: tomorrowTargets.map(l => l.id),
+          hasLeads: tomorrowTargets.length > 0,
+        },
+        // Campaign 2: Re-engage Cold Leads
+        {
           id: "reactivation",
           type: "reactivation",
-          title: `Re-engage ${coldOnly.length} Cold Lead${coldOnly.length === 1 ? "" : "s"}`,
-          subtitle: `Leads who went quiet — many just need one more nudge.`,
-          urgency: coldOnly.length >= 10 ? "high" : "medium",
+          title: `Re-engage Cold Leads`,
+          subtitle: coldOnly.length > 0
+            ? `${coldOnly.length} lead${coldOnly.length === 1 ? "" : "s"} went quiet — many just need one more nudge.`
+            : `No cold leads in the last 90 days — great retention!`,
+          urgency: coldOnly.length >= 10 ? "high" : coldOnly.length >= 3 ? "medium" : "low",
           recipientCount: coldOnly.length,
           estimatedRevenue: coldOnly.length * 180 * 0.12,
           script: `Hi {{name}}, it's Maids in Black! 👋 We still have your quote ready. Book this week and get priority scheduling. Want to move forward? Reply YES or call us anytime!`,
-          scheduleNote: `${coldOnly.length} lead${coldOnly.length === 1 ? "" : "s"} went cold in the last 90 days.`,
+          scheduleNote: coldOnly.length > 0
+            ? `${coldOnly.length} lead${coldOnly.length === 1 ? "" : "s"} went cold in the last 90 days.`
+            : `No cold leads right now.`,
           targetLeadIds: coldOnly.map(l => l.id),
-        });
-      }
-
-      // Campaign 3: Follow-up on stalled funnel leads (AVAILABILITY / SLOT_CHOICE / FOLLOW_UP_SCHEDULED)
-      const stalledFunnelLeads = stalledLeads
-        .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
-        .slice(0, 30);
-      if (stalledFunnelLeads.length >= 1) {
-        campaigns.push({
+          hasLeads: coldOnly.length > 0,
+        },
+        // Campaign 3: Follow Up on Open Quotes
+        {
           id: "quote_followup",
           type: "quote_followup",
-          title: `Follow Up on ${stalledFunnelLeads.length} Stalled Lead${stalledFunnelLeads.length === 1 ? "" : "s"}`,
-          subtitle: `Leads who started the booking flow but haven't confirmed yet.`,
-          urgency: "high",
+          title: `Follow Up on Open Quotes`,
+          subtitle: stalledFunnelLeads.length > 0
+            ? `${stalledFunnelLeads.length} lead${stalledFunnelLeads.length === 1 ? "" : "s"} started booking but haven't confirmed yet.`
+            : `No stalled leads right now — funnel is clean!`,
+          urgency: stalledFunnelLeads.length >= 5 ? "high" : stalledFunnelLeads.length >= 2 ? "medium" : "low",
           recipientCount: stalledFunnelLeads.length,
           estimatedRevenue: stalledFunnelLeads.length * 180 * 0.25,
           script: `Hi {{name}}! Just checking in — we'd love to get your home sparkling clean! We have openings this week. Any questions? Reply anytime or just say YES to book. 🌟`,
-          scheduleNote: `${stalledFunnelLeads.length} lead${stalledFunnelLeads.length === 1 ? "" : "s"} are mid-funnel and haven't booked yet.`,
+          scheduleNote: stalledFunnelLeads.length > 0
+            ? `${stalledFunnelLeads.length} lead${stalledFunnelLeads.length === 1 ? "" : "s"} are mid-funnel and haven't booked yet.`
+            : `No stalled quotes right now.`,
           targetLeadIds: stalledFunnelLeads.map(l => l.id),
-        });
-      }
+          hasLeads: stalledFunnelLeads.length > 0,
+        },
+      ];
 
       return {
         campaigns,

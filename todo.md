@@ -1980,3 +1980,7 @@
 ## Outbound Campaigns UX Fixes — March 22
 - [x] Move Outbound Campaigns section to top of Command Center (right after KPI cards)
 - [x] Debug blank campaigns panel — fixed: query was filtering for COLD/QUOTE_SENT only; expanded to include AVAILABILITY, SLOT_CHOICE, TIME_PREF, FOLLOW_UP_SCHEDULED and widened cold leads window to 90 days
+
+## Outbound Campaigns Design + Logic Fix — March 22
+- [x] Backend: always return exactly 3 campaign cards (Tomorrow Slots, Re-engage Cold Leads, Follow Up on Open Quotes) — show 0 recipients if no matching leads
+- [x] UI: redesign Outbound Campaigns to match Command Center's clean gray/white aesthetic (remove hard violet/red/amber colors)
