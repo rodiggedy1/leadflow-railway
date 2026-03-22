@@ -13,7 +13,6 @@
  */
 import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -622,27 +621,9 @@ export default function CommandCenter() {
                   <h1 className="text-lg font-bold text-gray-900">AI Lead Command Center</h1>
                   <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">Live</span>
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xs text-gray-400">
-                    {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
-                  </p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5 cursor-default select-none">
-                        <img
-                          src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/jade-headshot_e1d183ec.webp"
-                          alt="Jade"
-                          className="w-3.5 h-3.5 rounded-full object-cover object-top"
-                        />
-                        Powered by Jade AI
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-sm">
-                      <p className="font-semibold mb-1">Meet Jade 👋</p>
-                      <p className="text-gray-300 text-xs leading-relaxed">Jade is your AI sales assistant. She handles inbound leads 24/7 via SMS, qualifies them, proposes booking slots, and hands off hot prospects — so your team only talks to people ready to book.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
+                </p>
               </div>
             </div>
 
