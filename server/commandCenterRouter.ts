@@ -1226,10 +1226,17 @@ Respond in JSON with this exact schema:
         openSlots = 3;
       }
 
-      // Find leads that are cold/quoted but not booked (reactivation candidates)
+      // Find unbooked leads that could be re-engaged:
+      // - COLD: received nudges, went quiet — prime reactivation targets
+      // - QUOTE_SENT / AVAILABILITY / SLOT_CHOICE / TIME_PREF: active in funnel but stalled
+      // - FOLLOW_UP_SCHEDULED: agent set a follow-up, good for blast campaigns
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const coldLeads = await db
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      // Stalled active leads (last 30 days, not booked, in a reachable stage)
+      const stalledLeads = await db
         .select({
           id: conversationSessions.id,
           name: conversationSessions.leadName,
@@ -1243,8 +1250,32 @@ Respond in JSON with this exact schema:
             gte(conversationSessions.createdAt, thirtyDaysAgo),
             or(
               eq(conversationSessions.stage, "COLD" as string),
-              eq(conversationSessions.stage, "QUOTE_SENT" as string)
+              eq(conversationSessions.stage, "QUOTE_SENT" as string),
+              eq(conversationSessions.stage, "AVAILABILITY" as string),
+              eq(conversationSessions.stage, "SLOT_CHOICE" as string),
+              eq(conversationSessions.stage, "TIME_PREF" as string),
+              eq(conversationSessions.stage, "FOLLOW_UP_SCHEDULED" as string)
             ),
+            ne(conversationSessions.isBooked, 1),
+            isNotNull(conversationSessions.leadPhone)
+          )
+        )
+        .limit(100);
+
+      // Cold leads from last 90 days (wider window for reactivation)
+      const coldLeads = await db
+        .select({
+          id: conversationSessions.id,
+          name: conversationSessions.leadName,
+          phone: conversationSessions.leadPhone,
+          serviceType: conversationSessions.serviceType,
+          stage: conversationSessions.stage,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, ninetyDaysAgo),
+            eq(conversationSessions.stage, "COLD" as string),
             ne(conversationSessions.isBooked, 1),
             isNotNull(conversationSessions.leadPhone)
           )
@@ -1265,9 +1296,9 @@ Respond in JSON with this exact schema:
         targetLeadIds: number[];
       }> = [];
 
-      // Campaign 1: Tomorrow open slots — send to quoted/cold leads
+      // Campaign 1: Tomorrow open slots — send to all stalled leads
       if (openSlots >= 2) {
-        const tomorrowTargets = coldLeads.filter(l => l.stage === "QUOTE_SENT" || l.stage === "COLD").slice(0, 30);
+        const tomorrowTargets = stalledLeads.slice(0, 30);
         if (tomorrowTargets.length > 0) {
           campaigns.push({
             id: "tomorrow_slots",
@@ -1284,37 +1315,39 @@ Respond in JSON with this exact schema:
         }
       }
 
-      // Campaign 2: Re-engage cold leads from last 30 days
-      const coldOnly = coldLeads.filter(l => l.stage === "COLD").slice(0, 50);
-      if (coldOnly.length >= 3) {
+      // Campaign 2: Re-engage cold leads (90-day window)
+      const coldOnly = coldLeads.slice(0, 50);
+      if (coldOnly.length >= 1) {
         campaigns.push({
           id: "reactivation",
           type: "reactivation",
-          title: `Re-engage ${coldOnly.length} Cold Leads`,
-          subtitle: `Leads who went quiet in the last 30 days — many just need a nudge.`,
-          urgency: "medium",
+          title: `Re-engage ${coldOnly.length} Cold Lead${coldOnly.length === 1 ? "" : "s"}`,
+          subtitle: `Leads who went quiet — many just need one more nudge.`,
+          urgency: coldOnly.length >= 10 ? "high" : "medium",
           recipientCount: coldOnly.length,
           estimatedRevenue: coldOnly.length * 180 * 0.12,
           script: `Hi {{name}}, it's Maids in Black! 👋 We still have your quote ready. Book this week and get priority scheduling. Want to move forward? Reply YES or call us anytime!`,
-          scheduleNote: `${coldOnly.length} leads went cold in the last 30 days.`,
+          scheduleNote: `${coldOnly.length} lead${coldOnly.length === 1 ? "" : "s"} went cold in the last 90 days.`,
           targetLeadIds: coldOnly.map(l => l.id),
         });
       }
 
-      // Campaign 3: Quote follow-up (QUOTE_SENT with no reply)
-      const quoteSentLeads = coldLeads.filter(l => l.stage === "QUOTE_SENT").slice(0, 30);
-      if (quoteSentLeads.length >= 2) {
+      // Campaign 3: Follow-up on stalled funnel leads (AVAILABILITY / SLOT_CHOICE / FOLLOW_UP_SCHEDULED)
+      const stalledFunnelLeads = stalledLeads
+        .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
+        .slice(0, 30);
+      if (stalledFunnelLeads.length >= 1) {
         campaigns.push({
           id: "quote_followup",
           type: "quote_followup",
-          title: `Follow Up on ${quoteSentLeads.length} Open Quotes`,
-          subtitle: `Leads who received a quote but haven't replied yet.`,
+          title: `Follow Up on ${stalledFunnelLeads.length} Stalled Lead${stalledFunnelLeads.length === 1 ? "" : "s"}`,
+          subtitle: `Leads who started the booking flow but haven't confirmed yet.`,
           urgency: "high",
-          recipientCount: quoteSentLeads.length,
-          estimatedRevenue: quoteSentLeads.length * 180 * 0.25,
-          script: `Hi {{name}}! Just checking in on your Maids in Black quote. We'd love to get your home sparkling clean! Any questions? Reply anytime or book directly — we have slots this week. 🌟`,
-          scheduleNote: `${quoteSentLeads.length} leads are waiting on a quote reply.`,
-          targetLeadIds: quoteSentLeads.map(l => l.id),
+          recipientCount: stalledFunnelLeads.length,
+          estimatedRevenue: stalledFunnelLeads.length * 180 * 0.25,
+          script: `Hi {{name}}! Just checking in — we'd love to get your home sparkling clean! We have openings this week. Any questions? Reply anytime or just say YES to book. 🌟`,
+          scheduleNote: `${stalledFunnelLeads.length} lead${stalledFunnelLeads.length === 1 ? "" : "s"} are mid-funnel and haven't booked yet.`,
+          targetLeadIds: stalledFunnelLeads.map(l => l.id),
         });
       }
 

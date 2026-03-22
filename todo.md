@@ -1976,3 +1976,7 @@
 - [x] Backend: fireCampaign mutation — send bulk SMS to the campaign's target audience
 - [x] UI: Prominent Outbound Campaigns section with campaign cards (Tomorrow Campaign, Reactivation, etc.)
 - [x] UI: Confirmation popup before sending any campaign (shows recipient count, preview of SMS, estimated revenue)
+
+## Outbound Campaigns UX Fixes — March 22
+- [x] Move Outbound Campaigns section to top of Command Center (right after KPI cards)
+- [x] Debug blank campaigns panel — fixed: query was filtering for COLD/QUOTE_SENT only; expanded to include AVAILABILITY, SLOT_CHOICE, TIME_PREF, FOLLOW_UP_SCHEDULED and widened cold leads window to 90 days
