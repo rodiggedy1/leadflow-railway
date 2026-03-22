@@ -2065,3 +2065,8 @@
 - [x] Add Save SMS button (edit and save without sending)
 - [x] Add Send Test button (send to a test number before full send)
 - [x] Fix name field to show first name only (not full name)
+
+## SMS Campaign Fixes — March 22 (round 2)
+- [x] Add test name field to Send Test so {{name}} is replaced with entered name
+- [x] Persist saved script: load from DB when opening confirm dialog
+- [x] Fix recipient sort — 2026 bookings must appear first (removed daily offset, always top 50 by recency)

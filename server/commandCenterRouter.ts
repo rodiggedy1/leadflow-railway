@@ -1321,7 +1321,34 @@ Respond in JSON with this exact schema:
         ? Date.now() - (campCacheHit.generatedAt instanceof Date ? campCacheHit.generatedAt.getTime() : new Date(campCacheHit.generatedAt as unknown as string).getTime())
         : Infinity;
       if (campCacheHit && campCacheAge < CAMP_CACHE_TTL_MS) {
-        try { return JSON.parse(campCacheHit.payload); } catch { /* fall through */ }
+        try {
+          const cached = JSON.parse(campCacheHit.payload);
+          // Always inject saved scripts even on cache hit (scripts are not cached)
+          const savedRows = await db
+            .select()
+            .from(commandCenterCache)
+            .where(
+              and(
+                sql`${commandCenterCache.cacheKey} LIKE 'campaign_script:%'`,
+                eq(commandCenterCache.rangeKey, "none")
+              )
+            );
+          const scriptMap = new Map<string, string>();
+          for (const row of savedRows) {
+            try {
+              const p = JSON.parse(row.payload) as { script?: string };
+              if (p.script) scriptMap.set(row.cacheKey.replace("campaign_script:", ""), p.script);
+            } catch { /* ignore */ }
+          }
+          if (scriptMap.size > 0 && Array.isArray(cached.campaigns)) {
+            cached.campaigns = cached.campaigns.map((c: { id: string; script: string }) => ({
+              ...c,
+              script: scriptMap.get(c.id) ?? c.script,
+              hasCustomScript: scriptMap.has(c.id),
+            }));
+          }
+          return cached;
+        } catch { /* fall through */ }
       }
 
       // Get tomorrow's date string in Eastern time (business timezone).
@@ -1554,17 +1581,18 @@ Respond in JSON with this exact schema:
         return [...coldFiltered.slice(start), ...coldFiltered.slice(0, end % totalLapsed)];
       };
 
-      // Sort each batch by most recent last job date (2026 first, then 2025, etc.)
-      const sortByRecency = (arr: typeof coldFiltered) =>
-        [...arr].sort((a, b) => {
-          if (!a.lastJobDate && !b.lastJobDate) return 0;
-          if (!a.lastJobDate) return 1;
-          if (!b.lastJobDate) return -1;
-          return new Date(b.lastJobDate).getTime() - new Date(a.lastJobDate).getTime();
-        });
+      // Sort the full eligible pool by most recent last job date (2026 first)
+      // and always take the top 50 — this ensures the most recently eligible
+      // customers are always shown first, regardless of the daily rotation offset.
+      const recencySorted = [...coldFiltered].sort((a, b) => {
+        if (!a.lastJobDate && !b.lastJobDate) return 0;
+        if (!a.lastJobDate) return 1;
+        if (!b.lastJobDate) return -1;
+        return new Date(b.lastJobDate).getTime() - new Date(a.lastJobDate).getTime();
+      });
 
-      const tomorrowTargets = sortByRecency(getWrappedSlice(dailyStart, 50));          // first 50 of today's batch, most recent first
-      const coldOnly = sortByRecency(getWrappedSlice(dailyStart + 50, 50));             // second 50 of today's batch, most recent first
+      const tomorrowTargets = recencySorted.slice(0, 50);          // top 50 most recently eligible
+      const coldOnly = recencySorted.slice(50, 100);               // next 50 most recently eligible (no overlap)
 
       // Human-readable batch label for UI (e.g. "#81–180 of 3,491")
       const batchStart = dailyStart + 1;
@@ -1690,8 +1718,37 @@ Respond in JSON with this exact schema:
         },
       ];
 
+      // ── Load saved scripts (always fresh, not cached) ─────────────────────
+      // Fetch any admin-saved scripts for each campaign type and override defaults.
+      const savedScriptRows = await db
+        .select()
+        .from(commandCenterCache)
+        .where(
+          and(
+            sql`${commandCenterCache.cacheKey} LIKE 'campaign_script:%'`,
+            eq(commandCenterCache.rangeKey, "none")
+          )
+        );
+      const savedScriptMap = new Map<string, string>();
+      for (const row of savedScriptRows) {
+        try {
+          const parsed = JSON.parse(row.payload) as { script?: string };
+          if (parsed.script) {
+            const campaignId = row.cacheKey.replace("campaign_script:", "");
+            savedScriptMap.set(campaignId, parsed.script);
+          }
+        } catch { /* ignore malformed */ }
+      }
+
+      // Apply saved scripts to campaign objects
+      const campaignsWithSavedScripts = campaigns.map(c => ({
+        ...c,
+        script: savedScriptMap.get(c.id) ?? c.script,
+        hasCustomScript: savedScriptMap.has(c.id),
+      }));
+
       const campResult = {
-        campaigns,
+        campaigns: campaignsWithSavedScripts,
         scheduleNote,
         tomorrowLabel,
         openSlots,
@@ -1701,12 +1758,20 @@ Respond in JSON with this exact schema:
       // Save to cache in background (don't await)
       void (async () => {
         try {
-          const payload = JSON.stringify(campResult);
+          // Cache the base campaigns (without saved scripts) so script edits
+          // are always loaded fresh and not frozen in cache.
+          const cachePayload = JSON.stringify({
+            campaigns,
+            scheduleNote,
+            tomorrowLabel,
+            openSlots,
+            bookedSlots,
+          });
           if (campCacheHit) {
-            await db.update(commandCenterCache).set({ payload, generatedAt: new Date() })
+            await db.update(commandCenterCache).set({ payload: cachePayload, generatedAt: new Date() })
               .where(and(eq(commandCenterCache.cacheKey, "tomorrow_campaigns"), eq(commandCenterCache.rangeKey, "none")));
           } else {
-            await db.insert(commandCenterCache).values({ cacheKey: "tomorrow_campaigns", rangeKey: "none", payload, generatedAt: new Date() });
+            await db.insert(commandCenterCache).values({ cacheKey: "tomorrow_campaigns", rangeKey: "none", payload: cachePayload, generatedAt: new Date() });
           }
         } catch { /* non-fatal */ }
       })();
@@ -1940,8 +2005,8 @@ Respond in JSON with this exact schema:
     }))
     .mutation(async ({ input }) => {
       const { sendSms } = await import("./openphone");
-      const message = input.script.replace(/\{\{name\}\}/g, "Test");
-      const result = await sendSms({ to: input.phone, content: message });
+      // Name substitution is handled client-side before calling this procedure
+      const result = await sendSms({ to: input.phone, content: input.script });
       return { ok: result.success };
     }),
 });

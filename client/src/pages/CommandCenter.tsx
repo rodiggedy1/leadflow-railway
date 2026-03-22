@@ -564,6 +564,7 @@ export default function CommandCenter() {
   const [campaignFiring, setCampaignFiring] = useState(false);
   const [editedScript, setEditedScript] = useState<string>("");
   const [testPhone, setTestPhone] = useState<string>("");
+  const [testName, setTestName] = useState<string>("Test");
   const [showTestInput, setShowTestInput] = useState(false);
   const [scriptSaved, setScriptSaved] = useState(false);
 
@@ -1064,22 +1065,31 @@ export default function CommandCenter() {
                     </div>
                   </div>
                   {showTestInput && (
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        type="tel"
-                        placeholder="Phone number (e.g. 2025551234)"
-                        value={testPhone}
-                        onChange={e => setTestPhone(e.target.value)}
-                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => sendTestMutation.mutate({ phone: testPhone, script: editedScript })}
-                        disabled={sendTestMutation.isPending || testPhone.replace(/\D/g, "").length < 10}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-40 transition-colors"
-                      >
-                        {sendTestMutation.isPending ? "Sending…" : "Send"}
-                      </button>
+                    <div className="mt-2 space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Name (replaces {{name}})"
+                          value={testName}
+                          onChange={e => setTestName(e.target.value)}
+                          className="w-36 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        />
+                        <input
+                          type="tel"
+                          placeholder="Phone number (e.g. 2025551234)"
+                          value={testPhone}
+                          onChange={e => setTestPhone(e.target.value)}
+                          className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => sendTestMutation.mutate({ phone: testPhone, script: editedScript.replace(/\{\{name\}\}/g, testName || "Test") })}
+                          disabled={sendTestMutation.isPending || testPhone.replace(/\D/g, "").length < 10}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-40 transition-colors"
+                        >
+                          {sendTestMutation.isPending ? "Sending…" : "Send"}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
