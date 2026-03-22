@@ -2107,3 +2107,16 @@
 - [x] Update fireCampaign send delay from 150ms to 12s (5 messages/minute)
 - [x] Add getCampaignProgress tRPC query returning sent/total/remaining/estimatedMinutes
 - [x] Add live progress bar + countdown to AI Center Fire Campaign UI (polls every 5s while firing)
+
+## Campaign Delivery Status — March 22
+- [ ] Check OpenPhone sendSms return value for delivery confirmation
+- [ ] Store per-recipient send result (sent/failed) in campaignBlasts or reactivationContacts
+- [ ] Show delivery status in Campaign History tab: sent count, failed count, per-recipient breakdown
+- [ ] Add "View Last Campaign" quick status card in AI Center while campaign is recent
+
+## Campaign Delivery Fixes — March 22
+- [x] Query live DB to report status of campaign just fired
+- [x] Fix "Last Campaign SMS: Never" bug — lastCampaignSmsDate not being populated from reactivationContacts
+- [x] Fix getCampaignHistory replyCount query (wrong leadSource filter)
+- [x] Fix failure detection in fireCampaign (sendSms returns success:false silently)
+- [x] Add sessionCount to getCampaignHistory so we can see how many sessions were created

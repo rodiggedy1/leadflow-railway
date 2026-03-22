@@ -1511,9 +1511,19 @@ Respond in JSON with this exact schema:
         recentlyCampaignedRows.map(r => r.phone)
       );
 
-      // Helper: normalize phone to E.164-ish for comparison
-      const normalizePhone = (p: string | null) =>
-        p ? p.replace(/\D/g, "") : "";
+      // Helper: normalize phone to E.164 for comparison.
+      // Both completedJobs and reactivationContacts store phones as E.164 (+12025551234).
+      // Use the shared normalizePhone from routers.ts to ensure consistent format.
+      // The local strip-digits version was causing map lookup mismatches.
+      const normalizePhoneLocal = (p: string | null): string => {
+        if (!p) return "";
+        // Already E.164
+        if (p.startsWith("+")) return p.replace(/[^\d+]/g, "");
+        const digits = p.replace(/\D/g, "");
+        if (digits.length === 10) return `+1${digits}`;
+        if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+        return `+${digits}`;
+      };
 
       // Build a map of phone → last campaign SMS date from reactivationContacts
       // (all-time, not just 7 days, so we can show it in the recipient preview table)
@@ -1528,29 +1538,29 @@ Respond in JSON with this exact schema:
 
       const lastCampaignSmsMap = new Map<string, Date>();
       for (const row of allCampaignedRows) {
-        const digits = normalizePhone(row.phone);
-        if (digits && !lastCampaignSmsMap.has(digits)) {
-          lastCampaignSmsMap.set(digits, row.sentAt as Date);
+        const e164 = normalizePhoneLocal(row.phone);
+        if (e164 && !lastCampaignSmsMap.has(e164)) {
+          lastCampaignSmsMap.set(e164, row.sentAt as Date);
         }
       }
 
       // Populate lastCampaignSmsDate on each coldLead
       for (const lead of coldLeads) {
-        const digits = normalizePhone(lead.phone);
-        lead.lastCampaignSmsDate = lastCampaignSmsMap.get(digits) ?? null;
+        const e164 = normalizePhoneLocal(lead.phone);
+        lead.lastCampaignSmsDate = lastCampaignSmsMap.get(e164) ?? null;
       }
 
       const recentPhoneDigits = new Set(
-        Array.from(recentlyCampaignedPhones).map(normalizePhone)
+        Array.from(recentlyCampaignedPhones).map(p => normalizePhoneLocal(p))
       );
 
       const optedOutPhoneDigits = new Set(
-        Array.from(optedOutPhones).map(normalizePhone)
+        Array.from(optedOutPhones).map(p => normalizePhoneLocal(p))
       );
 
       const notRecentlyCampaigned = (lead: { phone: string | null }) =>
-        !recentPhoneDigits.has(normalizePhone(lead.phone)) &&
-        !optedOutPhoneDigits.has(normalizePhone(lead.phone));
+        !recentPhoneDigits.has(normalizePhoneLocal(lead.phone)) &&
+        !optedOutPhoneDigits.has(normalizePhoneLocal(lead.phone));
 
       // Segment leads for each campaign type (applying recency filter)
       // Campaign 1 (Tomorrow Slots) & Campaign 2 (Re-engage) both draw from the lapsed
@@ -1852,26 +1862,32 @@ Respond in JSON with this exact schema:
         const name = target.name.split(" ")[0] || "there";
         const personalizedScript = input.script.replace(/\{\{name\}\}/g, name);
         try {
-          await sendSms({ to: target.phone, content: personalizedScript });
-          sent++;
-          sentPhones.push(target.phone);
-          // Only create a session for phone-only targets (lapsed past customers).
-          // Session-based funnel leads already have an active session — no need to create one.
-          if (target.isPhoneOnly) {
-            try {
-              await db.insert(conversationSessions).values({
-                leadPhone: target.phone,
-                leadName: target.name ?? "",
-                stage: "REACTIVATION",
-                // Tag with the specific campaign so the leads page shows the source
-                leadSource: `campaign:${input.campaignId}`,
-                messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
-                aiMode: 1,
-                isBooked: 0,
-              });
-            } catch (sessionErr) {
-              // Non-fatal: session creation failure should not block the send count
-              console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
+          const smsResult = await sendSms({ to: target.phone, content: personalizedScript });
+          if (!smsResult.success) {
+            // sendSms returns { success: false } on API errors — count as failed
+            failed++;
+            errors.push(`${target.phone}: ${smsResult.error ?? "OpenPhone returned failure"}`);
+          } else {
+            sent++;
+            sentPhones.push(target.phone);
+            // Only create a session for phone-only targets (lapsed past customers).
+            // Session-based funnel leads already have an active session — no need to create one.
+            if (target.isPhoneOnly) {
+              try {
+                await db.insert(conversationSessions).values({
+                  leadPhone: target.phone,
+                  leadName: target.name ?? "",
+                  stage: "REACTIVATION",
+                  // Tag with the specific campaign so the leads page shows the source
+                  leadSource: `campaign:${input.campaignId}`,
+                  messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
+                  aiMode: 1,
+                  isBooked: 0,
+                });
+              } catch (sessionErr) {
+                // Non-fatal: session creation failure should not block the send count
+                console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
+              }
             }
           }
           // Stagger sends at 12s intervals (5/min) to avoid carrier burst-detection
@@ -1885,18 +1901,22 @@ Respond in JSON with this exact schema:
 
       // Log all successful sends to reactivationContacts so the 7-day recency
       // filter catches them on future campaign loads.
+      // Note: reactivationContacts has no unique key on (campaignId, phone), so we
+      // use individual inserts with error suppression to avoid duplicate rows.
       if (sentPhones.length > 0) {
-        // Use a synthetic campaignId of -1 to distinguish Command Center blasts
-        // from full reactivation campaign runs (which have real campaignId rows).
         const CC_CAMPAIGN_ID = -1;
-        await db.insert(reactivationContacts).values(
-          sentPhones.map(phone => ({
-            campaignId: CC_CAMPAIGN_ID,
-            phone,
-            status: "SENT" as const,
-            sentAt: new Date(),
-          }))
-        ).onDuplicateKeyUpdate({ set: { sentAt: new Date(), status: "SENT" as const } });
+        for (const phone of sentPhones) {
+          try {
+            await db.insert(reactivationContacts).values({
+              campaignId: CC_CAMPAIGN_ID,
+              phone,
+              status: "SENT" as const,
+              sentAt: new Date(),
+            });
+          } catch {
+            // Ignore duplicate insert errors — phone already logged from a prior campaign
+          }
+        }
       }
 
       // Log the blast to campaignBlasts for the Campaign History tab
@@ -1935,19 +1955,32 @@ Respond in JSON with this exact schema:
         .orderBy(desc(campaignBlasts.firedAt))
         .limit(50);
 
-      // For each blast, count how many sessions with leadSource='command-center'
-      // have advanced past REACTIVATION (i.e., the customer replied)
-      // within 48 hours of the blast firing.
+      // For each blast, count how many sessions created during the blast window
+      // have received a reply (i.e., stage has advanced past REACTIVATION).
+      // Sessions are tagged with leadSource = 'campaign:{campaignType}' by fireCampaign.
       const enriched = await Promise.all(
         blasts.map(async (blast) => {
           const windowStart = blast.firedAt;
-          const windowEnd = new Date(blast.firedAt.getTime() + 48 * 60 * 60 * 1000);
+          // 7-day window to catch delayed replies
+          const windowEnd = new Date(blast.firedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+          // Count sessions created in the blast window with matching campaign source
+          const [sessionRow] = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(conversationSessions)
+            .where(
+              and(
+                sql`${conversationSessions.leadSource} LIKE ${`campaign:${blast.campaignType}%`}`,
+                gte(conversationSessions.createdAt, windowStart),
+                lte(conversationSessions.createdAt, windowEnd)
+              )
+            );
+          // Count those that have replied (stage advanced past REACTIVATION)
           const [replyRow] = await db
             .select({ count: sql<number>`COUNT(*)` })
             .from(conversationSessions)
             .where(
               and(
-                eq(conversationSessions.leadSource, "command-center"),
+                sql`${conversationSessions.leadSource} LIKE ${`campaign:${blast.campaignType}%`}`,
                 ne(conversationSessions.stage, "REACTIVATION"),
                 gte(conversationSessions.createdAt, windowStart),
                 lte(conversationSessions.createdAt, windowEnd)
@@ -1955,6 +1988,7 @@ Respond in JSON with this exact schema:
             );
           return {
             ...blast,
+            sessionCount: Number(sessionRow?.count ?? 0),
             replyCount: Number(replyRow?.count ?? 0),
           };
         })
