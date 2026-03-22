@@ -1113,3 +1113,51 @@ export const aiInsightsCache = mysqlTable("ai_insights_cache", {
 });
 export type AiInsightsCache = typeof aiInsightsCache.$inferSelect;
 export type InsertAiInsightsCache = typeof aiInsightsCache.$inferInsert;
+
+// ── Campaign Blasts ───────────────────────────────────────────────────────────
+/**
+ * campaignBlasts — one row per Command Center campaign fire event.
+ * Used to power the Campaign History tab and measure reply conversion.
+ */
+export const campaignBlasts = mysqlTable("campaign_blasts", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Campaign type: "tomorrow_slots" | "reactivation" | "quote_followup" */
+  campaignType: varchar("campaignType", { length: 50 }).notNull(),
+  /** Human-readable label, e.g. "Fill Tomorrow's Open Slots" */
+  campaignTitle: varchar("campaignTitle", { length: 200 }).notNull(),
+  /** Batch label shown on the card, e.g. "#1–50 of 3,491" */
+  batchLabel: varchar("batchLabel", { length: 100 }),
+  /** Number of recipients targeted */
+  recipientCount: int("recipientCount").notNull(),
+  /** Number of SMS successfully sent */
+  sentCount: int("sentCount").notNull().default(0),
+  /** Number of SMS that failed */
+  failedCount: int("failedCount").notNull().default(0),
+  /** The SMS script that was sent (personalized template) */
+  script: text("script"),
+  /** When the blast was fired */
+  firedAt: timestamp("firedAt").defaultNow().notNull(),
+  /** Who fired it (admin user name or "system") */
+  firedBy: varchar("firedBy", { length: 255 }).default("admin"),
+});
+export type CampaignBlast = typeof campaignBlasts.$inferSelect;
+export type InsertCampaignBlast = typeof campaignBlasts.$inferInsert;
+
+// ── SMS Opt-Outs ──────────────────────────────────────────────────────────────
+/**
+ * smsOptOuts — permanent STOP/opt-out registry.
+ * Any phone in this table is excluded from ALL future campaign pools.
+ */
+export const smsOptOuts = mysqlTable("sms_opt_outs", {
+  id: int("id").primaryKey().autoincrement(),
+  /** E.164 normalized phone number */
+  phone: varchar("phone", { length: 20 }).notNull().unique(),
+  /** When the opt-out was recorded */
+  optedOutAt: timestamp("optedOutAt").defaultNow().notNull(),
+  /** Source: "reply_stop" | "manual" | "webhook" */
+  source: varchar("source", { length: 50 }).notNull().default("reply_stop"),
+  /** Optional: the raw message that triggered the opt-out */
+  triggerMessage: varchar("triggerMessage", { length: 255 }),
+});
+export type SmsOptOut = typeof smsOptOuts.$inferSelect;
+export type InsertSmsOptOut = typeof smsOptOuts.$inferInsert;

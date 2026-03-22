@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -306,6 +306,18 @@ export function registerWebhookRoutes(app: Express) {
           .set({ status: "OPTED_OUT" })
           .where(eq(alwaysOnEnrollments.phone, fromPhone))
           .catch((err: unknown) => console.error("[Webhook] Failed to mark always-on enrollments OPTED_OUT:", err));
+        // Permanently record in smsOptOuts so ALL future campaign pools exclude this phone.
+        // This covers Command Center blasts, Reactivation Campaigns, and Always-On campaigns.
+        await db
+          .insert(smsOptOuts)
+          .values({
+            phone: fromPhone,
+            optedOutAt: new Date(),
+            source: "reply_stop",
+            triggerMessage: inboundText.slice(0, 255),
+          })
+          .onDuplicateKeyUpdate({ set: { optedOutAt: new Date(), source: "reply_stop" } })
+          .catch((err: unknown) => console.error("[Webhook] Failed to insert smsOptOuts:", err));
         // Send the required STOP acknowledgement (TCPA compliance)
         await sendSms({
           to: fromPhone,

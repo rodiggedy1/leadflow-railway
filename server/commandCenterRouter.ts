@@ -21,6 +21,8 @@ import {
   aiInsightsCache,
   reactivationContacts,
   completedJobs,
+  campaignBlasts,
+  smsOptOuts,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, lte, ne, sql, isNotNull, or, isNull } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
@@ -1332,6 +1334,13 @@ Respond in JSON with this exact schema:
         stage: "LAPSED" as string,
       }));
 
+      // ── Permanent opt-out exclusion ────────────────────────────────────────
+      // Exclude any phone that has replied STOP to any campaign.
+      const optedOutRows = await db
+        .select({ phone: smsOptOuts.phone })
+        .from(smsOptOuts);
+      const optedOutPhones = new Set(optedOutRows.map(r => r.phone));
+
       // ── 7-day campaign recency filter ──────────────────────────────────────
       // Exclude any lead whose phone number was sent a campaign SMS in the last 7 days.
       // This checks reactivationContacts.sentAt (campaign blasts only — not automated
@@ -1386,8 +1395,13 @@ Respond in JSON with this exact schema:
         Array.from(recentlyCampaignedPhones).map(normalizePhone)
       );
 
+      const optedOutPhoneDigits = new Set(
+        Array.from(optedOutPhones).map(normalizePhone)
+      );
+
       const notRecentlyCampaigned = (lead: { phone: string | null }) =>
-        !recentPhoneDigits.has(normalizePhone(lead.phone));
+        !recentPhoneDigits.has(normalizePhone(lead.phone)) &&
+        !optedOutPhoneDigits.has(normalizePhone(lead.phone));
 
       // Segment leads for each campaign type (applying recency filter)
       // Campaign 1 (Tomorrow Slots) & Campaign 2 (Re-engage) both draw from the lapsed
@@ -1443,6 +1457,7 @@ Respond in JSON with this exact schema:
         estimatedRevenue: number;
         script: string;
         scheduleNote: string;
+        batchLabel: string;
         targetLeadIds: number[];
         targetPhones: string[]; // for lapsed customers who have no session id
         hasLeads: boolean;
@@ -1470,6 +1485,7 @@ Respond in JSON with this exact schema:
           estimatedRevenue: tomorrowTargets.length * 250 * 0.15,
           script: `Hi {{name}}, it's Maids in Black! 🏠 We have a last-minute opening ${tomorrowLabel} — perfect timing to get your home sparkling! Want to grab the slot? Reply YES and we'll confirm right away! ✨`,
           scheduleNote,
+          batchLabel,
           targetLeadIds: [],
           targetPhones: tomorrowTargets.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: tomorrowTargets.length > 0,
@@ -1500,6 +1516,7 @@ Respond in JSON with this exact schema:
           scheduleNote: coldOnly.length > 0
             ? `Sending to customers ${batchLabel} (second 50 of today's batch, no overlap with Tomorrow Slots).`
             : `No additional lapsed customers beyond the Tomorrow Slots batch.`,
+          batchLabel,
           targetLeadIds: [],
           targetPhones: coldOnly.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: coldOnly.length > 0,
@@ -1527,6 +1544,7 @@ Respond in JSON with this exact schema:
           scheduleNote: stalledFunnelLeads.length > 0
             ? `${stalledFunnelLeads.length} lead${stalledFunnelLeads.length === 1 ? "" : "s"} are mid-funnel and haven't booked yet.`
             : `No stalled quotes right now.`,
+          batchLabel: "",
           totalPoolSize: stalledFunnelLeads.length,
           targetLeadIds: stalledFunnelLeads.map(l => l.id),
           targetPhones: [],
@@ -1562,6 +1580,9 @@ Respond in JSON with this exact schema:
   fireCampaign: adminAgentProcedure
     .input(z.object({
       campaignId: z.string(),
+      campaignType: z.string().optional().default("command-center"),
+      campaignTitle: z.string().optional().default("Command Center Campaign"),
+      batchLabel: z.string().optional(),
       targetLeadIds: z.array(z.number()),
       targetPhones: z.array(z.string()).optional().default([]),
       script: z.string(),
@@ -1664,6 +1685,67 @@ Respond in JSON with this exact schema:
         ).onDuplicateKeyUpdate({ set: { sentAt: new Date(), status: "SENT" as const } });
       }
 
+      // Log the blast to campaignBlasts for the Campaign History tab
+      try {
+        await db.insert(campaignBlasts).values({
+          campaignType: input.campaignType,
+          campaignTitle: input.campaignTitle,
+          batchLabel: input.batchLabel ?? null,
+          recipientCount: sendList.length,
+          sentCount: sent,
+          failedCount: failed,
+          script: input.script.slice(0, 2000),
+          firedAt: new Date(),
+          firedBy: "admin",
+        });
+      } catch (logErr) {
+        // Non-fatal: blast logging failure should not affect the return value
+        console.error("[fireCampaign] Failed to log blast:", logErr);
+      }
+
       return { sent, failed, errors };
+    }),
+
+  /**
+   * getCampaignHistory — returns the last 50 campaign blasts for the Campaign History tab.
+   * Enriches each blast with reply count (sessions that advanced past REACTIVATION).
+   */
+  getCampaignHistory: adminAgentProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const blasts = await db
+        .select()
+        .from(campaignBlasts)
+        .orderBy(desc(campaignBlasts.firedAt))
+        .limit(50);
+
+      // For each blast, count how many sessions with leadSource='command-center'
+      // have advanced past REACTIVATION (i.e., the customer replied)
+      // within 48 hours of the blast firing.
+      const enriched = await Promise.all(
+        blasts.map(async (blast) => {
+          const windowStart = blast.firedAt;
+          const windowEnd = new Date(blast.firedAt.getTime() + 48 * 60 * 60 * 1000);
+          const [replyRow] = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(conversationSessions)
+            .where(
+              and(
+                eq(conversationSessions.leadSource, "command-center"),
+                ne(conversationSessions.stage, "REACTIVATION"),
+                gte(conversationSessions.createdAt, windowStart),
+                lte(conversationSessions.createdAt, windowEnd)
+              )
+            );
+          return {
+            ...blast,
+            replyCount: Number(replyRow?.count ?? 0),
+          };
+        })
+      );
+
+      return enriched;
     }),
 });

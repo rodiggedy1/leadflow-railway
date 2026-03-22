@@ -44,6 +44,9 @@ import {
   RotateCcw,
   Calendar,
   X,
+  History,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -428,6 +431,7 @@ export default function CommandCenter() {
   const [campaignConfirm, setCampaignConfirm] = useState<{
     id: string;
     title: string;
+    batchLabel?: string;
     script: string;
     recipientCount: number;
     totalPoolSize: number;
@@ -478,6 +482,10 @@ export default function CommandCenter() {
   const campaignsQuery = trpc.commandCenter.getTomorrowCampaigns.useQuery(
     undefined,
     { staleTime: 300_000 }
+  );
+  const campaignHistoryQuery = trpc.commandCenter.getCampaignHistory.useQuery(
+    undefined,
+    { staleTime: 60_000 }
   );
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -541,6 +549,9 @@ export default function CommandCenter() {
     try {
       const result = await fireCampaignMutation.mutateAsync({
         campaignId: campaignConfirm.id,
+        campaignType: campaignConfirm.id,
+        campaignTitle: campaignConfirm.title,
+        batchLabel: campaignConfirm.batchLabel,
         targetLeadIds: campaignConfirm.targetLeadIds,
         targetPhones: campaignConfirm.targetPhones,
         script: scriptToSend,
@@ -549,6 +560,7 @@ export default function CommandCenter() {
       setCampaignConfirm(null);
       setEditedScript("");
       campaignsQuery.refetch();
+      campaignHistoryQuery.refetch();
     } catch {
       toast.error("Campaign failed — check logs");
     } finally {
@@ -824,6 +836,7 @@ export default function CommandCenter() {
                         setCampaignConfirm({
                           id: campaign.id,
                           title: campaign.title,
+                          batchLabel: campaign.batchLabel ?? undefined,
                           script: campaign.script,
                           recipientCount: campaign.recipientCount,
                           totalPoolSize: campaign.totalPoolSize ?? campaign.recipientCount,
@@ -1307,6 +1320,75 @@ export default function CommandCenter() {
                       <td className="py-3 text-gray-500 italic">{row.aiNote}</td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ── Campaign History ─────────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <History className="w-4 h-4 text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-900">Campaign History</h2>
+            <span className="ml-auto text-xs text-gray-400">Last 30 blasts</span>
+          </div>
+          {campaignHistoryQuery.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
+          ) : !campaignHistoryQuery.data || campaignHistoryQuery.data.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <History className="w-8 h-8 text-gray-200 mb-2" />
+              <p className="text-sm text-gray-400">No campaigns sent yet</p>
+              <p className="text-xs text-gray-300 mt-1">Campaign blasts will appear here after you send your first one</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {["Date", "Campaign", "Batch", "Sent", "Delivered", "Replies", "Conv. Rate"].map(h => (
+                      <th key={h} className="text-left text-xs font-medium text-gray-400 pb-2 pr-4 last:pr-0">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaignHistoryQuery.data.map((row) => {
+                    const convRate = row.sentCount > 0 ? Math.round((row.replyCount / row.sentCount) * 100) : 0;
+                    return (
+                      <tr key={row.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                        <td className="py-3 pr-4 text-gray-500 text-xs whitespace-nowrap">
+                          {new Date(row.firedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className="font-medium text-gray-900">{row.campaignTitle}</span>
+                          <span className="ml-2 text-xs text-gray-400 capitalize">{row.campaignType.replace(/_/g, " ")}</span>
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-gray-500">{row.batchLabel || "—"}</td>
+                        <td className="py-3 pr-4 text-gray-700 font-medium">{row.sentCount}</td>
+                        <td className="py-3 pr-4">
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium ${
+                            row.failedCount === 0 ? "text-green-600" : "text-amber-600"
+                          }`}>
+                            {row.failedCount === 0
+                              ? <><CheckCircle className="w-3 h-3" />{row.sentCount}</>  
+                              : <><XCircle className="w-3 h-3" />{row.sentCount - row.failedCount} / {row.sentCount}</>}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-gray-700">{row.replyCount}</td>
+                        <td className="py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            convRate >= 20 ? "bg-green-100 text-green-700" :
+                            convRate >= 10 ? "bg-amber-100 text-amber-700" :
+                            "bg-gray-100 text-gray-500"
+                          }`}>
+                            {convRate}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -2026,3 +2026,11 @@
 ## Uniform Campaign Session Behavior — March 22
 - [x] fireCampaign: create a conversationSession per send (leadSource="command-center") so replies are routed to AI
 - [x] Leads page filter: hide sessions with stage=REACTIVATION for ALL campaign leadSources (command-center, reactivation, always-on) — only show when customer replies and stage advances
+
+## Campaign History + STOP Opt-Out — March 22
+- [x] DB: add campaignBlasts table (id, campaignType, batchLabel, recipientCount, firedAt, firedBy)
+- [x] DB: add smsOptOuts table (phone, optedOutAt, source) for permanent STOP exclusions
+- [x] Backend: log each fireCampaign call to campaignBlasts; query reply count from conversationSessions
+- [x] Backend: webhook STOP handler — mark session DONE, insert into smsOptOuts
+- [x] Backend: filter smsOptOuts phones from all 3 campaign target lists
+- [x] UI: Campaign History tab in Command Center showing blast log with date, type, batch, recipients, replies
