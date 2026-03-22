@@ -2353,6 +2353,49 @@ export default function AdminDashboard() {
                 })}
               </div>
             </div>
+            {/* Stats bar */}
+            {(() => {
+              const allLeads = (sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads'];
+              const now = Date.now();
+              const filtered = allLeads.filter(l => {
+                if (!l.createdAt) return false;
+                const t = new Date(l.createdAt).getTime();
+                if (pipelineDateFilter === "today") return now - t < 86400000;
+                if (pipelineDateFilter === "week") return now - t < 7 * 86400000;
+                return now - t < 31 * 86400000;
+              });
+              const totalLeads = filtered.length;
+              const totalPipeline = filtered.reduce((sum, l) => sum + (parseInt(l.quotedPrice ?? "0", 10) || 0), 0);
+              const booked = filtered.filter(l => l.stage === "BOOKED" || l.stage === "COMPLETED");
+              const bookedValue = booked.reduce((sum, l) => sum + (parseInt(l.quotedPrice ?? "0", 10) || 0), 0);
+              const checkingAvail = filtered.filter(l => l.stage === "AVAILABILITY").length;
+              return (
+                <div className="flex items-center gap-5 mb-4 text-sm text-gray-700 flex-wrap">
+                  <span className="flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-gray-400" />
+                    <strong>{totalLeads}</strong>
+                    <span className="text-gray-400">leads</span>
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-gray-400" />
+                    <strong>${totalPipeline.toLocaleString()}</strong>
+                    <span className="text-gray-400">total pipeline</span>
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <strong className="text-emerald-600">${bookedValue.toLocaleString()}</strong>
+                    <span className="text-gray-400">booked</span>
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: "#f97316" }}>{checkingAvail}</span>
+                    <span className="text-gray-400">checking availability</span>
+                  </span>
+                </div>
+              );
+            })()}
             <KanbanBoard
               leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads']}
               onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
