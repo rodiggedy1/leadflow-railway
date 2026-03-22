@@ -2042,3 +2042,5 @@
 - [x] Add confirmation dialog to Execute button in AI Action Feed (show action description + confirm before firing)
 - [x] Show recipient count in Action Feed confirm dialog (live from backend getBulkActionPreview)
 - [x] Show SMS preview text in Action Feed confirm dialog (personalized with first recipient's name)
+- [x] Build TrackerFlow admin page with SMS sequence previews, tracker page mockup, and editable messages
+- [x] Add TrackerFlow route to App.tsx and Jobs nav dropdown in AdminHeader

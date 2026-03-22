@@ -37,6 +37,7 @@ import {
   Briefcase,
   Settings,
   BrainCircuit,
+  Smartphone,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -238,6 +239,7 @@ export type AdminTab =
   | "campaign-approval"
   | "completed-jobs"
   | "quality"
+  | "tracker-flow"
   | "command-center"
   | "settings";
 
@@ -318,11 +320,13 @@ const NAV_ENTRIES: NavEntry[] = [
     tabId: "completed-jobs",
   },
   {
-    id: "quality",
+    id: "jobs-group",
     label: "Jobs",
     icon: <Briefcase className="w-3.5 h-3.5" />,
-    href: "/admin/quality",
-    tabId: "quality",
+    children: [
+      { id: "quality",       label: "Quality Dashboard", href: "/admin/quality",       icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+      { id: "tracker-flow",  label: "Tracker Flow",      href: "/admin/tracker-flow", icon: <Smartphone className="w-3.5 h-3.5" /> },
+    ],
   },
   {
     id: "settings",
