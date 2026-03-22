@@ -2045,4 +2045,3 @@
 - [x] Build TrackerFlow admin page with SMS sequence previews, tracker page mockup, and editable messages
 - [x] Add TrackerFlow route to App.tsx and Jobs nav dropdown in AdminHeader
 - [x] Redesign Pipeline page: 4 columns (New Leads, Quoted, Follow Up, Booked), inspired by provided screenshot, light mode, stats bar at bottom
-- [x] Update Pipeline: Lead Pipeline + Live badge header, Today/This Week/This Month filter, card shape matching reference screenshot

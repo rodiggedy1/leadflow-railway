@@ -1,14 +1,12 @@
 /**
  * KanbanBoard — Pipeline view for the admin dashboard.
  *
- * Design matches the provided reference screenshot (light mode):
- * - "Lead Pipeline" heading + "Live" pulsing badge
- * - Today / This Week / This Month filter pills (top-right)
- * - 4 columns: New Leads → Quoted → Follow Up → Booked
- * - Column headers: uppercase tracking-widest, colored bottom underline, round count badge
- * - Cards: white bg, name bold top-left, "..." top-right, service type subtitle,
- *   green price bottom-left, source icon + time bottom-right
- * - Stats bar at bottom: Leads Today / Booked Today / Revenue Today
+ * 4 columns: New Leads → Quoted → Follow Up → Booked
+ * Design: light mode, inspired by the provided screenshot.
+ * - Column headers with colored bottom underline + count badge
+ * - Cards: name, service, price (green), source badge + time ago
+ * - Stats bar at bottom: Leads Today, Booked Today, Revenue Today
+ * - Drag-and-drop between columns
  */
 import { useState, useMemo, useRef } from "react";
 import type React from "react";
@@ -26,7 +24,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc";
-import { Globe, MessageSquare, Mic, MoreHorizontal, CheckCircle2, Phone } from "lucide-react";
+import { Phone, Globe, MessageSquare, Mic, MoreHorizontal, CheckCircle2 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,9 +51,8 @@ type KanbanColumn = {
   label: string;
   stages: string[];
   targetStage: string;
-  accentColor: string;
-  badgeBg: string;
-  badgeText: string;
+  accentColor: string;   // hex for the bottom underline
+  badgeBg: string;       // tailwind classes for count badge
 };
 
 const KANBAN_COLUMNS: KanbanColumn[] = [
@@ -64,36 +61,32 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     label: "NEW LEADS",
     stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE"],
     targetStage: "QUOTE_SENT",
-    accentColor: "#84cc16",   // lime-500
-    badgeBg: "#84cc16",
-    badgeText: "#000",
+    accentColor: "#AAFF00",
+    badgeBg: "bg-[#AAFF00] text-black",
   },
   {
     id: "quoted",
     label: "QUOTED",
     stages: ["AVAILABILITY"],
     targetStage: "AVAILABILITY",
-    accentColor: "#d1d5db",   // gray-300
-    badgeBg: "#e5e7eb",
-    badgeText: "#374151",
+    accentColor: "#d1d5db",
+    badgeBg: "bg-gray-200 text-gray-700",
   },
   {
     id: "follow_up",
     label: "FOLLOW UP",
     stages: ["CALL_SCHEDULED", "DONE", "UNHANDLED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"],
     targetStage: "FOLLOW_UP_SCHEDULED",
-    accentColor: "#84cc16",
-    badgeBg: "#84cc16",
-    badgeText: "#000",
+    accentColor: "#AAFF00",
+    badgeBg: "bg-[#AAFF00] text-black",
   },
   {
     id: "booked",
     label: "BOOKED",
     stages: ["BOOKED"],
     targetStage: "BOOKED",
-    accentColor: "#84cc16",
-    badgeBg: "#84cc16",
-    badgeText: "#000",
+    accentColor: "#AAFF00",
+    badgeBg: "bg-[#AAFF00] text-black",
   },
 ];
 
@@ -125,19 +118,11 @@ function computeTotal(quotedPrice: string | null, _extras: string | null): numbe
 }
 
 function getSourceInfo(source: string | null): { label: string; icon: React.ReactNode } {
-  if (!source) return { label: "form", icon: <Globe className="w-3 h-3" /> };
-  if (source === "widget") return { label: "widget", icon: <Globe className="w-3 h-3" /> };
-  if (source === "voice") return { label: "voice", icon: <Mic className="w-3 h-3" /> };
-  if (source === "reactivation" || source.startsWith("always-on"))
-    return { label: "sms", icon: <MessageSquare className="w-3 h-3" /> };
-  return { label: "form", icon: <Globe className="w-3 h-3" /> };
-}
-
-function formatName(name: string | null): string {
-  if (!name) return "Unknown";
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  if (!source) return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
+  if (source === "widget") return { label: "widget", icon: <Globe className="w-2.5 h-2.5" /> };
+  if (source === "voice") return { label: "voice", icon: <Mic className="w-2.5 h-2.5" /> };
+  if (source === "reactivation" || source.startsWith("always-on")) return { label: "sms", icon: <MessageSquare className="w-2.5 h-2.5" /> };
+  return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
 }
 
 // ── Lead Card ─────────────────────────────────────────────────────────────────
@@ -162,7 +147,9 @@ function LeadCard({
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const total = computeTotal(lead.quotedPrice, lead.extras);
   const { label: srcLabel, icon: srcIcon } = getSourceInfo(lead.leadSource);
-  const activityAt = lead.lastActivityAt ?? lead.createdAt;
+  const firstName = lead.leadName?.split(" ")[0] ?? "Unknown";
+  const lastName = lead.leadName?.split(" ").slice(1).join(" ");
+  const displayName = lastName ? `${firstName} ${lastName[0]}.` : firstName;
 
   return (
     <div
@@ -170,8 +157,8 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group relative bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none transition-all ${
-        isDragging ? "opacity-40 shadow-xl" : "hover:shadow-md hover:border-gray-300"
+      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none transition-all ${
+        isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
         if (isCurrentlyDragging) return;
@@ -179,13 +166,16 @@ function LeadCard({
         onClick?.();
       }}
     >
-      {/* Top row: name + "..." */}
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <span className="text-sm font-bold text-gray-900 leading-tight truncate">
-          {formatName(lead.leadName)}
-        </span>
+      {/* Top row: name + menu */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
+          {lead.serviceType && (
+            <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.serviceType}</p>
+          )}
+        </div>
         <button
-          className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded hover:bg-gray-100"
           onClick={e => { e.stopPropagation(); onClick?.(); }}
           title="View details"
         >
@@ -193,46 +183,45 @@ function LeadCard({
         </button>
       </div>
 
-      {/* Service type */}
-      {lead.serviceType && (
-        <p className="text-xs text-gray-400 mb-3 truncate">{lead.serviceType}</p>
-      )}
-      {!lead.serviceType && <div className="mb-3" />}
-
-      {/* Bottom row: price left, source + time right */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {total > 0 ? (
-            <span className="text-sm font-bold" style={{ color: "#16a34a" }}>${total}</span>
-          ) : (
-            <span className="text-sm text-gray-300">—</span>
-          )}
-          {isQuoted && onMoveToBooked && (
-            <button
-              onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
-              title="Mark as Booked"
-            >
-              <CheckCircle2 className="w-2.5 h-2.5" />
-              Book
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={`tel:${lead.leadPhone}`}
-            onClick={e => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 transition-opacity"
-            title={`Call ${lead.leadPhone}`}
+      {/* Price row */}
+      <div className="flex items-center justify-between mt-2.5">
+        {total > 0 ? (
+          <span className="text-base font-bold" style={{ color: "#16a34a" }}>${total}</span>
+        ) : (
+          <span className="text-sm text-gray-300 font-medium">—</span>
+        )}
+        {/* Quick Book button for Quoted leads */}
+        {isQuoted && onMoveToBooked && (
+          <button
+            onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+            title="Mark as Booked"
           >
-            <Phone className="w-3 h-3 text-gray-400 hover:text-gray-700" />
-          </a>
-          <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-            {srcIcon}
-            {srcLabel}
-          </span>
-          {activityAt && (
-            <span className="text-[11px] text-gray-400">{timeAgo(activityAt)}</span>
+            <CheckCircle2 className="w-2.5 h-2.5" />
+            Book
+          </button>
+        )}
+      </div>
+
+      {/* Footer: source + time */}
+      <div className="flex items-center justify-between mt-2">
+        <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
+          {srcIcon}
+          {srcLabel}
+        </span>
+        <div className="flex items-center gap-2">
+          {lead.leadPhone && (
+            <a
+              href={`tel:${lead.leadPhone}`}
+              onClick={e => e.stopPropagation()}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              title={`Call ${lead.leadPhone}`}
+            >
+              <Phone className="w-3 h-3 text-gray-400 hover:text-gray-700" />
+            </a>
+          )}
+          {lead.lastActivityAt && (
+            <span className="text-[11px] text-gray-400">{timeAgo(lead.lastActivityAt)}</span>
           )}
         </div>
       </div>
@@ -260,34 +249,33 @@ function KanbanColumnView({
   const { setNodeRef } = useDroppable({ id: column.id });
 
   return (
-    <div className="flex flex-col flex-1 min-w-[230px] max-w-[320px]">
+    <div className="flex flex-col flex-1 min-w-[220px] max-w-[300px]">
       {/* Column header */}
       <div className="mb-3">
-        <div className="flex items-center justify-between mb-2.5">
-          <span className="text-[11px] font-bold tracking-widest text-gray-500 uppercase">{column.label}</span>
-          <span
-            className="text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: column.badgeBg, color: column.badgeText }}
-          >
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold tracking-widest text-gray-500 uppercase">{column.label}</span>
+          <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${column.badgeBg}`}>
             {leads.length}
           </span>
         </div>
         {/* Colored underline */}
-        <div className="h-[2px] rounded-full" style={{ backgroundColor: column.accentColor }} />
+        <div className="h-0.5 rounded-full" style={{ backgroundColor: column.accentColor }} />
       </div>
 
       {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className="flex-1 flex flex-col gap-2.5 min-h-[380px] rounded-xl transition-colors duration-150"
-        style={{ backgroundColor: isOver ? "#f0fdf4" : "transparent" }}
+        className="flex-1 flex flex-col gap-2.5 min-h-[400px] rounded-xl transition-colors duration-150 p-1"
+        style={{
+          backgroundColor: isOver ? "#f0fdf4" : "transparent",
+        }}
       >
         {leads.length === 0 && (
           <div
-            className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed min-h-[100px] transition-colors"
+            className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed min-h-[120px]"
             style={{ borderColor: isOver ? "#86efac" : "#e5e7eb" }}
           >
-            <p className="text-xs font-medium" style={{ color: isOver ? "#16a34a" : "#d1d5db" }}>
+            <p className="text-xs text-gray-300 font-medium">
               {isOver ? "Drop here" : "No leads"}
             </p>
           </div>
@@ -310,15 +298,6 @@ function KanbanColumnView({
             <p className="text-xs text-green-500 font-medium">Drop here</p>
           </div>
         )}
-
-        {/* + Add lead placeholder */}
-        <button
-          className="w-full mt-1 py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-xs text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors font-medium"
-          onClick={() => {}}
-          title="Feature coming soon"
-        >
-          + Add lead
-        </button>
       </div>
     </div>
   );
@@ -335,22 +314,22 @@ function StatsBar({ leads }: { leads: LeadRow[] }) {
   const revenueToday = bookedToday.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
 
   const stats = [
-    { value: todayLeads.length.toString(), label: "LEADS TODAY" },
-    { value: bookedToday.length.toString(), label: "BOOKED TODAY" },
-    { value: `$${revenueToday.toLocaleString()}`, label: "REVENUE TODAY", green: true },
+    { value: todayLeads.length, label: "LEADS TODAY" },
+    { value: bookedToday.length, label: "BOOKED TODAY" },
+    { value: `$${revenueToday.toLocaleString()}`, label: "REVENUE TODAY", accent: true },
   ];
 
   return (
-    <div className="mt-6 border-t border-gray-100 pt-1 grid grid-cols-3 divide-x divide-gray-100">
+    <div className="mt-6 border-t border-gray-100 pt-5 grid grid-cols-3 divide-x divide-gray-100">
       {stats.map(s => (
-        <div key={s.label} className="flex flex-col items-center py-5">
+        <div key={s.label} className="flex flex-col items-center py-3 px-4">
           <span
-            className="text-4xl font-black tabular-nums"
-            style={{ color: s.green ? "#16a34a" : "#111827", letterSpacing: "-0.03em" }}
+            className="text-3xl font-black tabular-nums"
+            style={{ color: s.accent ? "#16a34a" : "#111827", letterSpacing: "-0.03em" }}
           >
             {s.value}
           </span>
-          <span className="text-[10px] font-bold tracking-widest text-gray-400 mt-1.5 uppercase">{s.label}</span>
+          <span className="text-[10px] font-bold tracking-widest text-gray-400 mt-1 uppercase">{s.label}</span>
         </div>
       ))}
     </div>
@@ -365,13 +344,11 @@ type KanbanBoardProps = {
   onStageChange?: (id: number, newStage: string) => void;
 };
 
-type DateFilter = "today" | "week" | "month";
-
 export default function KanbanBoard({ leads, onCardClick, onStageChange }: KanbanBoardProps) {
   const updateStageQuick = trpc.leads.adminUpdateStage.useMutation();
+  const utilsQuick = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const justDraggedRef = useRef(false);
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
@@ -408,32 +385,18 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     [leads, localStages]
   );
 
-  // Filter leads by date
-  const filteredLeads = useMemo(() => {
-    const now = new Date();
-    const cutoff = new Date();
-    if (dateFilter === "today") {
-      cutoff.setHours(0, 0, 0, 0);
-    } else if (dateFilter === "week") {
-      cutoff.setDate(now.getDate() - 7);
-      cutoff.setHours(0, 0, 0, 0);
-    } else {
-      cutoff.setDate(now.getDate() - 30);
-      cutoff.setHours(0, 0, 0, 0);
-    }
-    return effectiveLeads.filter(l => new Date(l.createdAt) >= cutoff);
-  }, [effectiveLeads, dateFilter]);
-
   const columnLeads = useMemo(() => {
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
-    filteredLeads.forEach(lead => {
+    effectiveLeads.forEach(lead => {
       const colId = STAGE_TO_COLUMN[lead.stage];
-      if (colId) map[colId].push(lead);
-      // Dead/cold leads not shown
+      if (colId) {
+        map[colId].push(lead);
+      }
+      // Dead/cold leads are not shown in the pipeline
     });
     return map;
-  }, [filteredLeads]);
+  }, [effectiveLeads]);
 
   const activeLead = useMemo(() =>
     activeId ? effectiveLeads.find(l => String(l.id) === activeId) ?? null : null,
@@ -487,42 +450,8 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     );
   }
 
-  const filterLabels: { key: DateFilter; label: string }[] = [
-    { key: "today", label: "Today" },
-    { key: "week", label: "This Week" },
-    { key: "month", label: "This Month" },
-  ];
-
   return (
     <div>
-      {/* Pipeline header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Lead Pipeline</h2>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-lime-400 text-black">
-            <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
-            Live
-          </span>
-        </div>
-        {/* Date filter pills */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          {filterLabels.map(f => (
-            <button
-              key={f.key}
-              onClick={() => setDateFilter(f.key)}
-              className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all"
-              style={
-                dateFilter === f.key
-                  ? { backgroundColor: "#84cc16", color: "#000" }
-                  : { backgroundColor: "transparent", color: "#6b7280" }
-              }
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -531,7 +460,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
         onDragEnd={handleDragEnd}
       >
         <div className="overflow-x-auto pb-2">
-          <div className="flex gap-5 min-w-max">
+          <div className="flex gap-4 min-w-max">
             {KANBAN_COLUMNS.map(col => (
               <KanbanColumnView
                 key={col.id}
