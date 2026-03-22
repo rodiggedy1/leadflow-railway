@@ -35,6 +35,9 @@ const CS_SUPPORT_NUMBER = "+12028885362";
 // In-memory typing presence store: sessionId -> { agentName, agentId, expiresAt }
 // Ephemeral — cleared on server restart. No DB needed for real-time typing indicators.
 const typingPresence = new Map<string, { agentName: string; agentId: number; expiresAt: number }>();
+// In-process dedup lock for manual sendMessage: prevents double-sends from rapid
+// double-clicks or React StrictMode double-invocations. Key = "sessionId:message".
+const sendMessageDedup = new Map<string, number>();
 // SECONDARY_ALERT_NUMBER: additional number to receive new lead SMS alerts
 const SECONDARY_ALERT_NUMBER = "+13029816191";
 
@@ -652,6 +655,20 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
 
+        // ── Atomic in-process dedup lock ─────────────────────────────────────────
+        // The old guard (read history → check duplicate → write) had a race condition:
+        // two concurrent calls both read history before either writes, both find no
+        // duplicate, both send SMS. Fix: use a process-level Map as an atomic lock.
+        // The key is sessionId:message. First call claims the key; second call sees
+        // it already claimed and returns immediately. TTL of 15s auto-clears stale keys.
+        const dedupKey = `${input.sessionId}:${input.message}`;
+        if (sendMessageDedup.has(dedupKey)) {
+          console.warn(`[sendMessage] Duplicate blocked by in-process lock for session ${input.sessionId}.`);
+          return { success: true, smsSent: false, duplicate: true };
+        }
+        sendMessageDedup.set(dedupKey, Date.now());
+        setTimeout(() => sendMessageDedup.delete(dedupKey), 15_000);
+
         // Fetch the session to get the lead's phone and current history
         const [session] = await db
           .select()
@@ -664,21 +681,11 @@ export const appRouter = router({
         let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
 
-        // Deduplication guard: reject if the exact same message was sent within the last 10 seconds.
-        // This prevents double-sends caused by rapid re-renders or accidental double-clicks.
         const now = Date.now();
-        const recentDuplicate = history.find(
-          m => m.role === "assistant" && m.content === input.message && m.ts && (now - m.ts) < 10_000
-        );
-        if (recentDuplicate) {
-          console.warn(`[sendMessage] Duplicate detected for session ${input.sessionId} — skipping SMS send.`);
-          return { success: true, smsSent: false, duplicate: true };
-        }
-
         history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
         if (history.length > 20) history = history.slice(-20);
 
-        // Save to DB
+        // Save to DB first, then send SMS
         await db
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history) })

@@ -131,7 +131,7 @@ export async function runSilenceFollowUp(): Promise<{
             eq(conversationSessions.autoFollowUpSent, 0)  // only claim if not already claimed
           )
         );
-      const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 1;
+      const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 0;
       if (claimed === 0) {
         // Another cron instance already claimed this session — skip it
         console.log(`[SilenceFollowUp] Session ${session.id} already claimed by another instance — skipping.`);

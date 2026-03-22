@@ -21,7 +21,7 @@
  */
 
 import type { Express } from "express";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts } from "../drizzle/schema";
 import { sendSms } from "./openphone";
@@ -156,17 +156,26 @@ export function registerWebhookRoutes(app: Express) {
           console.log(`[Webhook] Duplicate event (fast path) — messageId ${inboundMessageId} already processed for session ${session.id}. Skipping.`);
           return;
         }
-        // Atomic claim: only the first concurrent call wins
+        // Atomic claim: only the first concurrent call wins.
+        // IMPORTANT: Must use isNull() + ne() Drizzle operators, NOT raw sql`!=`.
+        // In MySQL, NULL != 'value' evaluates to NULL (not TRUE), so a raw sql
+        // template would make the WHERE clause evaluate to NULL when the column
+        // is NULL — matching no rows — causing the ?? 1 fallback to fire and
+        // letting both concurrent calls through. isNull() generates IS NULL
+        // correctly and ne() generates != only for non-null comparisons.
         const claimResult = await db
           .update(conversationSessions)
           .set({ lastProcessedMessageId: inboundMessageId })
           .where(
             and(
               eq(conversationSessions.id, session.id),
-              sql`(${conversationSessions.lastProcessedMessageId} IS NULL OR ${conversationSessions.lastProcessedMessageId} != ${inboundMessageId})`
+              or(
+                isNull(conversationSessions.lastProcessedMessageId),
+                ne(conversationSessions.lastProcessedMessageId, inboundMessageId)
+              )
             )
           );
-        const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 1;
+        const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 0;
         if (claimed === 0) {
           console.log(`[Webhook] Duplicate event (atomic claim lost) — messageId ${inboundMessageId} already claimed for session ${session.id}. Skipping.`);
           return;
