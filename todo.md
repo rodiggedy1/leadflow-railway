@@ -2125,3 +2125,8 @@
 - [x] Fix "Last Campaign SMS: Never" — use conversation_sessions as source of truth (reactivationContacts logging is post-fire, not pre-fire)
 - [x] Add "Today's Campaign" status banner at top of AI Center showing campaigns already sent today with sent count and time
 - [x] Auto-refresh recipient list after campaign fires so Last Campaign SMS updates immediately
+
+## Campaign Leads Visibility — March 22
+- [x] Hide REACTIVATION-stage leads with no inbound reply from default leads list
+- [ ] Add "Campaign Replies" filter in leads drawer to see all campaign leads (replied + not replied)
+- [ ] Show reply count badge on Campaign source tag in leads list

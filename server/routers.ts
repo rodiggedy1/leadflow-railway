@@ -90,8 +90,8 @@ export const appRouter = router({
 
         // Leads page visibility rule (uniform across all campaign types):
         //   Show a session ONLY if the customer has replied (stage advanced past REACTIVATION).
-        //   Campaign sessions (always-on, reactivation, command-center) start at REACTIVATION
-        //   and are hidden until the customer responds.
+        //   Campaign sessions (always-on, reactivation, command-center, campaign:*) start at
+        //   REACTIVATION and are hidden until the customer responds.
         //   Organic form leads (leadSource IS NULL or unknown) are shown immediately.
         // Explicitly exclude:
         //   - review sessions (leadSource = 'review') — these belong in the Reviews tab
@@ -101,13 +101,19 @@ export const appRouter = router({
           ne(conversationSessions.leadSource, "review"),
           or(
             // Organic / form leads — show immediately (no leadSource or unknown source)
+            // Exclude always-on, reactivation, command-center, and campaign:* sources
             and(
-              sql`(${conversationSessions.leadSource} IS NULL OR (${conversationSessions.leadSource} NOT LIKE 'always-on%' AND ${conversationSessions.leadSource} NOT IN (${sql.join(campaignSources.map(s => sql`${s}`), sql`, `)})))`,
+              sql`(${conversationSessions.leadSource} IS NULL OR (
+                ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+                ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+                ${conversationSessions.leadSource} NOT IN (${sql.join(campaignSources.map(s => sql`${s}`), sql`, `)})
+              ))`,
             ),
-            // Campaign sessions (always-on, reactivation, command-center) — only show after customer replies
+            // Campaign sessions (always-on, reactivation, command-center, campaign:*) — only show after customer replies
             and(
               or(
                 sql`${conversationSessions.leadSource} LIKE 'always-on%'`,
+                sql`${conversationSessions.leadSource} LIKE 'campaign:%'`,
                 sql`${conversationSessions.leadSource} IN (${sql.join(campaignSources.map(s => sql`${s}`), sql`, `)})`
               ),
               ne(conversationSessions.stage, "REACTIVATION")
