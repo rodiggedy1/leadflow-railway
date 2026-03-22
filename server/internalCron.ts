@@ -140,6 +140,53 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Tomorrow's schedule sync: 9 PM ET daily ──────────────────────────────
+  // Syncs tomorrow's bookings from Launch27 so cleaners see their jobs overnight.
+  // Uses the same runNightlySync logic, just called with tomorrow's date.
+  cron.schedule("0 0 21 * * *", async () => {
+    const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    etNow.setDate(etNow.getDate() + 1);
+    const yyyy = etNow.getFullYear();
+    const mm = String(etNow.getMonth() + 1).padStart(2, "0");
+    const dd = String(etNow.getDate()).padStart(2, "0");
+    const tomorrowDate = `${yyyy}-${mm}-${dd}`;
+    console.log(`[InternalCron] Running TomorrowSync for ${tomorrowDate}...`);
+    const startedAt = new Date();
+    try {
+      const result = await runNightlySync(tomorrowDate);
+      const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
+      console.log(`[InternalCron] TomorrowSync — ${summary}`);
+      await recordHeartbeat("tomorrow-sync", summary, true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] TomorrowSync failed:", msg);
+      await recordHeartbeat("tomorrow-sync", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Today's schedule sync: every 60 min, 7 AM–8 PM ET ──────────────────────
+  // Re-syncs today's bookings hourly to catch reschedules, cancellations, and
+  // new bookings added during the day. Same logic as nightly sync, today's date.
+  cron.schedule("0 0 7-20 * * *", async () => {
+    const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const yyyy = etNow.getFullYear();
+    const mm = String(etNow.getMonth() + 1).padStart(2, "0");
+    const dd = String(etNow.getDate()).padStart(2, "0");
+    const todayDate = `${yyyy}-${mm}-${dd}`;
+    console.log(`[InternalCron] Running TodaySync for ${todayDate}...`);
+    const startedAt = new Date();
+    try {
+      const result = await runNightlySync(todayDate);
+      const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
+      console.log(`[InternalCron] TodaySync — ${summary}`);
+      await recordHeartbeat("today-sync", summary, true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] TodaySync failed:", msg);
+      await recordHeartbeat("today-sync", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   // ── Always-On batch generation: 10 AM ET Mon–Sat ───────────────────────────
   // Creates pending approval batches for admin review. Does NOT send SMS directly.
   // Admin must approve each batch in Campaigns → Always-On before SMS goes out.
@@ -216,6 +263,8 @@ export function startInternalCron(): void {
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
   console.log("  - NightlySync:        12:00 PM ET daily");
+  console.log("  - TomorrowSync:       9:00 PM ET daily");
+  console.log("  - TodaySync:          every hour 7 AM–8 PM ET");
   console.log("  - AlwaysOnSend:       10 AM ET Mon-Sat (gated by isActive flag)");
   console.log("  - TrackerLinkSend:    8 AM ET daily");
   console.log("  - AiCacheWarmUp:      every 30 minutes");
