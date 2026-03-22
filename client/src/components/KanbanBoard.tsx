@@ -3,12 +3,13 @@
  *
  * 4 columns: New Leads → Quoted → Follow Up → Booked
  * Design: light mode, inspired by the provided screenshot.
- * - Column headers with colored bottom underline + count badge
+ * - Column headers with colored bottom underline + count badge + total value
  * - Cards: name, service, price (green), source badge + time ago
- * - Stats bar at bottom: Leads Today, Booked Today, Revenue Today
+ * - Staggered card entrance animations on load
+ * - Better per-column empty states
  * - Drag-and-drop between columns
  */
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import type React from "react";
 import {
   DndContext,
@@ -24,7 +25,18 @@ import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc";
-import { Phone, Globe, MessageSquare, Mic, MoreHorizontal, CheckCircle2 } from "lucide-react";
+import {
+  Phone,
+  Globe,
+  MessageSquare,
+  Mic,
+  MoreHorizontal,
+  CheckCircle2,
+  Sparkles,
+  Clock,
+  CalendarCheck,
+  UserCheck,
+} from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,8 +63,11 @@ type KanbanColumn = {
   label: string;
   stages: string[];
   targetStage: string;
-  accentColor: string;   // hex for the bottom underline
-  badgeBg: string;       // tailwind classes for count badge
+  accentColor: string;
+  badgeBg: string;
+  emptyIcon: React.ReactNode;
+  emptyTitle: string;
+  emptySubtitle: string;
 };
 
 const KANBAN_COLUMNS: KanbanColumn[] = [
@@ -63,6 +78,9 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     targetStage: "QUOTE_SENT",
     accentColor: "#AAFF00",
     badgeBg: "bg-[#AAFF00] text-black",
+    emptyIcon: <Sparkles className="w-6 h-6 text-lime-300" />,
+    emptyTitle: "No new leads yet",
+    emptySubtitle: "New form submissions will appear here",
   },
   {
     id: "quoted",
@@ -71,6 +89,9 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     targetStage: "AVAILABILITY",
     accentColor: "#d1d5db",
     badgeBg: "bg-gray-200 text-gray-700",
+    emptyIcon: <Clock className="w-6 h-6 text-gray-300" />,
+    emptyTitle: "No quoted leads",
+    emptySubtitle: "Leads waiting on availability show here",
   },
   {
     id: "follow_up",
@@ -79,6 +100,9 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     targetStage: "FOLLOW_UP_SCHEDULED",
     accentColor: "#AAFF00",
     badgeBg: "bg-[#AAFF00] text-black",
+    emptyIcon: <CalendarCheck className="w-6 h-6 text-lime-300" />,
+    emptyTitle: "Nothing to follow up",
+    emptySubtitle: "Great — no leads are waiting on you",
   },
   {
     id: "booked",
@@ -87,6 +111,9 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     targetStage: "BOOKED",
     accentColor: "#AAFF00",
     badgeBg: "bg-[#AAFF00] text-black",
+    emptyIcon: <UserCheck className="w-6 h-6 text-lime-300" />,
+    emptyTitle: "No bookings yet",
+    emptySubtitle: "Drag a lead here or use the Book button",
   },
 ];
 
@@ -132,24 +159,52 @@ function LeadCard({
   isDragging = false,
   onClick,
   onMoveToBooked,
+  animationDelay = 0,
 }: {
   lead: LeadRow;
   isDragging?: boolean;
   onClick?: () => void;
   onMoveToBooked?: () => void;
+  animationDelay?: number;
 }) {
+  const [visible, setVisible] = useState(false);
   const isQuoted = lead.stage === "AVAILABILITY";
   const { attributes, listeners, setNodeRef, transform, isDragging: isCurrentlyDragging } = useDraggable({
     id: String(lead.id),
     data: { lead },
   });
 
-  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), animationDelay);
+    return () => clearTimeout(t);
+  }, [animationDelay]);
+
+  const style: React.CSSProperties = {
+    ...(transform ? { transform: CSS.Translate.toString(transform) } : {}),
+    opacity: visible ? 1 : 0,
+    translate: visible ? "none" : "0 12px",
+    transition: isDragging ? "none" : "opacity 0.25s ease, translate 0.25s ease",
+  };
+
   const total = computeTotal(lead.quotedPrice, lead.extras);
   const { label: srcLabel, icon: srcIcon } = getSourceInfo(lead.leadSource);
   const firstName = lead.leadName?.split(" ")[0] ?? "Unknown";
   const lastName = lead.leadName?.split(" ").slice(1).join(" ");
   const displayName = lastName ? `${firstName} ${lastName[0]}.` : firstName;
+
+  // Initials avatar color — deterministic from name
+  const avatarColors = [
+    "#6366f1", "#8b5cf6", "#ec4899", "#f97316",
+    "#14b8a6", "#0ea5e9", "#84cc16", "#f59e0b",
+  ];
+  const initials = (lead.leadName ?? "?")
+    .split(" ")
+    .map(w => w[0] ?? "")
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+  const colorIdx = (lead.leadName ?? "").charCodeAt(0) % avatarColors.length;
+  const avatarColor = avatarColors[colorIdx];
 
   return (
     <div
@@ -157,7 +212,7 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none transition-all flex flex-col h-[130px] ${
+      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none flex flex-col h-[130px] ${
         isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
@@ -166,13 +221,22 @@ function LeadCard({
         onClick?.();
       }}
     >
-      {/* Top row: name + menu */}
+      {/* Top row: avatar + name + menu */}
       <div className="flex items-start justify-between gap-2 flex-shrink-0">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
-          {lead.serviceType && (
-            <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.serviceType}</p>
-          )}
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Initials avatar */}
+          <div
+            className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white leading-none"
+            style={{ backgroundColor: avatarColor }}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
+            {lead.serviceType && (
+              <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.serviceType}</p>
+            )}
+          </div>
         </div>
         <button
           className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 transition-colors"
@@ -248,6 +312,9 @@ function KanbanColumnView({
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
+  // Total value for this column
+  const columnTotal = leads.reduce((sum, l) => sum + computeTotal(l.quotedPrice, l.extras), 0);
+
   return (
     <div className="flex flex-col flex-1 min-w-[220px] max-w-[300px]">
       {/* Column header */}
@@ -256,9 +323,18 @@ function KanbanColumnView({
         <div className="h-px mb-3" style={{ backgroundColor: column.accentColor }} />
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-bold tracking-widest text-gray-500 uppercase">{column.label}</span>
-          <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${column.badgeBg}`}>
-            {leads.length}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {/* Total value badge */}
+            {columnTotal > 0 && (
+              <span className="text-[11px] font-semibold text-gray-400">
+                ${columnTotal.toLocaleString()}
+              </span>
+            )}
+            {/* Count badge */}
+            <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${column.badgeBg}`}>
+              {leads.length}
+            </span>
+          </div>
         </div>
         {/* Colored underline */}
         <div className="h-0.5 rounded-full" style={{ backgroundColor: column.accentColor }} />
@@ -272,33 +348,34 @@ function KanbanColumnView({
           backgroundColor: isOver ? "#f0fdf4" : "transparent",
         }}
       >
-        {leads.length === 0 && (
+        {leads.length === 0 ? (
           <div
-            className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed min-h-[120px]"
+            className="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed min-h-[160px] gap-2 px-4"
             style={{ borderColor: isOver ? "#86efac" : "#e5e7eb" }}
           >
-            <p className="text-xs text-gray-300 font-medium">
-              {isOver ? "Drop here" : "No leads"}
-            </p>
+            {isOver ? (
+              <p className="text-xs text-emerald-500 font-semibold">Drop here</p>
+            ) : (
+              <>
+                {column.emptyIcon}
+                <p className="text-xs font-semibold text-gray-400 text-center leading-snug">{column.emptyTitle}</p>
+                <p className="text-[11px] text-gray-300 text-center leading-snug">{column.emptySubtitle}</p>
+              </>
+            )}
           </div>
-        )}
-
-        {leads.map(lead => (
-          <LeadCard
-            key={lead.id}
-            lead={lead}
-            onClick={() => {
-              if (justDraggedRef.current) return;
-              onCardClick(lead);
-            }}
-            onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
-          />
-        ))}
-
-        {leads.length > 0 && isOver && (
-          <div className="flex items-center justify-center py-2 rounded-xl border-2 border-dashed border-green-300">
-            <p className="text-xs text-green-500 font-medium">Drop here</p>
-          </div>
+        ) : (
+          leads.map((lead, idx) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              animationDelay={idx * 50}
+              onClick={() => {
+                if (justDraggedRef.current) return;
+                onCardClick(lead);
+              }}
+              onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
+            />
+          ))
         )}
       </div>
     </div>
@@ -411,7 +488,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
       if (colId) {
         map[colId].push(lead);
       }
-      // Dead/cold leads are not shown in the pipeline
     });
     return map;
   }, [filteredLeads]);
