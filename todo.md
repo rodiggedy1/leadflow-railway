@@ -2099,3 +2099,6 @@
 - [x] Add LLM fallback to REACTIVATION_TIME stage: off-script replies acknowledged, re-asked for time window
 - [x] Constrained system prompt: Jade persona, brief answer, always end with time-ask, never deviate
 - [x] Update tests to cover off-script LLM fallback path
+
+## Reactivation Auto-Reply Disabled — March 22
+- [x] Disable auto-reply SMS for REACTIVATION/REACTIVATION_TIME stages — log reply but send nothing back

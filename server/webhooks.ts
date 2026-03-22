@@ -304,28 +304,31 @@ export function registerWebhookRoutes(app: Express) {
         smsFlow: session.smsFlow ?? "B",
       };
 
-      // ── REACTIVATION / REACTIVATION_TIME: Fully scripted — no LLM ─────────────────
-      // Uses DB templates from messageTemplates (editable in Settings → Reactivation tab).
-      // Flow: REACTIVATION → (YES/price/other) → REACTIVATION_TIME → (time given) → DONE
+      // ── REACTIVATION / REACTIVATION_TIME: Auto-reply DISABLED ───────────────────────────────────
+      // Auto-replies are temporarily disabled while the reactivation flow is being
+      // refined. Inbound replies are logged to the conversation history so they
+      // are visible in the leads drawer, but no outbound SMS is sent.
+      // To re-enable: remove this block and uncomment the handler below.
       if (session.stage === "REACTIVATION" || session.stage === "REACTIVATION_TIME") {
-        const reactivationResult = await processReactivationReply(inboundText, context);
-        console.log(`[Webhook] Reactivation stage: ${session.stage} → ${reactivationResult.nextStage}. Reply: "${reactivationResult.reply}"`);
-        // Send SMS FIRST — before DB update — so a DB error never blocks the message
-        const reactivationSmsResult = await sendSms({ to: fromPhone, content: reactivationResult.reply });
-        if (!reactivationSmsResult.success) {
-          console.error(`[Webhook] Failed to send reactivation reply to ${fromPhone}:`, reactivationSmsResult.error);
-        }
-        history.push({ role: "assistant", content: reactivationResult.reply, ts: Date.now() });
+        console.log(`[Webhook] Reactivation reply received (auto-reply DISABLED): stage=${session.stage}, from=${fromPhone}, text="${inboundText}"`);
+        // Log the inbound message to history so it's visible in the leads drawer
+        history.push({ role: "user", content: inboundText, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
         await db
           .update(conversationSessions)
-          .set({
-            stage: reactivationResult.nextStage as any,
-            messageHistory: JSON.stringify(history),
-          })
+          .set({ messageHistory: JSON.stringify(history) })
           .where(eq(conversationSessions.id, session.id));
-        return;
+        return; // No outbound SMS sent
       }
+      // ── (DISABLED) Reactivation auto-reply handler — re-enable when flow is ready ──
+      // if (session.stage === "REACTIVATION" || session.stage === "REACTIVATION_TIME") {
+      //   const reactivationResult = await processReactivationReply(inboundText, context);
+      //   const reactivationSmsResult = await sendSms({ to: fromPhone, content: reactivationResult.reply });
+      //   history.push({ role: "assistant", content: reactivationResult.reply, ts: Date.now() });
+      //   if (history.length > 20) history = history.slice(-20);
+      //   await db.update(conversationSessions).set({ stage: reactivationResult.nextStage as any, messageHistory: JSON.stringify(history) }).where(eq(conversationSessions.id, session.id));
+      //   return;
+      // }
 
       // ── QUALITY_RATING: Post-job 1-5 star rating flow ───────────────────────────
       if (session.stage === "QUALITY_RATING_REQUESTED" || session.stage === "QUALITY_MISSED_FOLLOWUP") {
