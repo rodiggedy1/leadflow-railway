@@ -20,6 +20,7 @@ import {
   leadCallLogs,
   aiInsightsCache,
   reactivationContacts,
+  completedJobs,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, lte, ne, sql, isNotNull, or, isNull } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
@@ -1280,32 +1281,47 @@ Respond in JSON with this exact schema:
         )
         .limit(100);
 
-      // "Cold" leads from last 90 days — leads who went quiet without booking.
-      // In this system there is no literal COLD stage; the equivalent is:
-      //   REVIEW_REQUESTED  → asked for review, never converted (largest pool)
-      //   NOT_INTERESTED    → expressed hesitation but didn't hard-opt-out
-      // These are prime re-engagement targets for a friendly check-in blast.
-      const coldLeads = await db
+      // Lapsed past customers — people who had a completed job but haven't booked
+      // in 60+ days. We find the most recent jobDate per phone number in completedJobs
+      // and target those where it's been at least 60 days.
+      const sixtyDaysAgoStr = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 60);
+        return [
+          d.getFullYear(),
+          String(d.getMonth() + 1).padStart(2, "0"),
+          String(d.getDate()).padStart(2, "0"),
+        ].join("-");
+      })();
+
+      // Get one row per phone: the customer's most recent job date and name
+      const lapsedCustomers = await db
         .select({
-          id: conversationSessions.id,
-          name: conversationSessions.leadName,
-          phone: conversationSessions.leadPhone,
-          serviceType: conversationSessions.serviceType,
-          stage: conversationSessions.stage,
+          phone: completedJobs.phone,
+          firstName: completedJobs.firstName,
+          serviceType: completedJobs.serviceType,
+          lastJobDate: sql<string>`MAX(${completedJobs.jobDate})`.as("lastJobDate"),
         })
-        .from(conversationSessions)
+        .from(completedJobs)
         .where(
           and(
-            gte(conversationSessions.createdAt, ninetyDaysAgo),
-            or(
-              eq(conversationSessions.stage, "REVIEW_REQUESTED" as string),
-              eq(conversationSessions.stage, "NOT_INTERESTED" as string)
-            ),
-            ne(conversationSessions.isBooked, 1),
-            isNotNull(conversationSessions.leadPhone)
+            isNotNull(completedJobs.phone),
+            isNotNull(completedJobs.jobDate)
           )
         )
+        .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.serviceType)
+        .having(sql`MAX(${completedJobs.jobDate}) <= ${sixtyDaysAgoStr}`)
+        .orderBy(sql`MAX(${completedJobs.jobDate}) DESC`)
         .limit(100);
+
+      // Map to the same shape as stalledLeads for the recency filter
+      const coldLeads = lapsedCustomers.map(c => ({
+        id: 0 as number, // no session id for past customers
+        name: c.firstName ?? "Customer",
+        phone: c.phone,
+        serviceType: c.serviceType,
+        stage: "LAPSED" as string,
+      }));
 
       // ── 7-day campaign recency filter ──────────────────────────────────────
       // Exclude any lead whose phone number was sent a campaign SMS in the last 7 days.

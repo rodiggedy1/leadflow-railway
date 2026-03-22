@@ -1996,3 +1996,6 @@
 
 ## Cold Leads Fix — March 22
 - [x] Fix Re-engage Cold Leads: no COLD stage exists in DB; retarget to REVIEW_REQUESTED + NOT_INTERESTED leads (went quiet after review ask)
+
+## Cold Leads Fix v2 — March 22
+- [x] Re-engage Cold Leads: target lapsed past customers from completedJobs who haven't booked in 60+ days (not conversationSessions stages)
