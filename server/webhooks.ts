@@ -21,7 +21,7 @@
  */
 
 import type { Express } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts } from "../drizzle/schema";
 import { sendSms } from "./openphone";
@@ -141,12 +141,37 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // ── Idempotency guard ─────────────────────────────────────────────────────
-      // OpenPhone uses at-least-once delivery — the same event can arrive 2-3x.
-      // If we've already processed this exact message ID for this session, skip.
-      if (inboundMessageId && session.lastProcessedMessageId === inboundMessageId) {
-        console.log(`[Webhook] Duplicate event detected — messageId ${inboundMessageId} already processed for session ${session.id}. Skipping.`);
-        return;
+      // ── Atomic idempotency claim ───────────────────────────────────────────────
+      // OpenPhone has at-least-once delivery and can fire the same webhook 2-3x
+      // within seconds. A simple read-then-check guard has a race condition: both
+      // calls read the session before either writes lastProcessedMessageId, so both
+      // pass the guard and both send SMS.
+      //
+      // Fix: atomically claim this messageId with an UPDATE that only succeeds if
+      // no other instance has already claimed it. The instance that gets 0 affected
+      // rows lost the race and must skip.
+      if (inboundMessageId) {
+        // Fast path: already processed (avoids the UPDATE on most requests)
+        if (session.lastProcessedMessageId === inboundMessageId) {
+          console.log(`[Webhook] Duplicate event (fast path) — messageId ${inboundMessageId} already processed for session ${session.id}. Skipping.`);
+          return;
+        }
+        // Atomic claim: only the first concurrent call wins
+        const claimResult = await db
+          .update(conversationSessions)
+          .set({ lastProcessedMessageId: inboundMessageId })
+          .where(
+            and(
+              eq(conversationSessions.id, session.id),
+              sql`(${conversationSessions.lastProcessedMessageId} IS NULL OR ${conversationSessions.lastProcessedMessageId} != ${inboundMessageId})`
+            )
+          );
+        const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 1;
+        if (claimed === 0) {
+          console.log(`[Webhook] Duplicate event (atomic claim lost) — messageId ${inboundMessageId} already claimed for session ${session.id}. Skipping.`);
+          return;
+        }
+        console.log(`[Webhook] Atomic claim succeeded for messageId ${inboundMessageId}, session ${session.id}.`);
       }
 
       // ── Supersede stale duplicate sessions ───────────────────────────────────
