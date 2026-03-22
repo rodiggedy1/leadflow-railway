@@ -1,5 +1,5 @@
 /**
- * CommandCenter — AI Lead Command Center for Maids in Black
+ * CommandCenter — Jade Command Center for Maids in Black
  *
  * Sections:
  *   1. KPI stat cards (New Leads, Booked, Revenue, Response Rate, Conversion, Pipeline)
@@ -618,7 +618,7 @@ export default function CommandCenter() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-bold text-gray-900">AI Lead Command Center</h1>
+                  <h1 className="text-lg font-bold text-gray-900">Jade Command Center</h1>
                   <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">Live</span>
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5">
