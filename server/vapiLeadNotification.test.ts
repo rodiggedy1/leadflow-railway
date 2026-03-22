@@ -152,7 +152,7 @@ describe("notifyNewLeadViaCall", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("calls VAPI API with correct phone number during business hours", async () => {
+  it("calls VAPI API for BOTH primary number and CS fixed number during business hours", async () => {
     // 10am ET in January = 3pm UTC
     const insideHours = new Date("2026-01-15T15:00:00.000Z");
     const OriginalDate = globalThis.Date;
@@ -164,14 +164,21 @@ describe("notifyNewLeadViaCall", () => {
     const result = await notifyNewLeadViaCall({ name: "Sarah" });
 
     expect(result).toBe(true);
-    expect(fetchMock).toHaveBeenCalledOnce();
+    // Expect exactly 2 VAPI calls: one to the primary number, one to the fixed CS line
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
+    const calledNumbers = fetchMock.mock.calls.map(([, opts]: [string, RequestInit]) => {
+      const body = JSON.parse(opts.body as string);
+      return body.customer.number as string;
+    });
+    expect(calledNumbers).toContain(LEAD_ALERT_CALL_NUMBER);   // 302-981-6191
+    expect(calledNumbers).toContain("+12028885362");             // 202-888-5362 (fixed CS)
+
+    // Verify script content on the first call
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.vapi.ai/call");
     expect(options.method).toBe("POST");
-
     const body = JSON.parse(options.body as string);
-    expect(body.customer.number).toBe(LEAD_ALERT_CALL_NUMBER);
     expect(body.assistant.firstMessage).toContain("Sarah");
     expect(body.assistant.firstMessage).toContain("Check the lead platform now");
     expect(body.assistant.firstMessage).toContain("30 seconds");

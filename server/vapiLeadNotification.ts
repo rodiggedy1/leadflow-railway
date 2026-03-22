@@ -23,10 +23,15 @@ const VAPI_API_BASE = "https://api.vapi.ai";
 const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
 
 /**
- * The number to call for new-lead alerts.
- * Currently set to the test number; change to CS team when ready.
+ * The primary number to call for new-lead alerts (configurable via DB settings).
  */
-export const LEAD_ALERT_CALL_NUMBER = "+13029816191"; // test: 302-981-6191
+export const LEAD_ALERT_CALL_NUMBER = "+13029816191"; // 302-981-6191
+
+/**
+ * The fixed CS line that ALWAYS receives a call regardless of settings.
+ * This is the main business line and cannot be disabled.
+ */
+const CS_FIXED_CALL_NUMBER = "+12028885362"; // 202-888-5362
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,12 +105,50 @@ async function vapiPost(path: string, body: unknown): Promise<unknown> {
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
- * Fires an outbound VAPI call to LEAD_ALERT_CALL_NUMBER with a TTS alert.
+ * Builds the VAPI call payload for a given destination number.
+ */
+function buildCallPayload(callTo: string, script: string) {
+  return {
+    phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
+    customer: { number: callTo },
+    assistant: {
+      name: "LeadAlert",
+      firstMessage: script,
+      model: {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a brief automated notification system. " +
+              "You have already delivered your message. " +
+              "If the person says anything, simply say 'Got it, good luck!' and end the call.",
+          },
+        ],
+      },
+      voice: {
+        provider: "11labs",
+        voiceId: "EXAVITQu4vr4xnSDxMaL",
+        stability: 0.5,
+        similarityBoost: 0.75,
+        style: 0.3,
+        useSpeakerBoost: true,
+      },
+      maxDurationSeconds: 45,
+    },
+  };
+}
+
+/**
+ * Fires outbound VAPI calls to BOTH the configurable alert number AND the
+ * fixed CS line (202-888-5362) whenever a new lead arrives.
  *
  * - Silently no-ops outside business hours (7 am – 7 pm ET).
  * - Never throws — logs errors and returns false on failure.
+ * - Both calls fire in parallel; failure of one does not block the other.
  *
- * @returns true if the call was initiated, false otherwise.
+ * @returns true if at least one call was initiated, false otherwise.
  */
 export async function notifyNewLeadViaCall(
   details: LeadAlertDetails
@@ -126,56 +169,36 @@ export async function notifyNewLeadViaCall(
     return false;
   }
 
-  const callTo = phoneFromDb.trim() || LEAD_ALERT_CALL_NUMBER;
-
   if (!isWithinBusinessHours()) {
     console.log("[VapiAlert] Outside business hours (7am–7pm ET) — skipping call notification");
     return false;
   }
 
+  const primaryNumber = phoneFromDb.trim() || LEAD_ALERT_CALL_NUMBER;
   const script = buildLeadAlertScript(details);
-  console.log(`[VapiAlert] Placing call to ${callTo} with script: "${script}"`);
 
-  try {
-    const callPayload = {
-      phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
-      customer: {
-        number: callTo,
-      },
-      assistant: {
-        // One-shot TTS assistant: reads the script and hangs up
-        name: "LeadAlert",
-        firstMessage: script,
-        model: {
-          provider: "openai",
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a brief automated notification system. " +
-                "You have already delivered your message. " +
-                "If the person says anything, simply say 'Got it, good luck!' and end the call.",
-            },
-          ],
-        },
-        voice: {
-          provider: "11labs",
-          voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — warm, professional female voice (same as main assistant)
-          stability: 0.5,
-          similarityBoost: 0.75,
-          style: 0.3,
-          useSpeakerBoost: true,
-        },
-        maxDurationSeconds: 45,
-      },
-    };
+  // Deduplicate: if the configurable number is the same as the fixed CS number,
+  // only call once to avoid ringing the same phone twice.
+  const numbersToCall = primaryNumber === CS_FIXED_CALL_NUMBER
+    ? [CS_FIXED_CALL_NUMBER]
+    : [primaryNumber, CS_FIXED_CALL_NUMBER];
 
-    const result = await vapiPost("/call", callPayload) as { id?: string };
-    console.log(`[VapiAlert] Call initiated. VAPI call ID: ${result?.id ?? "unknown"}`);
-    return true;
-  } catch (err) {
-    console.error("[VapiAlert] Failed to place lead alert call:", err);
-    return false;
+  console.log(`[VapiAlert] Placing calls to: ${numbersToCall.join(", ")}`);
+
+  const results = await Promise.allSettled(
+    numbersToCall.map(async (num) => {
+      const payload = buildCallPayload(num, script);
+      const result = await vapiPost("/call", payload) as { id?: string };
+      console.log(`[VapiAlert] Call to ${num} initiated. VAPI call ID: ${result?.id ?? "unknown"}`);
+      return true;
+    })
+  );
+
+  const anySucceeded = results.some(r => r.status === "fulfilled");
+  const failures = results.filter(r => r.status === "rejected");
+  if (failures.length > 0) {
+    failures.forEach(f => console.error("[VapiAlert] A call failed:", (f as PromiseRejectedResult).reason));
   }
+
+  return anySucceeded;
 }
