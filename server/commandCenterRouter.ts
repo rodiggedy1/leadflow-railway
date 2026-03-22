@@ -1525,8 +1525,31 @@ Respond in JSON with this exact schema:
         return `+${digits}`;
       };
 
-      // Build a map of phone → last campaign SMS date from reactivationContacts
-      // (all-time, not just 7 days, so we can show it in the recipient preview table)
+      // Build a map of phone → last campaign SMS date.
+      // PRIMARY source: conversation_sessions with leadSource LIKE 'campaign:%'
+      // This is written immediately when fireCampaign sends each SMS, so it's
+      // always up-to-date even before reactivationContacts logging completes.
+      // FALLBACK: reactivationContacts.sentAt for older campaigns.
+      const lastCampaignSmsMap = new Map<string, Date>();
+
+      // 1. Load from conversation_sessions (most reliable — written per-send)
+      const campaignSessionRows = await db
+        .select({
+          phone: conversationSessions.leadPhone,
+          createdAt: conversationSessions.createdAt,
+        })
+        .from(conversationSessions)
+        .where(sql`${conversationSessions.leadSource} LIKE ${'campaign:%'}`)
+        .orderBy(sql`${conversationSessions.createdAt} DESC`);
+
+      for (const row of campaignSessionRows) {
+        const e164 = normalizePhoneLocal(row.phone);
+        if (e164 && !lastCampaignSmsMap.has(e164)) {
+          lastCampaignSmsMap.set(e164, row.createdAt as Date);
+        }
+      }
+
+      // 2. Fallback: reactivationContacts.sentAt for phones not found above
       const allCampaignedRows = await db
         .select({
           phone: reactivationContacts.phone,
@@ -1536,7 +1559,6 @@ Respond in JSON with this exact schema:
         .where(isNotNull(reactivationContacts.sentAt))
         .orderBy(sql`${reactivationContacts.sentAt} DESC`);
 
-      const lastCampaignSmsMap = new Map<string, Date>();
       for (const row of allCampaignedRows) {
         const e164 = normalizePhoneLocal(row.phone);
         if (e164 && !lastCampaignSmsMap.has(e164)) {
@@ -2038,6 +2060,46 @@ Respond in JSON with this exact schema:
       // 12s per message → remaining * 12 / 60 minutes
       const estimatedMinutesLeft = remaining > 0 ? Math.ceil((remaining * 12) / 60) : 0;
       return { sent, total: input.totalExpected, remaining, estimatedMinutesLeft, done: remaining === 0 };
+    }),
+
+  /**
+   * getTodayCampaignStatus — returns all campaigns sent today so the AI Center
+   * can show a "Today's Campaign" banner to prevent duplicate sends.
+   * Uses conversation_sessions as source of truth (written per-send).
+   */
+  getTodayCampaignStatus: adminAgentProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+
+      // Start of today in UTC
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+
+      // Group sessions by campaignId (extract from leadSource 'campaign:{id}')
+      const rows = await db
+        .select({
+          leadSource: conversationSessions.leadSource,
+          count: sql<number>`COUNT(*)`,
+          firstSent: sql<Date>`MIN(${conversationSessions.createdAt})`,
+          lastSent: sql<Date>`MAX(${conversationSessions.createdAt})`,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            sql`${conversationSessions.leadSource} LIKE ${'campaign:%'}`,
+            gte(conversationSessions.createdAt, todayStart)
+          )
+        )
+        .groupBy(conversationSessions.leadSource)
+        .orderBy(sql`MIN(${conversationSessions.createdAt}) DESC`);
+
+      return rows.map(r => ({
+        campaignId: (r.leadSource ?? '').replace('campaign:', ''),
+        sentCount: Number(r.count),
+        firstSent: r.firstSent,
+        lastSent: r.lastSent,
+      }));
     }),
 
   /**

@@ -2120,3 +2120,8 @@
 - [x] Fix getCampaignHistory replyCount query (wrong leadSource filter)
 - [x] Fix failure detection in fireCampaign (sendSms returns success:false silently)
 - [x] Add sessionCount to getCampaignHistory so we can see how many sessions were created
+
+## Campaign Visibility Fixes — March 22
+- [x] Fix "Last Campaign SMS: Never" — use conversation_sessions as source of truth (reactivationContacts logging is post-fire, not pre-fire)
+- [x] Add "Today's Campaign" status banner at top of AI Center showing campaigns already sent today with sent count and time
+- [x] Auto-refresh recipient list after campaign fires so Last Campaign SMS updates immediately

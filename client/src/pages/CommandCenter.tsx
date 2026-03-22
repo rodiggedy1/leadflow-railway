@@ -607,6 +607,10 @@ export default function CommandCenter() {
     undefined,
     { staleTime: 60_000 }
   );
+  const todayCampaignQuery = trpc.commandCenter.getTodayCampaignStatus.useQuery(
+    undefined,
+    { staleTime: 30_000, refetchInterval: 30_000 } // refresh every 30s
+  );
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const executeLeadAction = trpc.commandCenter.executeLeadAction.useMutation();
@@ -917,6 +921,34 @@ export default function CommandCenter() {
         </div>
 
         {/* ── Outbound Campaigns ───────────────────────────────────────────── */}
+        {/* ── Today's Campaign Status Banner ──────────────────────────────── */}
+        {todayCampaignQuery.data && todayCampaignQuery.data.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-900">Campaigns already sent today</p>
+                <p className="text-xs text-amber-700 mt-0.5">These leads were already messaged — they are excluded from today's recipient lists.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {todayCampaignQuery.data.map(c => (
+                    <div key={c.campaignId} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-lg px-3 py-1.5">
+                      <Send className="w-3 h-3 text-amber-500" />
+                      <span className="text-xs font-medium text-amber-900 capitalize">{c.campaignId.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-amber-600">— {c.sentCount} sent</span>
+                      <span className="text-xs text-amber-400">
+                        {new Date(c.firstSent).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                        {c.firstSent !== c.lastSent && ` – ${new Date(c.lastSent).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
