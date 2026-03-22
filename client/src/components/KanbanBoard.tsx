@@ -379,32 +379,16 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
   );
 
   const [localStages, setLocalStages] = useState<Record<number, string>>({});
-  const [dateFilter, setDateFilter] = useState<"today" | "week" | "month">("today");
 
   const effectiveLeads = useMemo(() =>
     leads.map(l => localStages[l.id] ? { ...l, stage: localStages[l.id] } : l),
     [leads, localStages]
   );
 
-  const filteredLeads = useMemo(() => {
-    const now = new Date();
-    const cutoff = new Date();
-    if (dateFilter === "today") {
-      cutoff.setHours(0, 0, 0, 0);
-    } else if (dateFilter === "week") {
-      cutoff.setDate(now.getDate() - 7);
-      cutoff.setHours(0, 0, 0, 0);
-    } else {
-      cutoff.setDate(now.getDate() - 30);
-      cutoff.setHours(0, 0, 0, 0);
-    }
-    return effectiveLeads.filter(l => new Date(l.createdAt) >= cutoff);
-  }, [effectiveLeads, dateFilter]);
-
   const columnLeads = useMemo(() => {
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
-    filteredLeads.forEach(lead => {
+    effectiveLeads.forEach(lead => {
       const colId = STAGE_TO_COLUMN[lead.stage];
       if (colId) {
         map[colId].push(lead);
@@ -412,7 +396,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
       // Dead/cold leads are not shown in the pipeline
     });
     return map;
-  }, [filteredLeads]);
+  }, [effectiveLeads]);
 
   const activeLead = useMemo(() =>
     activeId ? effectiveLeads.find(l => String(l.id) === activeId) ?? null : null,
@@ -466,41 +450,8 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     );
   }
 
-  const filterOptions: { key: "today" | "week" | "month"; label: string }[] = [
-    { key: "today", label: "Today" },
-    { key: "week", label: "This Week" },
-    { key: "month", label: "This Month" },
-  ];
-
   return (
     <div>
-      {/* Pipeline header */}
-      <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Lead Pipeline</h2>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: "#a3e635", color: "#000" }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
-            Live
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          {filterOptions.map(f => (
-            <button
-              key={f.key}
-              onClick={() => setDateFilter(f.key)}
-              className="px-4 py-1.5 rounded-full text-xs font-semibold transition-all border"
-              style={
-                dateFilter === f.key
-                  ? { backgroundColor: "#a3e635", color: "#000", borderColor: "#a3e635" }
-                  : { backgroundColor: "transparent", color: "#6b7280", borderColor: "#d1d5db" }
-              }
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
