@@ -562,6 +562,8 @@ export default function CommandCenter() {
     }>;
   } | null>(null);
   const [campaignFiring, setCampaignFiring] = useState(false);
+  const [campaignFireStartedAt, setCampaignFireStartedAt] = useState<number | null>(null);
+  const [campaignProgressSent, setCampaignProgressSent] = useState(0);
   const [editedScript, setEditedScript] = useState<string>("");
   const [testPhone, setTestPhone] = useState<string>("");
   const [testName, setTestName] = useState<string>("Test");
@@ -683,7 +685,15 @@ export default function CommandCenter() {
   const handleFireCampaign = useCallback(async () => {
     if (!campaignConfirm) return;
     const scriptToSend = editedScript.trim() || campaignConfirm.script;
+    const total = campaignConfirm.recipientCount;
+    const startedAt = Date.now();
     setCampaignFiring(true);
+    setCampaignFireStartedAt(startedAt);
+    setCampaignProgressSent(0);
+    // Client-side tick: increment estimated sent count every 12s
+    const tickInterval = setInterval(() => {
+      setCampaignProgressSent(prev => Math.min(prev + 1, total));
+    }, 12_000);
     try {
       const result = await fireCampaignMutation.mutateAsync({
         campaignId: campaignConfirm.id,
@@ -694,6 +704,7 @@ export default function CommandCenter() {
         targetPhones: campaignConfirm.targetPhones,
         script: scriptToSend,
       });
+      setCampaignProgressSent(result.sent);
       toast.success(`Campaign sent! ${result.sent} messages delivered${result.failed > 0 ? `, ${result.failed} failed` : ""}`);
       setCampaignConfirm(null);
       setEditedScript("");
@@ -702,7 +713,9 @@ export default function CommandCenter() {
     } catch {
       toast.error("Campaign failed — check logs");
     } finally {
+      clearInterval(tickInterval);
       setCampaignFiring(false);
+      setCampaignFireStartedAt(null);
     }
   }, [campaignConfirm, editedScript, fireCampaignMutation, campaignsQuery]);
 
@@ -1172,10 +1185,43 @@ export default function CommandCenter() {
                     </div>
                   </div>
                 )}
-                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-gray-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-gray-600">This will immediately send SMS messages to all {campaignConfirm.recipientCount} leads. This action cannot be undone.</p>
-                </div>
+                {/* Progress indicator — shown while firing */}
+                {campaignFiring ? (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                        <span className="font-semibold text-blue-900">Sending campaign…</span>
+                      </div>
+                      <span className="text-blue-700 font-mono text-sm">
+                        {campaignProgressSent} / {campaignConfirm.recipientCount}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 bg-blue-500 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round((campaignProgressSent / Math.max(campaignConfirm.recipientCount, 1)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-blue-600">
+                      <span>5 messages/min — carrier-safe rate</span>
+                      <span>
+                        {campaignProgressSent < campaignConfirm.recipientCount
+                          ? `~${Math.ceil(((campaignConfirm.recipientCount - campaignProgressSent) * 12) / 60)} min left`
+                          : "Finishing up…"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-blue-500">Do not close this window. Replies will appear in the Leads drawer as they come in.</p>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-gray-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-gray-600">
+                      This will send SMS messages to {campaignConfirm.recipientCount} leads at 5/min (~{Math.ceil((campaignConfirm.recipientCount * 12) / 60)} min total). This action cannot be undone.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             <DialogFooter className="gap-2">

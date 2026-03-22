@@ -2102,3 +2102,8 @@
 
 ## Reactivation Auto-Reply Disabled — March 22
 - [x] Disable auto-reply SMS for REACTIVATION/REACTIVATION_TIME stages — log reply but send nothing back
+
+## Campaign Send Rate + Progress Indicator — March 22
+- [x] Update fireCampaign send delay from 150ms to 12s (5 messages/minute)
+- [x] Add getCampaignProgress tRPC query returning sent/total/remaining/estimatedMinutes
+- [x] Add live progress bar + countdown to AI Center Fire Campaign UI (polls every 5s while firing)

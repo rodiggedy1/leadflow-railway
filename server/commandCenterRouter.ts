@@ -1874,8 +1874,9 @@ Respond in JSON with this exact schema:
               console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
             }
           }
-          // Small delay to avoid rate limiting
-          await new Promise(r => setTimeout(r, 150));
+          // Stagger sends at 12s intervals (5/min) to avoid carrier burst-detection
+          // and OpenPhone rate limits. 50 contacts ≈ 10 minutes total.
+          await new Promise(r => setTimeout(r, 12_000));
         } catch (err) {
           failed++;
           errors.push(`${target.phone}: ${String(err)}`);
@@ -1960,6 +1961,49 @@ Respond in JSON with this exact schema:
       );
 
       return enriched;
+    }),
+
+  /**
+   * getCampaignProgress — returns live send progress for a campaign blast.
+   * Used by the progress indicator while fireCampaign is running.
+   * Returns sent/total/remaining/estimatedMinutesLeft based on reactivationContacts.
+   */
+  getCampaignProgress: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.string(),
+      totalExpected: z.number().int().min(1),
+      startedAt: z.number(), // Unix ms timestamp when firing started
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { sent: 0, total: input.totalExpected, remaining: input.totalExpected, estimatedMinutesLeft: null, done: false };
+
+      // Count sessions created after startedAt with this campaign source
+      const since = new Date(input.startedAt);
+      const [row] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(conversationSessions)
+        .where(
+          and(
+            sql`${conversationSessions.leadSource} LIKE ${`campaign:${input.campaignId}%`}`,
+            gte(conversationSessions.createdAt, since)
+          )
+        );
+      // Also count command-center blasts (phone-only targets use leadSource='command-center')
+      const [row2] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.leadSource, `campaign:${input.campaignId}`),
+            gte(conversationSessions.createdAt, since)
+          )
+        );
+      const sent = Math.min(Number(row?.count ?? 0) + Number(row2?.count ?? 0), input.totalExpected);
+      const remaining = Math.max(0, input.totalExpected - sent);
+      // 12s per message → remaining * 12 / 60 minutes
+      const estimatedMinutesLeft = remaining > 0 ? Math.ceil((remaining * 12) / 60) : 0;
+      return { sent, total: input.totalExpected, remaining, estimatedMinutesLeft, done: remaining === 0 };
     }),
 
   /**
