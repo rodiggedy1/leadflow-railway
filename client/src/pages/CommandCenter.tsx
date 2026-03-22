@@ -43,6 +43,7 @@ import {
   PhoneCall,
   RotateCcw,
   Calendar,
+  X,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -901,7 +902,12 @@ export default function CommandCenter() {
                 {/* Recipient detail table */}
                 {campaignConfirm.recipients && campaignConfirm.recipients.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-2">Recipients ({campaignConfirm.recipients.length})</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-gray-500">Recipients ({campaignConfirm.recipients.length})</p>
+                      {campaignConfirm.recipients.length < (campaignConfirm.totalPoolSize ?? campaignConfirm.recipientCount) && (
+                        <span className="text-xs text-gray-400">{(campaignConfirm.totalPoolSize ?? campaignConfirm.recipientCount) - campaignConfirm.recipients.length} excluded</span>
+                      )}
+                    </div>
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="max-h-52 overflow-y-auto">
                         <table className="w-full text-xs">
@@ -912,11 +918,12 @@ export default function CommandCenter() {
                               <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Frequency</th>
                               <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Last Booking</th>
                               <th className="text-left px-3 py-2 font-semibold text-gray-500 border-b border-gray-200">Last Campaign SMS</th>
+                              <th className="w-8 border-b border-gray-200"></th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-100">
                             {campaignConfirm.recipients.map((r, i) => (
-                              <tr key={i} className="hover:bg-gray-50">
+                              <tr key={i} className="hover:bg-gray-50 group">
                                 <td className="px-3 py-2 text-gray-900 font-medium">{r.name}</td>
                                 <td className="px-3 py-2 text-gray-600">{r.phone}</td>
                                 <td className="px-3 py-2 text-gray-600">{r.frequency ?? <span className="text-gray-300">—</span>}</td>
@@ -929,6 +936,31 @@ export default function CommandCenter() {
                                   {r.lastCampaignSmsDate
                                     ? new Date(r.lastCampaignSmsDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                                     : <span className="text-gray-400 italic">Never</span>}
+                                </td>
+                                <td className="px-2 py-2 text-right">
+                                  <button
+                                    type="button"
+                                    disabled={campaignFiring}
+                                    onClick={() => {
+                                      const phoneToRemove = r.phone;
+                                      setCampaignConfirm(prev => {
+                                        if (!prev) return prev;
+                                        const newRecipients = prev.recipients.filter((_, idx) => idx !== i);
+                                        return {
+                                          ...prev,
+                                          recipients: newRecipients,
+                                          recipientCount: newRecipients.length,
+                                          targetPhones: prev.targetPhones.filter(p => p !== phoneToRemove),
+                                          targetLeadIds: prev.targetLeadIds, // unchanged for funnel leads
+                                          estimatedRevenue: newRecipients.length * (prev.estimatedRevenue / Math.max(prev.recipientCount, 1)),
+                                        };
+                                      });
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 disabled:opacity-0 p-0.5 rounded"
+                                    title="Remove from this blast"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
                                 </td>
                               </tr>
                             ))}

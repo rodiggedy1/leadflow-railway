@@ -2016,3 +2016,6 @@
 ## Campaign Popup Recipient Details — March 22
 - [x] Backend: include recipient detail array in campaign cards (name, phone, frequency, lastBookingDate, lastCampaignSmsDate)
 - [x] UI: show scrollable recipient table in confirmation dialog (name, number, frequency, last booking, last campaign SMS)
+
+## Recipient Row Removal — March 22
+- [x] Add ✕ button on each recipient row in confirmation dialog to exclude individuals before sending; update recipient count and targetPhones/targetLeadIds live
