@@ -2169,7 +2169,7 @@ export default function AdminDashboard() {
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
-  const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("today");
+  const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("month");
 
   // Compute the active date range to send to the backend
   const dateRange = useMemo(() => {
