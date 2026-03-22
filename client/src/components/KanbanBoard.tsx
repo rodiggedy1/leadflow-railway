@@ -157,7 +157,7 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none transition-all ${
+      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none transition-all flex flex-col h-[130px] ${
         isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
@@ -167,7 +167,7 @@ function LeadCard({
       }}
     >
       {/* Top row: name + menu */}
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2 flex-shrink-0">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
           {lead.serviceType && (
@@ -184,7 +184,7 @@ function LeadCard({
       </div>
 
       {/* Price row */}
-      <div className="flex items-center justify-between mt-2.5">
+      <div className="flex items-center justify-between flex-1 mt-1">
         {total > 0 ? (
           <span className="text-base font-bold" style={{ color: "#16a34a" }}>${total}</span>
         ) : (
@@ -204,7 +204,7 @@ function LeadCard({
       </div>
 
       {/* Footer: source + time */}
-      <div className="flex items-center justify-between mt-2">
+      <div className="flex items-center justify-between flex-shrink-0">
         <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
           {srcIcon}
           {srcLabel}
