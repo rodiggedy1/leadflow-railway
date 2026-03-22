@@ -166,6 +166,7 @@ Service type multiplier — apply AFTER adding bathroom surcharge:
 
 Worked examples (memorize these):
 - 1 bed / 1 bath / Standard = $119
+- 1 bed / 2 bath / Standard = $119 + $30 = $149
 - 2 bed / 1 bath / Standard = $209
 - 3 bed / 2 bath / Standard = $229 + $30 = $259
 - 3 bed / 2 bath / Deep = $259 × 1.5 = $389
