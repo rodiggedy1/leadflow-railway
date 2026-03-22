@@ -1053,6 +1053,18 @@ function ConversationDrawer({
   });
   const loadedNotes = notesData?.notes ?? "";
 
+  // Customer history from completed_jobs (for campaign leads)
+  const isCampaignLead = !!(session.leadSource && (
+    session.leadSource.startsWith("campaign:") ||
+    session.leadSource === "reactivation" ||
+    session.leadSource === "command-center" ||
+    session.leadSource.startsWith("always-on")
+  ));
+  const { data: customerHistory } = trpc.leads.getCustomerHistory.useQuery(
+    { phone: session.leadPhone },
+    { enabled: isCampaignLead, staleTime: 60_000 }
+  );
+
   // Follow-up scheduling
   const DEFAULT_FOLLOWUP_MSG = "Hi, just circling back on this. We have some availability and would love to get you scheduled!";
   const [followUpDate, setFollowUpDate] = useState(session.followUpDate ?? "");
@@ -1230,6 +1242,55 @@ function ConversationDrawer({
 
           {/* RIGHT: lead details panel */}
           <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
+
+            {/* Customer History panel — shown for campaign/reactivation leads with completed_jobs data */}
+            {isCampaignLead && customerHistory && (
+              <div className="px-4 py-4 border-b bg-indigo-50">
+                <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wide mb-3">Customer History</p>
+                <div className="space-y-2 text-sm">
+                  {/* Full name */}
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 shrink-0">Full Name</span>
+                    <span className="font-semibold text-right text-gray-900">{customerHistory.name ?? customerHistory.firstName ?? "—"}</span>
+                  </div>
+                  {/* Last booking price */}
+                  {customerHistory.lastBookingPrice != null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 shrink-0">Last Price</span>
+                      <span className="font-semibold" style={{ color: "#E8603C" }}>${customerHistory.lastBookingPrice}</span>
+                    </div>
+                  )}
+                  {/* Last service date */}
+                  {customerHistory.jobDate && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 shrink-0">Last Service</span>
+                      <span className="font-medium text-right text-xs text-gray-700">{customerHistory.jobDate}</span>
+                    </div>
+                  )}
+                  {/* Service type */}
+                  {customerHistory.serviceType && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 shrink-0">Service Type</span>
+                      <span className="font-medium text-right text-xs truncate max-w-[55%]">{customerHistory.serviceType}</span>
+                    </div>
+                  )}
+                  {/* Frequency */}
+                  {customerHistory.frequency && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 shrink-0">Frequency</span>
+                      <span className="font-medium text-right text-xs">{customerHistory.frequency}</span>
+                    </div>
+                  )}
+                  {/* Address */}
+                  {customerHistory.address && (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-500 text-xs">Address</span>
+                      <span className="font-medium text-xs leading-snug text-gray-800">{customerHistory.address}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Lead info */}
             <div className="px-4 py-4 border-b">

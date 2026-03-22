@@ -2134,3 +2134,13 @@
 ## Bug Fixes — March 22 (Evening)
 - [x] Fix duplicate inbound messages — idempotency guard (claimed check) was reading wrong affectedRows path from Drizzle mysql2 result; fixed + added content+timestamp dedup as belt-and-suspenders
 - [ ] Fix campaign data pull — recent customers (service within 14 days) should be excluded from reactivation campaign
+
+## Campaign Lead Drawer Enrichment — March 22
+- [ ] Extend getLeads / session detail query to JOIN reactivationContacts and completed_jobs for campaign leads
+- [ ] Surface full customer name, address, and last booking price in leads drawer for campaign sessions
+- [ ] Show a "Customer Info" panel at the top of the drawer (name, address, last price, last service date)
+
+## Campaign Lead Drawer Enrichment — March 22
+- [x] Add leads.getCustomerHistory tRPC procedure (queries completed_jobs by phone)
+- [x] Show Customer History panel in ConversationDrawer for campaign/reactivation leads
+- [x] Display: full name, last price, last service date, service type, frequency, address

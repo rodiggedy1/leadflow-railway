@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, isNull, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -1056,6 +1056,35 @@ export const appRouter = router({
         pendingFollowUps,
       };
     }),
+
+    /**
+     * leads.getCustomerHistory — returns the most recent completed_jobs row for a phone number.
+     * Used by the ConversationDrawer to show full customer info (name, address, last price)
+     * for campaign leads whose conversation_sessions don't carry that data.
+     */
+    getCustomerHistory: publicProcedure
+      .input(z.object({ phone: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        // Find the most recent completed job for this phone
+        const rows = await db
+          .select({
+            id: completedJobs.id,
+            name: completedJobs.name,
+            firstName: completedJobs.firstName,
+            address: completedJobs.address,
+            lastBookingPrice: completedJobs.lastBookingPrice,
+            jobDate: completedJobs.jobDate,
+            serviceType: completedJobs.serviceType,
+            frequency: completedJobs.frequency,
+          })
+          .from(completedJobs)
+          .where(eq(completedJobs.phone, input.phone))
+          .orderBy(desc(completedJobs.jobDate))
+          .limit(1);
+        return rows[0] ?? null;
+      }),
   }),
 
   /**
