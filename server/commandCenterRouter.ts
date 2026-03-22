@@ -1885,3 +1885,260 @@ Respond in JSON with this exact schema:
       return enriched;
     }),
 });
+
+// ─── Background Cache Warm-Up ──────────────────────────────────────────────────
+/**
+ * warmAiInsightsCache — pre-generates and stores AI insights for all three
+ * range keys ("today", "7d", "30d") and conversation intelligence for "30d".
+ *
+ * Called by the internal cron every 30 minutes so users always hit a warm cache
+ * and never wait for LLM calls on page load.
+ */
+export async function warmAiInsightsCache(): Promise<{ warmed: string[]; errors: string[] }> {
+  const db = await getDb();
+  if (!db) return { warmed: [], errors: ["DB unavailable"] };
+
+  const warmed: string[] = [];
+  const errors: string[] = [];
+
+  // ── 1. Warm getAiInsights for all three ranges ─────────────────────────────
+  const ranges: Array<"today" | "7d" | "30d"> = ["today", "7d", "30d"];
+
+  for (const range of ranges) {
+    try {
+      const since = getWindowStart(range);
+
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          stage: conversationSessions.stage,
+          isBooked: conversationSessions.isBooked,
+          quotedPrice: conversationSessions.quotedPrice,
+          extras: conversationSessions.extras,
+          bookedAmount: conversationSessions.bookedAmount,
+          reactivationLastPrice: conversationSessions.reactivationLastPrice,
+          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+          leadSource: conversationSessions.leadSource,
+          utmSource: conversationSessions.utmSource,
+          createdAt: conversationSessions.createdAt,
+          updatedAt: conversationSessions.updatedAt,
+          nudgeCount: conversationSessions.nudgeCount,
+          lastAiMessageAt: conversationSessions.lastAiMessageAt,
+          serviceType: conversationSessions.serviceType,
+        })
+        .from(conversationSessions)
+        .where(and(gte(conversationSessions.createdAt, since), ne(conversationSessions.leadSource, "review")));
+
+      const totalLeads = sessions.length;
+      const booked = sessions.filter(s => s.stage === "BOOKED" || s.isBooked === 1);
+      const cold = sessions.filter(s => s.stage === "COLD" || s.stage === "NOT_INTERESTED");
+      const unhandled = sessions.filter(s => s.stage === "UNHANDLED");
+      const callScheduled = sessions.filter(s => s.stage === "CALL_SCHEDULED");
+      const quoteSent = sessions.filter(s => s.stage === "QUOTE_SENT");
+      const bookedRevenue = booked.reduce((sum, s) => sum + calcRevenue(s), 0);
+
+      const TEN_MIN_MS = 10 * 60 * 1000;
+      const withFirstContact = sessions.filter(s => {
+        if (!s.lastAiMessageAt) return false;
+        const c = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
+        const r = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
+        return (r - c) <= TEN_MIN_MS;
+      });
+      const avgResponseMin = withFirstContact.length > 0
+        ? Math.round(withFirstContact.reduce((sum, s) => {
+            const c = s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime();
+            const r = s.lastAiMessageAt instanceof Date ? s.lastAiMessageAt.getTime() : new Date(s.lastAiMessageAt as unknown as string).getTime();
+            return sum + Math.max(0, (r - c) / 60000);
+          }, 0) / withFirstContact.length)
+        : 0;
+
+      const sourceCount: Record<string, number> = {};
+      const sourceBooked: Record<string, number> = {};
+      for (const s of sessions) {
+        const src = s.utmSource ?? s.leadSource ?? "organic";
+        sourceCount[src] = (sourceCount[src] ?? 0) + 1;
+        if (s.stage === "BOOKED" || s.isBooked === 1) sourceBooked[src] = (sourceBooked[src] ?? 0) + 1;
+      }
+
+      const serviceCount: Record<string, number> = {};
+      for (const s of sessions) {
+        if (s.serviceType) serviceCount[s.serviceType] = (serviceCount[s.serviceType] ?? 0) + 1;
+      }
+
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const reactivationPool = await db
+        .select({ id: conversationSessions.id })
+        .from(conversationSessions)
+        .where(and(
+          gte(conversationSessions.createdAt, ninetyDaysAgo),
+          or(eq(conversationSessions.stage, "COLD" as string), eq(conversationSessions.stage, "NOT_INTERESTED" as string))
+        ));
+
+      // Quick objections LLM call
+      const allSessions = await db
+        .select({ messageHistory: conversationSessions.messageHistory, stage: conversationSessions.stage, isBooked: conversationSessions.isBooked })
+        .from(conversationSessions)
+        .where(and(gte(conversationSessions.createdAt, since), ne(conversationSessions.leadSource, "review")))
+        .limit(200);
+
+      const leadMessages: string[] = [];
+      for (const s of allSessions) {
+        try {
+          const history: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? "[]");
+          for (const msg of history) {
+            if (msg.role === "user" && msg.content && msg.content.trim().length > 5) leadMessages.push(msg.content.trim());
+          }
+        } catch { /* skip */ }
+      }
+
+      let topObjections: Array<{ label: string; pct: number; tip: string; example: string }> = [];
+      let conversationInsight = "";
+      if (leadMessages.length >= 5) {
+        try {
+          const sample = leadMessages.slice(0, 50);
+          const objResponse = await invokeLLM({
+            messages: [
+              { role: "system", content: "You are a sales coach. Respond only with valid JSON." },
+              { role: "user", content: `Analyze these ${sample.length} SMS replies from cleaning service leads and identify the top 3 objections. Respond with JSON: {"objections":[{"label":string,"pct":number,"tip":string,"example":string}],"topInsight":string}\n\n${sample.map((m, i) => `${i + 1}. "${m}"`).join("\n")}` },
+            ],
+            response_format: { type: "json_object" } as any,
+          });
+          const rawObjContent = objResponse?.choices?.[0]?.message?.content ?? "{}";
+          const rawObj = typeof rawObjContent === "string" ? rawObjContent : JSON.stringify(rawObjContent);
+          const parsedObj = JSON.parse(rawObj);
+          topObjections = (parsedObj.objections ?? []).slice(0, 3);
+          conversationInsight = parsedObj.topInsight ?? "";
+        } catch { /* non-blocking */ }
+      }
+
+      const objectionContext = topObjections.length > 0
+        ? `\nTOP OBJECTIONS FROM SMS CONVERSATIONS:\n${topObjections.map(o => `- "${o.label}" (~${o.pct}% of leads): ${o.tip} Example: "${o.example}"`).join("\n")}\nOVERALL CONVERSATION INSIGHT: ${conversationInsight}`
+        : "";
+
+      const metricsContext = `
+BUSINESS: Maids in Black — home cleaning service, Washington DC Metro Area.
+PERIOD: ${range === "today" ? "Today" : range === "7d" ? "Last 7 days" : "Last 30 days"}
+KEY METRICS:
+- Total new leads: ${totalLeads}
+- Booked jobs: ${booked.length} (${totalLeads > 0 ? Math.round((booked.length / totalLeads) * 100) : 0}% conversion)
+- Revenue booked: $${bookedRevenue.toLocaleString()}
+- Avg first response time: ${avgResponseMin} minutes
+- Leads with no reply (COLD): ${cold.length}
+- Unhandled/needs review: ${unhandled.length}
+- Call scheduled (hot): ${callScheduled.length}
+- Quote sent, no reply yet: ${quoteSent.length}
+- Reactivation pool (last 90 days cold): ${reactivationPool.length} leads
+LEAD SOURCES: ${JSON.stringify(sourceCount)}
+BOOKED BY SOURCE: ${JSON.stringify(sourceBooked)}
+SERVICE TYPES: ${JSON.stringify(serviceCount)}${objectionContext}`.trim();
+
+      const response = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are an AI business analyst specializing in residential home cleaning companies. Analyze the metrics and return a JSON object with exactly this structure: {"pulse":[{"type":string,"title":string,"body":string,"metric":string,"action":string,"linkStage":string}],"actionFeed":[{"id":string,"title":string,"description":string,"estimatedValue":string,"actionType":string,"urgency":string,"linkStage":string}]}. Rules: pulse has exactly 3 cards; actionFeed has 4-6 items sorted by urgency; be specific with numbers; compare to home cleaning benchmarks (15-25% conversion is average, 30%+ is good).`,
+          },
+          { role: "user", content: metricsContext },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "ai_insights_warmup",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                pulse: { type: "array", items: { type: "object", properties: { type: { type: "string" }, title: { type: "string" }, body: { type: "string" }, metric: { type: "string" }, action: { type: "string" }, linkStage: { type: "string" } }, required: ["type", "title", "body", "metric", "action", "linkStage"], additionalProperties: false } },
+                actionFeed: { type: "array", items: { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, description: { type: "string" }, estimatedValue: { type: "string" }, actionType: { type: "string" }, urgency: { type: "string" }, linkStage: { type: "string" } }, required: ["id", "title", "description", "estimatedValue", "actionType", "urgency", "linkStage"], additionalProperties: false } },
+              },
+              required: ["pulse", "actionFeed"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const rawContent = response.choices?.[0]?.message?.content;
+      const content = typeof rawContent === "string" ? rawContent : null;
+      if (!content) throw new Error("No LLM response");
+      const parsed = JSON.parse(content);
+
+      // Upsert into aiInsightsCache
+      const existing = await db.select().from(aiInsightsCache).where(eq(aiInsightsCache.rangeKey, range)).limit(1);
+      const payload = JSON.stringify(parsed);
+      if (existing[0]) {
+        await db.update(aiInsightsCache).set({ payload, generatedAt: new Date() }).where(eq(aiInsightsCache.rangeKey, range));
+      } else {
+        await db.insert(aiInsightsCache).values({ rangeKey: range, payload, generatedAt: new Date() });
+      }
+      warmed.push(`ai_insights:${range}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`ai_insights:${range}: ${msg}`);
+      console.error(`[WarmCache] ai_insights:${range} failed:`, msg);
+    }
+  }
+
+  // ── 2. Warm getConversationIntelligence for "30d" ─────────────────────────
+  try {
+    const since = getWindowStart("30d");
+    const sessions = await db
+      .select({ id: conversationSessions.id, stage: conversationSessions.stage, messageHistory: conversationSessions.messageHistory, isBooked: conversationSessions.isBooked })
+      .from(conversationSessions)
+      .where(and(gte(conversationSessions.createdAt, since), ne(conversationSessions.leadSource, "review")))
+      .limit(200);
+
+    const leadMessages: string[] = [];
+    for (const s of sessions) {
+      try {
+        const history: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? "[]");
+        for (const msg of history) {
+          if (msg.role === "user" && msg.content && msg.content.trim().length > 5) leadMessages.push(msg.content.trim());
+        }
+      } catch { /* skip */ }
+    }
+
+    if (leadMessages.length > 0) {
+      const sample = leadMessages.slice(0, 150);
+      const totalLeads = sessions.length;
+      const bookedCount = sessions.filter(s => s.isBooked === 1 || s.stage === "BOOKED").length;
+
+      const prompt = `You are a sales coach analyzing SMS conversations for Maids in Black, a cleaning service in Washington DC.\n\nHere are ${sample.length} inbound messages from leads:\n\n${sample.map((m, i) => `${i + 1}. "${m}"`).join("\n")}\n\nContext: ${totalLeads} leads total, ${bookedCount} booked (${totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0}% conversion).\n\nIdentify the top 5 objections. Respond in JSON: {"objections":[{"label":string,"pct":number,"tip":string,"example":string}],"topInsight":string}`;
+
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are a sales coach. Respond only with valid JSON." },
+          { role: "user", content: prompt },
+        ],
+        response_format: { type: "json_object" } as any,
+      });
+
+      const rawContent = response?.choices?.[0]?.message?.content ?? "{}";
+      const raw = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+      const parsed = JSON.parse(raw);
+      const result = {
+        objections: (parsed.objections ?? []).slice(0, 5),
+        topInsight: parsed.topInsight ?? "",
+        totalMessagesAnalyzed: sample.length,
+      };
+
+      const payload = JSON.stringify(result);
+      const existing = await db.select().from(commandCenterCache)
+        .where(and(eq(commandCenterCache.cacheKey, "conv_intel"), eq(commandCenterCache.rangeKey, "30d"))).limit(1);
+      if (existing[0]) {
+        await db.update(commandCenterCache).set({ payload, generatedAt: new Date() })
+          .where(and(eq(commandCenterCache.cacheKey, "conv_intel"), eq(commandCenterCache.rangeKey, "30d")));
+      } else {
+        await db.insert(commandCenterCache).values({ cacheKey: "conv_intel", rangeKey: "30d", payload, generatedAt: new Date() });
+      }
+      warmed.push("conv_intel:30d");
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`conv_intel:30d: ${msg}`);
+    console.error("[WarmCache] conv_intel:30d failed:", msg);
+  }
+
+  return { warmed, errors };
+}

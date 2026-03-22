@@ -188,6 +188,13 @@ function LeadCard({
 
   const total = computeTotal(lead.quotedPrice, lead.extras);
   const { label: srcLabel, icon: srcIcon } = getSourceInfo(lead.leadSource);
+
+  // Urgency glow — based on idle time since last activity (or creation if no activity)
+  const activityDate = lead.lastActivityAt ?? lead.createdAt;
+  const idleMs = activityDate ? Date.now() - new Date(activityDate).getTime() : 0;
+  const isOverdue48h = lead.stage !== "BOOKED" && idleMs > 48 * 60 * 60 * 1000;
+  const isOverdue24h = lead.stage !== "BOOKED" && !isOverdue48h && idleMs > 24 * 60 * 60 * 1000;
+  const showUrgency = isOverdue24h || isOverdue48h;
   const firstName = lead.leadName?.split(" ")[0] ?? "Unknown";
   const lastName = lead.leadName?.split(" ").slice(1).join(" ");
   const displayName = lastName ? `${firstName} ${lastName[0]}.` : firstName;
@@ -212,8 +219,12 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none flex flex-col h-[130px] ${
-        isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md hover:border-gray-300"
+      className={`group bg-white rounded-xl border p-3.5 cursor-grab active:cursor-grabbing select-none flex flex-col h-[130px] relative overflow-hidden ${
+        isOverdue48h ? "border-red-300" :
+        isOverdue24h ? "border-amber-300" :
+        "border-gray-200"
+      } ${
+        isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md"
       }`}
       onClick={(e) => {
         if (isCurrentlyDragging) return;
@@ -221,6 +232,15 @@ function LeadCard({
         onClick?.();
       }}
     >
+      {/* Urgency left-border accent bar */}
+      {showUrgency && (
+        <div
+          className={`absolute left-0 top-0 bottom-0 w-[3px] ${
+            isOverdue48h ? "bg-red-400" : "bg-amber-400"
+          }`}
+        />
+      )}
+
       {/* Top row: avatar + name + menu */}
       <div className="flex items-start justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">

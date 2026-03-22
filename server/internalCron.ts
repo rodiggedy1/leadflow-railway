@@ -22,6 +22,7 @@ import { runSilenceFollowUp, runScheduledFollowUp } from "./followUpCron";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
+import { warmAiInsightsCache } from "./commandCenterRouter";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 
@@ -194,10 +195,28 @@ export function startInternalCron(): void {
   // }, { timezone: "America/New_York" });
   console.log("[InternalCron] TrackerLinkSend: DISABLED (testing mode)");
 
+  // ── AI Insights cache warm-up: every 30 minutes ─────────────────────────────
+  // Pre-generates LLM insights so the AI Center page always loads instantly.
+  // Runs at :00 and :30 of every hour.
+  cron.schedule("0 0,30 * * * *", async () => {
+    const start = Date.now();
+    try {
+      const result = await warmAiInsightsCache();
+      const summary = `warmed: [${result.warmed.join(", ")}], errors: ${result.errors.length}`;
+      console.log(`[InternalCron] AiCacheWarmUp — ${summary} (${Date.now() - start}ms)`);
+      await recordHeartbeat("ai-cache-warmup", summary, result.warmed.length > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] AiCacheWarmUp failed:", msg);
+      await recordHeartbeat("ai-cache-warmup", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
   console.log("  - NightlySync:        12:00 PM ET daily");
   console.log("  - AlwaysOnSend:       10 AM ET Mon-Sat (gated by isActive flag)");
   console.log("  - TrackerLinkSend:    8 AM ET daily");
+  console.log("  - AiCacheWarmUp:      every 30 minutes");
 }
