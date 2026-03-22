@@ -599,7 +599,7 @@ export default function CommandCenter() {
   );
   const campaignsQuery = trpc.commandCenter.getTomorrowCampaigns.useQuery(
     undefined,
-    { staleTime: 300_000 }
+    { staleTime: 0 } // Always re-fetch so saved scripts are immediately reflected
   );
   const campaignHistoryQuery = trpc.commandCenter.getCampaignHistory.useQuery(
     undefined,
@@ -610,11 +610,19 @@ export default function CommandCenter() {
   const executeLeadAction = trpc.commandCenter.executeLeadAction.useMutation();
   const executeBulkAction = trpc.commandCenter.executeBulkAction.useMutation();
   const fireCampaignMutation = trpc.commandCenter.fireCampaign.useMutation();
+  const utils = trpc.useUtils();
   const saveScriptMutation = trpc.commandCenter.saveCampaignScript.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setScriptSaved(true);
       setTimeout(() => setScriptSaved(false), 2500);
-      toast.success("Script saved");
+      toast.success("Script saved — this is now the default for this campaign");
+      // Update the campaignConfirm state so the script is already correct if dialog is closed and reopened
+      setCampaignConfirm(prev => prev && prev.id === variables.campaignId
+        ? { ...prev, script: variables.script }
+        : prev
+      );
+      // Invalidate campaigns query so the saved script is loaded on next open
+      void utils.commandCenter.getTomorrowCampaigns.invalidate();
     },
     onError: () => toast.error("Failed to save script"),
   });

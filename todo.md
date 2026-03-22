@@ -2070,3 +2070,6 @@
 - [x] Add test name field to Send Test so {{name}} is replaced with entered name
 - [x] Persist saved script: load from DB when opening confirm dialog
 - [x] Fix recipient sort — 2026 bookings must appear first (removed daily offset, always top 50 by recency)
+
+## SMS Save Script Persistence Fix — March 22
+- [x] Fix: saved script must persist permanently across dialog close/reopen and page refresh
