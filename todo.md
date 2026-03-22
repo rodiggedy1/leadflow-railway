@@ -2003,3 +2003,6 @@
 ## Campaign Cap + Logging — March 22
 - [x] Cap Re-engage Cold Leads at 50 by default; backend returns totalLapsed count so UI can show "expand to send all N"
 - [x] Log every fireCampaign send to reactivationContacts so the 7-day recency filter catches Command Center blasts too
+
+## Tomorrow Slots Recipients — March 22
+- [x] Fill Tomorrow Open Slots: retarget to lapsed past customers (same completedJobs pool as Re-engage, different urgency script)

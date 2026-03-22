@@ -1357,10 +1357,13 @@ Respond in JSON with this exact schema:
         !recentPhoneDigits.has(normalizePhone(lead.phone));
 
       // Segment leads for each campaign type (applying recency filter)
-      const tomorrowTargets = stalledLeads.filter(notRecentlyCampaigned).slice(0, 30);
+      // Campaign 1 (Tomorrow Slots) & Campaign 2 (Re-engage) both draw from the lapsed
+      // past-customer pool. Campaign 1 uses a different urgency script focused on the
+      // open slot; Campaign 2 uses a softer check-in script.
       const coldFiltered = coldLeads.filter(notRecentlyCampaigned);
       const totalLapsed = coldFiltered.length; // full pool count for UI display
-      const coldOnly = coldFiltered.slice(0, 50); // default cap: send to top 50 most recent lapsers
+      const tomorrowTargets = coldFiltered.slice(0, 50); // top 50 lapsed for tomorrow blast
+      const coldOnly = coldFiltered.slice(0, 50); // same cap for re-engage card
       const stalledFunnelLeads = stalledLeads
         .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
         .filter(notRecentlyCampaigned)
@@ -1382,20 +1385,23 @@ Respond in JSON with this exact schema:
         targetPhones: string[]; // for lapsed customers who have no session id
         hasLeads: boolean;
       }> = [
-        // Campaign 1: Fill Tomorrow's Open Slots
+        // Campaign 1: Fill Tomorrow's Open Slots — targets lapsed past customers
+        // with an urgency script about the open slot tomorrow.
         {
           id: "tomorrow_slots",
           type: "tomorrow_slots",
           title: `Fill Tomorrow's Open Slots`,
-          subtitle: scheduleNote,
+          subtitle: tomorrowTargets.length > 0
+            ? `${scheduleNote} Reaching out to ${tomorrowTargets.length} past customers.`
+            : scheduleNote,
           urgency: openSlots >= 4 ? "high" : openSlots >= 2 ? "medium" : "low",
           recipientCount: tomorrowTargets.length,
-          totalPoolSize: tomorrowTargets.length,
-          estimatedRevenue: tomorrowTargets.length * 180 * 0.15,
-          script: `Hi {{name}}! We have a last-minute opening on ${tomorrowLabel} for your cleaning. Want to lock it in? Reply YES and we'll confirm your slot right away! 🏠✨`,
+          totalPoolSize: totalLapsed,
+          estimatedRevenue: tomorrowTargets.length * 250 * 0.15,
+          script: `Hi {{name}}, it's Maids in Black! 🏠 We have a last-minute opening ${tomorrowLabel} — perfect timing to get your home sparkling! Want to grab the slot? Reply YES and we'll confirm right away! ✨`,
           scheduleNote,
-          targetLeadIds: tomorrowTargets.map(l => l.id),
-          targetPhones: [],
+          targetLeadIds: [],
+          targetPhones: tomorrowTargets.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: tomorrowTargets.length > 0,
         },
         // Campaign 2: Re-engage Lapsed Customers (haven't booked in 60+ days)
