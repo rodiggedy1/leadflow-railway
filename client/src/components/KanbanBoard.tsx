@@ -343,14 +343,14 @@ function KanbanColumnView({
       {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className="flex-1 flex flex-col gap-2.5 min-h-[400px] rounded-xl transition-colors duration-150 p-1"
+        className="flex-1 flex flex-col gap-2.5 min-h-[200px] rounded-xl transition-colors duration-150 p-1"
         style={{
           backgroundColor: isOver ? "#f0fdf4" : "transparent",
         }}
       >
         {leads.length === 0 ? (
           <div
-            className="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed min-h-[160px] gap-2 px-4"
+            className="flex flex-col items-center justify-start rounded-xl border-2 border-dashed min-h-[120px] gap-2 px-4 pt-6 pb-6"
             style={{ borderColor: isOver ? "#86efac" : "#e5e7eb" }}
           >
             {isOver ? (
