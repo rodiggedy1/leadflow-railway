@@ -2009,3 +2009,6 @@
 
 ## Campaign Deduplication — March 22
 - [x] Offset lapsed campaigns: Tomorrow Slots = top 50 (index 0–49), Re-engage = next 50 (index 50–99), so a run reaches 100 unique lapsed customers
+
+## Daily Pool Rotation — March 22
+- [x] Rotate lapsed customer pool daily: compute day-of-year offset so each day targets the next 100 unique customers (day 1 = 1–100, day 2 = 101–200, wraps at pool end)

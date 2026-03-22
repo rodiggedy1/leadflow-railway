@@ -1358,14 +1358,41 @@ Respond in JSON with this exact schema:
 
       // Segment leads for each campaign type (applying recency filter)
       // Campaign 1 (Tomorrow Slots) & Campaign 2 (Re-engage) both draw from the lapsed
-      // past-customer pool but are OFFSET so they cover unique recipients:
-      //   Tomorrow Slots  → index 0–49  (top 50 most recent lapsers)
-      //   Re-engage       → index 50–99 (next 50, no overlap)
-      // This means a single campaign run reaches up to 100 unique lapsed customers.
+      // past-customer pool with a DAILY ROTATING OFFSET:
+      //   Each day advances 100 positions through the full pool so every lapsed customer
+      //   gets reached systematically before the cycle repeats.
+      //   Tomorrow Slots  → dailyStart + 0..49  (50 leads)
+      //   Re-engage       → dailyStart + 50..99 (50 leads, no overlap)
       const coldFiltered = coldLeads.filter(notRecentlyCampaigned);
       const totalLapsed = coldFiltered.length; // full pool count for UI display
-      const tomorrowTargets = coldFiltered.slice(0, 50);   // positions 1–50
-      const coldOnly = coldFiltered.slice(50, 100);         // positions 51–100 (no overlap)
+
+      // Compute today's Eastern date as a stable day-of-year integer
+      const poolNowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+      const startOfYear = new Date(poolNowET.getFullYear(), 0, 1);
+      const dayOfYear = Math.floor((poolNowET.getTime() - startOfYear.getTime()) / 86_400_000);
+
+      // dailyStart wraps so we never go out of bounds; each day = +100 positions
+      const batchSize = 100;
+      const dailyStart = totalLapsed > 0
+        ? (dayOfYear * batchSize) % totalLapsed
+        : 0;
+
+      // Wrap-around: if the batch crosses the end of the array, concatenate tail + head
+      const getWrappedSlice = (start: number, count: number) => {
+        if (totalLapsed === 0) return [];
+        const end = start + count;
+        if (end <= totalLapsed) return coldFiltered.slice(start, end);
+        // Wrap: take from start to end of array, then from beginning
+        return [...coldFiltered.slice(start), ...coldFiltered.slice(0, end % totalLapsed)];
+      };
+
+      const tomorrowTargets = getWrappedSlice(dailyStart, 50);          // first 50 of today's batch
+      const coldOnly = getWrappedSlice(dailyStart + 50, 50);             // second 50 of today's batch
+
+      // Human-readable batch label for UI (e.g. "#81–180 of 3,491")
+      const batchStart = dailyStart + 1;
+      const batchEnd = Math.min(dailyStart + batchSize, totalLapsed);
+      const batchLabel = totalLapsed > 0 ? `#${batchStart}–${batchEnd} of ${totalLapsed.toLocaleString()}` : "";
       const stalledFunnelLeads = stalledLeads
         .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
         .filter(notRecentlyCampaigned)
@@ -1394,7 +1421,7 @@ Respond in JSON with this exact schema:
           type: "tomorrow_slots",
           title: `Fill Tomorrow's Open Slots`,
           subtitle: tomorrowTargets.length > 0
-            ? `${scheduleNote} Reaching out to ${tomorrowTargets.length} past customers.`
+            ? `${scheduleNote} Today's batch: lapsed customers ${batchLabel} (first 50).`
             : scheduleNote,
           urgency: openSlots >= 4 ? "high" : openSlots >= 2 ? "medium" : "low",
           recipientCount: tomorrowTargets.length,
@@ -1411,8 +1438,8 @@ Respond in JSON with this exact schema:
           id: "reactivation",
           type: "reactivation",
           title: `Re-engage Lapsed Customers`,
-          subtitle: totalLapsed > 50
-            ? `${totalLapsed.toLocaleString()} past customers haven't booked in 60+ days. Sending to customers #51–100 (no overlap with Tomorrow Slots).`
+          subtitle: coldOnly.length > 0
+            ? `Today's batch: lapsed customers ${batchLabel} (second 50, no overlap with Tomorrow Slots).`
             : totalLapsed > 0
             ? `${totalLapsed.toLocaleString()} past customers haven't booked in 60+ days — all covered by Tomorrow Slots campaign.`
             : `No lapsed customers right now — great retention!`,
@@ -1421,8 +1448,8 @@ Respond in JSON with this exact schema:
           totalPoolSize: totalLapsed,
           estimatedRevenue: coldOnly.length * 250 * 0.15, // past customers have higher avg value
           script: `Hi {{name}}, it's Maids in Black! 🏠 We'd love to have you back. We're offering priority scheduling for returning customers this week — want to book a clean? Reply YES or just let us know a good time!`,
-          scheduleNote: totalLapsed > 50
-            ? `Sending to customers #51–100 of ${totalLapsed.toLocaleString()} eligible lapsed customers (no overlap with Tomorrow Slots).`
+          scheduleNote: coldOnly.length > 0
+            ? `Sending to customers ${batchLabel} (second 50 of today's batch, no overlap with Tomorrow Slots).`
             : `No additional lapsed customers beyond the Tomorrow Slots batch.`,
           targetLeadIds: [],
           targetPhones: coldOnly.map(l => l.phone).filter(Boolean) as string[],
