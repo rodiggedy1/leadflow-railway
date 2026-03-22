@@ -211,19 +211,19 @@ const actionTypeIcon = {
   reactivate: <RotateCcw className="w-4 h-4" />,
 };
 
+// Map frontend actionType to backend bulk action enum
+const actionTypeToBulkKey: Record<string, "followup_cold" | "followup_quote_sent" | "reactivate_pool"> = {
+  send_sms: "followup_cold",
+  trigger_call: "followup_quote_sent",
+  reactivate: "reactivate_pool",
+};
+
 // Human-readable descriptions for each action type
 const actionTypeLabel: Record<string, string> = {
   send_sms: "Send SMS",
   trigger_call: "Send Follow-up SMS",
   review_leads: "Review Leads",
   reactivate: "Send Reactivation SMS",
-};
-
-const actionTypeWhatHappens: Record<string, string> = {
-  send_sms: "Jade will send a follow-up SMS to all cold leads who have gone quiet. Each message is personalized with the lead's first name.",
-  trigger_call: "Jade will send a follow-up SMS to all leads who have received a quote but haven't responded. This nudges them to book.",
-  review_leads: "You'll be taken to the Leads page to manually review and action each lead.",
-  reactivate: "Jade will send a re-engagement SMS to leads in the reactivation pool who haven't been messaged recently.",
 };
 
 function ActionFeedItem({
@@ -249,6 +249,14 @@ function ActionFeedItem({
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const isReview = actionType === "review_leads";
+  const bulkKey = actionTypeToBulkKey[actionType];
+
+  // Fetch preview data only when dialog is open and action has a bulk key
+  const previewQuery = trpc.commandCenter.getBulkActionPreview.useQuery(
+    { actionType: bulkKey! },
+    { enabled: confirmOpen && !!bulkKey, staleTime: 30_000 }
+  );
+  const preview = previewQuery.data;
 
   return (
     <>
@@ -294,7 +302,7 @@ function ActionFeedItem({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span className={`p-1.5 rounded-lg bg-gray-50`}>
+              <span className="p-1.5 rounded-lg bg-gray-50">
                 {actionTypeIcon[actionType as keyof typeof actionTypeIcon] ?? <Zap className="w-4 h-4" />}
               </span>
               Confirm: {actionTypeLabel[actionType] ?? "Execute"}
@@ -302,19 +310,53 @@ function ActionFeedItem({
           </DialogHeader>
 
           <div className="space-y-4 py-1">
-            {/* Action being triggered */}
-            <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-2">
+            {/* Action summary */}
+            <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-1.5">
               <p className="text-sm font-semibold text-gray-900">{title}</p>
               <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
             </div>
 
-            {/* What will happen */}
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">What will happen</p>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {actionTypeWhatHappens[actionType] ?? "This action will be executed immediately."}
-              </p>
-            </div>
+            {/* Recipient count — live from backend */}
+            {bulkKey && (
+              <div className="flex items-center justify-between rounded-lg border border-gray-100 px-4 py-3">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipients</span>
+                {previewQuery.isLoading ? (
+                  <span className="flex items-center gap-1.5 text-sm text-gray-400">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...
+                  </span>
+                ) : preview ? (
+                  <span className="text-sm font-bold text-gray-900">
+                    {preview.recipientCount} {preview.label}
+                    {preview.firstNames.length > 0 && (
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">
+                        ({preview.firstNames.join(", ")}{preview.recipientCount > preview.firstNames.length ? ", …" : ""})
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
+            )}
+
+            {/* SMS preview — live from backend */}
+            {bulkKey && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">SMS preview</p>
+                {previewQuery.isLoading ? (
+                  <div className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                ) : preview ? (
+                  <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3">
+                    <p className="text-sm text-gray-800 leading-relaxed">{preview.smsPreview}</p>
+                    <p className="text-xs text-blue-400 mt-1.5">Each message is personalized with the recipient's first name.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-gray-50 border border-gray-100 px-4 py-3">
+                    <p className="text-xs text-gray-400">Preview unavailable</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Estimated value */}
             {estimatedValue && (
@@ -331,11 +373,11 @@ function ActionFeedItem({
             </Button>
             <Button
               onClick={() => { setConfirmOpen(false); onExecute(id, actionType); }}
-              disabled={executing}
+              disabled={executing || (!!bulkKey && previewQuery.isLoading)}
               className="gap-1.5"
             >
               {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (actionTypeIcon[actionType as keyof typeof actionTypeIcon] ?? <Zap className="w-3.5 h-3.5" />)}
-              Confirm & Send
+              {preview ? `Send to ${preview.recipientCount} ${preview.label}` : "Confirm & Send"}
             </Button>
           </DialogFooter>
         </DialogContent>

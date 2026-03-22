@@ -2040,3 +2040,5 @@
 - [x] Upload to CDN and replace brain icon in AI Command Center header with Jade avatar
 - [x] Add 'Powered by Jade AI' badge with hover tooltip to Command Center header
 - [x] Add confirmation dialog to Execute button in AI Action Feed (show action description + confirm before firing)
+- [x] Show recipient count in Action Feed confirm dialog (live from backend getBulkActionPreview)
+- [x] Show SMS preview text in Action Feed confirm dialog (personalized with first recipient's name)

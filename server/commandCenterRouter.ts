@@ -1078,6 +1078,70 @@ If TOP OBJECTIONS are provided in the metrics:
     }),
 
   /**
+   * Preview a bulk action before firing: returns recipient count, first-name list, and SMS template.
+   * Used by the confirmation dialog so the user can see exactly who will be messaged.
+   */
+  getBulkActionPreview: adminAgentProcedure
+    .input(z.object({
+      actionType: z.enum(["followup_cold", "followup_quote_sent", "reactivate_pool"]),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      let targetStages: string[] = [];
+      let smsTemplate = "";
+      let since = new Date();
+      let label = "";
+
+      if (input.actionType === "followup_cold") {
+        targetStages = ["COLD"];
+        since.setDate(since.getDate() - 30);
+        smsTemplate = "Hi {firstName}! Jade here from Maids in Black 😊 We still have openings this week — want to lock in a time for your cleaning?";
+        label = "cold leads";
+      } else if (input.actionType === "followup_quote_sent") {
+        targetStages = ["QUOTE_SENT"];
+        since.setDate(since.getDate() - 7);
+        smsTemplate = "Hi {firstName}! Just following up on your cleaning quote — we have a few spots left this week. Want to grab one?";
+        label = "open quotes";
+      } else if (input.actionType === "reactivate_pool") {
+        targetStages = ["COLD", "NOT_INTERESTED"];
+        since.setDate(since.getDate() - 90);
+        smsTemplate = "Hi {firstName}! It's been a while — Maids in Black here. We have a special opening this week. Interested in getting your home cleaned? 🧹";
+        label = "lapsed leads";
+      }
+
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, since),
+            sql`${conversationSessions.stage} IN (${sql.join(targetStages.map((s: string) => sql`${s}`), sql`, `)})`,
+            eq(conversationSessions.smsOptOut, 0),
+          )
+        )
+        .limit(50);
+
+      const firstNames = sessions.map(s => (s.leadName ?? "there").split(" ")[0]);
+      // Build a sample SMS using the first recipient's name (or "[Name]" as placeholder)
+      const sampleName = firstNames[0] ?? "[Name]";
+      const smsPreview = smsTemplate.replace("{firstName}", sampleName);
+
+      return {
+        recipientCount: sessions.length,
+        label,
+        smsTemplate,
+        smsPreview,
+        firstNames: firstNames.slice(0, 5), // Show up to 5 names as a sample
+      };
+    }),
+
+  /**
    * Conversation Intelligence: LLM-analyzed objections from SMS message history.
    * Reads recent inbound lead messages and identifies top stall reasons with coaching tips.
    */
