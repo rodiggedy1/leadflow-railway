@@ -2169,6 +2169,7 @@ export default function AdminDashboard() {
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
+  const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("today");
 
   // Compute the active date range to send to the backend
   const dateRange = useMemo(() => {
@@ -2333,12 +2334,31 @@ export default function AdminDashboard() {
                 </div>
                 <p className="text-sm text-gray-500 mt-0.5">Drag cards between columns to update stage. Click any card to open the full lead drawer.</p>
               </div>
-              <span className="text-xs text-gray-400">{(sessions ?? []).length} leads · drag to move</span>
+              <div className="flex items-center gap-1.5">
+                {(["today", "week", "month"] as const).map((f) => {
+                  const label = f === "today" ? "Today" : f === "week" ? "This Week" : "This Month";
+                  const isActive = pipelineDateFilter === f;
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setPipelineDateFilter(f)}
+                      className="px-4 py-1.5 text-xs font-semibold transition-all"
+                      style={isActive
+                        ? { backgroundColor: "#a3e635", color: "#000", border: "1.5px solid #a3e635", borderRadius: "6px" }
+                        : { backgroundColor: "transparent", color: "#6b7280", border: "1.5px solid #d1d5db", borderRadius: "6px" }
+                      }
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <KanbanBoard
               leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads']}
               onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
               onStageChange={() => refetch()}
+              dateFilter={pipelineDateFilter}
             />
           </div>
         )}

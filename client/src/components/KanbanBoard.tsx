@@ -342,9 +342,10 @@ type KanbanBoardProps = {
   leads: LeadRow[];
   onCardClick: (lead: LeadRow) => void;
   onStageChange?: (id: number, newStage: string) => void;
+  dateFilter?: "today" | "week" | "month";
 };
 
-export default function KanbanBoard({ leads, onCardClick, onStageChange }: KanbanBoardProps) {
+export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFilter: externalDateFilter }: KanbanBoardProps) {
   const updateStageQuick = trpc.leads.adminUpdateStage.useMutation();
   const utilsQuick = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -385,10 +386,25 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     [leads, localStages]
   );
 
+  const filteredLeads = useMemo(() => {
+    const df = externalDateFilter ?? "today";
+    const cutoff = new Date();
+    if (df === "today") {
+      cutoff.setHours(0, 0, 0, 0);
+    } else if (df === "week") {
+      cutoff.setDate(cutoff.getDate() - 7);
+      cutoff.setHours(0, 0, 0, 0);
+    } else {
+      cutoff.setDate(cutoff.getDate() - 30);
+      cutoff.setHours(0, 0, 0, 0);
+    }
+    return effectiveLeads.filter(l => new Date(l.createdAt) >= cutoff);
+  }, [effectiveLeads, externalDateFilter]);
+
   const columnLeads = useMemo(() => {
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
-    effectiveLeads.forEach(lead => {
+    filteredLeads.forEach(lead => {
       const colId = STAGE_TO_COLUMN[lead.stage];
       if (colId) {
         map[colId].push(lead);
@@ -396,7 +412,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
       // Dead/cold leads are not shown in the pipeline
     });
     return map;
-  }, [effectiveLeads]);
+  }, [filteredLeads]);
 
   const activeLead = useMemo(() =>
     activeId ? effectiveLeads.find(l => String(l.id) === activeId) ?? null : null,
