@@ -1161,3 +1161,23 @@ export const smsOptOuts = mysqlTable("sms_opt_outs", {
 });
 export type SmsOptOut = typeof smsOptOuts.$inferSelect;
 export type InsertSmsOptOut = typeof smsOptOuts.$inferInsert;
+
+// ── Command Center Generic Cache ──────────────────────────────────────────────
+/**
+ * commandCenterCache — generic server-side cache for all slow Command Center queries.
+ * Each row is keyed by (cacheKey, rangeKey) so any procedure can cache its result.
+ * TTL is enforced by the consumer; this table just stores the payload + timestamp.
+ */
+export const commandCenterCache = mysqlTable("command_center_cache", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Procedure identifier, e.g. "conv_intel" | "tomorrow_campaigns" */
+  cacheKey: varchar("cacheKey", { length: 50 }).notNull(),
+  /** Optional range key: "today" | "7d" | "30d" | "none" */
+  rangeKey: varchar("rangeKey", { length: 10 }).notNull().default("none"),
+  /** Full JSON payload */
+  payload: text("payload").notNull(),
+  /** UTC timestamp when this cache entry was last generated */
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+});
+export type CommandCenterCache = typeof commandCenterCache.$inferSelect;
+export type InsertCommandCenterCache = typeof commandCenterCache.$inferInsert;

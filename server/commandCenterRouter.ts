@@ -19,6 +19,7 @@ import {
   activityLog,
   leadCallLogs,
   aiInsightsCache,
+  commandCenterCache,
   reactivationContacts,
   completedJobs,
   campaignBlasts,
@@ -1151,6 +1152,21 @@ If TOP OBJECTIONS are provided in the metrics:
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
+      // ── Cache check: serve instantly if cache is <5 min old ──────────────
+      const CONV_CACHE_TTL_MS = 5 * 60 * 1000;
+      const convCached = await db
+        .select()
+        .from(commandCenterCache)
+        .where(and(eq(commandCenterCache.cacheKey, "conv_intel"), eq(commandCenterCache.rangeKey, input.range)))
+        .limit(1);
+      const convCacheHit = convCached[0];
+      const convCacheAge = convCacheHit
+        ? Date.now() - (convCacheHit.generatedAt instanceof Date ? convCacheHit.generatedAt.getTime() : new Date(convCacheHit.generatedAt as unknown as string).getTime())
+        : Infinity;
+      if (convCacheHit && convCacheAge < CONV_CACHE_TTL_MS) {
+        try { return JSON.parse(convCacheHit.payload); } catch { /* fall through */ }
+      }
+
       const since = getWindowStart(input.range);
 
       // Pull message histories from recent sessions
@@ -1185,11 +1201,24 @@ If TOP OBJECTIONS are provided in the metrics:
       }
 
       if (leadMessages.length === 0) {
-        return {
+        const emptyResult = {
           objections: [],
           topInsight: "Not enough conversation data yet. Check back after more leads have replied.",
           totalMessagesAnalyzed: 0,
         };
+        // Cache the empty result for 5 min to avoid repeated DB scans
+        void (async () => {
+          try {
+            const payload = JSON.stringify(emptyResult);
+            if (convCacheHit) {
+              await db.update(commandCenterCache).set({ payload, generatedAt: new Date() })
+                .where(and(eq(commandCenterCache.cacheKey, "conv_intel"), eq(commandCenterCache.rangeKey, input.range)));
+            } else {
+              await db.insert(commandCenterCache).values({ cacheKey: "conv_intel", rangeKey: input.range, payload, generatedAt: new Date() });
+            }
+          } catch { /* non-fatal */ }
+        })();
+        return emptyResult;
       }
 
       // Sample up to 150 messages to keep LLM context manageable
@@ -1238,7 +1267,7 @@ Respond in JSON with this exact schema:
         const rawContent = response?.choices?.[0]?.message?.content ?? "{}";
         const raw = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
         const parsed = JSON.parse(raw);
-        return {
+        const result = {
           objections: (parsed.objections ?? []).slice(0, 5) as Array<{
             label: string;
             pct: number;
@@ -1248,6 +1277,19 @@ Respond in JSON with this exact schema:
           topInsight: parsed.topInsight ?? "",
           totalMessagesAnalyzed: sample.length,
         };
+        // Save to cache in background
+        void (async () => {
+          try {
+            const payload = JSON.stringify(result);
+            if (convCacheHit) {
+              await db.update(commandCenterCache).set({ payload, generatedAt: new Date() })
+                .where(and(eq(commandCenterCache.cacheKey, "conv_intel"), eq(commandCenterCache.rangeKey, input.range)));
+            } else {
+              await db.insert(commandCenterCache).values({ cacheKey: "conv_intel", rangeKey: input.range, payload, generatedAt: new Date() });
+            }
+          } catch { /* non-fatal */ }
+        })();
+        return result;
       } catch (err) {
         console.error("[getConversationIntelligence] LLM error:", err);
         return {
@@ -1266,6 +1308,21 @@ Respond in JSON with this exact schema:
     .query(async () => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
+
+      // ── Cache check: serve instantly if cache is <15 min old ──────────────
+      const CAMP_CACHE_TTL_MS = 15 * 60 * 1000;
+      const campCached = await db
+        .select()
+        .from(commandCenterCache)
+        .where(and(eq(commandCenterCache.cacheKey, "tomorrow_campaigns"), eq(commandCenterCache.rangeKey, "none")))
+        .limit(1);
+      const campCacheHit = campCached[0];
+      const campCacheAge = campCacheHit
+        ? Date.now() - (campCacheHit.generatedAt instanceof Date ? campCacheHit.generatedAt.getTime() : new Date(campCacheHit.generatedAt as unknown as string).getTime())
+        : Infinity;
+      if (campCacheHit && campCacheAge < CAMP_CACHE_TTL_MS) {
+        try { return JSON.parse(campCacheHit.payload); } catch { /* fall through */ }
+      }
 
       // Get tomorrow's date string in Eastern time (business timezone).
       // Using toISOString() would give UTC and could be a day ahead after 8 PM ET.
@@ -1624,13 +1681,28 @@ Respond in JSON with this exact schema:
         },
       ];
 
-      return {
+      const campResult = {
         campaigns,
         scheduleNote,
         tomorrowLabel,
         openSlots,
         bookedSlots,
       };
+
+      // Save to cache in background (don't await)
+      void (async () => {
+        try {
+          const payload = JSON.stringify(campResult);
+          if (campCacheHit) {
+            await db.update(commandCenterCache).set({ payload, generatedAt: new Date() })
+              .where(and(eq(commandCenterCache.cacheKey, "tomorrow_campaigns"), eq(commandCenterCache.rangeKey, "none")));
+          } else {
+            await db.insert(commandCenterCache).values({ cacheKey: "tomorrow_campaigns", rangeKey: "none", payload, generatedAt: new Date() });
+          }
+        } catch { /* non-fatal */ }
+      })();
+
+      return campResult;
     }),
 
   /**

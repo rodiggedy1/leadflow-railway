@@ -903,13 +903,13 @@ export default function CommandCenter() {
             </div>
           ) : campaigns ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {campaigns.campaigns.map(campaign => {
-                const typeIcons = {
+              {campaigns.campaigns.map((campaign: { id: string; type: string; title: string; subtitle: string; urgency: string; recipientCount: number; totalPoolSize?: number; estimatedRevenue: number; script: string; scheduleNote: string; batchLabel: string; targetLeadIds: number[]; targetPhones: string[]; hasLeads: boolean; recipients: Array<{ name: string; fullName: string; phone: string; frequency: string | null; lastBookingDate: string | null; lastCampaignSmsDate: Date | null }> }) => {
+                const typeIcons: Record<string, React.ElementType> = {
                   tomorrow_slots: Calendar,
                   reactivation: RefreshCw,
                   quote_followup: MessageSquare,
                 };
-                const TypeIcon = typeIcons[campaign.type];
+                const TypeIcon = typeIcons[campaign.type] ?? Calendar;
                 const estRevenue = Math.round(campaign.estimatedRevenue);
                 const hasLeads = campaign.hasLeads;
                 return (
@@ -1357,7 +1357,7 @@ export default function CommandCenter() {
             <div className="space-y-4">
               {/* Objection cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {convIntel.objections.map((obj, i) => {
+                {convIntel.objections.map((obj: { label: string; pct: number; tip: string; example: string }, i: number) => {
                   const barColors = ["bg-gray-900", "bg-gray-700", "bg-gray-500", "bg-gray-400", "bg-gray-300"];
                   return (
                     <div key={i} className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 transition-colors">

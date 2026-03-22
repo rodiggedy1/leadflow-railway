@@ -420,7 +420,7 @@ function StatsBar({ leads }: { leads: LeadRow[] }) {
 type KanbanBoardProps = {
   leads: LeadRow[];
   onCardClick: (lead: LeadRow) => void;
-  onStageChange?: (id: number, newStage: string) => void;
+  onStageChange?: ((id: number, newStage: string) => void) | (() => void);
   dateFilter?: "today" | "week" | "month";
 };
 

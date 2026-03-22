@@ -2399,7 +2399,7 @@ export default function AdminDashboard() {
             <KanbanBoard
               leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads']}
               onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
-              onStageChange={() => refetch()}
+              onStageChange={() => { void refetch(); }}
               dateFilter={pipelineDateFilter}
             />
           </div>
