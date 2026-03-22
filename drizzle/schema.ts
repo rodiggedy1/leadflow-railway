@@ -894,6 +894,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   manualAdjustment: varchar("manualAdjustment", { length: 20 }),
   /** Reason for the manual adjustment (shown to cleaner) */
   manualAdjustmentNote: varchar("manualAdjustmentNote", { length: 255 }),
+  /** Reclean penalty: -30.00 if admin marks job as requiring a reclean due to poor service (null = not applied) */
+  recleanPenalty: varchar("recleanPenalty", { length: 20 }),
   /** Cleaner-reported job status */
   jobStatus: mysqlEnum("jobStatus", [
     "on_the_way",

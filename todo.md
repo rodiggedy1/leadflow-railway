@@ -2048,3 +2048,8 @@
 
 ## Cron Health Dashboard — March 22
 - [x] Add tomorrow-sync and today-sync to cron health dashboard (6 cards in 3-column grid)
+
+## Pay Breakdown Fixes — March 22
+- [x] No Photo Penalty: show as Pending (not deducted from total) until job is marked completed
+- [x] Negative dollar amounts: render in red text
+- [x] Add Poor Service / Reclean deduction line at -$30 (Pending until job completed)

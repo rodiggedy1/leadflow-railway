@@ -159,6 +159,7 @@ type Job = {
   etaTimestamp: number | null;
   manualAdjustment: string | null;
   manualAdjustmentNote: string | null;
+  recleanPenalty: string | null;
   checklistItems: Array<{ text: string; checked: boolean }> | null;
 };
 
@@ -279,14 +280,18 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
   // photoAdjustment is written to DB by the server when rating is finalized or photo is uploaded
   // If not yet in DB (job not yet rated), calculate client-side for preview
   const hasPhoto = job.photoSubmitted === 1 || (job.photos?.length ?? 0) > 0;
-  const photoAdj = job.photoAdjustment != null
-    ? parseFloat(job.photoAdjustment)
-    : (hasPhoto ? 5 : -10);
+  // Photo adj: only apply to total when job is completed (photoAdjustment written to DB) or photo already submitted
+  // While job is pending and no photo yet, show as Pending — don't deduct from displayed total
+  const photoAdjFromDB = job.photoAdjustment != null ? parseFloat(job.photoAdjustment) : null;
+  const photoAdj = photoAdjFromDB ?? (hasPhoto ? 5 : 0); // 0 = not yet applied (pending)
+  const photoPending = !isComplete && photoAdjFromDB === null && !hasPhoto; // show as Pending
   const streakBonus = parseFloat(job.streakBonus ?? "0") || 0;
   const manualAdj = parseFloat(job.manualAdjustment ?? "0") || 0;
+  const recleanAdj = job.recleanPenalty != null ? parseFloat(job.recleanPenalty) : 0;
+  const recleanPending = !isComplete && job.recleanPenalty === null; // show as Pending until job completed
   // Always recalculate display total from components — stored finalPay may be stale
   // (e.g. set before photoAdjustment column existed). DB finalPay is for payroll records only.
-  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj;
+  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   return (
@@ -461,16 +466,37 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
           {/* Photo bonus/penalty */}
           <div className="flex justify-between items-start py-2 border-b border-slate-800">
             <div>
-              <p className={`text-sm font-medium ${hasPhoto ? "text-emerald-300" : "text-red-300"}`}>
+              <p className={`text-sm font-medium ${hasPhoto ? "text-emerald-300" : photoPending ? "text-slate-400" : "text-red-300"}`}>
                 {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
               </p>
               <p className="text-slate-500 text-xs mt-0.5">
                 {hasPhoto ? "Completion photo uploaded" : "Upload a photo to earn +$5 and avoid -$10"}
               </p>
             </div>
-            <span className={`font-semibold text-sm ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>
-              {hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}
-            </span>
+            {photoPending ? (
+              <span className="text-slate-500 text-xs italic">Pending</span>
+            ) : (
+              <span className={`font-semibold text-sm ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>
+                {hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}
+              </span>
+            )}
+          </div>
+
+          {/* Reclean penalty */}
+          <div className="flex justify-between items-start py-2 border-b border-slate-800">
+            <div>
+              <p className={`text-sm font-medium ${job.recleanPenalty != null ? "text-red-300" : "text-slate-400"}`}>
+                Poor Service / Reclean
+              </p>
+              <p className="text-slate-500 text-xs mt-0.5">-$30 if job requires a reclean</p>
+            </div>
+            {recleanPending ? (
+              <span className="text-slate-500 text-xs italic">Pending</span>
+            ) : (
+              <span className="font-semibold text-sm text-red-400">
+                {formatCurrency(recleanAdj.toFixed(2))}
+              </span>
+            )}
           </div>
 
           {/* Streak bonus */}
@@ -874,14 +900,19 @@ export default function CleanerPortal() {
 
   // Earnings summary
   // Always sum components directly so photoAdjustment is always included
-  const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null }) => {
+  const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null }) => {
     const base = parseFloat(j.basePay ?? "0") || 0;
     const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
     const hasPhoto = j.photoSubmitted === 1 || ((j.photos as unknown[])?.length ?? 0) > 0;
-    const photo = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : (hasPhoto ? 5 : -10);
+    const isComplete = j.bookingStatus === "completed";
+    // Only apply photo penalty if job is completed (photoAdjustment set in DB) or photo already uploaded
+    const photoFromDB = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : null;
+    const photo = photoFromDB ?? (hasPhoto ? 5 : 0);
     const streak = parseFloat(j.streakBonus ?? "0") || 0;
     const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
-    return base + rating + photo + streak + manual;
+    const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
+    void isComplete; // used for display logic in JobCard; calcJobPay uses DB values directly
+    return base + rating + photo + streak + manual + reclean;
   };
   const todayEarnings = jobs.reduce((sum, j) => sum + calcJobPay(j), 0);
   const weekEarnings = weekJobs.reduce((sum, j) => sum + calcJobPay(j), 0);
