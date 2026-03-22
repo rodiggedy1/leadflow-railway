@@ -252,6 +252,8 @@ function KanbanColumnView({
     <div className="flex flex-col flex-1 min-w-[220px] max-w-[300px]">
       {/* Column header */}
       <div className="mb-3">
+        {/* Separator line above */}
+        <div className="h-px bg-gray-200 mb-3" />
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-bold tracking-widest text-gray-500 uppercase">{column.label}</span>
           <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${column.badgeBg}`}>
