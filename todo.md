@@ -1990,3 +1990,6 @@
 - [x] Add editable textarea to confirmation dialog so script can be tweaked before send
 - [x] Fix tomorrow slots capacity: trace where "X out of 15" comes from and use real Launch27 data
 - [x] Fix tomorrow date calculation to use Eastern time (not UTC) so it matches the business calendar
+
+## Campaign Recency Filter — March 22
+- [x] Exclude leads who received an SMS in the last 7 days from all 3 campaign target lists

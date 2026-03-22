@@ -19,6 +19,7 @@ import {
   activityLog,
   leadCallLogs,
   aiInsightsCache,
+  reactivationContacts,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, lte, ne, sql, isNotNull, or, isNull } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
@@ -1299,11 +1300,44 @@ Respond in JSON with this exact schema:
         )
         .limit(100);
 
-      // Segment leads for each campaign type
-      const tomorrowTargets = stalledLeads.slice(0, 30);
-      const coldOnly = coldLeads.slice(0, 50);
+      // ── 7-day campaign recency filter ──────────────────────────────────────
+      // Exclude any lead whose phone number was sent a campaign SMS in the last 7 days.
+      // This checks reactivationContacts.sentAt (campaign blasts only — not automated
+      // system messages like ratings, follow-ups, or circle-backs).
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const recentlyCampaignedRows = await db
+        .select({ phone: reactivationContacts.phone })
+        .from(reactivationContacts)
+        .where(
+          and(
+            isNotNull(reactivationContacts.sentAt),
+            gte(reactivationContacts.sentAt, sevenDaysAgo)
+          )
+        );
+
+      const recentlyCampaignedPhones = new Set(
+        recentlyCampaignedRows.map(r => r.phone)
+      );
+
+      // Helper: normalize phone to E.164-ish for comparison
+      const normalizePhone = (p: string | null) =>
+        p ? p.replace(/\D/g, "") : "";
+
+      const recentPhoneDigits = new Set(
+        Array.from(recentlyCampaignedPhones).map(normalizePhone)
+      );
+
+      const notRecentlyCampaigned = (lead: { phone: string | null }) =>
+        !recentPhoneDigits.has(normalizePhone(lead.phone));
+
+      // Segment leads for each campaign type (applying recency filter)
+      const tomorrowTargets = stalledLeads.filter(notRecentlyCampaigned).slice(0, 30);
+      const coldOnly = coldLeads.filter(notRecentlyCampaigned).slice(0, 50);
       const stalledFunnelLeads = stalledLeads
         .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
+        .filter(notRecentlyCampaigned)
         .slice(0, 30);
 
       // Always return exactly 3 campaign cards — show 0 recipients if no matching leads
