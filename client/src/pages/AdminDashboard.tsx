@@ -777,6 +777,17 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "bark") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Bark</span>;
   }
+  // campaign:tomorrow_slots, campaign:reactivation, campaign:quote_followup, etc.
+  if (leadSource.startsWith("campaign:")) {
+    const campaignId = leadSource.replace("campaign:", "");
+    // Convert snake_case to Title Case for display
+    const label = campaignId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-700">📣 Campaign: {label}</span>;
+  }
+  // command-center (legacy, before campaign-specific tagging)
+  if (leadSource === "command-center") {
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-700">📣 Campaign</span>;
+  }
   // always-on:new-one-time, always-on:lapsed-one-time, always-on:lapsed-recurring, always-on:dormant
   if (leadSource.startsWith("always-on:")) {
     const groupType = leadSource.replace("always-on:", "");

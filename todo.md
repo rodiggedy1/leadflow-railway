@@ -2073,3 +2073,6 @@
 
 ## SMS Save Script Persistence Fix — March 22
 - [x] Fix: saved script must persist permanently across dialog close/reopen and page refresh
+
+## Campaign Reply Routing Fix — March 22
+- [x] fireCampaign: create conversationSession for phone-only targets so replies route to Jade and appear as leads tagged with campaign source

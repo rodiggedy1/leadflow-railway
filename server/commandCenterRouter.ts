@@ -1802,10 +1802,11 @@ Respond in JSON with this exact schema:
       if (!db) throw new Error("DB unavailable");
 
       // Build the unified send list
-      type SendTarget = { phone: string; name: string; sourceId?: number };
+      // isPhoneOnly=true means this is a lapsed past customer with no active session;
+      // we must create a session on send so their reply can be routed to Jade.
+      type SendTarget = { phone: string; name: string; sourceId?: number; isPhoneOnly?: boolean };
       const sendList: SendTarget[] = [];
-
-      // 1. Session-based leads (funnel leads)
+      // 1. Session-based leads (funnel leads — already have a session, no need to create one)
       if (input.targetLeadIds.length > 0) {
         const leads = await db
           .select({
@@ -1821,11 +1822,10 @@ Respond in JSON with this exact schema:
             )
           );
         for (const l of leads) {
-          if (l.phone) sendList.push({ phone: l.phone, name: l.name ?? "", sourceId: l.id });
+          if (l.phone) sendList.push({ phone: l.phone, name: l.name ?? "", sourceId: l.id, isPhoneOnly: false });
         }
       }
-
-      // 2. Phone-only targets (lapsed past customers from completedJobs)
+      // 2. Phone-only targets (lapsed past customers from completedJobs — no session exists)
       if (input.targetPhones.length > 0) {
         const pastCustomers = await db
           .select({
@@ -1838,7 +1838,7 @@ Respond in JSON with this exact schema:
           )
           .groupBy(completedJobs.phone, completedJobs.firstName);
         for (const c of pastCustomers) {
-          sendList.push({ phone: c.phone, name: c.firstName ?? "" });
+          sendList.push({ phone: c.phone, name: c.firstName ?? "", isPhoneOnly: true });
         }
       }
 
@@ -1854,22 +1854,24 @@ Respond in JSON with this exact schema:
           await sendSms({ to: target.phone, content: personalizedScript });
           sent++;
           sentPhones.push(target.phone);
-          // Create a session so that if the customer replies, the webhook can route
-          // their message to the AI engine. The session starts at REACTIVATION stage
-          // and is hidden from the Leads page until the customer actually responds.
-          try {
-            await db.insert(conversationSessions).values({
-              leadPhone: target.phone,
-              leadName: target.name ?? "",
-              stage: "REACTIVATION",
-              leadSource: "command-center",
-              messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
-              aiMode: 1,
-              isBooked: 0,
-            });
-          } catch (sessionErr) {
-            // Non-fatal: session creation failure should not block the send count
-            console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
+          // Only create a session for phone-only targets (lapsed past customers).
+          // Session-based funnel leads already have an active session — no need to create one.
+          if (target.isPhoneOnly) {
+            try {
+              await db.insert(conversationSessions).values({
+                leadPhone: target.phone,
+                leadName: target.name ?? "",
+                stage: "REACTIVATION",
+                // Tag with the specific campaign so the leads page shows the source
+                leadSource: `campaign:${input.campaignId}`,
+                messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
+                aiMode: 1,
+                isBooked: 0,
+              });
+            } catch (sessionErr) {
+              // Non-fatal: session creation failure should not block the send count
+              console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
+            }
           }
           // Small delay to avoid rate limiting
           await new Promise(r => setTimeout(r, 150));
