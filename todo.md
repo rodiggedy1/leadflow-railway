@@ -2034,3 +2034,7 @@
 - [x] Backend: webhook STOP handler — mark session DONE, insert into smsOptOuts
 - [x] Backend: filter smsOptOuts phones from all 3 campaign target lists
 - [x] UI: Campaign History tab in Command Center showing blast log with date, type, batch, recipients, replies
+
+## Jade AI Branding — March 22
+- [x] Generate Jade portrait (biracial woman with curly hair, warm AI persona)
+- [x] Upload to CDN and replace brain icon in AI Command Center header with Jade avatar

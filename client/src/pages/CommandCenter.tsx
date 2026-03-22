@@ -606,9 +606,11 @@ export default function CommandCenter() {
             {/* Title + live indicator */}
             <div className="flex items-center gap-3">
               <div className="relative shrink-0">
-                <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center">
-                  <BrainCircuit className="w-5 h-5 text-violet-600" />
-                </div>
+                <img
+                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/jade-headshot_e1d183ec.webp"
+                  alt="Jade"
+                  className="w-10 h-10 rounded-full object-cover object-top border-2 border-white shadow-sm"
+                />
                 <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
