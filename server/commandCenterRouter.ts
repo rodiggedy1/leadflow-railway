@@ -1300,6 +1300,7 @@ Respond in JSON with this exact schema:
         .select({
           phone: completedJobs.phone,
           firstName: completedJobs.firstName,
+          fullName: completedJobs.name,
           serviceType: completedJobs.serviceType,
           frequency: completedJobs.frequency,
           lastJobDate: sql<string>`MAX(${completedJobs.jobDate})`.as("lastJobDate"),
@@ -1311,7 +1312,7 @@ Respond in JSON with this exact schema:
             isNotNull(completedJobs.jobDate)
           )
         )
-        .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.serviceType, completedJobs.frequency)
+        .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.name, completedJobs.serviceType, completedJobs.frequency)
         .having(sql`MAX(${completedJobs.jobDate}) <= ${sixtyDaysAgoStr}`)
         .orderBy(sql`MAX(${completedJobs.jobDate}) DESC`)
         .limit(3500);
@@ -1322,6 +1323,7 @@ Respond in JSON with this exact schema:
       const coldLeads = lapsedCustomers.map(c => ({
         id: 0 as number, // no session id for past customers
         name: c.firstName ?? "Customer",
+        fullName: c.fullName ?? c.firstName ?? "Customer",
         phone: c.phone,
         serviceType: c.serviceType,
         frequency: c.frequency ?? null,
@@ -1446,11 +1448,12 @@ Respond in JSON with this exact schema:
         hasLeads: boolean;
         recipients: Array<{
           name: string;
+          fullName: string;
           phone: string;
           frequency: string | null;
           lastBookingDate: string | null;
           lastCampaignSmsDate: Date | null;
-        }>;
+        }>
       }> = [
         // Campaign 1: Fill Tomorrow's Open Slots — targets lapsed past customers
         // with an urgency script about the open slot tomorrow.
@@ -1472,6 +1475,7 @@ Respond in JSON with this exact schema:
           hasLeads: tomorrowTargets.length > 0,
           recipients: tomorrowTargets.map(l => ({
             name: l.name,
+            fullName: (l as any).fullName ?? l.name,
             phone: l.phone ?? "",
             frequency: l.frequency ?? null,
             lastBookingDate: l.lastJobDate ?? null,
@@ -1501,6 +1505,7 @@ Respond in JSON with this exact schema:
           hasLeads: coldOnly.length > 0,
           recipients: coldOnly.map(l => ({
             name: l.name,
+            fullName: (l as any).fullName ?? l.name,
             phone: l.phone ?? "",
             frequency: l.frequency ?? null,
             lastBookingDate: l.lastJobDate ?? null,
@@ -1528,6 +1533,7 @@ Respond in JSON with this exact schema:
           hasLeads: stalledFunnelLeads.length > 0,
           recipients: stalledFunnelLeads.map(l => ({
             name: l.name ?? "Lead",
+            fullName: l.name ?? "Lead",
             phone: l.phone ?? "",
             frequency: l.serviceType ?? null,
             lastBookingDate: null,

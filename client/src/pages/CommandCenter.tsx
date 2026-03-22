@@ -436,6 +436,7 @@ export default function CommandCenter() {
     targetPhones: string[];
     recipients: Array<{
       name: string;
+      fullName: string;
       phone: string;
       frequency: string | null;
       lastBookingDate: string | null;
@@ -924,7 +925,7 @@ export default function CommandCenter() {
                           <tbody className="bg-white divide-y divide-gray-100">
                             {campaignConfirm.recipients.map((r, i) => (
                               <tr key={i} className="hover:bg-gray-50 group">
-                                <td className="px-3 py-2 text-gray-900 font-medium">{r.name}</td>
+                                <td className="px-3 py-2 text-gray-900 font-medium">{r.fullName || r.name}</td>
                                 <td className="px-3 py-2 text-gray-600">{r.phone}</td>
                                 <td className="px-3 py-2 text-gray-600">{r.frequency ?? <span className="text-gray-300">—</span>}</td>
                                 <td className="px-3 py-2 text-gray-600">

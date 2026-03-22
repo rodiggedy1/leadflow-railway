@@ -2019,3 +2019,6 @@
 
 ## Recipient Row Removal — March 22
 - [x] Add ✕ button on each recipient row in confirmation dialog to exclude individuals before sending; update recipient count and targetPhones/targetLeadIds live
+
+## Recipient Full Name — March 22
+- [x] Show full name (firstName + lastName) in recipient table popup; keep first name only in SMS script
