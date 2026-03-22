@@ -361,7 +361,9 @@ function NavDropdown({
   activeTab: AdminTab;
 }) {
   const [open, setOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const isActive = entry.children?.some((c) => c.id === activeTab) ?? false;
 
   useEffect(() => {
@@ -374,10 +376,19 @@ function NavDropdown({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  function handleOpen() {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setOpen((v) => !v);
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={handleOpen}
         className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
         style={
           isActive
@@ -392,7 +403,10 @@ function NavDropdown({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+        <div
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[9999] min-w-[180px] py-1"
+          style={{ top: dropdownPos.top, left: dropdownPos.left }}
+        >
           {entry.children!.map((child) => {
             const childActive = child.id === activeTab;
             return (
