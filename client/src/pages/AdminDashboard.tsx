@@ -2391,7 +2391,7 @@ export default function AdminDashboard() {
                   <span className="text-gray-300">·</span>
                   <span className="flex items-center gap-1.5">
                     <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: "#f97316" }}>{checkingAvail}</span>
-                    <span className="text-gray-400">checking availability</span>
+                    <span className="text-gray-400">checking quoted</span>
                   </span>
                 </div>
               );
