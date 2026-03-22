@@ -28,6 +28,7 @@ import {
 import { and, desc, eq, gte, lte, ne, sql, isNotNull, or, isNull } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { sendSms } from "./openphone";
+import { normalizePhone } from "./routers";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -2009,8 +2010,13 @@ Respond in JSON with this exact schema:
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+      // CRITICAL: Normalize to E.164 (+1XXXXXXXXXX) so the webhook can find this
+      // session when the recipient replies. The webhook always normalizes the
+      // inbound phone via normalizePhone() before the DB lookup — if the session
+      // was stored without the +1 prefix the lookup fails and the reply is dropped.
+      const e164Phone = normalizePhone(input.phone);
       // Name substitution is handled client-side before calling this procedure
-      const result = await sendSms({ to: input.phone, content: input.script });
+      const result = await sendSms({ to: e164Phone, content: input.script });
       // CRITICAL: Create a REACTIVATION session so that when the test recipient
       // replies, the webhook finds an active session and routes the reply through
       // the REACTIVATION → REACTIVATION_TIME flow. Without this, the webhook finds
@@ -2018,7 +2024,7 @@ Respond in JSON with this exact schema:
       if (db && result.success) {
         try {
           await db.insert(conversationSessions).values({
-            leadPhone: input.phone,
+            leadPhone: e164Phone,
             leadName: input.testName ?? "Test",
             stage: "REACTIVATION",
             leadSource: `campaign-test:${input.campaignId ?? "manual"}`,
