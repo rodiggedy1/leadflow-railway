@@ -177,7 +177,9 @@ export function registerWebhookRoutes(app: Express) {
               )
             )
           );
-        const claimed = (claimResult as any)?.rowsAffected ?? (claimResult as any)?.[0]?.affectedRows ?? 0;
+        // Drizzle mysql2 returns [ResultSetHeader, FieldPacket[]] — affectedRows is at [0].affectedRows
+        const claimHeader = (claimResult as any)?.[0];
+        const claimed = claimHeader?.affectedRows ?? claimHeader?.rowsAffected ?? (claimResult as any)?.affectedRows ?? (claimResult as any)?.rowsAffected ?? 1;
         if (claimed === 0) {
           console.log(`[Webhook] Duplicate event (atomic claim lost) — messageId ${inboundMessageId} already claimed for session ${session.id}. Skipping.`);
           return;
@@ -236,8 +238,19 @@ export function registerWebhookRoutes(app: Express) {
         history = [];
       }
 
+      // Belt-and-suspenders dedup: if the same text was already stored within the
+      // last 10 seconds (e.g. OpenPhone retried without a message ID), skip it.
+      const now = Date.now();
+      const recentDuplicate = history.find(
+        m => m.role === "user" && m.content === inboundText && typeof m.ts === "number" && (now - m.ts) < 10_000
+      );
+      if (recentDuplicate) {
+        console.log(`[Webhook] Content dedup: identical message already in history within 10s for session ${session.id}. Skipping.`);
+        return;
+      }
+
       // Append the lead's inbound message to history first (always stored)
-      history.push({ role: "user", content: inboundText, ts: Date.now() });
+      history.push({ role: "user", content: inboundText, ts: now });
 
       // Trim history to last 20 messages to stay within varchar(5000)
       if (history.length > 20) {

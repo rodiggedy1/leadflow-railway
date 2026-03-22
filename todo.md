@@ -2130,3 +2130,7 @@
 - [x] Hide REACTIVATION-stage leads with no inbound reply from default leads list
 - [ ] Add "Campaign Replies" filter in leads drawer to see all campaign leads (replied + not replied)
 - [ ] Show reply count badge on Campaign source tag in leads list
+
+## Bug Fixes — March 22 (Evening)
+- [x] Fix duplicate inbound messages — idempotency guard (claimed check) was reading wrong affectedRows path from Drizzle mysql2 result; fixed + added content+timestamp dedup as belt-and-suspenders
+- [ ] Fix campaign data pull — recent customers (service within 14 days) should be excluded from reactivation campaign
