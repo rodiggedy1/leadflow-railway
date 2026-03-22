@@ -143,8 +143,8 @@ Before sending any SMS, you MUST confirm the number with the caller (see "Confir
 ## PRICING — calculate this yourself, do not call any tool for the price
 
 Base price by home size:
-- Studio: $119
-- 1 Bedroom: $119
+- Studio base: $119
+- 1 Bedroom base: $119
 - 2 Bedrooms: $209
 - 3 Bedrooms: $229
 - 4 Bedrooms: $279
@@ -164,14 +164,15 @@ Service type multiplier — apply AFTER adding bathroom surcharge:
 - Deep Cleaning: ×1.5 (round to nearest dollar)
 - Move-In/Move-Out: ×1.75 (round to nearest dollar)
 
-Worked examples (memorize these):
-- 1 bed / 1 bath / Standard = $119
-- 1 bed / 2 bath / Standard = $119 + $30 = $149
-- 2 bed / 1 bath / Standard = $209
-- 3 bed / 2 bath / Standard = $229 + $30 = $259
-- 3 bed / 2 bath / Deep = $259 × 1.5 = $389
-- 4 bed / 2 bath / Standard = $279 + $30 = $309
-- 4 bed / 3 bath / Standard = $279 + $60 = $339
+Worked examples (memorize these — bedroom base + $30 per bathroom):
+- 1 bed / 1 bath / Standard = $119 + $30 = $149
+- 1 bed / 2 bath / Standard = $119 + $60 = $179
+- 2 bed / 1 bath / Standard = $209 + $30 = $239
+- 2 bed / 2 bath / Standard = $209 + $60 = $269
+- 3 bed / 2 bath / Standard = $229 + $60 = $289
+- 3 bed / 2 bath / Deep = $289 × 1.5 = $434
+- 4 bed / 2 bath / Standard = $279 + $60 = $339
+- 4 bed / 3 bath / Standard = $279 + $90 = $369
 
 IMPORTANT: Always calculate the price yourself using the table above. Do NOT call getQuote or any other tool for the price. The price comes from your own calculation, not from a server.
 

@@ -3,11 +3,15 @@
  *
  * Single source of truth for all pricing calculations.
  * Used by the LLM prompt and the business rule enforcer.
+ *
+ * Structure:
+ *   Total = BEDROOM_BASE + (bathroom_count × $30) × service_multiplier
+ *   e.g. 1 bed / 1 bath / Standard = $119 + $30 = $149
+ *   e.g. 1 bed / 2 bath / Standard = $119 + $60 = $179
+ *   e.g. 2 bed / 2 bath / Standard = $209 + $60 = $269
  */
 
-// ─── Standard Cleaning Base Prices ───────────────────────────────────────────
-// Base price includes 1 bathroom. Each additional bathroom adds $30.
-
+// ─── Bedroom Base Prices (no bathrooms included) ──────────────────────────────
 const BEDROOM_BASE: Record<string, number> = {
   "Studio":       119,
   "1 Bedroom":    119,
@@ -31,7 +35,7 @@ const BATHROOM_COUNT: Record<string, number> = {
   "4+ Bathrooms":  4,
 };
 
-const EXTRA_BATH_PRICE = 30;
+const BATH_PRICE = 30; // every bathroom adds $30
 
 // ─── Recurring Discounts ──────────────────────────────────────────────────────
 export const RECURRING_DISCOUNTS = {
@@ -52,9 +56,8 @@ export const SERVICE_MULTIPLIERS: Record<string, number> = {
 export function calculatePrice(bedrooms: string, bathrooms: string, serviceType = "Standard Cleaning"): number {
   const base = BEDROOM_BASE[bedrooms] ?? 119;
   const baths = BATHROOM_COUNT[bathrooms] ?? 1;
-  const extraBaths = Math.max(0, baths - 1);
   const multiplier = SERVICE_MULTIPLIERS[serviceType] ?? 1.0;
-  return Math.round((base + extraBaths * EXTRA_BATH_PRICE) * multiplier);
+  return Math.round((base + baths * BATH_PRICE) * multiplier);
 }
 
 export function calculateRecurringPrice(basePrice: number, frequency: keyof typeof RECURRING_DISCOUNTS): number {
@@ -84,14 +87,22 @@ export function buildPricingSummary(bedrooms: string, bathrooms: string, service
  * Full pricing table as a string for the LLM system prompt.
  */
 export const PRICING_TABLE = `
-PRICING TABLE (Standard Cleaning, 1 bathroom included, +$30 per extra bathroom):
-- Studio / 1 Bedroom: $119
-- 2 Bedrooms: $209
-- 3 Bedrooms: $229
-- 4 Bedrooms: $279
-- 5 Bedrooms: $319
-- 6 Bedrooms: $379
-- 7+ Bedrooms: $419
+PRICING TABLE (bedroom base + $30 per bathroom, all bathrooms charged):
+- Studio / 1 Bedroom base: $119
+- 2 Bedrooms base: $209
+- 3 Bedrooms base: $229
+- 4 Bedrooms base: $279
+- 5 Bedrooms base: $319
+- 6 Bedrooms base: $379
+- 7+ Bedrooms base: $419
+
+BATHROOM ADD-ON: +$30 per bathroom (every bathroom is charged)
+Examples:
+- 1 bed / 1 bath = $119 + $30 = $149
+- 1 bed / 2 bath = $119 + $60 = $179
+- 2 bed / 1 bath = $209 + $30 = $239
+- 2 bed / 2 bath = $209 + $60 = $269
+- 3 bed / 2 bath = $229 + $60 = $289
 
 RECURRING DISCOUNTS (applied to standard cleaning price):
 - Weekly: 20% off → e.g. 2bed/2bath = $${calculateRecurringPrice(calculatePrice("2 Bedrooms", "2 Bathrooms"), "weekly")}/clean

@@ -14,45 +14,46 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { handleGetQuote } from "./vapiService";
 
 describe("handleGetQuote — pricing correctness", () => {
-  it("3 Bedrooms / 2 Bathrooms / Standard = $259", () => {
-    // Base: $229 (3BR) + $30 (1 extra bath) × 1.0 = $259
+  it("3 Bedrooms / 2 Bathrooms / Standard = $289", () => {
+    // Base: $229 (3BR) + 2 baths × $30 = $289
     const result = handleGetQuote({
       bedrooms: "3 Bedrooms",
       bathrooms: "2 Bathrooms",
       serviceType: "Standard Cleaning",
     });
-    expect(result.price).toBe(259);
-    expect(result.priceFormatted).toBe("$259");
-    expect(result.summary).toContain("$259");
+    expect(result.price).toBe(289);
+    expect(result.priceFormatted).toBe("$289");
+    expect(result.summary).toContain("$289");
   });
 
-  it("3 Bedrooms / 1 Bathroom / Standard = $229", () => {
-    // Base: $229 (3BR) + 0 extra baths = $229
+  it("3 Bedrooms / 1 Bathroom / Standard = $259", () => {
+    // Base: $229 (3BR) + 1 bath × $30 = $259
     const result = handleGetQuote({
       bedrooms: "3 Bedrooms",
       bathrooms: "1 Bathroom",
       serviceType: "Standard Cleaning",
     });
-    expect(result.price).toBe(229);
+    expect(result.price).toBe(259);
   });
 
-  it("2 Bedrooms / 2 Bathrooms / Standard = $239", () => {
-    // Base: $209 (2BR) + $30 (1 extra bath) = $239
+  it("2 Bedrooms / 2 Bathrooms / Standard = $269", () => {
+    // Base: $209 (2BR) + 2 baths × $30 = $269
     const result = handleGetQuote({
       bedrooms: "2 Bedrooms",
       bathrooms: "2 Bathrooms",
       serviceType: "Standard Cleaning",
     });
-    expect(result.price).toBe(239);
+    expect(result.price).toBe(269);
   });
 
-  it("Studio / 1 Bathroom / Standard = $119", () => {
+  it("Studio / 1 Bathroom / Standard = $149", () => {
+    // Base: $119 (Studio) + 1 bath × $30 = $149
     const result = handleGetQuote({
       bedrooms: "Studio",
       bathrooms: "1 Bathroom",
       serviceType: "Standard Cleaning",
     });
-    expect(result.price).toBe(119);
+    expect(result.price).toBe(149);
     expect(result.summary).toContain("Studio");
   });
 
@@ -151,7 +152,7 @@ describe("Vapi tool call format normalization", () => {
           bedrooms: "3 Bedrooms",
           bathrooms: "2 Bathrooms",
           serviceType: "Standard Cleaning",
-          quotedPrice: 259,
+          quotedPrice: 289,
         }),
       },
     };
@@ -168,7 +169,7 @@ describe("Vapi tool call format normalization", () => {
     expect(parsed!.name).toBe("createLead");
     expect(parsed!.args.name).toBe("Jane Smith");
     expect(parsed!.args.phone).toBe("+13029816191");
-    expect(parsed!.args.quotedPrice).toBe(259);
+    expect(parsed!.args.quotedPrice).toBe(289);
   });
 });
 
@@ -292,7 +293,7 @@ describe("Vapi webhook payload parsing", () => {
           recordingUrl: "https://storage.vapi.ai/recordings/test.mp3",
         },
         transcript: "Hi, I'd like to book a cleaning.",
-        summary: "Caller wanted to book a 3BR/2BA standard cleaning. Quote given: $259.",
+        summary: "Caller wanted to book a 3BR/2BA standard cleaning. Quote given: $289.",
         analysis: {
           structuredData: {
             intent: "booking",
@@ -302,7 +303,7 @@ describe("Vapi webhook payload parsing", () => {
             bedrooms: "3 Bedrooms",
             bathrooms: "2 Bathrooms",
             serviceType: "Standard Cleaning",
-            quotedPrice: 259,
+            quotedPrice: 289,
             leadCreated: false,
           },
           successEvaluation: "true",
@@ -319,7 +320,7 @@ describe("Vapi webhook payload parsing", () => {
     expect(durationSeconds).toBe(330); // 5 min 30 sec
     expect(call.customer.number).toBe("+13029816191");
     expect(payload.message.analysis.structuredData.outcome).toBe("quote_given");
-    expect(payload.message.analysis.structuredData.quotedPrice).toBe(259);
+    expect(payload.message.analysis.structuredData.quotedPrice).toBe(289);
     expect(payload.message.analysis.structuredData.callerEmail).toBe("rohan@example.com");
   });
 
@@ -367,7 +368,7 @@ describe("Tool call argument shapes", () => {
       bedrooms: "3 Bedrooms",
       bathrooms: "2 Bathrooms",
       serviceType: "Standard Cleaning",
-      quotedPrice: 259,
+      quotedPrice: 289,
       address: "1501 Canyon Mesquite",
       preferredDate: "Saturday morning",
     };
@@ -379,7 +380,7 @@ describe("Tool call argument shapes", () => {
   });
 
   it("sendSms requires to and message", () => {
-    const args = { to: "+13029816191", message: "Your quote is $259. We'll call to confirm!" };
+    const args = { to: "+13029816191", message: "Your quote is $289. We'll call to confirm!" };
     expect(args).toHaveProperty("to");
     expect(args).toHaveProperty("message");
     expect(args.message.length).toBeLessThanOrEqual(160);

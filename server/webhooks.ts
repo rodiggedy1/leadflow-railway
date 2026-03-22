@@ -149,6 +149,25 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
+      // ── Supersede stale duplicate sessions ───────────────────────────────────
+      // If multiple active sessions exist for this phone (e.g. a WIDGET_SIZING session
+      // AND an AVAILABILITY session from a re-submit), mark all non-selected active
+      // sessions as DONE immediately. This prevents the same inbound reply from being
+      // processed twice — once per active session — which causes duplicate AI responses.
+      const otherActiveSessions = sessions.filter(
+        s => s.id !== session.id && s.stage !== "DONE"
+      );
+      if (otherActiveSessions.length > 0) {
+        const otherIds = otherActiveSessions.map(s => s.id);
+        for (const otherId of otherIds) {
+          await db
+            .update(conversationSessions)
+            .set({ stage: "DONE" as any, autoFollowUpSent: 1 })
+            .where(eq(conversationSessions.id, otherId));
+        }
+        console.log(`[Webhook] Superseded ${otherActiveSessions.length} duplicate active session(s) for ${fromPhone} — keeping session ${session.id}.`);
+      }
+
       // If this phone belongs to a reactivation campaign contact, mark them as REPLIED
       markReactivationContactReplied(fromPhone).catch(err =>
         console.error("[Webhook] Failed to mark reactivation contact replied:", err)

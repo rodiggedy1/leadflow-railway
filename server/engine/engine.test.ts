@@ -37,7 +37,7 @@ function makeContext(overrides: Partial<ConversationContext> = {}): Conversation
     stage: "AVAILABILITY",
     leadName: "John Smith",
     leadPhone: "+12025551234",
-    quotedPrice: "239",
+    quotedPrice: "269",
     serviceType: "Standard Cleaning",
     bedrooms: "2 Bedrooms",
     bathrooms: "2 Bathrooms",
@@ -52,11 +52,11 @@ function makeContext(overrides: Partial<ConversationContext> = {}): Conversation
 
 describe("Pricing", () => {
   it("calculates standard price for 2bed/2bath correctly", () => {
-    expect(calculatePrice("2 Bedrooms", "2 Bathrooms")).toBe(239);
+    expect(calculatePrice("2 Bedrooms", "2 Bathrooms")).toBe(269);
   });
 
   it("calculates standard price for 3bed/2bath correctly", () => {
-    expect(calculatePrice("3 Bedrooms", "2 Bathrooms")).toBe(259);
+    expect(calculatePrice("3 Bedrooms", "2 Bathrooms")).toBe(289);
   });
 
   it("adds $30 per extra bathroom", () => {
@@ -66,26 +66,26 @@ describe("Pricing", () => {
   });
 
   it("calculates weekly recurring discount (20% off)", () => {
-    const standard = calculatePrice("2 Bedrooms", "2 Bathrooms"); // 239
+    const standard = calculatePrice("2 Bedrooms", "2 Bathrooms"); // 269
     const weekly = calculateRecurringPrice(standard, "weekly");
-    expect(weekly).toBe(Math.round(239 * 0.8)); // 191
+    expect(weekly).toBe(Math.round(269 * 0.8)); // 215
   });
 
   it("calculates biweekly recurring discount (15% off)", () => {
-    const standard = calculatePrice("2 Bedrooms", "2 Bathrooms"); // 239
+    const standard = calculatePrice("2 Bedrooms", "2 Bathrooms"); // 269
     const biweekly = calculateRecurringPrice(standard, "biweekly");
-    expect(biweekly).toBe(Math.round(239 * 0.85)); // 203
+    expect(biweekly).toBe(Math.round(269 * 0.85)); // 229
   });
 
   it("calculates monthly recurring discount (10% off)", () => {
-    const standard = calculatePrice("2 Bedrooms", "2 Bathrooms"); // 239
+    const standard = calculatePrice("2 Bedrooms", "2 Bathrooms"); // 269
     const monthly = calculateRecurringPrice(standard, "monthly");
-    expect(monthly).toBe(Math.round(239 * 0.9)); // 215
+    expect(monthly).toBe(Math.round(269 * 0.9)); // 242
   });
 
   it("buildPricingSummary includes all frequency options", () => {
     const summary = buildPricingSummary("2 Bedrooms", "2 Bathrooms");
-    expect(summary).toContain("$239");
+    expect(summary).toContain("$269");
     expect(summary).toContain("Weekly");
     expect(summary).toContain("Bi-weekly");
     expect(summary).toContain("Monthly");
@@ -317,9 +317,9 @@ describe("processLeadReplyV2 — Integration", () => {
   it("advances WIDGET_SIZING→AVAILABILITY when both rooms provided", async () => {
     const ctx = makeContext({ stage: "WIDGET_SIZING", bedrooms: "", bathrooms: "" });
     mockLLM.mockResolvedValueOnce(makeLLMResponse({
-      reply: "Great! For a 3 Bedrooms / 2 Bathrooms home, a Standard Cleaning is $259. Ready to schedule? We have openings Wednesday or Thursday — would either work?",
+      reply: "Great! For a 3 Bedrooms / 2 Bathrooms home, a Standard Cleaning is $289. Ready to schedule? We have openings Wednesday or Thursday — would either work?",
       nextStage: "AVAILABILITY",
-      extractedData: { bedrooms: "3 Bedrooms", bathrooms: "2 Bathrooms", selectedSlot: null, address: null, callPreference: null, quotedPrice: "259", serviceType: "Standard Cleaning" },
+      extractedData: { bedrooms: "3 Bedrooms", bathrooms: "2 Bathrooms", selectedSlot: null, address: null, callPreference: null, quotedPrice: "289", serviceType: "Standard Cleaning" },
       reasoning: "Both rooms provided, quoted price, asking for availability",
     }));
 

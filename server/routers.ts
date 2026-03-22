@@ -1961,7 +1961,31 @@ async function processWidgetLeadInBackground(input: {
   const smsResult = await sendSms({ to: normalizedPhone, content: sizingMsg });
   console.log(`[submitWidgetLead] Sizing SMS (Flow ${flowVariant}) sent: ${smsResult.success}`);
 
-  // ── Step 5: Create conversation session with correct smsFlow ──────────────────
+  // ── Step 4b: Supersede any existing active sessions for this phone ───────────
+  // Prevents duplicate AI responses when the same lead has multiple active sessions.
+  const WIDGET_ACTIVE_STAGES = [
+    "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF",
+    "ADDRESS", "CONFIRMATION", "WIDGET_SIZING",
+  ];
+  try {
+    const supersededCount = await db
+      .update(conversationSessions)
+      .set({ stage: "DONE" as any, autoFollowUpSent: 1 })
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, normalizedPhone),
+          or(...WIDGET_ACTIVE_STAGES.map(s => eq(conversationSessions.stage, s as any)))
+        )
+      );
+    const affected = (supersededCount as any)?.rowsAffected ?? (supersededCount as any)?.[0]?.affectedRows ?? 0;
+    if (affected > 0) {
+      console.log(`[submitWidgetLead] Superseded ${affected} old active session(s) for ${normalizedPhone} before creating new one.`);
+    }
+  } catch (supersedErr) {
+    console.error("[submitWidgetLead] Failed to supersede old sessions (non-fatal):", supersedErr);
+  }
+
+  // ── Step 5: Create conversation session with correct smsFlow ──────────────
   const now = Date.now();
   const initialHistory = JSON.stringify([
     { role: "assistant", content: sizingMsg, ts: now },
