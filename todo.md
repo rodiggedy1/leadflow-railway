@@ -1993,3 +1993,6 @@
 
 ## Campaign Recency Filter — March 22
 - [x] Exclude leads who received an SMS in the last 7 days from all 3 campaign target lists
+
+## Cold Leads Fix — March 22
+- [x] Fix Re-engage Cold Leads: no COLD stage exists in DB; retarget to REVIEW_REQUESTED + NOT_INTERESTED leads (went quiet after review ask)

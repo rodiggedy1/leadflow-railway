@@ -1280,7 +1280,11 @@ Respond in JSON with this exact schema:
         )
         .limit(100);
 
-      // Cold leads from last 90 days (wider window for reactivation)
+      // "Cold" leads from last 90 days — leads who went quiet without booking.
+      // In this system there is no literal COLD stage; the equivalent is:
+      //   REVIEW_REQUESTED  → asked for review, never converted (largest pool)
+      //   NOT_INTERESTED    → expressed hesitation but didn't hard-opt-out
+      // These are prime re-engagement targets for a friendly check-in blast.
       const coldLeads = await db
         .select({
           id: conversationSessions.id,
@@ -1293,7 +1297,10 @@ Respond in JSON with this exact schema:
         .where(
           and(
             gte(conversationSessions.createdAt, ninetyDaysAgo),
-            eq(conversationSessions.stage, "COLD" as string),
+            or(
+              eq(conversationSessions.stage, "REVIEW_REQUESTED" as string),
+              eq(conversationSessions.stage, "NOT_INTERESTED" as string)
+            ),
             ne(conversationSessions.isBooked, 1),
             isNotNull(conversationSessions.leadPhone)
           )
