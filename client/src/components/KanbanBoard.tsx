@@ -1,16 +1,12 @@
 /**
  * KanbanBoard — Pipeline view for the admin dashboard.
  *
- * 5 columns: Quote Sent → Follow Up → Availability → Booked → Lost
- * Each column shows lead count + total pipeline value.
- * Cards are draggable between columns; dropping fires adminUpdateStage.
- *
- * World-class polish:
- * - Drag handle hidden until card hover
- * - Empty state centered vertically with dashed border drop zone
- * - Colored top border per column (already present, kept)
- * - Improved card visual hierarchy: price is prominent, metadata is subtle
- * - Drop zone uses a neutral highlight (no coral)
+ * 4 columns: New Leads → Quoted → Follow Up → Booked
+ * Design: light mode, inspired by the provided screenshot.
+ * - Column headers with colored bottom underline + count badge
+ * - Cards: name, service, price (green), source badge + time ago
+ * - Stats bar at bottom: Leads Today, Booked Today, Revenue Today
+ * - Drag-and-drop between columns
  */
 import { useState, useMemo, useRef } from "react";
 import type React from "react";
@@ -28,7 +24,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc";
-import { Phone, Clock, GripVertical, ArrowDownToLine, CheckCircle2, TrendingUp, DollarSign } from "lucide-react";
+import { Phone, Globe, MessageSquare, Mic, MoreHorizontal, CheckCircle2 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,62 +51,42 @@ type KanbanColumn = {
   label: string;
   stages: string[];
   targetStage: string;
-  accentClass: string;       // Tailwind border-top color class
-  accentHex: string;         // Hex for drop zone tint
-  headerBg: string;
-  countBg: string;
+  accentColor: string;   // hex for the bottom underline
+  badgeBg: string;       // tailwind classes for count badge
 };
 
 const KANBAN_COLUMNS: KanbanColumn[] = [
   {
-    id: "quote_sent",
-    label: "Quote Sent",
+    id: "new_leads",
+    label: "NEW LEADS",
     stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE"],
     targetStage: "QUOTE_SENT",
-    accentClass: "border-t-blue-400",
-    accentHex: "#eff6ff",
-    headerBg: "bg-blue-50/60",
-    countBg: "bg-blue-100 text-blue-700",
+    accentColor: "#AAFF00",
+    badgeBg: "bg-[#AAFF00] text-black",
+  },
+  {
+    id: "quoted",
+    label: "QUOTED",
+    stages: ["AVAILABILITY"],
+    targetStage: "AVAILABILITY",
+    accentColor: "#d1d5db",
+    badgeBg: "bg-gray-200 text-gray-700",
   },
   {
     id: "follow_up",
-    label: "Follow Up",
+    label: "FOLLOW UP",
     stages: ["CALL_SCHEDULED", "DONE", "UNHANDLED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"],
     targetStage: "FOLLOW_UP_SCHEDULED",
-    accentClass: "border-t-amber-400",
-    accentHex: "#fffbeb",
-    headerBg: "bg-amber-50/60",
-    countBg: "bg-amber-100 text-amber-700",
-  },
-  {
-    id: "availability",
-    label: "Availability",
-    stages: ["AVAILABILITY"],
-    targetStage: "AVAILABILITY",
-    accentClass: "border-t-orange-400",
-    accentHex: "#fff7ed",
-    headerBg: "bg-orange-50/60",
-    countBg: "bg-orange-100 text-orange-700",
+    accentColor: "#AAFF00",
+    badgeBg: "bg-[#AAFF00] text-black",
   },
   {
     id: "booked",
-    label: "Booked",
+    label: "BOOKED",
     stages: ["BOOKED"],
     targetStage: "BOOKED",
-    accentClass: "border-t-emerald-500",
-    accentHex: "#f0fdf4",
-    headerBg: "bg-emerald-50/60",
-    countBg: "bg-emerald-100 text-emerald-700",
-  },
-  {
-    id: "dead",
-    label: "Dead Leads",
-    stages: ["COLD", "NOT_INTERESTED"],
-    targetStage: "COLD",
-    accentClass: "border-t-slate-500",
-    accentHex: "#f1f5f9",
-    headerBg: "bg-slate-50/60",
-    countBg: "bg-slate-200 text-slate-600",
+    accentColor: "#AAFF00",
+    badgeBg: "bg-[#AAFF00] text-black",
   },
 ];
 
@@ -128,11 +104,11 @@ function timeAgo(date: Date | string | null): string {
   const diffMs = now - then;
   const diffMins = Math.floor(diffMs / 60000);
   if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m`;
+  if (diffMins < 60) return `${diffMins}m ago`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h`;
+  if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d`;
+  return `${diffDays}d ago`;
 }
 
 function computeTotal(quotedPrice: string | null, _extras: string | null): number {
@@ -141,16 +117,15 @@ function computeTotal(quotedPrice: string | null, _extras: string | null): numbe
   return isNaN(base) ? 0 : base;
 }
 
-function sourceBadge(source: string | null): string {
-  if (!source) return "Form";
-  if (source.startsWith("always-on")) return "Always-On";
-  if (source === "widget") return "Widget";
-  if (source === "reactivation") return "Campaign";
-  if (source === "voice") return "Voice";
-  return "Form";
+function getSourceInfo(source: string | null): { label: string; icon: React.ReactNode } {
+  if (!source) return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
+  if (source === "widget") return { label: "widget", icon: <Globe className="w-2.5 h-2.5" /> };
+  if (source === "voice") return { label: "voice", icon: <Mic className="w-2.5 h-2.5" /> };
+  if (source === "reactivation" || source.startsWith("always-on")) return { label: "sms", icon: <MessageSquare className="w-2.5 h-2.5" /> };
+  return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
 }
 
-// ── Draggable card ────────────────────────────────────────────────────────────
+// ── Lead Card ─────────────────────────────────────────────────────────────────
 
 function LeadCard({
   lead,
@@ -163,8 +138,7 @@ function LeadCard({
   onClick?: () => void;
   onMoveToBooked?: () => void;
 }) {
-  const [hovered, setHovered] = useState(false);
-  const isAvailability = lead.stage === "AVAILABILITY";
+  const isQuoted = lead.stage === "AVAILABILITY";
   const { attributes, listeners, setNodeRef, transform, isDragging: isCurrentlyDragging } = useDraggable({
     id: String(lead.id),
     data: { lead },
@@ -172,7 +146,10 @@ function LeadCard({
 
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const total = computeTotal(lead.quotedPrice, lead.extras);
-  const src = sourceBadge(lead.leadSource);
+  const { label: srcLabel, icon: srcIcon } = getSourceInfo(lead.leadSource);
+  const firstName = lead.leadName?.split(" ")[0] ?? "Unknown";
+  const lastName = lead.leadName?.split(" ").slice(1).join(" ");
+  const displayName = lastName ? `${firstName} ${lastName[0]}.` : firstName;
 
   return (
     <div
@@ -180,98 +157,81 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border border-gray-200 p-3 cursor-grab active:cursor-grabbing select-none transition-all ${
-        isDragging ? "opacity-40 shadow-md" : "hover:shadow-md hover:border-gray-300"
+      className={`group bg-white rounded-xl border border-gray-200 p-3.5 cursor-grab active:cursor-grabbing select-none transition-all ${
+        isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
         if (isCurrentlyDragging) return;
         if ((e as unknown as MouseEvent & { _wasDrag?: boolean })._wasDrag) return;
         onClick?.();
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
-      {/* Top row: grip (hover only) + name + price */}
-      <div className="flex items-start gap-1.5">
-        {/* Drag handle — only visible on hover */}
-        <div className={`mt-0.5 flex-shrink-0 transition-opacity duration-150 ${hovered ? "opacity-40" : "opacity-0"}`}>
-          <GripVertical className="w-3.5 h-3.5 text-gray-400" />
-        </div>
-
+      {/* Top row: name + menu */}
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          {/* Name + price */}
-          <div className="flex items-baseline justify-between gap-1">
-            <span className="text-sm font-semibold text-gray-900 truncate leading-tight">
-              {lead.leadName ?? "Unknown"}
-            </span>
-            {total > 0 && (
-              <span className="text-base font-bold text-gray-900 flex-shrink-0 tabular-nums">
-                ${total}
-              </span>
-            )}
-          </div>
-
-          {/* Phone / call button */}
-          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {hovered ? (
-              <a
-                href={`tel:${lead.leadPhone}`}
-                onClick={e => e.stopPropagation()}
-                title={`Call ${lead.leadPhone}`}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-900 text-white hover:bg-gray-700 transition-colors"
-              >
-                <Phone className="w-2.5 h-2.5" />
-                Call
-              </a>
-            ) : (
-              <span className="text-xs text-gray-400 truncate">{lead.leadPhone}</span>
-            )}
-            {/* Move to Booked — only for Availability leads, only on hover */}
-            {hovered && isAvailability && onMoveToBooked && (
-              <button
-                onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
-                title="Mark as Booked"
-              >
-                <CheckCircle2 className="w-2.5 h-2.5" />
-                Book
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Service type */}
-      {lead.serviceType && (
-        <p className="text-xs text-gray-500 mt-1.5 truncate pl-5">{lead.serviceType}</p>
-      )}
-
-      {/* Footer row */}
-      <div className="flex items-center justify-between mt-2 pl-5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
-            {src}
-          </span>
-          {lead.assignedAgentName && (
-            <span className="text-[10px] text-gray-400 truncate max-w-[60px]">
-              {lead.assignedAgentName.split(" ")[0]}
-            </span>
+          <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
+          {lead.serviceType && (
+            <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.serviceType}</p>
           )}
         </div>
-        {lead.lastActivityAt && (
-          <span className="text-[10px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
-            <Clock className="w-2.5 h-2.5" />
-            {timeAgo(lead.lastActivityAt)}
-          </span>
+        <button
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded hover:bg-gray-100"
+          onClick={e => { e.stopPropagation(); onClick?.(); }}
+          title="View details"
+        >
+          <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
+        </button>
+      </div>
+
+      {/* Price row */}
+      <div className="flex items-center justify-between mt-2.5">
+        {total > 0 ? (
+          <span className="text-base font-bold" style={{ color: "#16a34a" }}>${total}</span>
+        ) : (
+          <span className="text-sm text-gray-300 font-medium">—</span>
         )}
+        {/* Quick Book button for Quoted leads */}
+        {isQuoted && onMoveToBooked && (
+          <button
+            onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+            title="Mark as Booked"
+          >
+            <CheckCircle2 className="w-2.5 h-2.5" />
+            Book
+          </button>
+        )}
+      </div>
+
+      {/* Footer: source + time */}
+      <div className="flex items-center justify-between mt-2">
+        <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
+          {srcIcon}
+          {srcLabel}
+        </span>
+        <div className="flex items-center gap-2">
+          {lead.leadPhone && (
+            <a
+              href={`tel:${lead.leadPhone}`}
+              onClick={e => e.stopPropagation()}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              title={`Call ${lead.leadPhone}`}
+            >
+              <Phone className="w-3 h-3 text-gray-400 hover:text-gray-700" />
+            </a>
+          )}
+          {lead.lastActivityAt && (
+            <span className="text-[11px] text-gray-400">{timeAgo(lead.lastActivityAt)}</span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Droppable column ──────────────────────────────────────────────────────────
+// ── Droppable Column ──────────────────────────────────────────────────────────
 
-function KanbanColumn({
+function KanbanColumnView({
   column,
   leads,
   isOver,
@@ -288,49 +248,39 @@ function KanbanColumn({
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
-  const totalValue = leads.reduce((sum, l) => sum + computeTotal(l.quotedPrice, l.extras), 0);
-  const isEmpty = leads.length === 0;
-
   return (
-    <div className="flex flex-col min-w-[230px] w-[230px] flex-shrink-0">
+    <div className="flex flex-col flex-1 min-w-[220px] max-w-[300px]">
       {/* Column header */}
-      <div
-        className={`rounded-t-xl border border-b-0 px-3 py-2.5 ${column.headerBg} border-t-4 ${column.accentClass}`}
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-800">{column.label}</span>
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${column.countBg}`}>
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold tracking-widest text-gray-500 uppercase">{column.label}</span>
+          <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${column.badgeBg}`}>
             {leads.length}
           </span>
         </div>
-        <p className="text-xs text-gray-400 font-medium mt-0.5">
-          {totalValue > 0 ? `$${totalValue.toLocaleString()} pipeline` : "no quotes yet"}
-        </p>
+        {/* Colored underline */}
+        <div className="h-0.5 rounded-full" style={{ backgroundColor: column.accentColor }} />
       </div>
 
       {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className="flex-1 rounded-b-xl border border-t-0 p-2 flex flex-col gap-2 min-h-[420px] transition-colors duration-150"
+        className="flex-1 flex flex-col gap-2.5 min-h-[400px] rounded-xl transition-colors duration-150 p-1"
         style={{
-          backgroundColor: isOver ? column.accentHex : "#f9fafb",
-          borderColor: isOver ? "#d1d5db" : "#e5e7eb",
-          borderStyle: isEmpty && !isOver ? "dashed" : "solid",
+          backgroundColor: isOver ? "#f0fdf4" : "transparent",
         }}
       >
-        {/* Empty state — centered vertically */}
-        {isEmpty && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-8">
-            <ArrowDownToLine
-              className={`w-5 h-5 transition-opacity ${isOver ? "opacity-60 text-gray-500" : "opacity-20 text-gray-400"}`}
-            />
-            <p className={`text-xs text-center transition-opacity ${isOver ? "opacity-70 text-gray-600 font-medium" : "opacity-40 text-gray-400"}`}>
-              {isOver ? "Release to move here" : "No leads yet"}
+        {leads.length === 0 && (
+          <div
+            className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed min-h-[120px]"
+            style={{ borderColor: isOver ? "#86efac" : "#e5e7eb" }}
+          >
+            <p className="text-xs text-gray-300 font-medium">
+              {isOver ? "Drop here" : "No leads"}
             </p>
           </div>
         )}
 
-        {/* Cards */}
         {leads.map(lead => (
           <LeadCard
             key={lead.id}
@@ -343,10 +293,9 @@ function KanbanColumn({
           />
         ))}
 
-        {/* Drop hint at bottom when column has cards and is being hovered */}
-        {!isEmpty && isOver && (
-          <div className="flex items-center justify-center py-2 rounded-lg border border-dashed border-gray-300">
-            <p className="text-xs text-gray-400 font-medium">Drop here</p>
+        {leads.length > 0 && isOver && (
+          <div className="flex items-center justify-center py-2 rounded-xl border-2 border-dashed border-green-300">
+            <p className="text-xs text-green-500 font-medium">Drop here</p>
           </div>
         )}
       </div>
@@ -354,58 +303,46 @@ function KanbanColumn({
   );
 }
 
-// ── Main board ────────────────────────────────────────────────────────────────
+// ── Stats Bar ─────────────────────────────────────────────────────────────────
+
+function StatsBar({ leads }: { leads: LeadRow[] }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const todayLeads = leads.filter(l => new Date(l.createdAt) >= today);
+  const bookedToday = todayLeads.filter(l => STAGE_TO_COLUMN[l.stage] === "booked");
+  const revenueToday = bookedToday.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
+
+  const stats = [
+    { value: todayLeads.length, label: "LEADS TODAY" },
+    { value: bookedToday.length, label: "BOOKED TODAY" },
+    { value: `$${revenueToday.toLocaleString()}`, label: "REVENUE TODAY", accent: true },
+  ];
+
+  return (
+    <div className="mt-6 border-t border-gray-100 pt-5 grid grid-cols-3 divide-x divide-gray-100">
+      {stats.map(s => (
+        <div key={s.label} className="flex flex-col items-center py-3 px-4">
+          <span
+            className="text-3xl font-black tabular-nums"
+            style={{ color: s.accent ? "#16a34a" : "#111827", letterSpacing: "-0.03em" }}
+          >
+            {s.value}
+          </span>
+          <span className="text-[10px] font-bold tracking-widest text-gray-400 mt-1 uppercase">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main Board ────────────────────────────────────────────────────────────────
 
 type KanbanBoardProps = {
   leads: LeadRow[];
   onCardClick: (lead: LeadRow) => void;
   onStageChange?: (id: number, newStage: string) => void;
 };
-
-// ── Pipeline summary bar ──────────────────────────────────────────────────────
-
-function PipelineSummary({ leads }: { leads: LeadRow[] }) {
-  const totalLeads = leads.length;
-  const totalPipeline = leads.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
-  const bookedLeads = leads.filter(l => STAGE_TO_COLUMN[l.stage] === "booked");
-  const bookedRevenue = bookedLeads.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
-  const availabilityCount = leads.filter(l => STAGE_TO_COLUMN[l.stage] === "availability").length;
-
-  return (
-    <div className="flex items-center gap-4 px-1 pb-3 flex-wrap">
-      <div className="flex items-center gap-1.5 text-sm text-gray-600">
-        <TrendingUp className="w-4 h-4 text-gray-400" />
-        <span className="font-semibold text-gray-900">{totalLeads}</span>
-        <span>leads</span>
-      </div>
-      <span className="text-gray-200">·</span>
-      <div className="flex items-center gap-1.5 text-sm text-gray-600">
-        <DollarSign className="w-4 h-4 text-gray-400" />
-        <span className="font-semibold text-gray-900">${totalPipeline.toLocaleString()}</span>
-        <span>total pipeline</span>
-      </div>
-      {bookedRevenue > 0 && (
-        <>
-          <span className="text-gray-200">·</span>
-          <div className="flex items-center gap-1.5 text-sm">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span className="font-semibold text-emerald-700">${bookedRevenue.toLocaleString()}</span>
-            <span className="text-gray-500">booked</span>
-          </div>
-        </>
-      )}
-      {availabilityCount > 0 && (
-        <>
-          <span className="text-gray-200">·</span>
-          <div className="flex items-center gap-1.5 text-sm">
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold">{availabilityCount}</span>
-            <span className="text-gray-500">checking availability</span>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 export default function KanbanBoard({ leads, onCardClick, onStageChange }: KanbanBoardProps) {
   const updateStageQuick = trpc.leads.adminUpdateStage.useMutation();
@@ -452,8 +389,11 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
     effectiveLeads.forEach(lead => {
-      const colId = STAGE_TO_COLUMN[lead.stage] ?? "follow_up";
-      map[colId].push(lead);
+      const colId = STAGE_TO_COLUMN[lead.stage];
+      if (colId) {
+        map[colId].push(lead);
+      }
+      // Dead/cold leads are not shown in the pipeline
     });
     return map;
   }, [effectiveLeads]);
@@ -487,7 +427,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
     const currentLead = effectiveLeads.find(l => l.id === leadId);
     if (!currentLead) return;
 
-    const currentColId = STAGE_TO_COLUMN[currentLead.stage] ?? "follow_up";
+    const currentColId = STAGE_TO_COLUMN[currentLead.stage];
     if (currentColId === targetCol.id) return;
 
     setLocalStages(prev => ({ ...prev, [leadId]: targetCol.targetStage }));
@@ -511,40 +451,41 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange }: Kanba
   }
 
   return (
-    <>
-    <PipelineSummary leads={effectiveLeads} />
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver as never}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="overflow-x-auto pb-4">
-        <div className="flex gap-3 min-w-max">
-          {KANBAN_COLUMNS.map(col => (
-            <KanbanColumn
-              key={col.id}
-              column={col}
-              leads={columnLeads[col.id] ?? []}
-              isOver={overId === col.id}
-              onCardClick={onCardClick}
-              justDraggedRef={justDraggedRef}
-              onMoveToBooked={col.id === "availability" ? handleMoveToBooked : undefined}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Drag overlay — ghost card while dragging */}
-      <DragOverlay>
-        {activeLead ? (
-          <div className="rotate-1 opacity-95 shadow-2xl scale-105">
-            <LeadCard lead={activeLead} />
+    <div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver as never}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="overflow-x-auto pb-2">
+          <div className="flex gap-4 min-w-max">
+            {KANBAN_COLUMNS.map(col => (
+              <KanbanColumnView
+                key={col.id}
+                column={col}
+                leads={columnLeads[col.id] ?? []}
+                isOver={overId === col.id}
+                onCardClick={onCardClick}
+                justDraggedRef={justDraggedRef}
+                onMoveToBooked={col.id === "quoted" ? handleMoveToBooked : undefined}
+              />
+            ))}
           </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
-    </>
+        </div>
+
+        {/* Drag overlay */}
+        <DragOverlay>
+          {activeLead ? (
+            <div className="rotate-1 opacity-95 shadow-2xl scale-105">
+              <LeadCard lead={activeLead} />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      <StatsBar leads={effectiveLeads} />
+    </div>
   );
 }
