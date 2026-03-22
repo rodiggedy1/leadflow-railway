@@ -1358,12 +1358,14 @@ Respond in JSON with this exact schema:
 
       // Segment leads for each campaign type (applying recency filter)
       // Campaign 1 (Tomorrow Slots) & Campaign 2 (Re-engage) both draw from the lapsed
-      // past-customer pool. Campaign 1 uses a different urgency script focused on the
-      // open slot; Campaign 2 uses a softer check-in script.
+      // past-customer pool but are OFFSET so they cover unique recipients:
+      //   Tomorrow Slots  → index 0–49  (top 50 most recent lapsers)
+      //   Re-engage       → index 50–99 (next 50, no overlap)
+      // This means a single campaign run reaches up to 100 unique lapsed customers.
       const coldFiltered = coldLeads.filter(notRecentlyCampaigned);
       const totalLapsed = coldFiltered.length; // full pool count for UI display
-      const tomorrowTargets = coldFiltered.slice(0, 50); // top 50 lapsed for tomorrow blast
-      const coldOnly = coldFiltered.slice(0, 50); // same cap for re-engage card
+      const tomorrowTargets = coldFiltered.slice(0, 50);   // positions 1–50
+      const coldOnly = coldFiltered.slice(50, 100);         // positions 51–100 (no overlap)
       const stalledFunnelLeads = stalledLeads
         .filter(l => l.stage === "AVAILABILITY" || l.stage === "SLOT_CHOICE" || l.stage === "TIME_PREF" || l.stage === "FOLLOW_UP_SCHEDULED")
         .filter(notRecentlyCampaigned)
@@ -1409,17 +1411,19 @@ Respond in JSON with this exact schema:
           id: "reactivation",
           type: "reactivation",
           title: `Re-engage Lapsed Customers`,
-          subtitle: totalLapsed > 0
-            ? `${totalLapsed.toLocaleString()} past customers haven't booked in 60+ days. Sending to top 50 most recent.`
+          subtitle: totalLapsed > 50
+            ? `${totalLapsed.toLocaleString()} past customers haven't booked in 60+ days. Sending to customers #51–100 (no overlap with Tomorrow Slots).`
+            : totalLapsed > 0
+            ? `${totalLapsed.toLocaleString()} past customers haven't booked in 60+ days — all covered by Tomorrow Slots campaign.`
             : `No lapsed customers right now — great retention!`,
           urgency: totalLapsed >= 100 ? "high" : totalLapsed >= 20 ? "medium" : "low",
           recipientCount: coldOnly.length,
           totalPoolSize: totalLapsed,
           estimatedRevenue: coldOnly.length * 250 * 0.15, // past customers have higher avg value
           script: `Hi {{name}}, it's Maids in Black! 🏠 We'd love to have you back. We're offering priority scheduling for returning customers this week — want to book a clean? Reply YES or just let us know a good time!`,
-          scheduleNote: totalLapsed > 0
-            ? `Sending to 50 of ${totalLapsed.toLocaleString()} eligible lapsed customers (60+ days since last job).`
-            : `No lapsed customers right now.`,
+          scheduleNote: totalLapsed > 50
+            ? `Sending to customers #51–100 of ${totalLapsed.toLocaleString()} eligible lapsed customers (no overlap with Tomorrow Slots).`
+            : `No additional lapsed customers beyond the Tomorrow Slots batch.`,
           targetLeadIds: [],
           targetPhones: coldOnly.map(l => l.phone).filter(Boolean) as string[],
           hasLeads: coldOnly.length > 0,

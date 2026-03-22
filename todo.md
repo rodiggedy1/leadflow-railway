@@ -2006,3 +2006,6 @@
 
 ## Tomorrow Slots Recipients — March 22
 - [x] Fill Tomorrow Open Slots: retarget to lapsed past customers (same completedJobs pool as Re-engage, different urgency script)
+
+## Campaign Deduplication — March 22
+- [x] Offset lapsed campaigns: Tomorrow Slots = top 50 (index 0–49), Re-engage = next 50 (index 50–99), so a run reaches 100 unique lapsed customers
