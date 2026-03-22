@@ -2086,3 +2086,10 @@
 - [x] Diagnose: follow-up messages not sending after reactivation reply
 - [x] Fix: sendTestCampaignSms now creates REACTIVATION session + passes testName/campaignId
 - [x] Root cause: old DONE widget sessions were intercepting replies (webhook picks most recent non-DONE session)
+
+## Reactivation SMS Path + Settings Tab — March 22
+- [x] Add reactivation_time_ask and reactivation_closing templates to DEFAULT_TEMPLATES
+- [x] Bypass LLM for REACTIVATION/REACTIVATION_TIME stages — use scripted templates from DB only
+- [x] Add dedicated REACTIVATION webhook handler block (sendSms BEFORE DB update)
+- [x] Add REACTIVATION/REACTIVATION_TIME to webhook priority filter
+- [x] Add "Reactivation" tab to SettingsPage with MessageFlowPanel + flow diagram

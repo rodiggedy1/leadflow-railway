@@ -476,11 +476,13 @@ function lookupPrice(bedrooms: string, bathrooms: string): string {
 
 /**
  * Handles replies in the REACTIVATION stage.
- * Covers three cases:
- *   1. YES / positive → ask for availability
- *   2. Price question → give discounted price + ask for availability
- *   3. STOP / opt-out → mark done, no further messages
- *   4. Anything else → route through availability flow
+ * Fully scripted — no LLM involved. All replies use DB templates from messageTemplates.
+ *
+ * Flow:
+ *   1. STOP / opt-out → reactivation_opt_out → DONE
+ *   2. Price question  → reactivation_price_question + reactivation_time_ask → REACTIVATION_TIME
+ *   3. YES / positive  → reactivation_yes_reply → REACTIVATION_TIME
+ *   4. Anything else   → reactivation_time_ask → REACTIVATION_TIME
  */
 async function handleReactivationReply(
   leadReply: string,
@@ -496,39 +498,43 @@ async function handleReactivationReply(
     return { reply, nextStage: "DONE" };
   }
 
-  // Price question
+  // Price question — give discounted price then ask for time window
   if (isPricingQuestion(lower)) {
     if (context.lastPrice && context.lastPrice > 0) {
       const discounted = Math.round(context.lastPrice * (1 - discountPct / 100));
-      const reply = await getTemplate("reactivation_price_question", {
+      const priceReply = await getTemplate("reactivation_price_question", {
         "[Name]": firstName,
         "[LastPrice]": String(context.lastPrice),
         "[Discount]": String(discountPct),
         "[DiscountedPrice]": String(discounted),
       });
+      const timeAsk = await getTemplate("reactivation_time_ask");
       return {
-        reply: reply + " " + buildAvailabilityMessage(context.extras),
-        nextStage: "AVAILABILITY",
+        reply: priceReply + " " + timeAsk,
+        nextStage: "REACTIVATION_TIME",
       };
     }
-    // No price on file — route to availability
+    // No price on file — still ask for time window
+    const timeAsk = await getTemplate("reactivation_time_ask");
     return {
-      reply: `Hi ${firstName}! We'd love to get you a quote — ${buildAvailabilityMessage(context.extras)}`,
-      nextStage: "AVAILABILITY",
-    };
-  }
-
-  // YES / positive intent
-  if (/^\s*(yes|yeah|yep|sure|ok|okay|sounds good|let's do it|book|i'm in|im in|absolutely|definitely|great|perfect|yes please)\s*[!.]*\s*$/i.test(lower)) {
-    return {
-      reply: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment",
+      reply: `Hi ${firstName}! We'd love to get you back. ` + timeAsk,
       nextStage: "REACTIVATION_TIME",
     };
   }
 
-  // Any other reply — treat as engagement, ask for time window
+  // YES / positive intent — use the yes_reply template then REACTIVATION_TIME
+  if (/^\s*(yes|yeah|yep|sure|ok|okay|sounds good|let's do it|book|i'm in|im in|absolutely|definitely|great|perfect|yes please)\s*[!.]*\s*$/i.test(lower)) {
+    const yesReply = await getTemplate("reactivation_yes_reply", { "[Name]": firstName });
+    return {
+      reply: yesReply,
+      nextStage: "REACTIVATION_TIME",
+    };
+  }
+
+  // Any other reply — treat as engagement, ask for time window (scripted, no LLM)
+  const timeAsk = await getTemplate("reactivation_time_ask");
   return {
-    reply: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment",
+    reply: timeAsk,
     nextStage: "REACTIVATION_TIME",
   };
 }
@@ -1376,6 +1382,12 @@ async function resumeStageAfterLanguageConfirm(
       // Lead was in the middle of answering bedrooms/bathrooms — ask again in their language
       englishMsg = `To get you a price, I just need to know: how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`;
       nextStage = "WIDGET_SIZING";
+      break;
+    case "REACTIVATION_TIME":
+      englishMsg = await getTemplate("reactivation_closing", {
+        "[Name]": context.leadName?.split(" ")[0] ?? context.leadName ?? "there",
+      });
+      nextStage = "DONE";
       break;
     case "QUOTE_SENT":
     case "AVAILABILITY":

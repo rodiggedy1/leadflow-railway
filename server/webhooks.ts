@@ -35,6 +35,7 @@ import { markReactivationContactReplied } from "./campaignRouter";
 import { markAlwaysOnContactReplied } from "./alwaysOnSend";
 import { handleReviewReplyForJob } from "./reviewRouter";
 import { handleRatingReply } from "./qualityRouter";
+import { processLeadReply as processReactivationReply } from "./conversationEngine";
 import { logActivity } from "./activityLogger";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
@@ -117,13 +118,14 @@ export function registerWebhookRoutes(app: Express) {
         .orderBy(conversationSessions.createdAt)
         .limit(50);
 
-      // Prioritize quality rating and review sessions so that a customer who has
-      // both a lead session and a rating/review session gets their reply routed
-      // to the quality/review flow, not the lead AI engine.
+      // Prioritize quality rating, review, and reactivation sessions so that a customer
+      // who has both a lead session and a reactivation/rating/review session gets their
+      // reply routed to the correct scripted flow, not the lead AI engine.
       const reversedSessions = sessions.slice().reverse();
       const reviewSession = reversedSessions.find(
         s => s.stage === "QUALITY_RATING_REQUESTED" || s.stage === "QUALITY_MISSED_FOLLOWUP"
           || s.stage === "REVIEW_REQUESTED" || s.stage === "REVIEW_DONE"
+          || s.stage === "REACTIVATION" || s.stage === "REACTIVATION_TIME"
       );
       const activeSession = reviewSession ??
         reversedSessions.find(s => s.stage !== "DONE");
@@ -301,6 +303,29 @@ export function registerWebhookRoutes(app: Express) {
         // SMS flow variant assigned at lead creation ("A" = Madison, "B" = Jade)
         smsFlow: session.smsFlow ?? "B",
       };
+
+      // ── REACTIVATION / REACTIVATION_TIME: Fully scripted — no LLM ─────────────────
+      // Uses DB templates from messageTemplates (editable in Settings → Reactivation tab).
+      // Flow: REACTIVATION → (YES/price/other) → REACTIVATION_TIME → (time given) → DONE
+      if (session.stage === "REACTIVATION" || session.stage === "REACTIVATION_TIME") {
+        const reactivationResult = await processReactivationReply(inboundText, context);
+        console.log(`[Webhook] Reactivation stage: ${session.stage} → ${reactivationResult.nextStage}. Reply: "${reactivationResult.reply}"`);
+        // Send SMS FIRST — before DB update — so a DB error never blocks the message
+        const reactivationSmsResult = await sendSms({ to: fromPhone, content: reactivationResult.reply });
+        if (!reactivationSmsResult.success) {
+          console.error(`[Webhook] Failed to send reactivation reply to ${fromPhone}:`, reactivationSmsResult.error);
+        }
+        history.push({ role: "assistant", content: reactivationResult.reply, ts: Date.now() });
+        if (history.length > 20) history = history.slice(-20);
+        await db
+          .update(conversationSessions)
+          .set({
+            stage: reactivationResult.nextStage as any,
+            messageHistory: JSON.stringify(history),
+          })
+          .where(eq(conversationSessions.id, session.id));
+        return;
+      }
 
       // ── QUALITY_RATING: Post-job 1-5 star rating flow ───────────────────────────
       if (session.stage === "QUALITY_RATING_REQUESTED" || session.stage === "QUALITY_MISSED_FOLLOWUP") {

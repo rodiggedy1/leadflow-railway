@@ -24,8 +24,9 @@ import {
   Settings, Link, MessageSquare, Star, Phone, Building2,
   Save, Loader2, CheckCircle2, ToggleLeft, ToggleRight, Bell,
   FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText, Mail,
-  PhoneCall,
+  PhoneCall, RefreshCw,
 } from "lucide-react";
+import MessageFlowPanel from "@/components/MessageFlowPanel";
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -552,7 +553,7 @@ function SmsTemplateCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type SettingsTab = "form" | "widget" | "email" | "general";
+type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general";
 
 export default function SettingsPage() {
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
@@ -597,6 +598,7 @@ export default function SettingsPage() {
     { id: "form", label: "Form SMS", icon: <FileText className="w-4 h-4" /> },
     { id: "widget", label: "Widget SMS", icon: <MessageCircle className="w-4 h-4" /> },
     { id: "email", label: "Email Leads", icon: <Mail className="w-4 h-4" /> },
+    { id: "reactivation", label: "Reactivation", icon: <RefreshCw className="w-4 h-4" /> },
     { id: "general", label: "General", icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -865,7 +867,125 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ── General Tab ──────────────────────────────────────────── */}
+            {/* ── Reactivation Tab ──────────────────────────────────────────── */}
+            {activeTab === "reactivation" && (
+              <div className="space-y-6">
+                {/* Info banner */}
+                <div className="rounded-xl bg-orange-50 border border-orange-100 px-4 py-3">
+                  <p className="text-xs text-orange-700 leading-relaxed">
+                    <strong>Reactivation SMS</strong> — these scripts are sent to past customers who receive a reactivation campaign. The flow is fully scripted (no AI) so every reply follows the exact path shown below. Edits apply to all future replies immediately.
+                  </p>
+                </div>
+
+                {/* Flow diagram */}
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 text-[#E8735A]" />
+                      Reactivation Conversation Flow
+                    </CardTitle>
+                    <CardDescription className="text-xs text-gray-500">
+                      Every inbound reply from a reactivation lead follows this scripted path. No AI is involved — what you see here is exactly what the customer receives.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Flow diagram */}
+                    <div className="flex flex-col items-start gap-0 mb-6">
+                      {/* Step 1: Initial outbound */}
+                      <div className="flex items-start gap-3 w-full">
+                        <div className="flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-[#E8735A] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">1</div>
+                          <div className="w-0.5 h-8 bg-gray-200 mt-1" />
+                        </div>
+                        <div className="pb-4">
+                          <p className="text-xs font-semibold text-gray-700">Campaign fires → Initial SMS sent</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Template: <code className="bg-gray-100 px-1 rounded">reactivation_initial</code></p>
+                        </div>
+                      </div>
+                      {/* Step 2: Customer replies */}
+                      <div className="flex items-start gap-3 w-full">
+                        <div className="flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">2</div>
+                          <div className="w-0.5 h-8 bg-gray-200 mt-1" />
+                        </div>
+                        <div className="pb-4">
+                          <p className="text-xs font-semibold text-gray-700">Customer replies</p>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">YES / positive</span>
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Price question</span>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Any other reply</span>
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">STOP</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Step 3: Bot responds */}
+                      <div className="flex items-start gap-3 w-full">
+                        <div className="flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-[#E8735A] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">3</div>
+                          <div className="w-0.5 h-8 bg-gray-200 mt-1" />
+                        </div>
+                        <div className="pb-4">
+                          <p className="text-xs font-semibold text-gray-700">Bot sends scripted reply</p>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">YES → yes_reply template → asks for time</span>
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Price → price_question + time_ask</span>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Other → time_ask template</span>
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">STOP → opt_out template → DONE</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Step 4: Customer gives time */}
+                      <div className="flex items-start gap-3 w-full">
+                        <div className="flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</div>
+                          <div className="w-0.5 h-8 bg-gray-200 mt-1" />
+                        </div>
+                        <div className="pb-4">
+                          <p className="text-xs font-semibold text-gray-700">Customer gives preferred time window</p>
+                          <p className="text-xs text-gray-500 mt-0.5">e.g. “Mornings work best”, “Weekend afternoon”</p>
+                        </div>
+                      </div>
+                      {/* Step 5: Closing */}
+                      <div className="flex items-start gap-3 w-full">
+                        <div className="flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-green-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">✓</div>
+                        </div>
+                        <div className="pb-4">
+                          <p className="text-xs font-semibold text-gray-700">Bot sends closing confirmation → DONE</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Template: <code className="bg-gray-100 px-1 rounded">reactivation_closing</code></p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Template editor */}
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-[#E8735A]" />
+                      Reactivation Message Templates
+                    </CardTitle>
+                    <CardDescription className="text-xs text-gray-500">
+                      Click the pencil icon on any message to edit it. Changes are saved immediately and apply to all future replies. Use <code className="bg-gray-100 px-1 rounded">[Name]</code>, <code className="bg-gray-100 px-1 rounded">[LastPrice]</code>, <code className="bg-gray-100 px-1 rounded">[Discount]</code>, <code className="bg-gray-100 px-1 rounded">[DiscountedPrice]</code> as variables.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MessageFlowPanel
+                      flowType="reactivation"
+                      sampleVars={{
+                        "[Name]": "Sarah",
+                        "[LastPrice]": "150",
+                        "[Discount]": "10",
+                        "[DiscountedPrice]": "135",
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* ── General Tab ────────────────────────────────────────────────── */}
             {activeTab === "general" && (
               <div className="space-y-6">
                 {SECTIONS.map((section) => (

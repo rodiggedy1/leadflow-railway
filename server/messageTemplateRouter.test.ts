@@ -8,13 +8,13 @@ import { DEFAULT_TEMPLATES } from "./messageTemplateRouter";
 // ─── Seed data integrity ──────────────────────────────────────────────────────
 
 describe("DEFAULT_TEMPLATES", () => {
-  it("should contain exactly 9 templates", () => {
-    expect(DEFAULT_TEMPLATES).toHaveLength(9);
+  it("should contain exactly 11 templates", () => {
+    expect(DEFAULT_TEMPLATES).toHaveLength(11);
   });
 
-  it("should have 4 reactivation templates", () => {
+  it("should have 6 reactivation templates", () => {
     const reactivation = DEFAULT_TEMPLATES.filter(t => t.flowType === "reactivation");
-    expect(reactivation).toHaveLength(4);
+    expect(reactivation).toHaveLength(6);
   });
 
   it("should have 5 review templates", () => {
@@ -77,6 +77,20 @@ describe("Template variable coverage", () => {
     const t = DEFAULT_TEMPLATES.find(t => t.stepKey === "reactivation_price_question")!;
     expect(t.body).toContain("[LastPrice]");
     expect(t.body).toContain("[DiscountedPrice]");
+  });
+
+  it("reactivation_time_ask should exist and be non-empty", () => {
+    const t = DEFAULT_TEMPLATES.find(t => t.stepKey === "reactivation_time_ask")!;
+    expect(t).toBeDefined();
+    expect(t.body.trim().length).toBeGreaterThan(10);
+    expect(t.isEditable).toBe(1);
+  });
+
+  it("reactivation_closing should use [Name]", () => {
+    const t = DEFAULT_TEMPLATES.find(t => t.stepKey === "reactivation_closing")!;
+    expect(t).toBeDefined();
+    expect(t.body).toContain("[Name]");
+    expect(t.isEditable).toBe(1);
   });
 
   it("review_initial should use [Name]", () => {

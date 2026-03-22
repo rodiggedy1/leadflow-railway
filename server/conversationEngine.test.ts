@@ -428,7 +428,8 @@ describe("REACTIVATION stage", () => {
     const result = await processLeadReply("yes", ctx);
     expect(result.nextStage).toBe("REACTIVATION_TIME");
     expect(result.reply).toBeTruthy();
-    expect(result.reply.toLowerCase()).toMatch(/time|window|appointment|looking forward/);
+    // reactivation_yes_reply template: "Amazing, [Name]! Let's get you scheduled. What days work best..."
+    expect(result.reply.toLowerCase()).toMatch(/time|window|appointment|looking forward|scheduled|days/);
   });
 
   it("STOP reply marks as DONE and unsubscribes", async () => {
@@ -441,7 +442,7 @@ describe("REACTIVATION stage", () => {
     expect(result.reply.toLowerCase()).toMatch(/unsubscribe|won't receive|opt/);
   });
 
-  it("price question with lastPrice gives discounted price", async () => {
+  it("price question with lastPrice gives discounted price and routes to REACTIVATION_TIME", async () => {
     const ctx = makeContext({
       stage: "REACTIVATION",
       leadName: "Alice Brown",
@@ -449,13 +450,14 @@ describe("REACTIVATION stage", () => {
       discountPct: 10,
     });
     const result = await processLeadReply("how much does it cost?", ctx);
-    expect(result.nextStage).toBe("AVAILABILITY");
+    // Scripted path: price question → REACTIVATION_TIME (not AVAILABILITY)
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
     // $200 with 10% off = $180
     expect(result.reply).toContain("$180");
     expect(result.reply).toContain("$200");
   });
 
-  it("price question without lastPrice routes to availability", async () => {
+  it("price question without lastPrice routes to REACTIVATION_TIME", async () => {
     const ctx = makeContext({
       stage: "REACTIVATION",
       leadName: "Tom Davis",
@@ -463,7 +465,8 @@ describe("REACTIVATION stage", () => {
       discountPct: 10,
     });
     const result = await processLeadReply("what's the price?", ctx);
-    expect(result.nextStage).toBe("AVAILABILITY");
+    // Scripted path: no price on file → still REACTIVATION_TIME
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
   });
 
   it("unsubscribe variants all mark DONE", async () => {

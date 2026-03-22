@@ -34,6 +34,7 @@ import { buildSystemPrompt, buildUserMessage } from "./prompt";
 import { enforceRules } from "./rules";
 import { buildJadePriceReveal } from "../aiService";
 import { buildJadeLockIn } from "../conversationEngine";
+import { getTemplate } from "../messageTemplateRouter";
 
 // ─── Fallback replies (if LLM fails entirely) ─────────────────────────────────
 
@@ -106,12 +107,13 @@ export async function processLeadReplyV2(
   // template for the actual SMS text so Settings edits are always respected.
   let finalReply = decision.reply;
 
-  // ── REACTIVATION_TIME: override with closing confirmation message ──────────
+  // ── REACTIVATION_TIME: override with closing confirmation message from DB ────
   // When a reactivation lead replies with a time window, always send the
-  // scripted closing message regardless of what the LLM generated.
+  // scripted closing message (reactivation_closing template) regardless of
+  // what the LLM generated. This keeps the message editable from Settings.
   if (context.stage === "REACTIVATION_TIME") {
     const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
-    finalReply = `Ok perfect, we'll confirm in a few moments but we should be good to go. See you soon ${firstName}`;
+    finalReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
     return {
       reply: finalReply,
       nextStage: "DONE",
