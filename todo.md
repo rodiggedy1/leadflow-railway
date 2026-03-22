@@ -2039,3 +2039,4 @@
 - [x] Generate Jade portrait (biracial woman with curly hair, warm AI persona)
 - [x] Upload to CDN and replace brain icon in AI Command Center header with Jade avatar
 - [x] Add 'Powered by Jade AI' badge with hover tooltip to Command Center header
+- [x] Add confirmation dialog to Execute button in AI Action Feed (show action description + confirm before firing)

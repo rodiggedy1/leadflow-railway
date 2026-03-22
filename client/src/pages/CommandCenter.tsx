@@ -211,6 +211,21 @@ const actionTypeIcon = {
   reactivate: <RotateCcw className="w-4 h-4" />,
 };
 
+// Human-readable descriptions for each action type
+const actionTypeLabel: Record<string, string> = {
+  send_sms: "Send SMS",
+  trigger_call: "Send Follow-up SMS",
+  review_leads: "Review Leads",
+  reactivate: "Send Reactivation SMS",
+};
+
+const actionTypeWhatHappens: Record<string, string> = {
+  send_sms: "Jade will send a follow-up SMS to all cold leads who have gone quiet. Each message is personalized with the lead's first name.",
+  trigger_call: "Jade will send a follow-up SMS to all leads who have received a quote but haven't responded. This nudges them to book.",
+  review_leads: "You'll be taken to the Leads page to manually review and action each lead.",
+  reactivate: "Jade will send a re-engagement SMS to leads in the reactivation pool who haven't been messaged recently.",
+};
+
 function ActionFeedItem({
   id,
   title,
@@ -232,43 +247,100 @@ function ActionFeedItem({
   onExecute: (id: string, actionType: string) => void;
   executing: boolean;
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const isReview = actionType === "review_leads";
+
   return (
-    <div className="flex items-start gap-4 py-4 border-b border-gray-50 last:border-0">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-semibold text-sm text-gray-900">{title}</span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${urgencyBadge[urgency as keyof typeof urgencyBadge] ?? urgencyBadge.low}`}>
-            {urgency}
-          </span>
-          {linkStage && linkStage !== "all" && (
-            <a
-              href={`/admin?stage=${linkStage}`}
-              className="text-xs text-violet-600 font-medium hover:underline"
-            >
-              View leads →
-            </a>
-          )}
+    <>
+      <div className="flex items-start gap-4 py-4 border-b border-gray-50 last:border-0">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-sm text-gray-900">{title}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${urgencyBadge[urgency as keyof typeof urgencyBadge] ?? urgencyBadge.low}`}>
+              {urgency}
+            </span>
+            {linkStage && linkStage !== "all" && (
+              <a
+                href={`/admin?stage=${linkStage}`}
+                className="text-xs text-violet-600 font-medium hover:underline"
+              >
+                View leads →
+              </a>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
         </div>
-        <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">{estimatedValue}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-7 px-2.5 gap-1.5"
+            onClick={() => isReview ? onExecute(id, actionType) : setConfirmOpen(true)}
+            disabled={executing}
+          >
+            {executing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              actionTypeIcon[actionType as keyof typeof actionTypeIcon] ?? <Zap className="w-3 h-3" />
+            )}
+            {actionTypeLabel[actionType] ?? "Execute"}
+          </Button>
+        </div>
       </div>
-      <div className="flex flex-col items-end gap-2 shrink-0">
-        <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">{estimatedValue}</span>
-        <Button
-          size="sm"
-          variant="outline"
-          className="text-xs h-7 px-2.5 gap-1.5"
-          onClick={() => onExecute(id, actionType)}
-          disabled={executing}
-        >
-          {executing ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            actionTypeIcon[actionType as keyof typeof actionTypeIcon] ?? <Zap className="w-3 h-3" />
-          )}
-          Execute
-        </Button>
-      </div>
-    </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className={`p-1.5 rounded-lg bg-gray-50`}>
+                {actionTypeIcon[actionType as keyof typeof actionTypeIcon] ?? <Zap className="w-4 h-4" />}
+              </span>
+              Confirm: {actionTypeLabel[actionType] ?? "Execute"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            {/* Action being triggered */}
+            <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 space-y-2">
+              <p className="text-sm font-semibold text-gray-900">{title}</p>
+              <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
+            </div>
+
+            {/* What will happen */}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">What will happen</p>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {actionTypeWhatHappens[actionType] ?? "This action will be executed immediately."}
+              </p>
+            </div>
+
+            {/* Estimated value */}
+            {estimatedValue && (
+              <div className="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3">
+                <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Estimated value</span>
+                <span className="text-sm font-bold text-emerald-700">{estimatedValue}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={executing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => { setConfirmOpen(false); onExecute(id, actionType); }}
+              disabled={executing}
+              className="gap-1.5"
+            >
+              {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (actionTypeIcon[actionType as keyof typeof actionTypeIcon] ?? <Zap className="w-3.5 h-3.5" />)}
+              Confirm & Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
