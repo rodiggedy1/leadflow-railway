@@ -2093,3 +2093,9 @@
 - [x] Add dedicated REACTIVATION webhook handler block (sendSms BEFORE DB update)
 - [x] Add REACTIVATION/REACTIVATION_TIME to webhook priority filter
 - [x] Add "Reactivation" tab to SettingsPage with MessageFlowPanel + flow diagram
+
+## Reactivation Hybrid Scripted + LLM Fallback — March 22
+- [x] Add LLM fallback to REACTIVATION stage: off-script replies answered in brand voice, steered back to time-ask
+- [x] Add LLM fallback to REACTIVATION_TIME stage: off-script replies acknowledged, re-asked for time window
+- [x] Constrained system prompt: Jade persona, brief answer, always end with time-ask, never deviate
+- [x] Update tests to cover off-script LLM fallback path

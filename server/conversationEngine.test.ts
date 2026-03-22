@@ -487,13 +487,89 @@ describe("REACTIVATION stage", () => {
     }
   });
 
-  it("other replies move to REACTIVATION_TIME", async () => {
+  it("other replies (off-script) call LLM and move to REACTIVATION_TIME", async () => {
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "Great question! We use eco-friendly products. What days and times work best for you?" }, index: 0, finish_reason: "stop" }],
+    } as any);
     const ctx = makeContext({
       stage: "REACTIVATION",
       leadName: "Mike Wilson",
     });
-    const result = await processLeadReply("I'm interested but need more info", ctx);
+    const result = await processLeadReply("Do you use eco-friendly products?", ctx);
     expect(result.nextStage).toBe("REACTIVATION_TIME");
+    expect(result.reply).toBeTruthy();
+    expect(mockLLM).toHaveBeenCalled();
+  });
+
+  it("off-script reply falls back to scripted time-ask when LLM fails", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("LLM unavailable"));
+    const ctx = makeContext({
+      stage: "REACTIVATION",
+      leadName: "Mike Wilson",
+    });
+    const result = await processLeadReply("I'm not sure yet", ctx);
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
+    expect(result.reply).toBeTruthy();
+  });
+});
+
+describe("REACTIVATION_TIME stage", () => {
+  beforeEach(() => {
+    mockLLM.mockReset();
+  });
+
+  it("time window reply sends closing message and moves to DONE", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION_TIME",
+      leadName: "Sarah Johnson",
+    });
+    const result = await processLeadReply("Friday morning works for me", ctx);
+    expect(result.nextStage).toBe("DONE");
+    expect(result.reply).toBeTruthy();
+  });
+
+  it("day-only reply sends closing message and moves to DONE", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION_TIME",
+      leadName: "Bob Smith",
+    });
+    const result = await processLeadReply("Thursday afternoon", ctx);
+    expect(result.nextStage).toBe("DONE");
+  });
+
+  it("STOP reply at REACTIVATION_TIME marks DONE", async () => {
+    const ctx = makeContext({
+      stage: "REACTIVATION_TIME",
+      leadName: "Alice Brown",
+    });
+    const result = await processLeadReply("STOP", ctx);
+    expect(result.nextStage).toBe("DONE");
+    expect(result.reply.toLowerCase()).toMatch(/unsubscribe|won't receive|opt/);
+  });
+
+  it("off-script reply at REACTIVATION_TIME calls LLM and stays at REACTIVATION_TIME", async () => {
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: "We do offer same-day bookings when available! What days and times work best for you?" }, index: 0, finish_reason: "stop" }],
+    } as any);
+    const ctx = makeContext({
+      stage: "REACTIVATION_TIME",
+      leadName: "Tom Davis",
+    });
+    const result = await processLeadReply("Do you do same-day bookings?", ctx);
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
+    expect(result.reply).toBeTruthy();
+    expect(mockLLM).toHaveBeenCalled();
+  });
+
+  it("off-script at REACTIVATION_TIME falls back to time-ask when LLM fails", async () => {
+    mockLLM.mockRejectedValueOnce(new Error("LLM unavailable"));
+    const ctx = makeContext({
+      stage: "REACTIVATION_TIME",
+      leadName: "Tom Davis",
+    });
+    const result = await processLeadReply("Can you do Sunday?", ctx);
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
+    expect(result.reply).toBeTruthy();
   });
 });
 

@@ -476,13 +476,15 @@ function lookupPrice(bedrooms: string, bathrooms: string): string {
 
 /**
  * Handles replies in the REACTIVATION stage.
- * Fully scripted — no LLM involved. All replies use DB templates from messageTemplates.
+ * Hybrid scripted + LLM fallback. Scripted paths handle the happy path deterministically;
+ * the LLM only fires when the reply doesn't match any known pattern.
  *
  * Flow:
- *   1. STOP / opt-out → reactivation_opt_out → DONE
- *   2. Price question  → reactivation_price_question + reactivation_time_ask → REACTIVATION_TIME
- *   3. YES / positive  → reactivation_yes_reply → REACTIVATION_TIME
- *   4. Anything else   → reactivation_time_ask → REACTIVATION_TIME
+ *   1. STOP / opt-out    → reactivation_opt_out → DONE
+ *   2. Price question     → reactivation_price_question + reactivation_time_ask → REACTIVATION_TIME
+ *   3. YES / positive     → reactivation_yes_reply → REACTIVATION_TIME
+ *   4. Off-script (LLM)  → brand-voice answer + time-ask → REACTIVATION_TIME
+ *   5. LLM unavailable   → reactivation_time_ask → REACTIVATION_TIME (safe fallback)
  */
 async function handleReactivationReply(
   leadReply: string,
@@ -531,8 +533,106 @@ async function handleReactivationReply(
     };
   }
 
-  // Any other reply — treat as engagement, ask for time window (scripted, no LLM)
+  // Off-script reply — LLM answers in brand voice, then steers back to time-ask
   const timeAsk = await getTemplate("reactivation_time_ask");
+  try {
+    const systemPrompt = [
+      "You are Jade, a friendly and professional booking assistant for Maids in Black, a premium home cleaning service in the Washington DC metro area.",
+      "A past customer just replied to a reactivation SMS offering them a discount on their next cleaning.",
+      "Their reply doesn't clearly say yes or ask about price — it's something off-script.",
+      "Your job: give a BRIEF, warm, on-brand answer (1-2 sentences max) that addresses what they said, then ALWAYS end with this exact sentence: \"" + timeAsk + "\"",
+      "Rules:",
+      "- Never make up prices, availability, or policies you don't know.",
+      "- If they ask something you can't answer (e.g. specific availability), say we'll confirm details when they book.",
+      "- Stay in character as Jade. Warm, professional, concise.",
+      "- Do NOT say 'As an AI' or break character.",
+      "- Your entire reply must be under 160 characters if possible.",
+    ].join("\n");
+
+    const llmResult = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: leadReply.trim() },
+      ],
+    });
+    const rawContent = llmResult?.choices?.[0]?.message?.content;
+    const llmReply = typeof rawContent === "string" ? rawContent.trim() : undefined;
+    if (llmReply && llmReply.length > 0) {
+      return { reply: llmReply, nextStage: "REACTIVATION_TIME" };
+    }
+  } catch {
+    // LLM unavailable — fall through to safe scripted fallback
+  }
+
+  // Safe fallback if LLM fails
+  return {
+    reply: timeAsk,
+    nextStage: "REACTIVATION_TIME",
+  };
+}
+
+/**
+ * Handles replies in the REACTIVATION_TIME stage.
+ * Hybrid scripted + LLM fallback.
+ *
+ * Flow:
+ *   1. STOP / opt-out       → reactivation_opt_out → DONE
+ *   2. Time window given    → reactivation_closing → DONE
+ *   3. Off-script (LLM)    → brand-voice answer + re-ask for time → REACTIVATION_TIME
+ *   4. LLM unavailable     → reactivation_time_ask → REACTIVATION_TIME (safe fallback)
+ */
+async function handleReactivationTimeReply(
+  leadReply: string,
+  context: ConversationContext
+): Promise<StageResult> {
+  const lower = leadReply.trim().toLowerCase();
+  const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+
+  // STOP / opt-out
+  if (/^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(lower)) {
+    const reply = await getTemplate("reactivation_opt_out");
+    return { reply, nextStage: "DONE" };
+  }
+
+  // Time window detected — any mention of a day, time, or scheduling preference
+  const hasTimeWindow = /(monday|tuesday|wednesday|thursday|friday|saturday|morning|afternoon|evening|weekend|weekday|anytime|flexible|any day|any time|\d{1,2}(am|pm)|next week|this week|tomorrow)/i.test(lower);
+  if (hasTimeWindow) {
+    const closingReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
+    return { reply: closingReply, nextStage: "DONE" };
+  }
+
+  // Off-script reply — LLM answers in brand voice, then steers back to time-ask
+  const timeAsk = await getTemplate("reactivation_time_ask");
+  try {
+    const systemPrompt = [
+      "You are Jade, a friendly and professional booking assistant for Maids in Black, a premium home cleaning service in the Washington DC metro area.",
+      "A past customer agreed to rebook their cleaning. You asked them what days and times work best.",
+      "Their reply is off-script — it doesn't mention a day or time preference.",
+      "Your job: give a BRIEF, warm, on-brand response (1-2 sentences max) that acknowledges what they said, then ALWAYS end with this exact sentence: \"" + timeAsk + "\"",
+      "Rules:",
+      "- Never make up prices, availability, or policies you don't know.",
+      "- If they ask something you can't answer, say we'll confirm details when they book.",
+      "- Stay in character as Jade. Warm, professional, concise.",
+      "- Do NOT say 'As an AI' or break character.",
+      "- Your entire reply must be under 160 characters if possible.",
+    ].join("\n");
+
+    const llmResult = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: leadReply.trim() },
+      ],
+    });
+    const rawContent = llmResult?.choices?.[0]?.message?.content;
+    const llmReply = typeof rawContent === "string" ? rawContent.trim() : undefined;
+    if (llmReply && llmReply.length > 0) {
+      return { reply: llmReply, nextStage: "REACTIVATION_TIME" };
+    }
+  } catch {
+    // LLM unavailable — fall through to safe scripted fallback
+  }
+
+  // Safe fallback if LLM fails
   return {
     reply: timeAsk,
     nextStage: "REACTIVATION_TIME",
@@ -787,6 +887,11 @@ async function _processLeadReplyCore(
   // ── REACTIVATION: Handle YES/price/STOP replies from reactivation campaign contacts ──
   if (stage === "REACTIVATION") {
     return handleReactivationReply(leadReply, context);
+  }
+
+  // ── REACTIVATION_TIME: Customer gave a time window → send closing, or LLM fallback for off-script ──
+  if (stage === "REACTIVATION_TIME") {
+    return handleReactivationTimeReply(leadReply, context);
   }
 
   // ── WIDGET_SIZING: Extract room counts and send quote, or ask for missing info ──
