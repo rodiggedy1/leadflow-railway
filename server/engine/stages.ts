@@ -68,8 +68,14 @@ export const STAGE_CONTRACTS: Partial<Record<ConversationStage, StageContract>> 
   REACTIVATION: {
     description: "Reactivation offer sent to a past customer. Waiting for yes/no.",
     requiredToAdvance: [],
-    validNextStages: ["AVAILABILITY", "FUTURE_BOOKING", "DONE", "REACTIVATION"],
+    validNextStages: ["REACTIVATION_TIME", "AVAILABILITY", "FUTURE_BOOKING", "DONE", "REACTIVATION"],
     stayStage: "REACTIVATION",
+  },
+  REACTIVATION_TIME: {
+    description: "Customer said yes to reactivation. Waiting for their preferred time window.",
+    requiredToAdvance: [],
+    validNextStages: ["DONE", "REACTIVATION_TIME"],
+    stayStage: "REACTIVATION_TIME",
   },
   FUTURE_BOOKING: {
     description: "Lead expressed interest but not ready yet. Staying warm.",

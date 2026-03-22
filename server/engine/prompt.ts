@@ -242,6 +242,13 @@ This is a past customer. You sent them a reactivation offer with a discount.
 - If they opt out → acknowledge politely, move to DONE.
 `.trim(),
 
+  REACTIVATION_TIME: `
+The customer confirmed interest and you asked for their preferred time window.
+- Any reply with a time, day, or preference → move to DONE.
+- If they ask a question → answer it briefly, then re-ask about the time window.
+- If they opt out → acknowledge politely, move to DONE.
+`.trim(),
+
   FUTURE_BOOKING: `
 The lead is interested but wants to book in the future.
 - Keep the conversation warm.

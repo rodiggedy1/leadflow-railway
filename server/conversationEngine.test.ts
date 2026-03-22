@@ -418,7 +418,7 @@ describe("REACTIVATION stage", () => {
     mockLLM.mockReset();
   });
 
-  it("YES reply moves to AVAILABILITY and asks for scheduling", async () => {
+  it("YES reply moves to REACTIVATION_TIME and asks for time window", async () => {
     const ctx = makeContext({
       stage: "REACTIVATION",
       leadName: "Sarah Johnson",
@@ -426,9 +426,9 @@ describe("REACTIVATION stage", () => {
       discountPct: 10,
     });
     const result = await processLeadReply("yes", ctx);
-    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
     expect(result.reply).toBeTruthy();
-    expect(result.reply.toLowerCase()).toMatch(/schedule|available|when|book|opening/);
+    expect(result.reply.toLowerCase()).toMatch(/time|window|appointment|looking forward/);
   });
 
   it("STOP reply marks as DONE and unsubscribes", async () => {
@@ -475,22 +475,22 @@ describe("REACTIVATION stage", () => {
     }
   });
 
-  it("positive variants all move to AVAILABILITY", async () => {
+  it("positive variants all move to REACTIVATION_TIME", async () => {
     const variants = ["yeah", "yep", "sure", "ok", "sounds good", "absolutely", "book"];
     for (const variant of variants) {
       const ctx = makeContext({ stage: "REACTIVATION", leadName: "Test User", lastPrice: 150, discountPct: 10 });
       const result = await processLeadReply(variant, ctx);
-      expect(result.nextStage).toBe("AVAILABILITY");
+      expect(result.nextStage).toBe("REACTIVATION_TIME");
     }
   });
 
-  it("other replies move to AVAILABILITY", async () => {
+  it("other replies move to REACTIVATION_TIME", async () => {
     const ctx = makeContext({
       stage: "REACTIVATION",
       leadName: "Mike Wilson",
     });
     const result = await processLeadReply("I'm interested but need more info", ctx);
-    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.nextStage).toBe("REACTIVATION_TIME");
   });
 });
 

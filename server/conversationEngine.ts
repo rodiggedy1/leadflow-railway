@@ -520,19 +520,16 @@ async function handleReactivationReply(
 
   // YES / positive intent
   if (/^\s*(yes|yeah|yep|sure|ok|okay|sounds good|let's do it|book|i'm in|im in|absolutely|definitely|great|perfect|yes please)\s*[!.]*\s*$/i.test(lower)) {
-    const reply = await getTemplate("reactivation_yes_reply", {
-      "[Name]": firstName,
-    });
     return {
-      reply: reply + " " + buildAvailabilityMessage(context.extras),
-      nextStage: "AVAILABILITY",
+      reply: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment",
+      nextStage: "REACTIVATION_TIME",
     };
   }
 
-  // Any other reply — treat as engagement and move to availability
+  // Any other reply — treat as engagement, ask for time window
   return {
-    reply: await buildAvailabilityMessage(context.extras),
-    nextStage: "AVAILABILITY",
+    reply: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment",
+    nextStage: "REACTIVATION_TIME",
   };
 }
 

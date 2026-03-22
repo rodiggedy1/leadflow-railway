@@ -47,6 +47,7 @@ const FALLBACK_REPLIES: Partial<Record<string, string>> = {
   CONFIRMATION:    "Perfect! Would you like us to call you now or in a few minutes to confirm?",
   CALL_SCHEDULED:  "We'll be in touch shortly. Looking forward to getting your home cleaned!",
   REACTIVATION:    "We'd love to have you back! Would you like to schedule a cleaning?",
+  REACTIVATION_TIME: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment",
   FUTURE_BOOKING:  "Sounds good! Just reach out when you're ready and we'll take care of everything.",
   DONE:            "Thanks for reaching out to Maids in Black! Have a great day. 😊",
 };
@@ -104,6 +105,18 @@ export async function processLeadReplyV2(
   // The LLM decides the stage transition and extracts data; we use the DB
   // template for the actual SMS text so Settings edits are always respected.
   let finalReply = decision.reply;
+
+  // ── REACTIVATION_TIME: override with closing confirmation message ──────────
+  // When a reactivation lead replies with a time window, always send the
+  // scripted closing message regardless of what the LLM generated.
+  if (context.stage === "REACTIVATION_TIME") {
+    const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+    finalReply = `Ok perfect, we'll confirm in a few moments but we should be good to go. See you soon ${firstName}`;
+    return {
+      reply: finalReply,
+      nextStage: "DONE",
+    };
+  }
 
   if (context.smsFlow === "B" || !context.smsFlow) {
     // Price reveal: LLM moved to SLOT_CHOICE → use buildJadePriceReveal

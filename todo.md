@@ -2076,3 +2076,7 @@
 
 ## Campaign Reply Routing Fix — March 22
 - [x] fireCampaign: create conversationSession for phone-only targets so replies route to Jade and appear as leads tagged with campaign source
+
+## Reactivation Follow-up Messages — March 22
+- [x] After positive reply: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment"
+- [x] After time given: "Ok perfect, we'll confirm in a few moments but we should be good to go. See you soon {{first name}}"

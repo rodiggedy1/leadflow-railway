@@ -421,6 +421,13 @@
       "when": 1774209142811,
       "tag": "0059_common_mentallo",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1774216147424,
+      "tag": "0060_premium_landau",
+      "breakpoints": true
     }
   ]
 }

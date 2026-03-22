@@ -59,6 +59,7 @@ export type InsertQuoteLead = typeof quoteLeads.$inferInsert;
 export const conversationStages = [
   "WIDGET_SIZING",
   "REACTIVATION",
+  "REACTIVATION_TIME", // waiting for time window reply after YES
   "QUOTE_SENT",
   "AVAILABILITY",
   "SLOT_CHOICE",
