@@ -1969,3 +1969,10 @@
 - [x] In getAiInsights: run lightweight objection-detection LLM call (50 messages max) and inject top 3 objections + tips + examples into metricsContext
 - [x] Update system prompt: AI now references top objection in pulse/action cards and includes specific 1-sentence rebuttal scripts in action feed descriptions
 - [x] Cache cleared so next load regenerates with full conversation intelligence context
+
+## Outbound Campaigns + Hot Leads Cap — March 21
+- [x] Cap Hot Leads Queue to top 3
+- [x] Backend: getTomorrowCampaigns — check tomorrow's schedule (Launch27), identify open slots, propose SMS campaigns with pre-written scripts
+- [x] Backend: fireCampaign mutation — send bulk SMS to the campaign's target audience
+- [x] UI: Prominent Outbound Campaigns section with campaign cards (Tomorrow Campaign, Reactivation, etc.)
+- [x] UI: Confirmation popup before sending any campaign (shows recipient count, preview of SMS, estimated revenue)

@@ -24,8 +24,8 @@ import { and, desc, eq, gte, lte, ne, sql, isNotNull, or, isNull } from "drizzle
 import { invokeLLM } from "./_core/llm";
 import { sendSms } from "./openphone";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+import { getCompletedBookingsForDate } from "./launch27";
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcRevenue(row: {
   bookedAmount?: number | null;
@@ -357,7 +357,7 @@ export const commandCenterRouter = router({
    * Hot leads queue: top leads ranked by intent score with next-best-action.
    */
   getHotLeads: adminAgentProcedure
-    .input(z.object({ limit: z.number().default(8) }))
+    .input(z.object({ limit: z.number().default(3) }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
@@ -1188,5 +1188,192 @@ Respond in JSON with this exact schema:
           totalMessagesAnalyzed: sample.length,
         };
       }
+    }),
+
+  /**
+   * getTomorrowCampaigns — checks tomorrow's Launch27 schedule and proposes
+   * ready-to-fire SMS campaigns for open slots and reactivation opportunities.
+   */
+  getTomorrowCampaigns: adminAgentProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // Get tomorrow's date string
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split("T")[0];
+      const tomorrowLabel = tomorrow.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+
+      // Fetch tomorrow's bookings from Launch27
+      let bookedSlots = 0;
+      let totalSlots = 0;
+      let openSlots = 0;
+      let scheduleNote = "";
+      try {
+        const result = await getCompletedBookingsForDate(tomorrowStr, { includeAll: true });
+        bookedSlots = result.bookings.length;
+        // Estimate capacity: MIB typically runs 8–12 jobs/day across teams
+        totalSlots = Math.max(bookedSlots + 3, 10);
+        openSlots = totalSlots - bookedSlots;
+        scheduleNote = bookedSlots === 0
+          ? `Tomorrow (${tomorrowLabel}) has no bookings yet — wide open schedule.`
+          : openSlots <= 2
+          ? `Tomorrow (${tomorrowLabel}) is nearly full — ${openSlots} slot${openSlots === 1 ? "" : "s"} left.`
+          : `Tomorrow (${tomorrowLabel}) has ${openSlots} open slot${openSlots === 1 ? "" : "s"} out of ~${totalSlots} capacity.`;
+      } catch {
+        scheduleNote = `Tomorrow (${tomorrowLabel}) — schedule data unavailable.`;
+        openSlots = 3;
+      }
+
+      // Find leads that are cold/quoted but not booked (reactivation candidates)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const coldLeads = await db
+        .select({
+          id: conversationSessions.id,
+          name: conversationSessions.leadName,
+          phone: conversationSessions.leadPhone,
+          serviceType: conversationSessions.serviceType,
+          stage: conversationSessions.stage,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, thirtyDaysAgo),
+            or(
+              eq(conversationSessions.stage, "COLD" as string),
+              eq(conversationSessions.stage, "QUOTE_SENT" as string)
+            ),
+            ne(conversationSessions.isBooked, 1),
+            isNotNull(conversationSessions.leadPhone)
+          )
+        )
+        .limit(100);
+
+      // Build campaigns
+      const campaigns: Array<{
+        id: string;
+        type: "tomorrow_slots" | "reactivation" | "quote_followup";
+        title: string;
+        subtitle: string;
+        urgency: "high" | "medium" | "low";
+        recipientCount: number;
+        estimatedRevenue: number;
+        script: string;
+        scheduleNote: string;
+        targetLeadIds: number[];
+      }> = [];
+
+      // Campaign 1: Tomorrow open slots — send to quoted/cold leads
+      if (openSlots >= 2) {
+        const tomorrowTargets = coldLeads.filter(l => l.stage === "QUOTE_SENT" || l.stage === "COLD").slice(0, 30);
+        if (tomorrowTargets.length > 0) {
+          campaigns.push({
+            id: "tomorrow_slots",
+            type: "tomorrow_slots",
+            title: `Fill Tomorrow's Open Slots`,
+            subtitle: scheduleNote,
+            urgency: openSlots >= 4 ? "high" : "medium",
+            recipientCount: tomorrowTargets.length,
+            estimatedRevenue: tomorrowTargets.length * 180 * 0.15,
+            script: `Hi {{name}}! We have a last-minute opening ${tomorrowLabel === `tomorrow` ? `tomorrow` : `on ${tomorrowLabel}`} for your cleaning. Want to lock it in? Reply YES and we'll confirm your slot right away! 🏠✨`,
+            scheduleNote,
+            targetLeadIds: tomorrowTargets.map(l => l.id),
+          });
+        }
+      }
+
+      // Campaign 2: Re-engage cold leads from last 30 days
+      const coldOnly = coldLeads.filter(l => l.stage === "COLD").slice(0, 50);
+      if (coldOnly.length >= 3) {
+        campaigns.push({
+          id: "reactivation",
+          type: "reactivation",
+          title: `Re-engage ${coldOnly.length} Cold Leads`,
+          subtitle: `Leads who went quiet in the last 30 days — many just need a nudge.`,
+          urgency: "medium",
+          recipientCount: coldOnly.length,
+          estimatedRevenue: coldOnly.length * 180 * 0.12,
+          script: `Hi {{name}}, it's Maids in Black! 👋 We still have your quote ready. Book this week and get priority scheduling. Want to move forward? Reply YES or call us anytime!`,
+          scheduleNote: `${coldOnly.length} leads went cold in the last 30 days.`,
+          targetLeadIds: coldOnly.map(l => l.id),
+        });
+      }
+
+      // Campaign 3: Quote follow-up (QUOTE_SENT with no reply)
+      const quoteSentLeads = coldLeads.filter(l => l.stage === "QUOTE_SENT").slice(0, 30);
+      if (quoteSentLeads.length >= 2) {
+        campaigns.push({
+          id: "quote_followup",
+          type: "quote_followup",
+          title: `Follow Up on ${quoteSentLeads.length} Open Quotes`,
+          subtitle: `Leads who received a quote but haven't replied yet.`,
+          urgency: "high",
+          recipientCount: quoteSentLeads.length,
+          estimatedRevenue: quoteSentLeads.length * 180 * 0.25,
+          script: `Hi {{name}}! Just checking in on your Maids in Black quote. We'd love to get your home sparkling clean! Any questions? Reply anytime or book directly — we have slots this week. 🌟`,
+          scheduleNote: `${quoteSentLeads.length} leads are waiting on a quote reply.`,
+          targetLeadIds: quoteSentLeads.map(l => l.id),
+        });
+      }
+
+      return {
+        campaigns,
+        scheduleNote,
+        tomorrowLabel,
+        openSlots,
+        bookedSlots,
+      };
+    }),
+
+  /**
+   * fireCampaign — sends the campaign SMS to all target leads.
+   */
+  fireCampaign: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.string(),
+      targetLeadIds: z.array(z.number()),
+      script: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // Fetch lead details for personalization
+      const leads = await db
+        .select({
+          id: conversationSessions.id,
+          name: conversationSessions.leadName,
+          phone: conversationSessions.leadPhone,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            isNotNull(conversationSessions.leadPhone),
+            sql`${conversationSessions.id} IN (${sql.join(input.targetLeadIds.map(id => sql`${id}`), sql`, `)})`
+          )
+        );
+
+      let sent = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const lead of leads) {
+        if (!lead.phone) continue;
+        const name = (lead.name ?? "").split(" ")[0] || "there";
+        const personalizedScript = input.script.replace(/\{\{name\}\}/g, name);
+        try {
+          await sendSms({ to: lead.phone, content: personalizedScript });
+          sent++;
+          // Small delay to avoid rate limiting
+          await new Promise(r => setTimeout(r, 150));
+        } catch (err) {
+          failed++;
+          errors.push(`Lead ${lead.id}: ${String(err)}`);
+        }
+      }
+
+      return { sent, failed, errors };
     }),
 });
