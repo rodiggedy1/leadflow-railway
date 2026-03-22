@@ -9,8 +9,8 @@
 // Base price includes 1 bathroom. Each additional bathroom adds $30.
 
 const BEDROOM_BASE: Record<string, number> = {
-  "Studio":       179,
-  "1 Bedroom":    179,
+  "Studio":       119,
+  "1 Bedroom":    119,
   "2 Bedrooms":   209,
   "3 Bedrooms":   229,
   "4 Bedrooms":   279,
@@ -50,7 +50,7 @@ export const SERVICE_MULTIPLIERS: Record<string, number> = {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function calculatePrice(bedrooms: string, bathrooms: string, serviceType = "Standard Cleaning"): number {
-  const base = BEDROOM_BASE[bedrooms] ?? 179;
+  const base = BEDROOM_BASE[bedrooms] ?? 119;
   const baths = BATHROOM_COUNT[bathrooms] ?? 1;
   const extraBaths = Math.max(0, baths - 1);
   const multiplier = SERVICE_MULTIPLIERS[serviceType] ?? 1.0;
@@ -85,7 +85,7 @@ export function buildPricingSummary(bedrooms: string, bathrooms: string, service
  */
 export const PRICING_TABLE = `
 PRICING TABLE (Standard Cleaning, 1 bathroom included, +$30 per extra bathroom):
-- Studio / 1 Bedroom: $179
+- Studio / 1 Bedroom: $119
 - 2 Bedrooms: $209
 - 3 Bedrooms: $229
 - 4 Bedrooms: $279

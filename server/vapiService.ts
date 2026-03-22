@@ -143,8 +143,8 @@ Before sending any SMS, you MUST confirm the number with the caller (see "Confir
 ## PRICING — calculate this yourself, do not call any tool for the price
 
 Base price by home size:
-- Studio: $179
-- 1 Bedroom: $179
+- Studio: $119
+- 1 Bedroom: $119
 - 2 Bedrooms: $209
 - 3 Bedrooms: $229
 - 4 Bedrooms: $279
@@ -165,7 +165,7 @@ Service type multiplier — apply AFTER adding bathroom surcharge:
 - Move-In/Move-Out: ×1.75 (round to nearest dollar)
 
 Worked examples (memorize these):
-- 1 bed / 1 bath / Standard = $179
+- 1 bed / 1 bath / Standard = $119
 - 2 bed / 1 bath / Standard = $209
 - 3 bed / 2 bath / Standard = $229 + $30 = $259
 - 3 bed / 2 bath / Deep = $259 × 1.5 = $389

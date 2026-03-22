@@ -443,13 +443,13 @@ Examples:
 /**
  * Real Maids in Black pricing — mirrors estimatePrice() in openphone.ts.
  * Standard Cleaning base prices (1 bathroom included):
- *   Studio/1 bed = $179, 2 bed = $209, 3 bed = $229, 4 bed = $279, 5 bed = $319, 6+ bed = $379
+ *   Studio/1 bed = $119, 2 bed = $209, 3 bed = $229, 4 bed = $279, 5 bed = $319, 6+ bed = $379
  * Additional bathrooms: +$30 each beyond the first.
  */
 function lookupPrice(bedrooms: string, bathrooms: string): string {
   const bedroomBase: Record<string, number> = {
-    "Studio":      179,
-    "1 Bedroom":   179,
+    "Studio":      119,
+    "1 Bedroom":   119,
     "2 Bedrooms":  209,
     "3 Bedrooms":  229,
     "4 Bedrooms":  279,
@@ -468,7 +468,7 @@ function lookupPrice(bedrooms: string, bathrooms: string): string {
     "4 Bathrooms":   4,
     "4+ Bathrooms":  4,
   };
-  const base = bedroomBase[bedrooms] ?? 179;
+  const base = bedroomBase[bedrooms] ?? 119;
   const baths = bathroomCount[bathrooms] ?? 1;
   const extraBaths = Math.max(0, baths - 1);
   const total = base + extraBaths * 30;

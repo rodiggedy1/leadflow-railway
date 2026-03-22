@@ -92,7 +92,7 @@ export function buildQuoteSmsMessage(params: {
  * Real Maids in Black pricing table.
  *
  * Standard base prices (1 bathroom included):
- *   1 bed = $179, 2 bed = $209, 3 bed = $229, 4 bed = $279,
+ *   1 bed = $119, 2 bed = $209, 3 bed = $229, 4 bed = $279,
  *   5 bed = $319, 6 bed = $379, 7 bed = $419
  *
  * Additional bathrooms: +$30 each beyond the first.
@@ -112,8 +112,8 @@ export function estimatePrice(params: {
 
   // Base price by bedroom count (includes 1 bathroom)
   const bedroomBase: Record<string, number> = {
-    "Studio":       179,
-    "1 Bedroom":    179,
+    "Studio":       119,
+    "1 Bedroom":    119,
     "2 Bedrooms":   209,
     "3 Bedrooms":   229,
     "4 Bedrooms":   279,
@@ -162,7 +162,7 @@ export function estimatePrice(params: {
     "Post-Construction Cleaning": 60,
   };
 
-  const base = bedroomBase[bedrooms] ?? 179;
+  const base = bedroomBase[bedrooms] ?? 119;
   const baths = bathroomCount[bathrooms] ?? 1;
   const extraBaths = Math.max(0, baths - 1);
   const bathExtra = extraBaths * 30;
