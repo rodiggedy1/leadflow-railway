@@ -2053,3 +2053,4 @@
 - [x] No Photo Penalty: show as Pending (not deducted from total) until job is marked completed
 - [x] Negative dollar amounts: render in red text
 - [x] Add Poor Service / Reclean deduction line at -$30 (Pending until job completed)
+- [x] Red negative numbers in Pay Breakdown description text (e.g. -$20, -$10, -$30 in subtitle lines)

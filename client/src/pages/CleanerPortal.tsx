@@ -426,7 +426,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                 <div className="flex justify-between items-start py-2 border-b border-slate-800">
                   <div>
                     <p className="text-slate-400 text-sm font-medium">Rating Bonus</p>
-                    <p className="text-slate-500 text-xs mt-0.5">+$10 for 5 stars · -$20 for 3 stars or below</p>
+                    <p className="text-slate-500 text-xs mt-0.5">+$10 for 5 stars · <span style={{color: '#f87171'}}>-$20</span> for 3 stars or below</p>
                   </div>
                   <span className="text-slate-500 text-xs italic">Pending</span>
                 </div>
@@ -470,7 +470,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                 {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
               </p>
               <p className="text-slate-500 text-xs mt-0.5">
-                {hasPhoto ? "Completion photo uploaded" : "Upload a photo to earn +$5 and avoid -$10"}
+                {hasPhoto ? "Completion photo uploaded" : <>Upload a photo to earn +$5 and avoid <span style={{color: '#f87171'}}>-$10</span></>}
               </p>
             </div>
             {photoPending ? (
@@ -488,7 +488,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
               <p className={`text-sm font-medium ${job.recleanPenalty != null ? "text-red-300" : "text-slate-400"}`}>
                 Poor Service / Reclean
               </p>
-              <p className="text-slate-500 text-xs mt-0.5">-$30 if job requires a reclean</p>
+              <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#f87171'}}>-$30</span> if job requires a reclean</p>
             </div>
             {recleanPending ? (
               <span className="text-slate-500 text-xs italic">Pending</span>
