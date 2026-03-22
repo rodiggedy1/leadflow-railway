@@ -1091,7 +1091,7 @@ export default function CommandCenter() {
                         />
                         <button
                           type="button"
-                          onClick={() => sendTestMutation.mutate({ phone: testPhone, script: editedScript.replace(/\{\{name\}\}/g, testName || "Test") })}
+                          onClick={() => sendTestMutation.mutate({ phone: testPhone, script: editedScript.replace(/\{\{name\}\}/g, testName || "Test"), testName: testName || "Test", campaignId: campaignConfirm?.id })}
                           disabled={sendTestMutation.isPending || testPhone.replace(/\D/g, "").length < 10}
                           className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg disabled:opacity-40 transition-colors"
                         >

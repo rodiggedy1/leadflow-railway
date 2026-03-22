@@ -2004,11 +2004,33 @@ Respond in JSON with this exact schema:
     .input(z.object({
       phone: z.string().min(10),
       script: z.string().max(1000),
+      testName: z.string().optional(),
+      campaignId: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { sendSms } = await import("./openphone");
+      const db = await getDb();
       // Name substitution is handled client-side before calling this procedure
       const result = await sendSms({ to: input.phone, content: input.script });
+      // CRITICAL: Create a REACTIVATION session so that when the test recipient
+      // replies, the webhook finds an active session and routes the reply through
+      // the REACTIVATION → REACTIVATION_TIME flow. Without this, the webhook finds
+      // only DONE sessions and silently drops the reply.
+      if (db && result.success) {
+        try {
+          await db.insert(conversationSessions).values({
+            leadPhone: input.phone,
+            leadName: input.testName ?? "Test",
+            stage: "REACTIVATION",
+            leadSource: `campaign-test:${input.campaignId ?? "manual"}`,
+            messageHistory: JSON.stringify([{ role: "assistant", content: input.script, ts: Date.now() }]),
+            aiMode: 1,
+            isBooked: 0,
+          });
+        } catch (sessionErr) {
+          // Non-fatal: log but don't fail the send
+          console.error("[sendTestCampaignSms] Failed to create test session:", sessionErr);
+        }
+      }
       return { ok: result.success };
     }),
 });

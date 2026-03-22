@@ -2080,3 +2080,9 @@
 ## Reactivation Follow-up Messages — March 22
 - [x] After positive reply: "Great! Can you give me a time window that works best for you? Looking forward to your cleaning appointment"
 - [x] After time given: "Ok perfect, we'll confirm in a few moments but we should be good to go. See you soon {{first name}}"
+
+## Campaign Flow Debug — March 22
+- [x] Diagnose: lead not created after campaign SMS reply
+- [x] Diagnose: follow-up messages not sending after reactivation reply
+- [x] Fix: sendTestCampaignSms now creates REACTIVATION session + passes testName/campaignId
+- [x] Root cause: old DONE widget sessions were intercepting replies (webhook picks most recent non-DONE session)
