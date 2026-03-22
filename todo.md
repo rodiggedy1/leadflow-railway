@@ -2054,3 +2054,8 @@
 - [x] Negative dollar amounts: render in red text
 - [x] Add Poor Service / Reclean deduction line at -$30 (Pending until job completed)
 - [x] Red negative numbers in Pay Breakdown description text (e.g. -$20, -$10, -$30 in subtitle lines)
+
+## Cleaner Job Enhancements — March 22
+- [x] Admin: reclean penalty toggle button on job detail view (apply/remove -$30)
+- [x] Cleaner: amber warning banner on job card when no photo uploaded and job is active
+- [x] Cleaner: allow uncompleting a completed job to upload photos (re-open for photo upload)

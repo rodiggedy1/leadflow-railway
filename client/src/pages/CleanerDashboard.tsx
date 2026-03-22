@@ -397,6 +397,7 @@ type JobRow = {
     etaTimestamp: number | null;
     manualAdjustment: string | null;
     manualAdjustmentNote: string | null;
+    recleanPenalty: string | null;
     customerNotes: string | null;
     staffNotes: string | null;
     checklistItems: Array<{ text: string; checked: boolean }> | null;
@@ -497,6 +498,76 @@ function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => 
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function UncompleteButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+  const isCompleted = job.bookingStatus === "completed";
+  const uncomplete = trpc.quality.uncompleteJob.useMutation({
+    onSuccess: () => {
+      toast.success("Job reopened — cleaner can now upload photos");
+      onRefetch();
+    },
+    onError: (err: { message: string }) => toast.error("Failed", { description: err.message }),
+  });
+
+  if (!job.cleanerAssignment || !isCompleted) return null;
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-1.5 text-xs h-7 px-2 border-slate-500/50 text-slate-400 hover:bg-slate-700/40"
+      onClick={() => uncomplete.mutate({ cleanerJobId: job.cleanerAssignment!.id })}
+      disabled={uncomplete.isPending}
+    >
+      {uncomplete.isPending ? (
+        <Loader2 className="w-3 h-3 animate-spin" />
+      ) : (
+        <>↩ Reopen for Photos</>
+      )}
+    </Button>
+  );
+}
+
+function RecleanPenaltyButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+  const hasReclean = job.cleanerAssignment?.recleanPenalty != null;
+
+  const setReclean = trpc.quality.setRecleanPenalty.useMutation({
+    onSuccess: () => {
+      toast.success(hasReclean ? "Reclean penalty removed" : "Reclean penalty applied (-$30)");
+      onRefetch();
+    },
+    onError: (err: { message: string }) => toast.error("Failed", { description: err.message }),
+  });
+
+  if (!job.cleanerAssignment) return null;
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className={`gap-1.5 text-xs h-7 px-2 ${
+        hasReclean
+          ? "border-red-500/50 text-red-400 hover:bg-red-950/30"
+          : "border-orange-500/30 text-orange-400 hover:bg-orange-950/20"
+      }`}
+      onClick={() =>
+        setReclean.mutate({
+          cleanerJobId: job.cleanerAssignment!.id,
+          apply: !hasReclean,
+        })
+      }
+      disabled={setReclean.isPending}
+    >
+      {setReclean.isPending ? (
+        <Loader2 className="w-3 h-3 animate-spin" />
+      ) : hasReclean ? (
+        <>✖ Reclean -$30</>
+      ) : (
+        <>Reclean Penalty</>
+      )}
+    </Button>
   );
 }
 
@@ -774,6 +845,14 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
             {job.cleanerAssignment && (
               <ManualAdjustButton job={job} onRefetch={onRefetch} />
             )}
+
+            {/* Reclean penalty toggle */}
+            {job.cleanerAssignment && (
+              <RecleanPenaltyButton job={job} onRefetch={onRefetch} />
+            )}
+
+            {/* Reopen completed job for photo upload */}
+            <UncompleteButton job={job} onRefetch={onRefetch} />
 
             {/* Photo upload */}
             {job.cleanerAssignment ? (

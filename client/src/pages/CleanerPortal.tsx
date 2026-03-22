@@ -351,6 +351,16 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
           </div>
         )}
 
+        {/* Amber warning: no photo uploaded and job is active */}
+        {!isComplete && !hasPhoto && (
+          <div className="bg-amber-900/20 border border-amber-600/40 rounded-lg px-3 py-2 flex items-center gap-2">
+            <span className="text-amber-400 text-sm">⚠</span>
+            <p className="text-amber-300 text-xs">
+              Upload photos to earn <span style={{color: '#34d399'}}>+$5</span> and avoid <span style={{color: '#f87171'}}>-$10</span> penalty
+            </p>
+          </div>
+        )}
+
         {/* AI Checklist */}
         {hasChecklist && (
           <div className="bg-slate-900/80 border border-slate-600 rounded-lg p-3">

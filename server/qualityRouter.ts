@@ -816,6 +816,7 @@ export const qualityRouter = router({
           etaTimestamp: cj.etaTimestamp ?? null,
           manualAdjustment: cj.manualAdjustment ?? null,
           manualAdjustmentNote: cj.manualAdjustmentNote ?? null,
+          recleanPenalty: cj.recleanPenalty ?? null,
           customerNotes: cj.customerNotes ?? null,
           staffNotes: cj.staffNotes ?? null,
           checklistItems: cj.checklistItems
@@ -1268,6 +1269,53 @@ export const qualityRouter = router({
         .set({
           manualAdjustment: input.amount ?? null,
           manualAdjustmentNote: input.note ?? null,
+        })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      return { ok: true };
+    }),
+
+  /**
+   * Admin reopens a completed job so the cleaner can upload photos.
+   * Sets bookingStatus back to "assigned" and clears photoAdjustment so it recalculates.
+   */
+  uncompleteJob: protectedProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      await db
+        .update(cleanerJobs)
+        .set({
+          bookingStatus: "assigned",
+          jobStatus: null, // reset to no status so cleaner can progress again
+          photoAdjustment: null, // will recalculate when re-completed
+        })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      return { ok: true };
+    }),
+
+  /**
+   * Admin applies or removes the reclean penalty (-$30) on a cleaner job.
+   * Pass apply=true to set the penalty, apply=false to clear it.
+   */
+  setRecleanPenalty: protectedProcedure
+    .input(
+      z.object({
+        cleanerJobId: z.number(),
+        apply: z.boolean(), // true = apply -30, false = clear
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      await db
+        .update(cleanerJobs)
+        .set({
+          recleanPenalty: input.apply ? "-30.00" : null,
         })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
