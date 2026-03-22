@@ -1623,6 +1623,23 @@ Respond in JSON with this exact schema:
           await sendSms({ to: target.phone, content: personalizedScript });
           sent++;
           sentPhones.push(target.phone);
+          // Create a session so that if the customer replies, the webhook can route
+          // their message to the AI engine. The session starts at REACTIVATION stage
+          // and is hidden from the Leads page until the customer actually responds.
+          try {
+            await db.insert(conversationSessions).values({
+              leadPhone: target.phone,
+              leadName: target.name ?? "",
+              stage: "REACTIVATION",
+              leadSource: "command-center",
+              messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
+              aiMode: 1,
+              isBooked: 0,
+            });
+          } catch (sessionErr) {
+            // Non-fatal: session creation failure should not block the send count
+            console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
+          }
           // Small delay to avoid rate limiting
           await new Promise(r => setTimeout(r, 150));
         } catch (err) {

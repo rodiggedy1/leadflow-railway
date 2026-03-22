@@ -2022,3 +2022,7 @@
 
 ## Recipient Full Name — March 22
 - [x] Show full name (firstName + lastName) in recipient table popup; keep first name only in SMS script
+
+## Uniform Campaign Session Behavior — March 22
+- [x] fireCampaign: create a conversationSession per send (leadSource="command-center") so replies are routed to AI
+- [x] Leads page filter: hide sessions with stage=REACTIVATION for ALL campaign leadSources (command-center, reactivation, always-on) — only show when customer replies and stage advances
