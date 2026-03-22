@@ -88,36 +88,38 @@ export const appRouter = router({
         if (!db) return [];
         const dateConditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        // Leads page visibility rule (uniform across all campaign types):
-        //   Show a session ONLY if the customer has replied (stage advanced past REACTIVATION).
-        //   Campaign sessions (always-on, reactivation, command-center, campaign:*) start at
-        //   REACTIVATION and are hidden until the customer responds.
-        //   Organic form leads (leadSource IS NULL or unknown) are shown immediately.
-        // Explicitly exclude:
-        //   - review sessions (leadSource = 'review') — these belong in the Reviews tab
-        const campaignSources = ["reactivation", "command-center"];
+        // Leads page visibility rule — simple and reliable:
+        //   1. Never show review-flow sessions (they belong in the Reviews tab)
+        //   2. Organic/form leads (no leadSource): show immediately
+        //   3. Campaign sessions (always-on, reactivation, command-center, campaign:*):
+        //      show ONLY if the customer has sent at least one inbound reply
+        //      (messageHistory contains a role:"user" entry)
+        //      This works regardless of stage — auto-replies being off means stage
+        //      stays at REACTIVATION even after a reply, so we check the message log.
         const sourceFilter = and(
           // Never show review-flow sessions in the lead list
-          ne(conversationSessions.leadSource, "review"),
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
           or(
-            // Organic / form leads — show immediately (no leadSource or unknown source)
-            // Exclude always-on, reactivation, command-center, and campaign:* sources
-            and(
-              sql`(${conversationSessions.leadSource} IS NULL OR (
-                ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
-                ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-                ${conversationSessions.leadSource} NOT IN (${sql.join(campaignSources.map(s => sql`${s}`), sql`, `)})
-              ))`,
-            ),
-            // Campaign sessions (always-on, reactivation, command-center, campaign:*) — only show after customer replies
-            and(
-              or(
-                sql`${conversationSessions.leadSource} LIKE 'always-on%'`,
-                sql`${conversationSessions.leadSource} LIKE 'campaign:%'`,
-                sql`${conversationSessions.leadSource} IN (${sql.join(campaignSources.map(s => sql`${s}`), sql`, `)})`
-              ),
-              ne(conversationSessions.stage, "REACTIVATION")
-            )
+            // Organic / form leads — show immediately (no leadSource)
+            sql`${conversationSessions.leadSource} IS NULL`,
+            // Non-campaign sources (not always-on, not reactivation, not command-center, not campaign:*)
+            // — show immediately
+            sql`(
+              ${conversationSessions.leadSource} IS NOT NULL AND
+              ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+              ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
+            )`,
+            // Campaign sessions — show ONLY if customer has replied
+            // Check messageHistory JSON for any role:"user" entry
+            sql`(
+              (
+                ${conversationSessions.leadSource} LIKE 'always-on%' OR
+                ${conversationSessions.leadSource} LIKE 'campaign:%' OR
+                ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
+              ) AND
+              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+            )`
           )
         );
 
