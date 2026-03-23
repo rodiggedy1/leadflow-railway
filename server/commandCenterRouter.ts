@@ -2188,6 +2188,88 @@ Respond in JSON with this exact schema:
       }
       return { ok: result.success };
     }),
+
+  /**
+   * getBlastDetail — returns per-contact status for a single campaign blast.
+   * Shows who replied, their current stage, and whether they moved into the pipeline.
+   */
+  getBlastDetail: adminAgentProcedure
+    .input(z.object({ blastId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      // Fetch the blast record
+      const [blast] = await db
+        .select()
+        .from(campaignBlasts)
+        .where(eq(campaignBlasts.id, input.blastId))
+        .limit(1);
+
+      if (!blast) return null;
+
+      // Determine session window (same logic as getCampaignHistory)
+      const windowStart = blast.startedAt
+        ? new Date(blast.startedAt.getTime() - 60_000)
+        : new Date(blast.firedAt.getTime() - 2 * 60 * 60 * 1000);
+      const windowEnd = new Date(blast.firedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      // Fetch all sessions for this blast
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          stage: conversationSessions.stage,
+          isBooked: conversationSessions.isBooked,
+          messageHistory: conversationSessions.messageHistory,
+          createdAt: conversationSessions.createdAt,
+          updatedAt: conversationSessions.updatedAt,
+          leadSource: conversationSessions.leadSource,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            sql`${conversationSessions.leadSource} LIKE ${`campaign:${blast.campaignType}%`}`,
+            gte(conversationSessions.createdAt, windowStart),
+            lte(conversationSessions.createdAt, windowEnd)
+          )
+        )
+        .orderBy(desc(conversationSessions.updatedAt));
+
+      // Pipeline stages — leads that moved beyond initial outreach
+      const PIPELINE_STAGES = new Set(["QUOTE_SENT", "FOLLOW_UP", "BOOKED", "CALL_SCHEDULED", "UNHANDLED"]);
+
+      const contacts = sessions.map((s) => {
+        const history: Array<{ role: string; content: string; ts?: number }> =
+          (() => { try { return JSON.parse(s.messageHistory ?? "[]"); } catch { return []; } })();
+        const hasReplied = history.some((m) => m.role === "user");
+        const lastUserMsg = [...history].reverse().find((m) => m.role === "user");
+        const inPipeline = PIPELINE_STAGES.has(s.stage ?? "") || s.isBooked === 1;
+        return {
+          id: s.id,
+          phone: s.leadPhone,
+          name: s.leadName || "Unknown",
+          stage: s.stage,
+          isBooked: s.isBooked === 1,
+          inPipeline,
+          hasReplied,
+          lastReply: lastUserMsg?.content ?? null,
+          lastReplyTs: lastUserMsg?.ts ?? null,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        };
+      });
+
+      return {
+        blast,
+        contacts,
+        totalSent: contacts.length,
+        totalReplied: contacts.filter((c) => c.hasReplied).length,
+        totalInPipeline: contacts.filter((c) => c.inPipeline).length,
+        totalBooked: contacts.filter((c) => c.isBooked).length,
+      };
+    }),
 });
 
 // ─── Background Cache Warm-Up ──────────────────────────────────────────────────

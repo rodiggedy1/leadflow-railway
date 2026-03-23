@@ -49,6 +49,15 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   Users,
   MessageSquare,
   Play,
@@ -68,6 +77,12 @@ import {
   PlusCircle,
   Megaphone,
   XCircle,
+  MessageCircle,
+  GitBranch,
+  CalendarCheck,
+  Loader2,
+  Phone,
+  X,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -122,6 +137,9 @@ export default function ReactivationCampaigns() {
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
+  // Blast detail drawer
+  const [selectedBlastId, setSelectedBlastId] = useState<number | null>(null);
+
   // ── Queries ──────────────────────────────────────────────────────────────
 
   const { data: campaigns = [], refetch: refetchCampaigns } =
@@ -130,6 +148,13 @@ export default function ReactivationCampaigns() {
   // AI Center blasts (from campaign_blasts table)
   const { data: blastHistory = [] } =
     trpc.commandCenter.getCampaignHistory.useQuery(undefined, { refetchInterval: 30_000 });
+
+  // Blast detail — loaded when a card is clicked
+  const { data: blastDetail, isLoading: isLoadingBlastDetail } =
+    trpc.commandCenter.getBlastDetail.useQuery(
+      { blastId: selectedBlastId! },
+      { enabled: !!selectedBlastId }
+    );
 
   // Live preview of eligible contacts as filters change
   const { data: preview, isLoading: isLoadingPreview, refetch: refetchPreview } =
@@ -269,7 +294,11 @@ export default function ReactivationCampaigns() {
               const sentCount = blast.sentCount ?? 0;
               const replyRate = sentCount > 0 ? Math.round((replyCount / sentCount) * 100) : 0;
               return (
-                <Card key={blast.id} className="border-purple-100">
+                <Card
+                  key={blast.id}
+                  className="border-purple-100 cursor-pointer hover:border-purple-300 hover:shadow-sm transition-all"
+                  onClick={() => setSelectedBlastId(blast.id)}
+                >
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0">
@@ -315,6 +344,7 @@ export default function ReactivationCampaigns() {
                           </div>
                           <div className="text-muted-foreground text-xs">Delivered</div>
                         </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground/50 ml-2" />
                       </div>
                     </div>
                   </CardContent>
@@ -856,6 +886,102 @@ export default function ReactivationCampaigns() {
       {view === "list" && renderCampaignList()}
       {view === "new" && renderNewCampaign()}
       {view === "detail" && renderCampaignDetail()}
+
+      {/* ── Blast Detail Sheet ──────────────────────────────────────────── */}
+      <Sheet open={!!selectedBlastId} onOpenChange={(open) => !open && setSelectedBlastId(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col">
+          <SheetHeader className="px-6 py-5 border-b">
+            <div className="flex items-center gap-2">
+              <Megaphone className="w-4 h-4 text-purple-500" />
+              <SheetTitle className="text-base">
+                {blastDetail?.blast.campaignTitle ?? "Blast Detail"}
+              </SheetTitle>
+            </div>
+            <SheetDescription className="text-xs">
+              {blastDetail ? (
+                <span>
+                  {new Date(blastDetail.blast.firedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {" · "}
+                  <span className="text-purple-600 font-medium">{blastDetail.blast.campaignType.replace(/_/g, " ")}</span>
+                </span>
+              ) : "Loading…"}
+            </SheetDescription>
+          </SheetHeader>
+
+          {isLoadingBlastDetail ? (
+            <div className="flex items-center justify-center flex-1">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : blastDetail ? (
+            <>
+              {/* KPI row */}
+              <div className="grid grid-cols-4 divide-x border-b">
+                {[
+                  { label: "Sent", value: blastDetail.totalSent, color: "text-foreground" },
+                  { label: "Replied", value: blastDetail.totalReplied, color: "text-blue-600" },
+                  { label: "In Pipeline", value: blastDetail.totalInPipeline, color: "text-purple-600" },
+                  { label: "Booked", value: blastDetail.totalBooked, color: "text-green-600" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="text-center py-4">
+                    <div className={`text-2xl font-bold ${color}`}>{value}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Contact list */}
+              <ScrollArea className="flex-1">
+                <div className="divide-y">
+                  {blastDetail.contacts.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">No contacts found for this blast.</div>
+                  ) : (
+                    blastDetail.contacts.map((contact) => (
+                      <div key={contact.id} className="px-6 py-4 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm text-foreground">{contact.name}</span>
+                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                <Phone className="w-3 h-3" />{contact.phone}
+                              </span>
+                            </div>
+                            {contact.lastReply && (
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                                <MessageCircle className="w-3 h-3 inline mr-1 text-blue-400" />
+                                {contact.lastReply}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            {contact.isBooked ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                <CalendarCheck className="w-3 h-3" /> Booked
+                              </span>
+                            ) : contact.inPipeline ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                                <GitBranch className="w-3 h-3" /> In Pipeline
+                              </span>
+                            ) : contact.hasReplied ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                <MessageCircle className="w-3 h-3" /> Replied
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                                <Clock className="w-3 h-3" /> No reply
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">{contact.stage}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>

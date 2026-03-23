@@ -2157,3 +2157,8 @@
 
 ## Campaigns Page Unification — March 22
 - [x] Show Command Center campaign blasts in the Reactivation Campaigns page so all campaigns appear in one place
+
+## Blast Detail View — March 22
+- [x] Add getBlastDetail tRPC procedure (per-contact reply/pipeline status for a blast)
+- [x] Build BlastDetailDrawer — slide-in panel showing replied contacts, stage, pipeline status
+- [x] Wire click handler on AI Center blast cards to open the drawer
