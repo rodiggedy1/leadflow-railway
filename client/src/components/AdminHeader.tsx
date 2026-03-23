@@ -321,16 +321,11 @@ const NAV_ENTRIES: NavEntry[] = [
       { id: "campaign-approval", label: "Approvals", href: "/admin/campaign-approval", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
     ],
   },
-  {
-    id: "completed-jobs",
-    label: "Happiness",
-    icon: <Smile className="w-3.5 h-3.5" />,
-    href: "/admin/completed-jobs",
-    tabId: "completed-jobs",
-  },
+  // Happiness nav item hidden — to be redesigned later
+  // { id: "completed-jobs", label: "Happiness", icon: <Smile className="w-3.5 h-3.5" />, href: "/admin/completed-jobs", tabId: "completed-jobs" },
   {
     id: "jobs-group",
-    label: "Jobs",
+    label: "Operations",
     icon: <Briefcase className="w-3.5 h-3.5" />,
     children: [
       { id: "quality",          label: "Work & Photos",          href: "/admin/quality",          icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
