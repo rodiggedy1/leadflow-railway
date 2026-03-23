@@ -313,6 +313,25 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── First-run AI warmup: delayed 60s after startup ──────────────────────────
+  // The recurring cron fires at :00 and :30 of every hour, but on a fresh
+  // deployment the server must pass health checks before making 4 LLM calls.
+  // This one-shot timer fires 60s after startup, then the cron takes over.
+  const AI_WARMUP_STARTUP_DELAY_MS = 60_000;
+  console.log(`[InternalCron] AiCacheWarmUp first run scheduled in ${AI_WARMUP_STARTUP_DELAY_MS / 1000}s...`);
+  setTimeout(async () => {
+    const start = Date.now();
+    try {
+      const result = await warmAiInsightsCache();
+      const summary = `warmed: [${result.warmed.join(", ")}], errors: ${result.errors.length}`;
+      console.log(`[InternalCron] AiCacheWarmUp (startup) — ${summary} (${Date.now() - start}ms)`);
+      await recordHeartbeat("ai-cache-warmup", summary, result.warmed.length > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] AiCacheWarmUp (startup) failed:", msg);
+    }
+  }, AI_WARMUP_STARTUP_DELAY_MS);
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");

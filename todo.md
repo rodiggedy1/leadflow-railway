@@ -2377,3 +2377,16 @@
 - [x] On photo upload, generate 200px thumbnail and store to S3 as separate key
 - [x] Add thumbnailUrl column to job_photos schema, run db:push
 - [x] Update Quality Dashboard: use thumbnailUrl for 48px chips, photoUrl for lightbox (929 tests pass)
+
+## Deployment Hang Investigation
+
+- [ ] Check for large static files in client/public or project directory
+- [ ] Check Sharp native bindings — may not survive deployment container
+- [ ] Analyze build output size
+- [ ] Check for any local file references that should be CDN URLs
+- [ ] Review package.json for deployment-incompatible dependencies
+
+## Deployment Startup Delay Fixes
+
+- [x] Add 30s startup delay to VAPI bootstrap so health checks pass first
+- [x] Add 60s startup delay to AI cache warmup first run (929 tests pass)

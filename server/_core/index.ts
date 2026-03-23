@@ -104,13 +104,18 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Bootstrap Vapi assistant after server is ready
+    // Start internal cron scheduler immediately (nightly sync, follow-ups, always-on).
+    // The AI warmup cron has its own 60s startup delay built in.
+    startInternalCron();
+    // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
     // Always use the production domain so Vapi tool calls reach the live server.
     // VAPI_WEBHOOK_URL env var can override for local dev/testing.
     const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
-    bootstrapVapiAssistant(webhookUrl).catch(console.error);
-    // Start internal cron scheduler (nightly sync, follow-ups, always-on)
-    startInternalCron();
+    const VAPI_STARTUP_DELAY_MS = 30_000;
+    console.log(`[Vapi] Bootstrap scheduled in ${VAPI_STARTUP_DELAY_MS / 1000}s...`);
+    setTimeout(() => {
+      bootstrapVapiAssistant(webhookUrl).catch(console.error);
+    }, VAPI_STARTUP_DELAY_MS);
   });
 }
 
