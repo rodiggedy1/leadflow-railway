@@ -20,7 +20,13 @@
 
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, fieldMgmtLog } from "../drizzle/schema";
+import {
+  cleanerJobs,
+  cleanerProfiles,
+  fieldMgmtLog,
+  fieldMgmtCalls,
+  jobStatusHistory,
+} from "../drizzle/schema";
 import { sendSms, sleep } from "./openphone";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
@@ -72,6 +78,8 @@ export async function placeNoCheckinEscalationCall(params: {
   customerName: string;
   jobAddress: string;
   scheduledTime: string;
+  cleanerJobId?: number;
+  step?: string;
 }): Promise<boolean> {
   if (!FIELD_MGMT_ENABLED) return false;
   if (!ENV.vapiPrivateKey) {
@@ -79,7 +87,7 @@ export async function placeNoCheckinEscalationCall(params: {
     return false;
   }
 
-  const { cleanerName, customerName, jobAddress, scheduledTime } = params;
+  const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step } = params;
   const script =
     `Hi Maids in Black team, this is an automated field alert. ` +
     `Cleaner ${cleanerName} has not checked in for their job at ${jobAddress} for client ${customerName}, ` +
@@ -115,7 +123,30 @@ export async function placeNoCheckinEscalationCall(params: {
 
   try {
     const result = await vapiPost("/call", payload) as { id?: string };
-    console.log(`[FieldMgmt] Escalation call placed to CS team. VAPI call ID: ${result?.id ?? "unknown"}`);
+    const vapiCallId = result?.id ?? null;
+    console.log(`[FieldMgmt] Escalation call placed to CS team. VAPI call ID: ${vapiCallId ?? "unknown"}`);
+
+    // Store the call record in fieldMgmtCalls so we can update it when the end-of-call report arrives
+    if (cleanerJobId && vapiCallId) {
+      const db = await getDb();
+      if (db) {
+        await db.insert(fieldMgmtCalls).values({
+          cleanerJobId,
+          step: step ?? "noshow_call",
+          vapiCallId,
+          calledPhone: CS_ALERT_NUMBER,
+          outcome: "no_answer", // will be updated by end-of-call webhook
+          durationSeconds: 0,
+          transcript: null,
+          summary: null,
+          endedReason: null,
+          recordingUrl: null,
+        }).catch((err: unknown) => {
+          console.error("[FieldMgmt] Failed to insert fieldMgmtCalls row:", err);
+        });
+      }
+    }
+
     return true;
   } catch (err) {
     console.error("[FieldMgmt] Escalation call FAILED:", err);
@@ -930,6 +961,8 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
             customerName: job.customerName ?? "Unknown",
             jobAddress: job.jobAddress ?? "Unknown",
             scheduledTime: timeStr,
+            cleanerJobId: jobIdForCall,
+            step: "noshow_call",
           })
         )
         .then((callResult) => {

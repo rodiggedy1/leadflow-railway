@@ -23,6 +23,9 @@ import {
   type VapiEndOfCallReport,
 } from "./vapiService";
 import { notifyOwner } from "./_core/notification";
+import { getDb } from "./db";
+import { fieldMgmtCalls } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 // Vapi native format
 interface VapiToolCallNative {
@@ -203,6 +206,36 @@ export function registerVapiWebhookRoute(app: Express): void {
         processEndOfCallReport(body as unknown as VapiEndOfCallReport).catch((err) => {
           console.error("[Vapi] processEndOfCallReport error:", err);
         });
+
+        // Also update fieldMgmtCalls if this vapiCallId matches a field mgmt call
+        const callMsg = (body as Record<string, unknown>)?.message as Record<string, unknown> | undefined;
+        const callObj = callMsg?.call as Record<string, unknown> | undefined;
+        const vapiCallId = callObj?.id as string | undefined;
+        if (vapiCallId) {
+          const artifact = callMsg?.artifact as Record<string, unknown> | undefined;
+          const analysis = callMsg?.analysis as Record<string, unknown> | undefined;
+          const startedAt = callObj?.startedAt ? new Date(callObj.startedAt as string).getTime() : Date.now();
+          const endedAt = callObj?.endedAt ? new Date(callObj.endedAt as string).getTime() : Date.now();
+          const durationSeconds = Math.round((endedAt - startedAt) / 1000);
+          const transcript = (artifact?.transcript as string | undefined) ?? null;
+          const summary = (analysis?.summary as string | undefined) ?? null;
+          const recordingUrl = (artifact?.recordingUrl as string | undefined) ?? null;
+          const endedReason = callMsg?.endedReason as string | undefined;
+          // Determine outcome from endedReason
+          const outcome = endedReason === "customer-ended-call" ? "answered"
+            : endedReason?.includes("voicemail") ? "voicemail"
+            : endedReason?.includes("no-answer") ? "no_answer"
+            : durationSeconds > 5 ? "answered" : "no_answer";
+
+          getDb().then(async (db) => {
+            if (!db) return;
+            await db.update(fieldMgmtCalls)
+              .set({ outcome, durationSeconds, transcript, summary, recordingUrl, endedReason: endedReason ?? null })
+              .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
+              .catch(() => {}); // no-op if not a field mgmt call
+          }).catch(() => {});
+        }
+
         return res.json({ received: true });
       }
 

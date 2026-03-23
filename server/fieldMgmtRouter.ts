@@ -23,7 +23,7 @@ import { eq, asc, inArray, notInArray, and } from "drizzle-orm";
 import { router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import {
   parseServiceDateTime,
@@ -934,6 +934,123 @@ export const fieldMgmtRouter = router({
    * but the job is already on the cleaner's schedule. Sets bookingStatus to
    * 'assigned' so the automation engine picks it up for pre-job reminders etc.
    */
+  /**
+   * Returns all SMS messages (outbound + inbound replies) for a job.
+   * Used by the Messages tab in the job detail panel.
+   */
+  getJobMessages: adminProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Outbound SMS from field_mgmt_log
+      const outbound = await db
+        .select({
+          id: fieldMgmtLog.id,
+          step: fieldMgmtLog.step,
+          smsSent: fieldMgmtLog.smsSent,
+          recipientPhone: fieldMgmtLog.recipientPhone,
+          firedAt: fieldMgmtLog.firedAt,
+          success: fieldMgmtLog.success,
+        })
+        .from(fieldMgmtLog)
+        .where(and(eq(fieldMgmtLog.cleanerJobId, input.cleanerJobId), eq(fieldMgmtLog.success, 1)))
+        .orderBy(asc(fieldMgmtLog.firedAt));
+
+      // Inbound replies from job_sms_replies
+      const inbound = await db
+        .select({
+          id: jobSmsReplies.id,
+          senderPhone: jobSmsReplies.senderPhone,
+          body: jobSmsReplies.body,
+          receivedAt: jobSmsReplies.receivedAt,
+          senderType: jobSmsReplies.senderType,
+        })
+        .from(jobSmsReplies)
+        .where(eq(jobSmsReplies.cleanerJobId, input.cleanerJobId))
+        .orderBy(asc(jobSmsReplies.receivedAt));
+
+      // Merge into a unified thread sorted by timestamp
+      type Message = {
+        id: number;
+        direction: "outbound" | "inbound";
+        body: string;
+        phone: string;
+        label: string;
+        timestamp: number;
+        success?: boolean;
+      };
+
+      const thread: Message[] = [
+        ...outbound
+          .filter((r) => r.smsSent)
+          .map((r) => ({
+            id: r.id,
+            direction: "outbound" as const,
+            body: r.smsSent!,
+            phone: r.recipientPhone ?? "",
+            label: r.step,
+            timestamp: r.firedAt ? new Date(r.firedAt).getTime() : 0,
+            success: r.success === 1,
+          })),
+        ...inbound.map((r) => ({
+          id: r.id,
+          direction: "inbound" as const,
+          body: r.body,
+          phone: r.senderPhone,
+          label: r.senderType === "cleaner" ? "Cleaner Reply" : "Client Reply",
+          timestamp: r.receivedAt ? new Date(r.receivedAt).getTime() : 0,
+        })),
+      ].sort((a, b) => a.timestamp - b.timestamp);
+
+      return thread;
+    }),
+
+  /**
+   * Returns all field mgmt calls (VAPI escalation/reminder calls) for a job.
+   * Used by the Calls tab in the job detail panel.
+   */
+  getJobCalls: adminProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const calls = await db
+        .select()
+        .from(fieldMgmtCalls)
+        .where(eq(fieldMgmtCalls.cleanerJobId, input.cleanerJobId))
+        .orderBy(asc(fieldMgmtCalls.createdAt));
+
+      return calls;
+    }),
+
+  /**
+   * Send a manual SMS from the job detail panel.
+   */
+  sendJobSms: adminProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      to: z.string(),
+      body: z.string().min(1).max(1600),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await sendSms({ to: input.to, content: input.body });
+      if (!result.success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error ?? "SMS send failed" });
+      }
+      // Log it as an outbound step
+      await recordStep({
+        cleanerJobId: input.cleanerJobId,
+        step: "manual_sms",
+        success: true,
+        smsSent: input.body,
+        recipientPhone: input.to,
+      });
+      return { success: true };
+    }),
+
   confirmAssignment: adminProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {

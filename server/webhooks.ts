@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -102,6 +102,9 @@ export function registerWebhookRoutes(app: Express) {
       const fromPhone = normalizePhone(rawPhone);
 
       console.log(`[Webhook] Inbound SMS from ${fromPhone}: "${inboundText}"`);
+
+      // Fire-and-forget: store this reply against any matching cleaner jobs
+      tryStoreJobSmsReply({ fromPhone, inboundText, openPhoneMessageId: inboundMessageId }).catch(() => {});
 
       const db = await getDb();
       if (!db) {
@@ -520,4 +523,71 @@ export function registerWebhookRoutes(app: Express) {
       console.error("[Webhook] Error processing OpenPhone event:", err);
     }
   });
+
+  // ── Job SMS reply matcher ─────────────────────────────────────────────────────
+  // Runs as a fire-and-forget side-effect on every inbound message.
+  // Checks if the sender phone matches a client or cleaner on any job within
+  // the last 2 days. If so, stores the reply in job_sms_replies for the ops team.
+  async function tryStoreJobSmsReply(params: {
+    fromPhone: string;
+    inboundText: string;
+    openPhoneMessageId?: string;
+  }): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+
+      const { fromPhone, inboundText, openPhoneMessageId } = params;
+
+      // Look for jobs in the last 2 days where this phone is either the client or cleaner.
+      // cleanerJobs has customerPhone for the client; cleaner phone is on cleanerProfiles.
+      const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      const matchingJobs = await db
+        .select({
+          id: cleanerJobs.id,
+          customerPhone: cleanerJobs.customerPhone,
+          cleanerPhone: cleanerProfiles.phone,
+        })
+        .from(cleanerJobs)
+        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+        .where(
+          and(
+            or(
+              eq(cleanerJobs.customerPhone, fromPhone),
+              eq(cleanerProfiles.phone, fromPhone)
+            ),
+            // Only jobs from the last 2 days
+            sql`${cleanerJobs.serviceDateTime} >= ${twoDaysAgo.toISOString().slice(0, 10)}`
+          )
+        )
+        .limit(5);
+
+      if (matchingJobs.length === 0) return;
+
+      for (const job of matchingJobs) {
+        const senderType = job.customerPhone === fromPhone ? "client" : "cleaner";
+        await db
+          .insert(jobSmsReplies)
+          .values({
+            cleanerJobId: job.id,
+            senderType,
+            senderPhone: fromPhone,
+            body: inboundText,
+            openPhoneMessageId: openPhoneMessageId ?? null,
+            receivedAt: new Date(),
+          })
+          .onDuplicateKeyUpdate({ set: { body: inboundText } }) // idempotent on messageId
+          .catch((err: unknown) => {
+            // Ignore duplicate key errors (same message matched to same job twice)
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!msg.includes('Duplicate entry')) {
+              console.error('[Webhook] Failed to store job SMS reply:', msg);
+            }
+          });
+        console.log(`[Webhook] Stored job SMS reply for job ${job.id} from ${senderType} (${fromPhone})`);
+      }
+    } catch (err) {
+      console.error('[Webhook] tryStoreJobSmsReply error:', err);
+    }
+  }
 }

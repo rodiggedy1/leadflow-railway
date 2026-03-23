@@ -1290,3 +1290,61 @@ export const jobStatusHistory = mysqlTable("job_status_history", {
 
 export type JobStatusHistory = typeof jobStatusHistory.$inferSelect;
 export type InsertJobStatusHistory = typeof jobStatusHistory.$inferInsert;
+
+// ── Job SMS Replies — inbound SMS messages from clients or cleaners ────────────
+// When OpenPhone receives an inbound SMS from a phone number that matches either
+// the client phone or cleaner phone on a cleaner job, we store it here so the
+// ops team can see the full conversation thread in the job detail panel.
+export const jobSmsReplies = mysqlTable("job_sms_replies", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to cleanerJobs.id */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** "client" | "cleaner" — which party sent this */
+  senderType: varchar("senderType", { length: 16 }).notNull(),
+  /** Sender's E.164 phone number */
+  senderPhone: varchar("senderPhone", { length: 30 }).notNull(),
+  /** The message text */
+  body: text("body").notNull(),
+  /** OpenPhone message ID for idempotency */
+  openPhoneMessageId: varchar("openPhoneMessageId", { length: 128 }),
+  /** When the message was received */
+  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+}, (table) => ({
+  idxCleanerJobId: index("idx_jsr_cleaner_job_id").on(table.cleanerJobId),
+  idxOpenPhoneMessageId: uniqueIndex("uniq_jsr_openphone_msg_id").on(table.openPhoneMessageId),
+}));
+export type JobSmsReply = typeof jobSmsReplies.$inferSelect;
+export type InsertJobSmsReply = typeof jobSmsReplies.$inferInsert;
+
+// ── Field Mgmt Calls — VAPI calls made as part of field management escalations ─
+// When the engine fires an exception_call or noshow_call step, we store the
+// resulting call record here (linked to the job) so ops can see outcome,
+// duration, and transcript in the job detail panel.
+export const fieldMgmtCalls = mysqlTable("field_mgmt_calls", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to cleanerJobs.id */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Which step triggered this call: "exception_call" | "noshow_call" */
+  step: varchar("step", { length: 32 }).notNull(),
+  /** Vapi call ID */
+  vapiCallId: varchar("vapiCallId", { length: 128 }).unique(),
+  /** Phone number that was called */
+  calledPhone: varchar("calledPhone", { length: 30 }).notNull(),
+  /** Call outcome: "answered" | "voicemail" | "no_answer" | "failed" */
+  outcome: varchar("outcome", { length: 32 }).default("no_answer").notNull(),
+  /** Call duration in seconds */
+  durationSeconds: int("durationSeconds").default(0).notNull(),
+  /** Full call transcript */
+  transcript: text("transcript"),
+  /** AI summary of the call */
+  summary: text("summary"),
+  /** Why the call ended */
+  endedReason: varchar("endedReason", { length: 100 }),
+  /** Recording URL */
+  recordingUrl: varchar("recordingUrl", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxCleanerJobId: index("idx_fmc_cleaner_job_id").on(table.cleanerJobId),
+}));
+export type FieldMgmtCall = typeof fieldMgmtCalls.$inferSelect;
+export type InsertFieldMgmtCall = typeof fieldMgmtCalls.$inferInsert;
