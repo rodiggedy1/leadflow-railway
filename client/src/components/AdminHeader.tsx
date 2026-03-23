@@ -445,8 +445,18 @@ interface AdminHeaderProps {
 }
 
 export default function AdminHeader({ activeTab, rightExtra, onSessionOpen }: AdminHeaderProps) {
+  const headerRef = (el: HTMLElement | null) => {
+    if (el) {
+      // Keep CSS variable in sync so detail panels can align below this header
+      const update = () => document.documentElement.style.setProperty('--admin-header-height', `${el.offsetHeight}px`);
+      update();
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+  };
+
   return (
-    <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#E5E5E5" }}>
+    <header ref={headerRef} className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#E5E5E5" }}>
       {/* Logo row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
         <a href="/admin/command-center" className="flex items-center gap-3 hover:opacity-80 transition-opacity">

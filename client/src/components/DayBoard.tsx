@@ -938,17 +938,17 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
       {/* ── Detail panel ── */}
       {selectedJob && (
         <div
-          className="fixed right-0 top-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col overflow-hidden"
-          style={{ animation: "slideInRight 150ms ease-out" }}
+          className="fixed right-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col overflow-hidden"
+          style={{ top: "var(--admin-header-height, 120px)", animation: "slideInRight 150ms ease-out" }}
         >
           <DetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onConfirmAssignment={onConfirmAssignment} />
         </div>
       )}
 
-      {/* Backdrop for detail panel on mobile */}
+      {/* Backdrop — click anywhere outside panel to close */}
       {selectedJob && (
         <div
-          className="fixed inset-0 bg-black/10 z-20 sm:hidden"
+          className="fixed inset-0 bg-black/10 z-40"
           onClick={() => setSelectedJob(null)}
         />
       )}
