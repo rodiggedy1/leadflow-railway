@@ -2297,3 +2297,9 @@
 - [x] Add status simulation buttons to job cards: "On the Way", "Arrived", "Running Late", "Completed"
 - [x] Test mode banner on job card when test fire is in progress
 - [x] Write vitest tests for fireStep and simulateStatusChange mutations
+
+## Field Management — Go Live
+
+- [x] Delete 5 seed jobs (Maria Santos, Claudia Reyes, Fatima Diallo, Ana Gutierrez, Lucia Morales) + their field_mgmt_log rows
+- [x] Keep Priya Nair seed job as permanent test job (phone → +13029816191)
+- [x] Enable FIELD_MGMT_ENABLED = true in server/fieldMgmtEngine.ts
