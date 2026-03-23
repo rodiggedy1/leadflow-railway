@@ -65,6 +65,7 @@ type Job = {
   teamName: string | null;
   customerName: string | null;
   customerPhone: string | null;
+  cleanerPhone: string | null;
   jobAddress: string | null;
   serviceDateTime: string | null;
   serviceType: string | null;
@@ -557,7 +558,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
     onError: (err: { message?: string }) => toast.error(err.message || "Failed to place call"),
   });
 
-  const replyPhone = replyTo === "client" ? (job.customerPhone ?? "") : "";
+  const replyPhone = replyTo === "client" ? (job.customerPhone ?? "") : (job.cleanerPhone ?? "");
 
 
   const startTime = job.serviceDateTime
@@ -834,7 +835,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
                   Cleaner
                 </button>
                 <span className="text-[10px] text-slate-400 self-center ml-1">
-                  {replyTo === "client" ? (job.customerPhone ?? "no phone") : "(cleaner phone)"}
+                  {replyTo === "client" ? (job.customerPhone ?? "no phone") : (job.cleanerPhone ?? "no phone on file")}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -856,9 +857,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
                   {sendSms.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              {replyTo === "cleaner" && (
-                <p className="text-[10px] text-amber-600 mt-1.5">Cleaner phone lookup not yet wired — add phone in cleaner profile</p>
-              )}
+
             </div>
           </div>
         )}
