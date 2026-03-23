@@ -24,6 +24,7 @@ const JobTracker = lazy(() => import("./pages/JobTracker"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 const TrackerFlow = lazy(() => import("./pages/TrackerFlow"));
+const FieldManagement = lazy(() => import("./pages/FieldManagement"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -55,6 +56,7 @@ function Router() {
       <Route path={"/admin/settings"} component={SettingsPage} />
       <Route path={"/admin/command-center"} component={CommandCenter} />
       <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
+      <Route path={"/admin/field-management"} component={FieldManagement} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

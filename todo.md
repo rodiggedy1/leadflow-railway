@@ -2211,3 +2211,13 @@
 - [x] Add email field extraction to form submission parser
 - [x] Detect email type (call vs form) from subject/body content automatically
 - [x] Write vitest tests for both new parsers
+
+## Field Management — March 22
+- [x] Create /admin/field-management route and page
+- [x] Add "Field Mgmt" nav entry to AdminHeader under Jobs dropdown
+- [x] Build transparency UI: workflow timeline showing all 5 stages
+- [x] Stage 1: Pre-Job Reminder (T-2hrs) — SMS content + trigger
+- [x] Stage 2: Arrival Check-In (ARRIVED keyword) — auto-response
+- [x] Stage 3: Mid-Job Nudge (~45-60min after start) — SMS content
+- [x] Stage 4: Completion Flow (cleaner marks complete) — checklist SMS
+- [x] Stage 5: Exception Handling (no check-in 30min before) — SMS + auto-call escalation
