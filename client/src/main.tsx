@@ -10,6 +10,19 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+// Expected auth errors that should NOT be logged as errors — they are normal
+// 401 responses from adminAgentProcedure / cleanerProcedure when the user
+// hasn't logged in yet. Logging them as errors creates noise and confusion.
+const EXPECTED_AUTH_ERRORS = new Set([
+  "Agent login required",
+  "Cleaner login required",
+]);
+
+const isExpectedAuthError = (error: unknown): boolean => {
+  if (!(error instanceof TRPCClientError)) return false;
+  return EXPECTED_AUTH_ERRORS.has(error.message);
+};
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -25,7 +38,11 @@ queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
     redirectToLoginIfUnauthorized(error);
-    console.error("[API Query Error]", error);
+    // Suppress expected auth errors — these are normal 401s from agent/cleaner
+    // procedures when visited without a session. Not bugs, not worth logging.
+    if (!isExpectedAuthError(error)) {
+      console.error("[API Query Error]", error);
+    }
   }
 });
 
@@ -33,7 +50,9 @@ queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
     redirectToLoginIfUnauthorized(error);
-    console.error("[API Mutation Error]", error);
+    if (!isExpectedAuthError(error)) {
+      console.error("[API Mutation Error]", error);
+    }
   }
 });
 
