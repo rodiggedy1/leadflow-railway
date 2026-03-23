@@ -333,9 +333,9 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "Jobs",
     icon: <Briefcase className="w-3.5 h-3.5" />,
     children: [
-      { id: "quality",          label: "Quality Dashboard", href: "/admin/quality",            icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
-      { id: "tracker-flow",     label: "Tracker Flow",      href: "/admin/tracker-flow",     icon: <Smartphone className="w-3.5 h-3.5" /> },
-      { id: "field-management", label: "Field Mgmt",        href: "/admin/field-management", icon: <Briefcase className="w-3.5 h-3.5" /> },
+      { id: "quality",          label: "Work & Photos",          href: "/admin/quality",          icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+      { id: "field-management", label: "During-Field Mgmt",      href: "/admin/field-management", icon: <Briefcase className="w-3.5 h-3.5" /> },
+      { id: "tracker-flow",     label: "After-Reviews & Rebook", href: "/admin/tracker-flow",     icon: <Smartphone className="w-3.5 h-3.5" /> },
     ],
   },
   {
