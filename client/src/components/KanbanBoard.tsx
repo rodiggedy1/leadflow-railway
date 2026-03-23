@@ -75,7 +75,7 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
   {
     id: "new_leads",
     label: "NEW LEADS",
-    stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE"],
+    stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE", "REACTIVATION"],
     targetStage: "QUOTE_SENT",
     accentColor: "#AAFF00",
     badgeBg: "bg-[#AAFF00] text-black",
