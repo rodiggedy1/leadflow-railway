@@ -15,6 +15,7 @@
 import { useState, useCallback, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import DayBoard from "@/components/DayBoard";
+import ControlTowerTab from "@/components/ControlTowerTab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
@@ -1181,7 +1182,7 @@ function FieldManagementLoginScreen({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function FieldManagement() {
-  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board">("board");
+  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower">("board");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, throwOnError: false });
   const isAdmin = meQuery.data?.isAdmin === true;
@@ -1205,7 +1206,7 @@ export default function FieldManagement() {
       <AdminHeader activeTab="field-management" />
 
       <div className={`mx-auto px-4 sm:px-6 py-8 ${
-        activeTab === "board" ? "max-w-7xl" : "max-w-3xl"
+        activeTab === "board" || activeTab === "tower" ? "max-w-7xl" : "max-w-3xl"
       }`}>
         {/* Page header */}
         <div className="mb-6">
@@ -1217,7 +1218,7 @@ export default function FieldManagement() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
-          {(["board", "log", "workflow"] as const).map((tab) => (
+          {(["board", "tower", "log", "workflow"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1227,13 +1228,14 @@ export default function FieldManagement() {
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {tab === "board" ? "Day Board" : tab === "log" ? "Job Log" : "Workflow"}
+              {tab === "board" ? "Day Board" : tab === "tower" ? "Control Tower" : tab === "log" ? "Job Log" : "Workflow"}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
         {activeTab === "board" && <BoardTab />}
+        {activeTab === "tower" && <ControlTowerTab />}
 
         {activeTab === "workflow" && (
           <>

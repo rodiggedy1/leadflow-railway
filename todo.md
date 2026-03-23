@@ -2426,3 +2426,10 @@
 - [x] Diagnose root cause: DB ECONNRESET during OAuth callback → missing session cookie → adminProcedure returns "Please login (10001)" → global redirect fires → in-flight tRPC requests receive HTML login page → JSON parse error
 - [x] Fix 1: Reset DB singleton on ECONNRESET/ECONNREFUSED/ETIMEDOUT in upsertUser and getUserByOpenId so the pool reconnects on next request
 - [x] Fix 2: Add auth guard to FieldManagement page (agent login screen) so fieldMgmt queries only fire when authenticated — prevents the 401 → redirect → HTML cycle
+
+## Control Tower Tab (Field Management) — IN PROGRESS
+
+- [x] Build ControlTowerTab component with metric cards, timeline day board, attention queue, selected-job detail panel
+- [x] Wire to real getJobsForDay tRPC data (map real fields: cleanerName, teamName, jobStatus, timeline events, stepsFired/stepsSuccess)
+- [x] Add "Control Tower" tab to FieldManagement page alongside Board/Log/Workflow
+- [x] Action buttons: retry failed step, open job tracker link
