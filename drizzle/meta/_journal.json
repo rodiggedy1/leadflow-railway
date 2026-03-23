@@ -456,6 +456,13 @@
       "when": 1774234538960,
       "tag": "0064_sparkling_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1774243110623,
+      "tag": "0065_condemned_bastion",
+      "breakpoints": true
     }
   ]
 }

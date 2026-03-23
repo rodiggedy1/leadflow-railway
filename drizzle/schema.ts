@@ -1200,3 +1200,52 @@ export const commandCenterCache = mysqlTable("command_center_cache", {
 });
 export type CommandCenterCache = typeof commandCenterCache.$inferSelect;
 export type InsertCommandCenterCache = typeof commandCenterCache.$inferInsert;
+
+// ── Field Management Log ──────────────────────────────────────────────────────
+/**
+ * fieldMgmtLog — one row per automation step fired per cleaner job.
+ * Prevents double-sends: before firing any step, check if a row already exists
+ * for (cleanerJobId, step). Insert atomically before sending SMS.
+ *
+ * step values (match FieldManagement.tsx step IDs):
+ *   "pre_job_reminder"   → Step 1: T-2hr SMS to cleaner
+ *   "client_on_the_way"  → Step 2: On the Way SMS to client
+ *   "arrived_checkin"    → Step 3: ARRIVED auto-response to cleaner
+ *   "mid_job_nudge"      → Step 4: Mid-job check SMS to cleaner
+ *   "completion_flow"    → Step 5: Completion checklist SMS to cleaner
+ *   "exception_sms"      → Step 6a: No check-in SMS to cleaner
+ *   "exception_call"     → Step 6b: Auto-call escalation after no SMS reply
+ *   "noshow_alert"       → Step 7: No-show CS team alert
+ */
+export const fieldMgmtSteps = [
+  "pre_job_reminder",
+  "client_on_the_way",
+  "arrived_checkin",
+  "mid_job_nudge",
+  "completion_flow",
+  "exception_sms",
+  "exception_call",
+  "noshow_alert",
+] as const;
+
+export type FieldMgmtStep = (typeof fieldMgmtSteps)[number];
+
+export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to cleanerJobs.id */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Which automation step fired */
+  step: mysqlEnum("step", fieldMgmtSteps as unknown as [string, ...string[]]).notNull(),
+  /** Whether the SMS/call was sent successfully */
+  success: int("success").default(0).notNull(),
+  /** Error message if failed */
+  errorDetail: text("errorDetail"),
+  /** The SMS content that was sent (for audit) */
+  smsSent: text("smsSent"),
+  /** Recipient phone (cleaner or client) */
+  recipientPhone: varchar("recipientPhone", { length: 30 }),
+  firedAt: timestamp("firedAt").defaultNow().notNull(),
+});
+
+export type FieldMgmtLog = typeof fieldMgmtLog.$inferSelect;
+export type InsertFieldMgmtLog = typeof fieldMgmtLog.$inferInsert;

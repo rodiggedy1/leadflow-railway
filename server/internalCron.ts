@@ -23,6 +23,13 @@ import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
 import { warmAiInsightsCache } from "./commandCenterRouter";
+import {
+  runPreJobReminders,
+  runMidJobNudges,
+  runExceptionHandling,
+  runNoShowEscalation,
+  FIELD_MGMT_ENABLED,
+} from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 
@@ -274,6 +281,38 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Field Management: every 5 minutes, 6 AM–10 PM ET ─────────────────────────
+  // Runs all time-based field management steps:
+  //   - Pre-job reminders (T-2hrs)
+  //   - Mid-job nudges (45-60min after arrived)
+  //   - Exception handling (30min before, no check-in)
+  //   - No-show escalation (10min before, no on_the_way)
+  // GATED: FIELD_MGMT_ENABLED must be true in fieldMgmtEngine.ts
+  cron.schedule("0 */5 6-22 * * *", async () => {
+    if (!FIELD_MGMT_ENABLED) return;
+    try {
+      const [reminders, nudges, exceptions, noshow] = await Promise.all([
+        runPreJobReminders(),
+        runMidJobNudges(),
+        runExceptionHandling(),
+        runNoShowEscalation(),
+      ]);
+      const summary = [
+        `reminders: ${reminders.sent}/${reminders.checked}`,
+        `nudges: ${nudges.sent}/${nudges.checked}`,
+        `exceptions: ${exceptions.sent}/${exceptions.checked}`,
+        `noshow: ${noshow.sent}/${noshow.checked}`,
+      ].join(", ");
+      const didWork = reminders.sent + nudges.sent + exceptions.sent + noshow.sent > 0;
+      if (didWork) console.log(`[InternalCron] FieldMgmt — ${summary}`);
+      await recordHeartbeat("field-mgmt", summary, didWork);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] FieldMgmt cron failed:", msg);
+      await recordHeartbeat("field-mgmt", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
@@ -283,4 +322,5 @@ export function startInternalCron(): void {
   console.log("  - AlwaysOnSend:       10 AM ET Mon-Sat (gated by isActive flag)");
   console.log("  - TrackerLinkSend:    8 AM ET daily");
   console.log("  - AiCacheWarmUp:      every 30 minutes");
+  console.log(`  - FieldMgmt:          every 5 min 6AM-10PM ET (ENABLED=${FIELD_MGMT_ENABLED})`);
 }

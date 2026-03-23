@@ -2225,3 +2225,18 @@
 ## Field Management — Step additions (March 22)
 - [x] Add Step 2a: Client "On the Way" SMS — fires when cleaner taps On the Way in app
 - [x] Add Step 6: No-Show / Late Escalation — CS team call alert 10 min before job start if no On the Way or ARRIVED
+
+## Field Management Automation — March 2026
+
+- [x] Create fieldMgmtLog DB table (cleanerJobId, step, success, smsSent, recipientPhone, firedAt)
+- [x] Push migration (field_mgmt_log table live)
+- [x] Create fieldMgmtEngine.ts with kill switch FIELD_MGMT_ENABLED=false
+- [x] Step 1: runPreJobReminders cron (T-2hrs, every 5min, ET timezone)
+- [x] Step 2: sendClientOnTheWaySms (hook into cleanerRouter.updateJobStatus on_the_way)
+- [x] Step 3: sendArrivedCheckin (hook into cleanerRouter.updateJobStatus arrived)
+- [x] Step 4: runMidJobNudges cron (45-60min after arrived_checkin log entry)
+- [x] Step 5: sendCompletionFlow (hook into cleanerRouter.markComplete)
+- [x] Step 6: runExceptionHandling cron (30min before, no check-in)
+- [x] Step 7: runNoShowEscalation cron (10min before, no on_the_way/arrived) + VAPI call
+- [x] Register field-mgmt cron in internalCron.ts (every 5min, 6AM-10PM ET, gated by FIELD_MGMT_ENABLED)
+- [x] Write vitest tests for fieldMgmtEngine (29 tests, 823 total passing)

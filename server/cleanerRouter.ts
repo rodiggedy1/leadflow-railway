@@ -18,6 +18,7 @@ import { publicProcedure, cleanerProcedure, adminAgentProcedure, router } from "
 import { getDb } from "./db";
 import { storagePut } from "./storage";
 import { notifyOwner } from "./_core/notification";
+import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow } from "./fieldMgmtEngine";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -292,6 +293,12 @@ export const cleanerRouter = router({
         .set({ bookingStatus: "completed", jobStatus: "completed" })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
+      // ── Field Management: Completion Flow ───────────────────────────────────────
+      // Fire-and-forget: don't block the response
+      sendCompletionFlow(input.cleanerJobId).catch(err =>
+        console.error("[FieldMgmt] sendCompletionFlow error:", err)
+      );
+
       return { success: true };
     }),
 
@@ -360,6 +367,19 @@ export const cleanerRouter = router({
         .update(cleanerJobs)
         .set(updateData)
         .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      // ── Field Management hooks ─────────────────────────────────────────────────
+      // Fire-and-forget: don't let SMS failures block the status update response
+      if (input.status === "on_the_way") {
+        sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
+          console.error("[FieldMgmt] sendClientOnTheWaySms error:", err)
+        );
+      }
+      if (input.status === "arrived") {
+        sendArrivedCheckin(input.cleanerJobId).catch(err =>
+          console.error("[FieldMgmt] sendArrivedCheckin error:", err)
+        );
+      }
 
       // Send owner notifications for urgent statuses
       const cleanerName = ctx.cleaner.cleanerName;
