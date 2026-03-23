@@ -288,10 +288,20 @@ export const appRouter = router({
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
         // Stage breakdown — exclude review sessions (they belong in the Reviews tab)
+        // Also exclude reactivation/campaign leads from the total count so the LEADS
+        // metric reflects only organic inbound leads (form, widget, voice, bark, etc.)
         const reviewExclude = ne(conversationSessions.leadSource, "review");
+        const organicOnlyFilter = sql`(
+          ${conversationSessions.leadSource} IS NULL OR
+          (
+            ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+            ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+            ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
+          )
+        )`;
         const statsConditions = conditions
-          ? and(conditions, reviewExclude)
-          : reviewExclude;
+          ? and(conditions, reviewExclude, organicOnlyFilter)
+          : and(reviewExclude, organicOnlyFilter);
 
         const rows = await db
           .select({

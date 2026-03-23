@@ -2182,3 +2182,6 @@
 ## Activity Feed Clickable Items — March 22
 - [x] Make activity feed items clickable — clicking an item opens the lead's conversation drawer
 - [x] Ensure sessionId is included in activity feed event data for lookup (already in meta for lead_reply events)
+
+## Leads Stats Count Fix — March 22
+- [x] Exclude reactivation/campaign leads from the LEADS count in the stats bar (only count organic/form/widget/voice/bark leads)
