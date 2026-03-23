@@ -308,6 +308,10 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Pre-job reminder sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+      // Also fire the client pre-job SMS (T-2hrs with 7:30 AM floor)
+      sendClientPreJobSms(job.id).catch((err) =>
+        console.error(`[FieldMgmt] Client pre-job SMS error for job ${job.id}:`, err)
+      );
     } else {
       errors++;
       console.error(`[FieldMgmt] Pre-job reminder FAILED for job ${job.id}:`, result.error);
@@ -365,8 +369,14 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
     if (serviceTime) etaStr = formatTimeET(serviceTime);
   }
 
+  const trackingLink = job.trackerToken
+    ? `https://quote.maidinblack.com/track/${job.trackerToken}`
+    : "https://quote.maidinblack.com";
+
   const msg = [
     `Hi ${clientFirstName}! Your Maids in Black team is on the way and will arrive at ${address} around ${etaStr}. 🚗`,
+    ``,
+    `Track their arrival in real time here: ${trackingLink}`,
     ``,
     `The best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.`,
     `Feel free to point anything out — they're happy to fix it on the spot.`,
@@ -850,4 +860,198 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
   }
 
   return { checked: jobs.length, sent, errors };
+}
+
+// ── Client Pre-Job Notification (T-2hrs, floor 7:30 AM ET) ───────────────────
+
+/**
+ * Compute when to send the client pre-job SMS.
+ * Rule: T-2hrs before job start, but never before 7:30 AM ET.
+ * If T-2hrs falls before 7:30 AM ET on the job day, return 7:30 AM ET that day.
+ */
+export function computeClientPreJobSendTime(serviceTime: Date): Date {
+  const twoHoursBefore = new Date(serviceTime.getTime() - 2 * 60 * 60 * 1000);
+
+  // Get the job date in ET and compute 7:30 AM ET on that day
+  const jobDateET = new Date(
+    serviceTime.toLocaleString("en-US", { timeZone: "America/New_York" })
+  );
+  const jobYear = jobDateET.getFullYear();
+  const jobMonth = jobDateET.getMonth();
+  const jobDay = jobDateET.getDate();
+
+  // Build "7:30 AM ET on job day" as a UTC timestamp
+  // We do this by constructing a date string and parsing it with the ET offset
+  const floor730ETStr = `${jobYear}-${String(jobMonth + 1).padStart(2, "0")}-${String(jobDay).padStart(2, "0")}T07:30:00`;
+  // Convert ET local time to UTC by using the Intl trick
+  const floor730UTC = new Date(
+    new Date(floor730ETStr).toLocaleString("en-US", { timeZone: "UTC" })
+  );
+  // The above gives wrong result; use a reliable method instead:
+  // Create a date in ET by finding the UTC offset for that day
+  const etOffsetMs = serviceTime.getTime() -
+    new Date(serviceTime.toLocaleString("en-US", { timeZone: "America/New_York" })).getTime();
+  const floor730Local = new Date(jobYear, jobMonth, jobDay, 7, 30, 0, 0);
+  const floor730AsUTC = new Date(floor730Local.getTime() + etOffsetMs);
+
+  return twoHoursBefore.getTime() < floor730AsUTC.getTime()
+    ? floor730AsUTC
+    : twoHoursBefore;
+}
+
+/**
+ * Runs every 5 minutes (via runPreJobReminders cron).
+ * Sends the pre-job notification to the CLIENT with tracking link.
+ * Timing: T-2hrs, but never before 7:30 AM ET.
+ * Window: checks if sendAt falls within the current ±5 min cron window.
+ */
+export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
+  if (!FIELD_MGMT_ENABLED) return;
+
+  if (await stepAlreadyFired(cleanerJobId, "client_pre_job")) return;
+
+  const db = await getDb();
+  if (!db) return;
+
+  const jobRows = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      jobAddress: cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      trackerToken: cleanerJobs.trackerToken,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const job = jobRows[0];
+  if (!job) return;
+
+  const clientPhone = job.customerPhone;
+  if (!clientPhone) {
+    console.warn(`[FieldMgmt] Client pre-job: no customer phone for job ${cleanerJobId}`);
+    return;
+  }
+
+  if (!job.serviceDateTime) return;
+  const serviceTime = parseServiceDateTime(job.serviceDateTime);
+  if (!serviceTime) return;
+
+  // Check if now is within the send window (sendAt ± 5 min)
+  const sendAt = computeClientPreJobSendTime(serviceTime);
+  const now = Date.now();
+  const windowStart = sendAt.getTime() - 5 * 60 * 1000;
+  const windowEnd = sendAt.getTime() + 5 * 60 * 1000;
+  if (now < windowStart || now > windowEnd) return;
+
+  const clientFirstName = firstName(job.customerName);
+  const timeStr = formatTimeET(serviceTime);
+  const trackingLink = job.trackerToken
+    ? `https://quote.maidinblack.com/track/${job.trackerToken}`
+    : "https://quote.maidinblack.com";
+
+  const msg = [
+    `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} 😊`,
+    ``,
+    `You can follow your cleaning here: ${trackingLink}`,
+    ``,
+    `We'll update this in real time if anything changes, including arrival timing.`,
+  ].join("\n");
+
+  await recordStep({
+    cleanerJobId,
+    step: "client_pre_job",
+    success: false,
+    smsSent: msg,
+    recipientPhone: clientPhone,
+  });
+
+  const result = await sendSms({ to: clientPhone, content: msg });
+
+  if (result.success) {
+    console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${cleanerJobId}`);
+  } else {
+    console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${cleanerJobId}:`, result.error);
+    await recordStep({
+      cleanerJobId,
+      step: "client_pre_job",
+      success: false,
+      errorDetail: result.error,
+      recipientPhone: clientPhone,
+    });
+  }
+}
+
+// ── Running Late — Client Notification ───────────────────────────────────────
+
+/**
+ * Called from cleanerRouter.updateJobStatus when status = "running_late".
+ * Sends a delay notification to the CLIENT with the delay duration and tracking link.
+ * Fires once per job — idempotent via fieldMgmtLog.
+ */
+export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
+  if (!FIELD_MGMT_ENABLED) return;
+
+  if (await stepAlreadyFired(cleanerJobId, "client_running_late")) return;
+
+  const db = await getDb();
+  if (!db) return;
+
+  const jobRows = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      trackerToken: cleanerJobs.trackerToken,
+      delayMinutes: cleanerJobs.delayMinutes,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const job = jobRows[0];
+  if (!job) return;
+
+  const clientPhone = job.customerPhone;
+  if (!clientPhone) {
+    console.warn(`[FieldMgmt] Running late: no customer phone for job ${cleanerJobId}`);
+    return;
+  }
+
+  const clientFirstName = firstName(job.customerName);
+  const delayStr = job.delayMinutes ? `${job.delayMinutes} minutes` : "a bit";
+  const trackingLink = job.trackerToken
+    ? `https://quote.maidinblack.com/track/${job.trackerToken}`
+    : "https://quote.maidinblack.com";
+
+  const msg = [
+    `Hey ${clientFirstName} — quick heads up, the team is running about ${delayStr} behind.`,
+    ``,
+    `You can follow their updated arrival here: ${trackingLink}`,
+    ``,
+    `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
+  ].join("\n");
+
+  await recordStep({
+    cleanerJobId,
+    step: "client_running_late",
+    success: false,
+    smsSent: msg,
+    recipientPhone: clientPhone,
+  });
+
+  const result = await sendSms({ to: clientPhone, content: msg });
+
+  if (result.success) {
+    console.log(`[FieldMgmt] Running late SMS sent to ${clientPhone} for job ${cleanerJobId}`);
+  } else {
+    console.error(`[FieldMgmt] Running late SMS FAILED for job ${cleanerJobId}:`, result.error);
+    await recordStep({
+      cleanerJobId,
+      step: "client_running_late",
+      success: false,
+      errorDetail: result.error,
+      recipientPhone: clientPhone,
+    });
+  }
 }

@@ -51,9 +51,9 @@ const WORKFLOW: WorkflowStep[] = [
   {
     id: 1,
     phase: "Pre-Job",
-    label: "Pre-Job Reminder",
+    label: "Pre-Job Reminder — Cleaner",
     triggerKind: "time",
-    triggerDescription: "2 hours before first job of the day",
+    triggerDescription: "2 hours before job start",
     actionKind: "sms",
     messages: [
       {
@@ -64,12 +64,32 @@ const WORKFLOW: WorkflowStep[] = [
       },
     ],
     notes: [
-      "Sent only for the cleaner's first job of the day.",
-      "If the cleaner has multiple jobs, only one reminder fires — not one per job.",
+      "Sent 2 hours before job start.",
     ],
   },
   {
     id: 2,
+    phase: "Pre-Job",
+    label: "Pre-Job Notification — Client",
+    triggerKind: "time",
+    triggerDescription: "2 hours before job start (floor: 7:30 AM ET)",
+    actionKind: "sms-client",
+    isClientFacing: true,
+    messages: [
+      {
+        role: "client-sms",
+        content:
+          "Hey {{client_name}} — you're all set for your home cleaning today at {{time}} 😊\n\nYou can follow your cleaning here: {{tracking_link}}\n\nWe'll update this in real time if anything changes, including arrival timing.",
+        note: "Sent to the CLIENT at T-2hrs. If T-2hrs falls before 7:30 AM ET, the message is held and sent at 7:30 AM ET instead. {{tracking_link}} is the live job tracker URL.",
+      },
+    ],
+    notes: [
+      "Never sends before 7:30 AM ET, even if the job starts at 8 AM or earlier.",
+      "Tracking link is unique per job and shows live cleaner status.",
+    ],
+  },
+  {
+    id: 3,
     phase: "On the Way",
     label: "Client \"On the Way\" Notification",
     triggerKind: "status",
@@ -80,17 +100,17 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "client-sms",
         content:
-          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. 🚗\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
-        note: "Sent to the CLIENT (not the cleaner). {{client_name}}, {{address}}, and {{eta}} are pulled from the job record.",
+          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. 🚗\n\nTrack their arrival in real time here: {{tracking_link}}\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
+        note: "Sent to the CLIENT (not the cleaner). {{client_name}}, {{address}}, {{eta}}, and {{tracking_link}} are pulled from the job record.",
       },
     ],
     notes: [
       "Fires immediately when the cleaner's app status changes to On the Way.",
-      "ETA is calculated from the cleaner's current location to the job address.",
+      "ETA is calculated from the cleaner's selected ETA option in the app.",
     ],
   },
   {
-    id: 3,
+    id: 5,
     phase: "Arrival",
     label: "Arrival Check-In",
     triggerKind: "status",
@@ -109,7 +129,7 @@ const WORKFLOW: WorkflowStep[] = [
     ],
   },
   {
-    id: 4,
+    id: 6,
     phase: "Mid-Job",
     label: "Mid-Job Nudge",
     triggerKind: "time",
@@ -128,7 +148,7 @@ const WORKFLOW: WorkflowStep[] = [
     ],
   },
   {
-    id: 5,
+    id: 7,
     phase: "Completion",
     label: "Completion Flow",
     triggerKind: "status",
@@ -148,7 +168,7 @@ const WORKFLOW: WorkflowStep[] = [
     ],
   },
   {
-    id: 6,
+    id: 8,
     phase: "Exception",
     label: "Exception Escalation — Cleaner Not Responding",
     triggerKind: "exception",
@@ -174,7 +194,28 @@ const WORKFLOW: WorkflowStep[] = [
     ],
   },
   {
-    id: 7,
+    id: 4,
+    phase: "Running Late",
+    label: "Running Late — Client Notification",
+    triggerKind: "status",
+    triggerDescription: "Cleaner taps \"Running Late\" in app",
+    actionKind: "sms-client",
+    isClientFacing: true,
+    messages: [
+      {
+        role: "client-sms",
+        content:
+          "Hey {{client_name}} — quick heads up, the team is running about {{delay}} behind.\n\nYou can follow their updated arrival here: {{tracking_link}}\n\nReally appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏",
+        note: "{{delay}} is the number of minutes late (e.g. \"30 minutes\"). {{tracking_link}} is the live tracker URL. Fires once per job.",
+      },
+    ],
+    notes: [
+      "Fires once per job — if the cleaner taps Running Late multiple times, only the first triggers the SMS.",
+      "{{delay}} is set by the cleaner when they select their ETA in the app.",
+    ],
+  },
+  {
+    id: 9,
     phase: "No-Show",
     label: "No-Show / Late Escalation",
     triggerKind: "no-show",
@@ -267,6 +308,7 @@ function PhaseIcon({ phase }: { phase: string }) {
     Completion:   <ClipboardList className="w-5 h-5" />,
     Exception:    <AlertTriangle className="w-5 h-5" />,
     "No-Show":    <UserX className="w-5 h-5" />,
+    "Running Late": <Clock className="w-5 h-5" />,
   };
   return <>{icons[phase] ?? <Zap className="w-5 h-5" />}</>;
 }
@@ -441,7 +483,7 @@ export default function FieldManagement() {
 
         {/* Workflow steps */}
         <div className="space-y-4">
-          {WORKFLOW.map((step, idx) => (
+          {[...WORKFLOW].sort((a, b) => a.id - b.id).map((step, idx) => (
             <div key={step.id}>
               <StepCard step={step} />
               {idx < WORKFLOW.length - 1 && (

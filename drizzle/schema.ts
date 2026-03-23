@@ -934,6 +934,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   trackerToken: varchar("trackerToken", { length: 64 }),
   /** When the tracker link SMS was sent to the customer */
   trackerSmsSentAt: timestamp("trackerSmsSentAt"),
+  /** How many minutes late the cleaner is running (set when jobStatus = running_late) */
+  delayMinutes: int("delayMinutes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1219,7 +1221,9 @@ export type InsertCommandCenterCache = typeof commandCenterCache.$inferInsert;
  */
 export const fieldMgmtSteps = [
   "pre_job_reminder",
+  "client_pre_job",
   "client_on_the_way",
+  "client_running_late",
   "arrived_checkin",
   "mid_job_nudge",
   "completion_flow",

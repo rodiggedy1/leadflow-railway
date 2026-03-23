@@ -18,7 +18,7 @@ import { publicProcedure, cleanerProcedure, adminAgentProcedure, router } from "
 import { getDb } from "./db";
 import { storagePut } from "./storage";
 import { notifyOwner } from "./_core/notification";
-import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow } from "./fieldMgmtEngine";
+import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -314,6 +314,7 @@ export const cleanerRouter = router({
       status: z.enum(["on_the_way", "arrived", "running_late", "in_progress", "completed", "issue_at_property"]),
       issueNote: z.string().max(500).optional(),
       etaLabel: z.string().max(50).optional(), // e.g. "30 minutes", "1 hour", "Don't know"
+      delayMinutes: z.number().int().positive().optional(), // minutes late for running_late
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -378,6 +379,18 @@ export const cleanerRouter = router({
       if (input.status === "arrived") {
         sendArrivedCheckin(input.cleanerJobId).catch(err =>
           console.error("[FieldMgmt] sendArrivedCheckin error:", err)
+        );
+      }
+      if (input.status === "running_late") {
+        // Save delayMinutes to DB first so sendRunningLateSms can read it
+        if (input.delayMinutes) {
+          db.update(cleanerJobs)
+            .set({ delayMinutes: input.delayMinutes })
+            .where(eq(cleanerJobs.id, input.cleanerJobId))
+            .catch(() => {});
+        }
+        sendRunningLateSms(input.cleanerJobId).catch(err =>
+          console.error("[FieldMgmt] sendRunningLateSms error:", err)
         );
       }
 
