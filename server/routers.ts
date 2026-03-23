@@ -1221,6 +1221,35 @@ export const appRouter = router({
           .limit(1);
         return rows[0] ?? null;
       }),
+
+    /**
+     * leads.markAsLost — agent marks a lead as lost/dead via the 3-dot menu.
+     * Sets stage to LOST, turns off AI mode, and logs activity.
+     */
+    markAsLost: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        // Fetch session for logging
+        const rows = await db
+          .select({ leadName: conversationSessions.leadName, leadPhone: conversationSessions.leadPhone })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        const session = rows[0];
+        await db
+          .update(conversationSessions)
+          .set({ stage: "LOST" as any, aiMode: 0, isBooked: 0 })
+          .where(eq(conversationSessions.id, input.sessionId));
+        logActivity({
+          eventType: "lead_lost",
+          title: `${session?.leadName ?? session?.leadPhone ?? "Lead"} marked as Lost`,
+          body: "Manually marked as lost via pipeline card menu.",
+          meta: { sessionId: input.sessionId, leadPhone: session?.leadPhone, leadName: session?.leadName },
+        }).catch(() => {});
+        return { success: true };
+      }),
   }),
 
   /**

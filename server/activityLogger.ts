@@ -20,7 +20,9 @@ export type ActivityEventType =
   | "review_send"
   | "rating_sms_send"
   | "booking"
-  | "new_lead";
+  | "new_lead"
+  | "followup_due"
+  | "lead_lost";
 
 export interface LogActivityOptions {
   eventType: ActivityEventType;

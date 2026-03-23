@@ -26,6 +26,13 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Phone,
   Globe,
   MessageSquare,
@@ -38,6 +45,8 @@ import {
   Calendar,
   UserCheck,
   Megaphone,
+  XCircle,
+  Eye,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -209,12 +218,14 @@ function LeadCard({
   isDragging = false,
   onClick,
   onMoveToBooked,
+  onMarkAsLost,
   animationDelay = 0,
 }: {
   lead: LeadRow;
   isDragging?: boolean;
   onClick?: () => void;
   onMoveToBooked?: () => void;
+  onMarkAsLost?: () => void;
   animationDelay?: number;
 }) {
   const [visible, setVisible] = useState(false);
@@ -313,13 +324,34 @@ function LeadCard({
             )}
           </div>
         </div>
-        <button
-          className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 transition-colors"
-          onClick={e => { e.stopPropagation(); onClick?.(); }}
-          title="View details"
-        >
-          <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 transition-colors"
+              onClick={e => e.stopPropagation()}
+              title="Options"
+            >
+              <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onClick={e => { e.stopPropagation(); onClick?.(); }}
+              className="gap-2 cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              View Details
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={e => { e.stopPropagation(); onMarkAsLost?.(); }}
+              className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              Mark as Lost
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Price row */}
@@ -398,6 +430,7 @@ function KanbanColumnView({
   onCardClick,
   justDraggedRef,
   onMoveToBooked,
+  onMarkAsLost,
 }: {
   column: KanbanColumn;
   leads: LeadRow[];
@@ -405,6 +438,7 @@ function KanbanColumnView({
   onCardClick: (lead: LeadRow) => void;
   justDraggedRef: React.RefObject<boolean>;
   onMoveToBooked?: (lead: LeadRow) => void;
+  onMarkAsLost?: (lead: LeadRow) => void;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
@@ -470,6 +504,7 @@ function KanbanColumnView({
                 onCardClick(lead);
               }}
               onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
+              onMarkAsLost={onMarkAsLost ? () => onMarkAsLost(lead) : undefined}
             />
           ))
         )}
@@ -526,8 +561,10 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const justDraggedRef = useRef(false);
+  const [showLost, setShowLost] = useState(false);
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
+  const markAsLostMutation = trpc.leads.markAsLost.useMutation();
   const utils = trpc.useUtils();
 
   function handleMoveToBooked(lead: LeadRow) {
@@ -576,10 +613,36 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
     return effectiveLeads.filter(l => new Date(l.createdAt) >= cutoff);
   }, [effectiveLeads, externalDateFilter]);
 
+  function handleMarkAsLost(lead: LeadRow) {
+    setLocalStages(prev => ({ ...prev, [lead.id]: "LOST" }));
+    markAsLostMutation.mutate(
+      { sessionId: lead.id },
+      {
+        onSuccess: () => {
+          utils.leads.list.invalidate();
+          onStageChange?.(lead.id, "LOST");
+        },
+        onError: () => {
+          setLocalStages(prev => {
+            const next = { ...prev };
+            delete next[lead.id];
+            return next;
+          });
+        },
+      }
+    );
+  }
+
   const columnLeads = useMemo(() => {
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
+    // Separate LOST bucket
+    const lostLeads: LeadRow[] = [];
     filteredLeads.forEach(lead => {
+      if (lead.stage === "LOST") {
+        lostLeads.push(lead);
+        return;
+      }
       // Campaign/reactivation leads only appear in the pipeline once the customer
       // has replied (has at least one inbound message). Leads that were blasted
       // but never responded should not clutter the pipeline board.
@@ -589,8 +652,17 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
         map[colId].push(lead);
       }
     });
-    return map;
-  }, [filteredLeads]);
+    // When showLost is on, surface lost leads in a virtual "lost" bucket
+    if (showLost) {
+      map["lost"] = lostLeads;
+    }
+    return map as Record<string, LeadRow[]>;
+  }, [filteredLeads, showLost]);
+
+  const lostCount = useMemo(() =>
+    filteredLeads.filter(l => l.stage === "LOST").length,
+    [filteredLeads]
+  );
 
   const activeLead = useMemo(() =>
     activeId ? effectiveLeads.find(l => String(l.id) === activeId) ?? null : null,
@@ -646,6 +718,21 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
 
   return (
     <div>
+      {/* Show Lost toggle */}
+      <div className="flex justify-end mb-3">
+        <button
+          onClick={() => setShowLost(v => !v)}
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+            showLost
+              ? "bg-red-50 border-red-200 text-red-600"
+              : "bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+          }`}
+        >
+          <XCircle className="w-3.5 h-3.5" />
+          {showLost ? "Hide Lost" : `Show Lost${lostCount > 0 ? ` (${lostCount})` : ""}`}
+        </button>
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -664,8 +751,30 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
                 onCardClick={onCardClick}
                 justDraggedRef={justDraggedRef}
                 onMoveToBooked={col.id === "quoted" ? handleMoveToBooked : undefined}
+                onMarkAsLost={handleMarkAsLost}
               />
             ))}
+            {/* Lost column — only rendered when showLost is toggled on */}
+            {showLost && (
+              <KanbanColumnView
+                key="lost"
+                column={{
+                  id: "lost",
+                  label: "LOST",
+                  stages: ["LOST"],
+                  targetStage: "LOST",
+                  accentColor: "#ef4444",
+                  badgeBg: "bg-red-100 text-red-600",
+                  emptyIcon: <XCircle className="w-6 h-6 text-red-200" />,
+                  emptyTitle: "No lost leads",
+                  emptySubtitle: "Leads marked as lost will appear here",
+                }}
+                leads={columnLeads["lost"] ?? []}
+                isOver={false}
+                onCardClick={onCardClick}
+                justDraggedRef={justDraggedRef}
+              />
+            )}
           </div>
         </div>
 

@@ -108,6 +108,11 @@ export const conversationStages = [
    * Leads can be manually re-engaged by an agent at any time.
    */
   "COLD",
+  /**
+   * LOST → Manually marked as lost/dead by an agent via the 3-dot menu on the pipeline card.
+   * Excluded from active pipeline view; visible via the "Show Lost" toggle.
+   */
+  "LOST",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

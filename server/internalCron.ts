@@ -18,7 +18,7 @@
 
 import cron from "node-cron";
 import { runNightlySync } from "./cronSync";
-import { runSilenceFollowUp, runScheduledFollowUp } from "./followUpCron";
+import { runSilenceFollowUp, runScheduledFollowUp, runFollowUpDueAlerts } from "./followUpCron";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
@@ -97,9 +97,24 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Scheduled follow-up: 9 AM ET daily ──────────────────────────────────────
+  // ── Follow-up due alerts: 8 AM ET daily ───────────────────────────────────────
+  // Creates notification bell alerts for each follow-up due today (1 hr before SMS).
+  cron.schedule("0 0 8 * * *", async () => {
+    console.log("[InternalCron] Running FollowUpDueAlerts...");
+    try {
+      const result = await runFollowUpDueAlerts();
+      const summary = `checked: ${result.checked}, alerted: ${result.alerted}`;
+      console.log(`[InternalCron] FollowUpDueAlerts — ${summary}`);
+      await recordHeartbeat("followup-due-alerts", summary, result.alerted > 0);
+    } catch (err) {
+      console.error("[InternalCron] FollowUpDueAlerts failed:", err);
+      await recordHeartbeat("followup-due-alerts", `error: ${err instanceof Error ? err.message : String(err)}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Scheduled follow-up: 9 AM ET daily ──────────────────────────────────────────
   // Sends circle-back SMS to leads with followUpDate = today.
-  cron.schedule("0 0 9 * * *", async () => {
+  cron.schedule("0 0 9 * * *",async () => {
     console.log("[InternalCron] Running ScheduledFollowUp...");
     try {
       const result = await runScheduledFollowUp();

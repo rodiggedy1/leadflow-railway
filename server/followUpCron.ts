@@ -304,6 +304,50 @@ export async function runScheduledFollowUp(): Promise<{
   return { checked: sessions.length, sent, errors };
 }
 
+// ─── Follow-Up Due Alerts (8 AM ET) ─────────────────────────────────────────
+
+/**
+ * Fires at 8 AM ET — one hour before the scheduled SMS goes out.
+ * Creates a notification bell alert for each follow-up due today so the admin
+ * can review before the circle-back message is sent.
+ */
+export async function runFollowUpDueAlerts(): Promise<{ checked: number; alerted: number }> {
+  const db = await getDb();
+  if (!db) return { checked: 0, alerted: 0 };
+
+  // Get today's date in Eastern Time (YYYY-MM-DD)
+  const todayET = new Date()
+    .toLocaleString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
+
+  // Find sessions with followUpDate = today and followUpSent = 0
+  const sessions = await db
+    .select()
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.followUpDate, todayET),
+        eq(conversationSessions.followUpSent, 0)
+      )
+    )
+    .limit(100);
+
+  let alerted = 0;
+  for (const session of sessions) {
+    const firstName = session.leadName?.split(' ')[0] ?? session.leadName ?? 'Lead';
+    const message = session.followUpMessage?.trim() || DEFAULT_CIRCLE_BACK_MESSAGE;
+    logActivity({
+      eventType: 'followup_due',
+      title: `Follow-up due today — ${session.leadName ?? session.leadPhone}`,
+      body: `Scheduled circle-back for ${firstName}: "${message.slice(0, 80)}${message.length > 80 ? '…' : ''}"`,
+      meta: { sessionId: session.id, leadPhone: session.leadPhone, leadName: session.leadName, followUpDate: session.followUpDate },
+    }).catch(() => {});
+    alerted++;
+  }
+
+  return { checked: sessions.length, alerted };
+}
+
 // ─── Route Registration ───────────────────────────────────────────────────────
 
 export function registerFollowUpCronRoutes(app: Express) {
@@ -358,6 +402,33 @@ export function registerFollowUpCronRoutes(app: Express) {
       console.log(`[ScheduledFollowUp] Done — checked: ${result.checked}, sent: ${result.sent}, errors: ${result.errors}`);
     } catch (err) {
       console.error("[ScheduledFollowUp] Cron failed:", err);
+    }
+  });
+
+  /**
+   * POST /api/cron/followup-due-alerts
+   * Runs daily at 8 AM ET — 1 hour before the SMS fires.
+   * Creates notification bell alerts for each follow-up due today.
+   */
+  app.post("/api/cron/followup-due-alerts", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) {
+      res.status(503).json({ error: "Cron endpoint is not configured (CRON_SECRET missing)" });
+      return;
+    }
+    const provided = req.headers["x-cron-secret"];
+    if (provided !== secret) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    res.status(200).json({ received: true });
+
+    try {
+      const result = await runFollowUpDueAlerts();
+      console.log(`[FollowUpDueAlerts] Done — checked: ${result.checked}, alerted: ${result.alerted}`);
+    } catch (err) {
+      console.error("[FollowUpDueAlerts] Cron failed:", err);
     }
   });
 }

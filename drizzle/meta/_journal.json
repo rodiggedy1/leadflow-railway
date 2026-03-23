@@ -442,6 +442,13 @@
       "when": 1774227288853,
       "tag": "0062_slimy_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "5",
+      "when": 1774233225291,
+      "tag": "0063_abandoned_prodigy",
+      "breakpoints": true
     }
   ]
 }
