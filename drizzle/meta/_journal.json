@@ -428,6 +428,13 @@
       "when": 1774216147424,
       "tag": "0060_premium_landau",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1774225786894,
+      "tag": "0061_sweet_stryfe",
+      "breakpoints": true
     }
   ]
 }

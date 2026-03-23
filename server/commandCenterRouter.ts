@@ -1879,6 +1879,7 @@ Respond in JSON with this exact schema:
       let failed = 0;
       const errors: string[] = [];
       const sentPhones: string[] = [];
+      const blastStartedAt = new Date(); // Record before first SMS so session window is accurate
 
       for (const target of sendList) {
         const name = target.name.split(" ")[0] || "there";
@@ -1951,6 +1952,7 @@ Respond in JSON with this exact schema:
           sentCount: sent,
           failedCount: failed,
           script: input.script.slice(0, 2000),
+          startedAt: blastStartedAt,
           firedAt: new Date(),
           firedBy: "admin",
         });
@@ -1977,13 +1979,20 @@ Respond in JSON with this exact schema:
         .orderBy(desc(campaignBlasts.firedAt))
         .limit(50);
 
-      // For each blast, count how many sessions created during the blast window
-      // have received a reply (i.e., stage has advanced past REACTIVATION).
+      // For each blast, count sessions and replies.
       // Sessions are tagged with leadSource = 'campaign:{campaignType}' by fireCampaign.
+      // IMPORTANT: firedAt is recorded at the END of the blast (after all SMS are sent),
+      // so sessions are created BEFORE firedAt. We use a 2-hour lookback window to capture
+      // all sessions that were created during the blast, plus a 7-day forward window for
+      // delayed replies.
       const enriched = await Promise.all(
         blasts.map(async (blast) => {
-          const windowStart = blast.firedAt;
-          // 7-day window to catch delayed replies
+          // Use startedAt if available (recorded before first SMS); fall back to
+          // a 2-hour lookback from firedAt for legacy blasts without startedAt.
+          const windowStart = blast.startedAt
+            ? new Date(blast.startedAt.getTime() - 60_000) // 1-min buffer before first send
+            : new Date(blast.firedAt.getTime() - 2 * 60 * 60 * 1000);
+          // 7-day forward window to catch delayed replies
           const windowEnd = new Date(blast.firedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
           // Count sessions created in the blast window with matching campaign source
           const [sessionRow] = await db

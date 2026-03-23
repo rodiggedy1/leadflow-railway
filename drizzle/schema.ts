@@ -1138,7 +1138,9 @@ export const campaignBlasts = mysqlTable("campaign_blasts", {
   failedCount: int("failedCount").notNull().default(0),
   /** The SMS script that was sent (personalized template) */
   script: text("script"),
-  /** When the blast was fired */
+  /** When the blast started (first SMS sent) — used for session window matching */
+  startedAt: timestamp("startedAt"),
+  /** When the blast completed (last SMS sent) */
   firedAt: timestamp("firedAt").defaultNow().notNull(),
   /** Who fired it (admin user name or "system") */
   firedBy: varchar("firedBy", { length: 255 }).default("admin"),
