@@ -754,8 +754,10 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
     // Separate LOST bucket
+    // NOTE: Use effectiveLeads (not filteredLeads) so leads created before the
+    // current date-filter window still appear in the pipeline after being dragged.
     const lostLeads: LeadRow[] = [];
-    filteredLeads.forEach(lead => {
+    effectiveLeads.forEach(lead => {
       if (lead.stage === "LOST") {
         lostLeads.push(lead);
         return;
@@ -774,11 +776,11 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
       map["lost"] = lostLeads;
     }
     return map as Record<string, LeadRow[]>;
-  }, [filteredLeads, showLost]);
+  }, [effectiveLeads, showLost]);
 
   const lostCount = useMemo(() =>
-    filteredLeads.filter(l => l.stage === "LOST").length,
-    [filteredLeads]
+    effectiveLeads.filter(l => l.stage === "LOST").length,
+    [effectiveLeads]
   );
 
   const activeLead = useMemo(() =>

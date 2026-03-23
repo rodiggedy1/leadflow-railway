@@ -2201,3 +2201,4 @@
 - [x] Lost reason picker modal when marking as lost (Price, Timing, No Response, Competitor)
 - [x] Store lostReason in DB on conversation_sessions
 - [x] Lost Reasons analytics panel in pipeline header
+- [x] Fix drag-and-drop: card disappears when dragged to Follow-Up column
