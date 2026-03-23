@@ -35,6 +35,7 @@ import {
   Sparkles,
   Clock,
   CalendarCheck,
+  Calendar,
   UserCheck,
   Megaphone,
 } from "lucide-react";
@@ -58,6 +59,7 @@ type LeadRow = {
   createdAt: Date | string;
   reactivationLastPrice?: number | null;
   reactivationDiscountPct?: number | null;
+  followUpDate?: string | null;
 };
 
 // ── Kanban column definitions ─────────────────────────────────────────────────
@@ -344,6 +346,16 @@ function LeadCard({
           </button>
         )}
       </div>
+
+      {/* Follow-up date badge — shown for FOLLOW_UP_SCHEDULED cards */}
+      {lead.stage === "FOLLOW_UP_SCHEDULED" && lead.followUpDate && (
+        <div className="flex items-center gap-1 mb-1">
+          <Calendar className="w-3 h-3 text-violet-500 flex-shrink-0" />
+          <span className="text-[11px] font-semibold text-violet-600">
+            {new Date(lead.followUpDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+        </div>
+      )}
 
       {/* Footer: source + time */}
       <div className="flex items-center justify-between flex-shrink-0">

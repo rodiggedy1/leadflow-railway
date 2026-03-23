@@ -2193,3 +2193,4 @@
 - [ ] Campaign view: reactivation/always-on/command-center/campaign:* contacts who have replied
 - [x] Fix booked revenue missing from leads page metrics after organic/campaign stats change
 - [x] Fix campaign Done leads showing $0 quote — use reactivationLastPrice when quotedPrice and bookedAmount are null
+- [x] Add follow-up date to follow-up stage cards in the pipeline kanban view
