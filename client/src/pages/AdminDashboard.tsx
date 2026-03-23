@@ -2782,11 +2782,42 @@ export default function AdminDashboard() {
               const view = statsMode === 'organic' ? stats.organic : stats.campaign;
               const rev = view?.bookedRevenue ?? 0;
               const bookedCnt = view?.bookedCount ?? 0;
+              // Source breakdown: for organic mode use revenueBySource; for campaign show single bar
+              const rbs = stats.revenueBySource as Record<string, number> | undefined;
+              const organicSources = [
+                { key: 'form', label: 'Form', color: '#059669' },
+                { key: 'widget', label: 'Widget', color: '#0d9488' },
+              ];
               return (
                 <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
                   <span className="hj-metric-label">Booked Revenue</span>
                   <span className="hj-metric-value hj-metric-value--accent">${rev.toLocaleString()}</span>
-                  <span className="hj-metric-sub">from {bookedCnt} job{bookedCnt !== 1 ? 's' : ''}</span>
+                  {/* Source breakdown bar — organic mode only */}
+                  {statsMode === 'organic' && rbs && rev > 0 && (() => {
+                    return (
+                      <div className="mt-1 space-y-1">
+                        <div className="flex h-2 rounded-full overflow-hidden gap-px">
+                          {organicSources.map(s => {
+                            const pct = rev > 0 ? ((rbs[s.key] ?? 0) / rev) * 100 : 0;
+                            return pct > 0 ? (
+                              <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} />
+                            ) : null;
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                          {organicSources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
+                            <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#059669', opacity: 0.85 }}>
+                              <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
+                              {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {!(statsMode === 'organic' && rbs && rev > 0) && (
+                    <span className="hj-metric-sub">from {bookedCnt} job{bookedCnt !== 1 ? 's' : ''}</span>
+                  )}
                   <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
                 </div>
               );

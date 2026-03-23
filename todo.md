@@ -2191,3 +2191,4 @@
 - [ ] Add Organic/Campaign toggle switch to the stats bar in AdminDashboard
 - [ ] Organic view: form/widget/voice/bark/null-source leads only
 - [ ] Campaign view: reactivation/always-on/command-center/campaign:* contacts who have replied
+- [x] Fix booked revenue missing from leads page metrics after organic/campaign stats change
