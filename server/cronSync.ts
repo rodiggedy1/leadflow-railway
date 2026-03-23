@@ -209,6 +209,8 @@ export async function runNightlySync(targetDate?: string): Promise<{
       serviceType: null,
       frequency: b.frequency || null,
       launch27BookingId: String(b.id),
+      bedrooms: b.bedrooms ?? null,
+      bathrooms: b.bathrooms ?? null,
       lastBookingPrice: b.totalRevenue ? Math.round(b.totalRevenue) : null,
       jobDate,
       status: "PENDING",

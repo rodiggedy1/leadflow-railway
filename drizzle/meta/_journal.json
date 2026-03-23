@@ -435,6 +435,13 @@
       "when": 1774225786894,
       "tag": "0061_sweet_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1774227288853,
+      "tag": "0062_slimy_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

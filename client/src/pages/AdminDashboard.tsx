@@ -2907,26 +2907,24 @@ export default function AdminDashboard() {
                         </div>
                       </TableCell>
 
-                      {/* Service — type + size */}
+                      {/* Service — type/frequency */}
                       <TableCell className="py-2">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-sm leading-tight" style={{ color: '#555555' }}>
                             {session.serviceType ?? <span style={{ color: '#555555' }}>—</span>}
                           </span>
-                          {session.serviceType && (
+                          {session.serviceType && session.bedrooms && (
                             <span className="text-xs" style={{ color: '#777' }}>
                               {session.serviceType === "Office Cleaning"
-                                ? (session.bedrooms ? `${session.bedrooms} sqft` : null)
-                                : (session.bedrooms && session.bathrooms
-                                    ? `${session.bedrooms.replace(/ Bedrooms?/i, '')} bd · ${session.bathrooms.replace(/ Bathrooms?/i, '')} ba`
-                                    : null)
+                                ? `${session.bedrooms} sqft`
+                                : `${String(session.bedrooms).replace(/ Bedrooms?/i, '')} bd${session.bathrooms ? ` · ${String(session.bathrooms).replace(/ Bathrooms?/i, '')} ba` : ''}`
                               }
                             </span>
                           )}
                         </div>
                       </TableCell>
 
-                      {/* Quote */}
+                      {/* Quote — quoted price for form leads, last booking price for campaign leads */}
                       <TableCell className="py-2">
                         {session.quotedPrice ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
@@ -2935,7 +2933,11 @@ export default function AdminDashboard() {
                               ${total}
                             </span>
                           );
-                        })() : (
+                        })() : session.reactivationLastPrice ? (
+                          <span className="text-sm font-bold tabular-nums" style={{ color: '#7c3aed' }}>
+                            ${session.reactivationLastPrice}
+                          </span>
+                        ) : (
                           <span className="text-sm" style={{ color: '#555555' }}>—</span>
                         )}
                       </TableCell>

@@ -2164,7 +2164,17 @@
 - [x] Wire click handler on AI Center blast cards to open the drawer
 
 ## Widget DOWN Fix — March 22
-- [ ] Diagnose and fix Widget DOWN status in admin header
+- [x] Diagnosed Widget DOWN — was a stale cache from server restart, not a real outage; widget endpoint returns 200 + valid JS
 
 ## Pipeline Card Last Booking Price — March 22
 - [x] Show last booking $ amount on pipeline cards for campaign/reactivation leads (same position as quoted price) — purple text + "last booking" label; backfilled 51 existing sessions
+
+## Leads Table Campaign Data — March 22
+- [x] Show SERVICE column for campaign leads — frequency from completed_jobs (Monthly, One-time, etc.) via batch lookup in leads.list
+- [x] Show QUOTE column for campaign leads — reactivationLastPrice in purple when quotedPrice is null
+
+## Launch27 Sync Bedrooms/Bathrooms — March 22
+- [x] Add bedrooms + bathrooms columns to completed_jobs schema and migrated
+- [x] Update Launch27 sync to populate bedrooms/bathrooms from booking extras
+- [x] Backfill 77 existing completed_jobs rows via Launch27 API
+- [ ] Show bedrooms/bathrooms in leads table SERVICE column for campaign leads (deferred — frequency shown instead)

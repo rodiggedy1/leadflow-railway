@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, desc, eq, gte, isNull, isNotNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -227,7 +227,53 @@ export const appRouter = router({
           return bTime - aTime;
         });
 
-        return mapped;
+        // ── Enrich campaign leads with bedrooms/bathrooms/serviceType from completed_jobs ──
+        // Campaign sessions don't have serviceType/bedrooms/bathrooms on the session row.
+        // Do a single batch lookup by phone to avoid N+1 queries.
+        const CAMPAIGN_SOURCES = ['reactivation', 'command-center'];
+        const isCampaignLead = (s: { leadSource: string | null }) =>
+          s.leadSource != null && (
+            s.leadSource.startsWith('campaign:') ||
+            s.leadSource.startsWith('always-on') ||
+            CAMPAIGN_SOURCES.includes(s.leadSource)
+          );
+
+        const campaignPhones = Array.from(new Set(
+          mapped.filter(s => isCampaignLead(s) && s.leadPhone).map(s => s.leadPhone!)
+        ));
+
+        // Map phone -> most recent completed_job frequency
+        const jobFreqMap = new Map<string, string>();
+        if (campaignPhones.length > 0) {
+          const jobRows = await db
+            .select({
+              phone: completedJobs.phone,
+              frequency: completedJobs.frequency,
+            })
+            .from(completedJobs)
+            .where(inArray(completedJobs.phone, campaignPhones))
+            .orderBy(desc(completedJobs.jobDate));
+
+          // Keep only the most recent row per phone
+          for (const row of jobRows) {
+            if (!jobFreqMap.has(row.phone) && row.frequency) {
+              jobFreqMap.set(row.phone, row.frequency);
+            }
+          }
+        }
+
+        const enriched = mapped.map(s => {
+          if (!isCampaignLead(s) || !s.leadPhone) return s;
+          const freq = jobFreqMap.get(s.leadPhone);
+          if (!freq) return s;
+          return {
+            ...s,
+            // Show frequency as serviceType for campaign leads that have no serviceType
+            serviceType: s.serviceType ?? freq,
+          };
+        });
+
+        return enriched;
       }),
     stats: publicProcedure
       .input(
@@ -1078,6 +1124,8 @@ export const appRouter = router({
             jobDate: completedJobs.jobDate,
             serviceType: completedJobs.serviceType,
             frequency: completedJobs.frequency,
+            bedrooms: completedJobs.bedrooms,
+            bathrooms: completedJobs.bathrooms,
           })
           .from(completedJobs)
           .where(eq(completedJobs.phone, input.phone))

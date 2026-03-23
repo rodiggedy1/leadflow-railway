@@ -491,6 +491,10 @@ export const completedJobs = mysqlTable("completed_jobs", {
   frequency: varchar("frequency", { length: 100 }),
   /** Launch27 booking ID for deep-linking back to the original booking */
   launch27BookingId: varchar("launch27BookingId", { length: 64 }),
+  /** Number of bedrooms from the booking (parsed from service name e.g. "2 bedrooms") */
+  bedrooms: int("bedrooms"),
+  /** Number of bathrooms from the booking (parsed from pricing_parameters) */
+  bathrooms: int("bathrooms"),
   /** Total price of the booking (for reactivation discount calculation) */
   lastBookingPrice: int("lastBookingPrice"),
   /** Date of the completed job (YYYY-MM-DD) */

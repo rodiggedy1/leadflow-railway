@@ -33,6 +33,8 @@ export interface Launch27Booking {
   completed: boolean;
   teams: Launch27Team[]; // assigned teams with pay share %
   serviceNames: string[]; // e.g. ["1 bedroom"]
+  bedrooms: number | null;   // parsed from serviceNames (e.g. "2 bedrooms" → 2)
+  bathrooms: number | null;  // summed from pricing_parameters entries with name containing "Bathroom"
   customerNotes: string;
   staffNotes: string;
 }
@@ -140,6 +142,26 @@ export async function getCompletedBookingsForDate(
           bgColor: t.bg_color ?? "#888888",
         })),
         serviceNames: (b.services ?? []).map((s) => s.name),
+        bedrooms: (() => {
+          // Parse bedroom count from service name, e.g. "1 bedroom" → 1, "2 bedrooms" → 2
+          for (const svc of b.services ?? []) {
+            const m = svc.name?.match(/(\d+)\s*bedroom/i);
+            if (m) return parseInt(m[1], 10);
+          }
+          return null;
+        })(),
+        bathrooms: (() => {
+          // Sum bathroom quantities from pricing_parameters across all services
+          let total = 0;
+          for (const svc of b.services ?? []) {
+            for (const pp of svc.pricing_parameters ?? []) {
+              if (pp.name?.toLowerCase().includes('bathroom')) {
+                total += pp.quantity ?? 0;
+              }
+            }
+          }
+          return total > 0 ? total : null;
+        })(),
         customerNotes: b.customer_notes ?? "",
         staffNotes: b.staff_notes ?? "",
       });
