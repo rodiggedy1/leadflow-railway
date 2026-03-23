@@ -513,11 +513,21 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
 
   const startTime = job.serviceDateTime
     ? (() => {
-        const [, time] = job.serviceDateTime.split(" ");
-        const [h, m] = time.split(":").map(Number);
-        const ampm = h >= 12 ? "PM" : "AM";
-        const h12 = h % 12 || 12;
-        return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+        try {
+          // Handle both "2026-03-23 09:00:00" and "2026-03-23T09:00:00Z" formats
+          const d = new Date(job.serviceDateTime);
+          if (!isNaN(d.getTime())) {
+            return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+          }
+          // Fallback: manual split on space or T
+          const timePart = job.serviceDateTime.split(/[ T]/)[1];
+          if (!timePart) return "—";
+          const [h, m] = timePart.split(":").map(Number);
+          if (isNaN(h) || isNaN(m)) return "—";
+          const ampm = h >= 12 ? "PM" : "AM";
+          const h12 = h % 12 || 12;
+          return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+        } catch { return "—"; }
       })()
     : "—";
 
