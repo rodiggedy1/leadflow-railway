@@ -2202,3 +2202,4 @@
 - [x] Store lostReason in DB on conversation_sessions
 - [x] Lost Reasons analytics panel in pipeline header
 - [x] Fix drag-and-drop: card disappears when dragged to Follow-Up column
+- [x] Definitively fix pipeline cards disappearing when dragged (Bronia case)

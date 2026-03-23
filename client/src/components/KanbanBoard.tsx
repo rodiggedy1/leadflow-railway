@@ -762,10 +762,6 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
         lostLeads.push(lead);
         return;
       }
-      // Campaign/reactivation leads only appear in the pipeline once the customer
-      // has replied (has at least one inbound message). Leads that were blasted
-      // but never responded should not clutter the pipeline board.
-      if (isCampaignLead(lead) && !hasReplied(lead)) return;
       const colId = STAGE_TO_COLUMN[lead.stage];
       if (colId) {
         map[colId].push(lead);
