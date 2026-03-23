@@ -331,27 +331,28 @@ function JobBlock({
         />
       </div>
 
-      {/* Content — fixed 56px height, badge always in bottom-left corner */}
-      <div className="absolute inset-0 px-2 pt-1.5 pb-5 flex flex-col justify-start overflow-hidden">
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="shrink-0 opacity-70">{sc.icon}</span>
+      {/* Three-zone layout: name (top) → address (middle) → badge (bottom-pinned) */}
+      <div className="absolute inset-0 flex flex-col px-2 pt-1.5 pb-1 overflow-hidden">
+        {/* Zone 1: Customer name + status icon */}
+        <div className="flex items-center gap-1 min-w-0 shrink-0">
+          <span className="shrink-0 opacity-60">{sc.icon}</span>
           <span className="text-xs font-semibold truncate leading-tight">{shortName}</span>
         </div>
+        {/* Zone 2: Address — only when block is wide enough, fills remaining space */}
         {widthPct > 8 && (
-          <span className="text-[10px] opacity-60 truncate leading-tight mt-0.5">{shortAddr}</span>
+          <span className="text-[10px] opacity-55 truncate leading-tight mt-0.5 shrink-0">{shortAddr}</span>
         )}
-      </div>
-      {/* Status badge pinned to bottom-left, never overflows */}
-      {widthPct > 12 && (
-        <div className="absolute bottom-1 left-2 right-2 flex items-center">
+        {/* Zone 3: Status badge — spacer pushes it to the bottom */}
+        <div className="flex-1" />
+        {widthPct > 12 && (
           <span
-            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${sc.badgeClass}`}
+            className={`inline-flex items-center self-start gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide shrink-0 ${sc.badgeClass}`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} shrink-0`} />
             {sc.label}
           </span>
-        </div>
-      )}
+        )}
+      </div>
     </button>
   );
 }
@@ -379,7 +380,7 @@ function SwimLane({
       </div>
 
       {/* Timeline area */}
-      <div className="flex-1 relative" style={{ height: "56px" }}>
+      <div className="flex-1 relative" style={{ height: "72px" }}>
         {/* Hour grid lines */}
         {HOUR_LABELS.map((_, i) => (
           <div
