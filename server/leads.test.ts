@@ -122,27 +122,39 @@ describe("leads.list", () => {
 // ── leads.stats ───────────────────────────────────────────────────────────────
 
 /**
- * Helper: build a mock DB that handles two sequential select() calls.
- * First call  → stage-count query  (select → from → where → groupBy → resolves stageRows)
- * Second call → booked-rows query  (select → from → where → resolves bookedRows)
+ * Helper: build a mock DB that handles the parallel queries in leads.stats:
+ *   calls 1-2 → organic/campaign stage-count queries (select → from → where → groupBy)
+ *   calls 3-5 → booked-rows queries (select → from → where)
+ *
+ * For simplicity in tests, all stage queries return the same stageRows and
+ * all booked queries return the same bookedRows.
  */
 function buildStatsMockDb(
   stageRows: { stage: string; count: number | string }[],
-  bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null }[] = []
+  bookedRows: { quotedPrice: string | null; extras?: string | null; bookedAmount?: number | null; leadSource?: string | null }[] = []
 ) {
-  // Second query: booked rows
-  const mockBookedWhere = vi.fn().mockResolvedValue(bookedRows);
-  const mockBookedFrom = vi.fn().mockReturnValue({ where: mockBookedWhere });
+  // Stage query chain: select → from → where → groupBy
+  const makeStageChain = () => {
+    const mockGroupBy = vi.fn().mockResolvedValue(stageRows);
+    const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { from: mockFrom };
+  };
 
-  // First query: stage counts
-  const mockGroupBy = vi.fn().mockResolvedValue(stageRows);
-  const mockStageWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
-  const mockStageFrom = vi.fn().mockReturnValue({ where: mockStageWhere });
+  // Booked query chain: select → from → where
+  const makeBookedChain = () => {
+    const mockWhere = vi.fn().mockResolvedValue(bookedRows);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { from: mockFrom };
+  };
 
   let callCount = 0;
   const mockSelect = vi.fn().mockImplementation(() => {
     callCount++;
-    return callCount === 1 ? { from: mockStageFrom } : { from: mockBookedFrom };
+    // calls 1 & 2 are stage breakdown queries (organic + campaign)
+    if (callCount <= 2) return makeStageChain();
+    // calls 3, 4, 5 are booked breakdown queries
+    return makeBookedChain();
   });
 
   return { select: mockSelect } as never;
@@ -153,18 +165,21 @@ describe("leads.stats", () => {
     vi.clearAllMocks();
   });
 
+  const emptyBreakdown = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
+  const emptyResult = { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 }, organic: emptyBreakdown, campaign: emptyBreakdown };
+
   it("returns zero totals when the database is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
-    expect(result).toEqual({ total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } });
+    expect(result).toEqual(emptyResult);
   });
 
   it("returns zero totals with date filter when DB is unavailable", async () => {
     mockGetDb.mockResolvedValue(null as never);
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats({ dateFrom: "2026-03-01" });
-    expect(result).toEqual({ total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } });
+    expect(result).toEqual(emptyResult);
   });
 
   it("aggregates stage counts correctly", async () => {
@@ -179,13 +194,17 @@ describe("leads.stats", () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
 
-    expect(result.total).toBe(9);
-    expect(result.byStage["AVAILABILITY"]).toBe(5);
-    expect(result.byStage["DONE"]).toBe(3);
-    expect(result.byStage["UNHANDLED"]).toBe(1);
-    expect(result.bookedCount).toBe(0);
-    expect(result.bookedRevenue).toBe(0);
-    expect(result.conversionRate).toBe(0);
+    // The mock returns the same rows for both organic and campaign queries,
+    // so combined total = 9 * 2 = 18. Each sub-breakdown has total = 9.
+    expect(result.organic.total).toBe(9);
+    expect(result.organic.byStage["AVAILABILITY"]).toBe(5);
+    expect(result.organic.byStage["DONE"]).toBe(3);
+    expect(result.organic.byStage["UNHANDLED"]).toBe(1);
+    expect(result.organic.bookedCount).toBe(0);
+    expect(result.organic.bookedRevenue).toBe(0);
+    expect(result.organic.conversionRate).toBe(0);
+    // Combined total is organic + campaign
+    expect(result.total).toBe(18);
   });
 
   it("handles numeric string counts from MySQL", async () => {
@@ -199,9 +218,10 @@ describe("leads.stats", () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
 
-    expect(result.total).toBe(9);
-    expect(result.byStage["SLOT_CHOICE"]).toBe(7);
-    expect(result.byStage["CONFIRMATION"]).toBe(2);
+    // Each sub-breakdown has total = 9 (7+2); combined = 18
+    expect(result.organic.total).toBe(9);
+    expect(result.organic.byStage["SLOT_CHOICE"]).toBe(7);
+    expect(result.organic.byStage["CONFIRMATION"]).toBe(2);
   });
 
   it("returns correct counts for all 10 conversation stages including BOOKED and NOT_INTERESTED", async () => {
@@ -219,17 +239,18 @@ describe("leads.stats", () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
 
-    // 1+2+3+4+5+6+7+8+9+10 = 55
-    expect(result.total).toBe(55);
-    expect(result.byStage["QUOTE_SENT"]).toBe(1);
-    expect(result.byStage["DONE"]).toBe(7);
-    expect(result.byStage["UNHANDLED"]).toBe(8);
-    expect(result.byStage["BOOKED"]).toBe(9);
-    expect(result.byStage["NOT_INTERESTED"]).toBe(10);
-    expect(result.bookedCount).toBe(9);
-    expect(result.bookedRevenue).toBe(900);
+    // Each sub-breakdown has total = 55 (1+2+...+10); combined = 110
+    expect(result.organic.total).toBe(55);
+    expect(result.organic.byStage["QUOTE_SENT"]).toBe(1);
+    expect(result.organic.byStage["DONE"]).toBe(7);
+    expect(result.organic.byStage["UNHANDLED"]).toBe(8);
+    expect(result.organic.byStage["BOOKED"]).toBe(9);
+    expect(result.organic.byStage["NOT_INTERESTED"]).toBe(10);
+    // Each booked query returns 9 rows at $100; organic.bookedCount = 9
+    expect(result.organic.bookedCount).toBe(9);
+    expect(result.organic.bookedRevenue).toBe(900);
     // conversionRate = round(9/55 * 100) = 16
-    expect(result.conversionRate).toBe(16);
+    expect(result.organic.conversionRate).toBe(16);
   });
 
   it("calculates bookedRevenue correctly from quoted prices (no extras, no override)", async () => {
@@ -248,11 +269,12 @@ describe("leads.stats", () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
 
-    expect(result.bookedCount).toBe(3);
-    expect(result.bookedRevenue).toBe(712); // 179 + 234 + 299
-    expect(result.total).toBe(10);
+    // organic sub-breakdown: 3 booked rows, revenue = 712
+    expect(result.organic.bookedCount).toBe(3);
+    expect(result.organic.bookedRevenue).toBe(712); // 179 + 234 + 299
+    expect(result.organic.total).toBe(10);
     // conversionRate = round(3/10 * 100) = 30
-    expect(result.conversionRate).toBe(30);
+    expect(result.organic.conversionRate).toBe(30);
   });
 
   it("uses bookedAmount override when set, falls back to quotedPrice + extras otherwise", async () => {
@@ -273,8 +295,9 @@ describe("leads.stats", () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.leads.stats();
 
-    expect(result.bookedCount).toBe(3);
+    // organic sub-breakdown: 3 booked rows
+    expect(result.organic.bookedCount).toBe(3);
     // 500 (override) + 264 (234 + 30 extras) + 299 = 1063
-    expect(result.bookedRevenue).toBe(1063);
+    expect(result.organic.bookedRevenue).toBe(1063);
   });
 });

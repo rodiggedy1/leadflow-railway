@@ -2185,3 +2185,9 @@
 
 ## Leads Stats Count Fix — March 22
 - [x] Exclude reactivation/campaign leads from the LEADS count in the stats bar (only count organic/form/widget/voice/bark leads)
+
+## Organic/Campaign Stats Toggle — March 22
+- [ ] Update leads.stats to return separate organic and campaign breakdowns (leads count + bookings each)
+- [ ] Add Organic/Campaign toggle switch to the stats bar in AdminDashboard
+- [ ] Organic view: form/widget/voice/bark/null-source leads only
+- [ ] Campaign view: reactivation/always-on/command-center/campaign:* contacts who have replied

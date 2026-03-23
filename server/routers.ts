@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -284,20 +284,19 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         const db = await getDb();
-        if (!db) return { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } };
+        const emptyBreakdown = { total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
+        if (!db) return {
+          total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0,
+          revenueBySource: { form: 0, widget: 0, reactivation: 0 },
+          organic: emptyBreakdown,
+          campaign: emptyBreakdown,
+        };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        // Stage breakdown — use the EXACT same visibility filter as leads.list so the
-        // count matches the number of rows the user actually sees in the leads table.
-        //
-        // Rules (mirrors leads.list sourceFilter):
-        //   1. Never count review-flow sessions
-        //   2. Organic/form leads (no leadSource): always counted
-        //   3. Non-campaign sources: always counted
-        //   4. Campaign sessions (always-on, reactivation, command-center, campaign:*):
-        //      counted ONLY if the customer has sent at least one inbound reply
-        const listVisibilityFilter = and(
-          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+        // ── Visibility filters ────────────────────────────────────────────────────
+        // Organic: null source OR non-campaign sources (form, widget, voice, bark…)
+        const organicFilter = and(
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('review'))`,
           or(
             sql`${conversationSessions.leadSource} IS NULL`,
             sql`(
@@ -305,63 +304,113 @@ export const appRouter = router({
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
               ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
-            )`,
-            sql`(
-              (
-                ${conversationSessions.leadSource} LIKE 'always-on%' OR
-                ${conversationSessions.leadSource} LIKE 'campaign:%' OR
-                ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
-              ) AND
-              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
             )`
           )
         );
-        const statsConditions = conditions
-          ? and(conditions, listVisibilityFilter)
-          : listVisibilityFilter;
+        // Campaign: always-on/campaign:/reactivation/command-center — only if customer replied
+        const campaignFilter = and(
+          or(
+            sql`${conversationSessions.leadSource} LIKE 'always-on%'`,
+            sql`${conversationSessions.leadSource} LIKE 'campaign:%'`,
+            sql`${conversationSessions.leadSource} IN ('reactivation', 'command-center')`
+          ),
+          sql`JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL`
+        );
+        // Combined (what the leads list shows)
+        const listVisibilityFilter = and(
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+          or(organicFilter, campaignFilter)
+        );
 
-        const rows = await db
-          .select({
-            stage: conversationSessions.stage,
-            count: sql<number>`count(*)`,
-          })
-          .from(conversationSessions)
-          .where(statsConditions)
-          .groupBy(conversationSessions.stage);
-        const byStage: Record<string, number> = {};
-        let total = 0;
-        for (const row of rows) {
-          byStage[row.stage] = Number(row.count);
-          total += Number(row.count);
+        // Helper: run stage-count query for a given filter
+        async function stageBreakdown(filter: SQL<unknown> | undefined) {
+          const rows = await db!
+            .select({ stage: conversationSessions.stage, count: sql<number>`count(*)` })
+            .from(conversationSessions)
+            .where(conditions ? and(conditions, filter) : filter)
+            .groupBy(conversationSessions.stage);
+          const byStage: Record<string,number> = {};
+          let total = 0;
+          for (const r of rows) { byStage[r.stage] = Number(r.count); total += Number(r.count); }
+          return { byStage, total };
         }
 
-        // Booked revenue: use bookedAmount if set, else quotedPrice + extras total
-        const bookedRows = await db
-          .select({
-            leadSource: conversationSessions.leadSource,
-            quotedPrice: conversationSessions.quotedPrice,
-            extras: conversationSessions.extras,
-            bookedAmount: conversationSessions.bookedAmount,
-            reactivationLastPrice: conversationSessions.reactivationLastPrice,
-            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
-          })
-          .from(conversationSessions)
-          .where(
-            conditions
-              ? and(conditions, eq(conversationSessions.stage, "BOOKED"))
-              : eq(conversationSessions.stage, "BOOKED")
-          );
-        const bookedCount = bookedRows.length;
-        const bookedRevenue = bookedRows.reduce((sum, r) => sum + calcBookedRevenue(r), 0);
-        // Revenue broken down by lead source
+        // Helper: run booked-revenue query for a given filter
+        async function bookedBreakdown(filter: SQL<unknown> | undefined) {
+          const baseWhere = conditions ? and(conditions, filter, eq(conversationSessions.stage, "BOOKED"))
+                                       : and(filter, eq(conversationSessions.stage, "BOOKED"));
+          const rows = await db!
+            .select({
+              leadSource: conversationSessions.leadSource,
+              quotedPrice: conversationSessions.quotedPrice,
+              extras: conversationSessions.extras,
+              bookedAmount: conversationSessions.bookedAmount,
+              reactivationLastPrice: conversationSessions.reactivationLastPrice,
+              reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+            })
+            .from(conversationSessions)
+            .where(baseWhere);
+          const bookedCount = rows.length;
+          const bookedRevenue = rows.reduce((s, r) => s + calcBookedRevenue(r), 0);
+          return { bookedCount, bookedRevenue };
+        }
+
+        // Run all queries in parallel
+        const [
+          organicStages, campaignStages,
+          organicBooked, campaignBooked,
+          allBooked,
+        ] = await Promise.all([
+          stageBreakdown(organicFilter),
+          stageBreakdown(campaignFilter),
+          bookedBreakdown(organicFilter),
+          bookedBreakdown(campaignFilter),
+          // legacy combined booked for revenueBySource
+          (async () => {
+            const baseWhere = conditions
+              ? and(conditions, listVisibilityFilter, eq(conversationSessions.stage, "BOOKED"))
+              : and(listVisibilityFilter, eq(conversationSessions.stage, "BOOKED"));
+            return db!.select({
+              leadSource: conversationSessions.leadSource,
+              quotedPrice: conversationSessions.quotedPrice,
+              extras: conversationSessions.extras,
+              bookedAmount: conversationSessions.bookedAmount,
+              reactivationLastPrice: conversationSessions.reactivationLastPrice,
+              reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+            }).from(conversationSessions).where(baseWhere);
+          })(),
+        ]);
+
+        // Build organic breakdown
+        const organic = {
+          ...organicStages,
+          ...organicBooked,
+          conversionRate: organicStages.total > 0 ? Math.round((organicBooked.bookedCount / organicStages.total) * 100) : 0,
+        };
+        // Build campaign breakdown
+        const campaign = {
+          ...campaignStages,
+          ...campaignBooked,
+          conversionRate: campaignStages.total > 0 ? Math.round((campaignBooked.bookedCount / campaignStages.total) * 100) : 0,
+        };
+
+        // Combined totals (legacy fields kept for backward compat)
+        const total = organic.total + campaign.total;
+        const byStage = { ...organic.byStage };
+        for (const [k, v] of Object.entries(campaign.byStage)) {
+          byStage[k] = (byStage[k] ?? 0) + v;
+        }
+        const bookedCount = organic.bookedCount + campaign.bookedCount;
+        const bookedRevenue = organic.bookedRevenue + campaign.bookedRevenue;
+        const conversionRate = total > 0 ? Math.round((bookedCount / total) * 100) : 0;
+
         const revenueBySource = { form: 0, widget: 0, reactivation: 0 } as Record<string, number>;
-        for (const r of bookedRows) {
+        for (const r of allBooked) {
           const src = r.leadSource ?? 'form';
           revenueBySource[src] = (revenueBySource[src] ?? 0) + calcBookedRevenue(r);
         }
-        const conversionRate = total > 0 ? Math.round((bookedCount / total) * 100) : 0;
 
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource };
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign };
       }),
 
     /**

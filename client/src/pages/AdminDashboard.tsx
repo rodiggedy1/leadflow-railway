@@ -2236,6 +2236,7 @@ export default function AdminDashboard() {
     return "all";
   });
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [statsMode, setStatsMode] = useState<'organic' | 'campaign'>('organic');
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [agentFilter, setAgentFilter] = useState<string>("all");
@@ -2655,9 +2656,34 @@ export default function AdminDashboard() {
         {activeTab === "leads" && <>
         {/* Summary + date filter row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif' }}>{stats?.total ?? 0}</span>
-            <span className="text-sm" style={{ color: '#888888' }}>leads</span>
+          <div className="flex items-center gap-3">
+            {/* Organic / Campaign toggle */}
+            <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: '#E5E5E5' }}>
+              <button
+                onClick={() => setStatsMode('organic')}
+                className="px-3 py-1.5 text-sm font-medium transition-colors"
+                style={statsMode === 'organic'
+                  ? { backgroundColor: '#000000', color: '#FFFFFF' }
+                  : { backgroundColor: '#FFFFFF', color: '#666666' }}
+              >
+                Organic
+              </button>
+              <button
+                onClick={() => setStatsMode('campaign')}
+                className="px-3 py-1.5 text-sm font-medium transition-colors"
+                style={statsMode === 'campaign'
+                  ? { backgroundColor: '#000000', color: '#FFFFFF' }
+                  : { backgroundColor: '#FFFFFF', color: '#666666' }}
+              >
+                Campaign
+              </button>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif' }}>
+                {statsMode === 'organic' ? (stats?.organic?.total ?? 0) : (stats?.campaign?.total ?? 0)}
+              </span>
+              <span className="text-sm" style={{ color: '#888888' }}>leads</span>
+            </div>
           </div>
           {/* Date preset selector */}
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -2717,65 +2743,54 @@ export default function AdminDashboard() {
               <span className="hj-metric-sub">page views in range</span>
               <Sparkline data={dailyTrend.map(d => d.visitors)} color="#c8ff00" />
             </div>
-            {/* Leads */}
-            <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
-              <span className="hj-metric-label">Leads</span>
-              <span className="hj-metric-value hj-metric-value--accent">{(stats.total ?? 0).toLocaleString()}</span>
-              <span className="hj-metric-sub">
-                {visitorStats?.visitors
-                  ? `${((stats.total / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
-                  : "form submissions"}
-              </span>
-              <Sparkline data={dailyTrend.map(d => d.leads)} color="#f59e0b" />
-            </div>
+            {/* Leads — scoped to statsMode */}
+            {(() => {
+              const view = statsMode === 'organic' ? stats.organic : stats.campaign;
+              const leadsTotal = view?.total ?? 0;
+              return (
+                <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
+                  <span className="hj-metric-label">Leads</span>
+                  <span className="hj-metric-value hj-metric-value--accent">{leadsTotal.toLocaleString()}</span>
+                  <span className="hj-metric-sub">
+                    {statsMode === 'organic' && visitorStats?.visitors
+                      ? `${((leadsTotal / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
+                      : statsMode === 'campaign' ? 'campaign replies' : 'form submissions'}
+                  </span>
+                  <Sparkline data={dailyTrend.map(d => d.leads)} color="#f59e0b" />
+                </div>
+              );
+            })()}
 
-            {/* Jobs Booked */}
-            <div className="hj-metric-card">
-              <span className="hj-metric-label">Jobs Booked</span>
-              <span className="hj-metric-value">{stats.bookedCount ?? 0}</span>
-              <span className="hj-metric-sub">{stats.total > 0 ? `${stats.conversionRate ?? 0}% lead → booked` : 'no leads yet'}</span>
-              <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
-            </div>
+            {/* Jobs Booked — scoped to statsMode */}
+            {(() => {
+              const view = statsMode === 'organic' ? stats.organic : stats.campaign;
+              const bookedCnt = view?.bookedCount ?? 0;
+              const leadsTotal = view?.total ?? 0;
+              const convRate = view?.conversionRate ?? 0;
+              return (
+                <div className="hj-metric-card">
+                  <span className="hj-metric-label">Jobs Booked</span>
+                  <span className="hj-metric-value">{bookedCnt}</span>
+                  <span className="hj-metric-sub">{leadsTotal > 0 ? `${convRate}% lead → booked` : 'no leads yet'}</span>
+                  <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
+                </div>
+              );
+            })()}
 
-            {/* Booked Revenue */}
-            <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
-              <span className="hj-metric-label">Booked Revenue</span>
-              <span className="hj-metric-value hj-metric-value--accent">${(stats.bookedRevenue ?? 0).toLocaleString()}</span>
-              {/* Source breakdown bar */}
-              {stats.revenueBySource && stats.bookedRevenue > 0 && (() => {
-                const rbs = stats.revenueBySource as Record<string, number>;
-                const total = stats.bookedRevenue;
-                const sources = [
-                  { key: 'form', label: 'Form', color: '#059669' },
-                  { key: 'widget', label: 'Widget', color: '#0d9488' },
-                  { key: 'reactivation', label: 'Reactivation', color: '#7c3aed' },
-                ];
-                return (
-                  <div className="mt-1 space-y-1">
-                    <div className="flex h-2 rounded-full overflow-hidden gap-px">
-                      {sources.map(s => {
-                        const pct = total > 0 ? ((rbs[s.key] ?? 0) / total) * 100 : 0;
-                        return pct > 0 ? (
-                          <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} />
-                        ) : null;
-                      })}
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                      {sources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
-                        <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#059669', opacity: 0.85 }}>
-                          <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
-                          {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-               {!(stats.revenueBySource && stats.bookedRevenue > 0) && (
-                <span className="hj-metric-sub">from {stats.bookedCount ?? 0} job{(stats.bookedCount ?? 0) !== 1 ? 's' : ''}</span>
-              )}
-              <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
-            </div>
+            {/* Booked Revenue — scoped to statsMode */}
+            {(() => {
+              const view = statsMode === 'organic' ? stats.organic : stats.campaign;
+              const rev = view?.bookedRevenue ?? 0;
+              const bookedCnt = view?.bookedCount ?? 0;
+              return (
+                <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
+                  <span className="hj-metric-label">Booked Revenue</span>
+                  <span className="hj-metric-value hj-metric-value--accent">${rev.toLocaleString()}</span>
+                  <span className="hj-metric-sub">from {bookedCnt} job{bookedCnt !== 1 ? 's' : ''}</span>
+                  <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
+                </div>
+              );
+            })()}
             {/* Voice Calls */}
             <div className="hj-metric-card">
               <span className="hj-metric-label">AI Voice Calls</span>
