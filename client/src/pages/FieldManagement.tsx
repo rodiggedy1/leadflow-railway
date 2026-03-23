@@ -469,7 +469,7 @@ const EVENT_STYLES: Record<EventType, {
 };
 
 function TimelineEventRow({ event, isLast, onRetrySuccess }: { event: TimelineEvent; isLast: boolean; onRetrySuccess?: () => void }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true); // default expanded
   const [retrying, setRetrying] = useState(false);
   const s = EVENT_STYLES[event.type];
   const hasDetail = !!event.detail;

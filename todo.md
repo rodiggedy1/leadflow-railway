@@ -2401,3 +2401,7 @@
 - [x] Add "Group by Cleaner" toggle in the tab settings area of Job Log
 - [x] Default workflow steps (accordion) to expanded
 - [x] Default job log cards to expanded
+
+## Job Log Timeline Event Rows Default Expanded
+
+- [x] Default timeline event message detail rows to open on Job Log page
