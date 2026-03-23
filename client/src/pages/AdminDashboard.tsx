@@ -2259,7 +2259,7 @@ export default function AdminDashboard() {
     isLoading: sessionsLoading,
     refetch,
     isFetching,
-  } = trpc.leads.list.useQuery(dateRange, { refetchInterval: 30000, enabled: isAdmin || isAuthenticated });
+  } = trpc.leads.list.useQuery({}, { refetchInterval: 30000, enabled: isAdmin || isAuthenticated });
 
   const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,
