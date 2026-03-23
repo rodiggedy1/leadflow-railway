@@ -1614,14 +1614,16 @@ export default function CommandCenter() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {["Date", "Campaign", "Batch", "Sent", "Delivered", "Replies", "Conv. Rate"].map(h => (
+                    {["Date", "Campaign", "Batch", "Sent", "Delivered", "Reply Rate"].map(h => (
                       <th key={h} className="text-left text-xs font-medium text-gray-400 pb-2 pr-4 last:pr-0">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {campaignHistoryQuery.data.map((row) => {
-                    const convRate = row.sentCount > 0 ? Math.round((row.replyCount / row.sentCount) * 100) : 0;
+                    const replyCount = row.replyCount ?? 0;
+                    const sentCount = row.sentCount ?? 0;
+                    const convRate = sentCount > 0 ? Math.round((replyCount / sentCount) * 100) : 0;
                     return (
                       <tr key={row.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
                         <td className="py-3 pr-4 text-gray-500 text-xs whitespace-nowrap">
@@ -1632,25 +1634,44 @@ export default function CommandCenter() {
                           <span className="ml-2 text-xs text-gray-400 capitalize">{row.campaignType.replace(/_/g, " ")}</span>
                         </td>
                         <td className="py-3 pr-4 text-xs text-gray-500">{row.batchLabel || "—"}</td>
-                        <td className="py-3 pr-4 text-gray-700 font-medium">{row.sentCount}</td>
+                        <td className="py-3 pr-4 text-gray-700 font-medium">{sentCount}</td>
                         <td className="py-3 pr-4">
                           <span className={`inline-flex items-center gap-1 text-xs font-medium ${
                             row.failedCount === 0 ? "text-green-600" : "text-amber-600"
                           }`}>
                             {row.failedCount === 0
-                              ? <><CheckCircle className="w-3 h-3" />{row.sentCount}</>  
-                              : <><XCircle className="w-3 h-3" />{row.sentCount - row.failedCount} / {row.sentCount}</>}
+                              ? <><CheckCircle className="w-3 h-3" />{sentCount}</>  
+                              : <><XCircle className="w-3 h-3" />{sentCount - row.failedCount} / {sentCount}</>}
                           </span>
                         </td>
-                        <td className="py-3 pr-4 text-gray-700">{row.replyCount}</td>
+                        {/* Reply Rate: X replied / Y sent + mini progress bar + % badge */}
                         <td className="py-3">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            convRate >= 20 ? "bg-green-100 text-green-700" :
-                            convRate >= 10 ? "bg-amber-100 text-amber-700" :
-                            "bg-gray-100 text-gray-500"
-                          }`}>
-                            {convRate}%
-                          </span>
+                          <div className="flex flex-col gap-1 min-w-[120px]">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-700 font-medium">
+                                {replyCount} replied
+                                <span className="text-gray-400 font-normal"> / {sentCount} sent</span>
+                              </span>
+                              <span className={`ml-2 text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                                convRate >= 20 ? "bg-green-100 text-green-700" :
+                                convRate >= 10 ? "bg-amber-100 text-amber-700" :
+                                "bg-gray-100 text-gray-500"
+                              }`}>
+                                {convRate}%
+                              </span>
+                            </div>
+                            {/* Mini progress bar */}
+                            <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  convRate >= 20 ? "bg-green-500" :
+                                  convRate >= 10 ? "bg-amber-400" :
+                                  "bg-gray-300"
+                                }`}
+                                style={{ width: `${Math.min(convRate, 100)}%` }}
+                              />
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     );

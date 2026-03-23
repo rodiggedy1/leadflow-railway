@@ -2150,3 +2150,7 @@
 
 ## Pipeline Card Campaign Badge — March 22
 - [x] Show human-readable campaign name + megaphone icon on pipeline cards for campaign/reactivation leads (instead of "form")
+
+## Campaign History Reply Rate — March 22
+- [x] Add repliedCount + sentCount to getCampaignHistory backend procedure (switched to messageHistory-based reply detection)
+- [x] Show "X replied / Y sent" reply rate in Campaign History UI per blast with mini progress bar + % badge

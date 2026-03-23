@@ -1996,14 +1996,14 @@ Respond in JSON with this exact schema:
                 lte(conversationSessions.createdAt, windowEnd)
               )
             );
-          // Count those that have replied (stage advanced past REACTIVATION)
+          // Count those that have replied — has at least one user message in messageHistory
           const [replyRow] = await db
             .select({ count: sql<number>`COUNT(*)` })
             .from(conversationSessions)
             .where(
               and(
                 sql`${conversationSessions.leadSource} LIKE ${`campaign:${blast.campaignType}%`}`,
-                ne(conversationSessions.stage, "REACTIVATION"),
+                sql`${conversationSessions.messageHistory} LIKE ${`%"role":"user"%`}`,
                 gte(conversationSessions.createdAt, windowStart),
                 lte(conversationSessions.createdAt, windowEnd)
               )
