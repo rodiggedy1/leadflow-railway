@@ -2154,3 +2154,6 @@
 ## Campaign History Reply Rate — March 22
 - [x] Add repliedCount + sentCount to getCampaignHistory backend procedure (switched to messageHistory-based reply detection)
 - [x] Show "X replied / Y sent" reply rate in Campaign History UI per blast with mini progress bar + % badge
+
+## Campaigns Page Unification — March 22
+- [x] Show Command Center campaign blasts in the Reactivation Campaigns page so all campaigns appear in one place

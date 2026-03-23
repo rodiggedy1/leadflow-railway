@@ -66,6 +66,8 @@ import {
   RefreshCw,
   Filter,
   PlusCircle,
+  Megaphone,
+  XCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,6 +126,10 @@ export default function ReactivationCampaigns() {
 
   const { data: campaigns = [], refetch: refetchCampaigns } =
     trpc.campaigns.list.useQuery(undefined, { refetchInterval: 10_000 });
+
+  // AI Center blasts (from campaign_blasts table)
+  const { data: blastHistory = [] } =
+    trpc.commandCenter.getCampaignHistory.useQuery(undefined, { refetchInterval: 30_000 });
 
   // Live preview of eligible contacts as filters change
   const { data: preview, isLoading: isLoadingPreview, refetch: refetchPreview } =
@@ -250,7 +256,84 @@ export default function ReactivationCampaigns() {
           </span>
         </div>
 
-        {campaigns.length === 0 ? (
+        {/* ── AI Center Blasts ─────────────────────────────────────────── */}
+        {blastHistory.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Megaphone className="w-4 h-4 text-purple-500" />
+              <h2 className="text-sm font-semibold text-foreground">AI Center Blasts</h2>
+              <span className="text-xs text-muted-foreground">— sent from the AI Center campaign tool</span>
+            </div>
+            {blastHistory.map((blast) => {
+              const replyCount = blast.replyCount ?? 0;
+              const sentCount = blast.sentCount ?? 0;
+              const replyRate = sentCount > 0 ? Math.round((replyCount / sentCount) * 100) : 0;
+              return (
+                <Card key={blast.id} className="border-purple-100">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-foreground truncate">{blast.campaignTitle}</span>
+                            {blast.batchLabel && (
+                              <span className="text-xs text-muted-foreground">{blast.batchLabel}</span>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-xs font-medium bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full">
+                              <Megaphone className="w-2.5 h-2.5" />
+                              {blast.campaignType.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(blast.firedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                            {blast.firedBy && blast.firedBy !== "admin" && ` · by ${blast.firedBy}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6 text-sm shrink-0 ml-4">
+                        <div className="text-center hidden sm:block">
+                          <div className="font-semibold text-foreground">{sentCount}</div>
+                          <div className="text-muted-foreground text-xs">Sent</div>
+                        </div>
+                        <div className="text-center hidden sm:block">
+                          <div className="font-semibold text-blue-600">{replyCount}</div>
+                          <div className="text-muted-foreground text-xs">{replyRate}% reply</div>
+                        </div>
+                        <div className="text-center hidden sm:block">
+                          <div className={`font-semibold text-xs px-2 py-0.5 rounded-full ${
+                            replyRate >= 20 ? "bg-green-100 text-green-700" :
+                            replyRate >= 10 ? "bg-amber-100 text-amber-700" :
+                            "bg-gray-100 text-gray-500"
+                          }`}>{replyRate}%</div>
+                          <div className="text-muted-foreground text-xs">Rate</div>
+                        </div>
+                        <div className="text-center hidden sm:block">
+                          <div className="font-semibold text-green-600">
+                            {blast.failedCount === 0
+                              ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All</span>
+                              : <span className="text-amber-600 flex items-center gap-1"><XCircle className="w-3 h-3" />{sentCount - blast.failedCount}/{sentCount}</span>}
+                          </div>
+                          <div className="text-muted-foreground text-xs">Delivered</div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Reactivation Campaigns ──────────────────────────────────────── */}
+        {campaigns.length > 0 && (
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-emerald-500" />
+            <h2 className="text-sm font-semibold text-foreground">Reactivation Campaigns</h2>
+            <span className="text-xs text-muted-foreground">— built from booking history contacts</span>
+          </div>
+        )}
+
+        {campaigns.length === 0 && blastHistory.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
@@ -264,7 +347,7 @@ export default function ReactivationCampaigns() {
               </Button>
             </CardContent>
           </Card>
-        ) : (
+        ) : campaigns.length > 0 ? (
           <div className="space-y-3">
             {(campaigns as Campaign[]).map((c) => (
               <Card
@@ -319,7 +402,7 @@ export default function ReactivationCampaigns() {
               </Card>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     );
   }
