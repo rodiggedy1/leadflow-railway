@@ -2247,3 +2247,7 @@
 ## Bug Fixes — Tracker Token (March 23 2026)
 - [x] Add ensureTrackerToken helper to fieldMgmtEngine — generates + saves token if null before building tracking link
 - [x] Use ensureTrackerToken in sendClientPreJobSms, sendClientOnTheWaySms, sendRunningLateSms
+
+## Tracker Token — Early Generation (March 23 2026)
+- [x] Generate trackerToken at job creation/sync time (qualityRouter.ts both inserts) so every job always has a token
+- [x] Backfill any existing jobs that are missing a token (45 jobs backfilled)

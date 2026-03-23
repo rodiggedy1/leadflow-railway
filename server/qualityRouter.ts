@@ -17,11 +17,13 @@
  * New rating replies use a separate stage: QUALITY_RATING_REQUESTED.
  */
 
+import { randomBytes } from "crypto";
 import { z } from "zod";
 import { and, desc, eq, gte, isNull, sql, count, lt } from "drizzle-orm";
 import { router, protectedProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
+
 import {
   cleanerProfiles,
   cleanerJobs,
@@ -36,6 +38,11 @@ import { storagePut } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
 import { invokeLLM } from "./_core/llm";
+
+/** Generate a URL-safe random tracker token (32 chars). */
+function generateTrackerToken(): string {
+  return randomBytes(24).toString("base64url");
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -886,6 +893,7 @@ export const qualityRouter = router({
           basePay: basePay !== null ? String(basePay) : null,
           photoSubmitted: 0,
           flagged: 0,
+          trackerToken: generateTrackerToken(), // generate at creation time
         });
       }
 
@@ -1205,6 +1213,7 @@ export const qualityRouter = router({
                 completedJobId: 0, // placeholder — not linked to completedJobs table for quality-sync jobs
                 photoSubmitted: 0,
                 flagged: 0,
+                trackerToken: generateTrackerToken(), // generate at creation time
               });
               created++;
             }
