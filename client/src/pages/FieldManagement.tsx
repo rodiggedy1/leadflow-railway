@@ -80,7 +80,7 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "client-sms",
         content:
-          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. 🚗\n\nIf you have any last-minute notes, reply here.",
+          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. 🚗\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
         note: "Sent to the CLIENT (not the cleaner). {{client_name}}, {{address}}, and {{eta}} are pulled from the job record.",
       },
     ],
