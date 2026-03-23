@@ -436,9 +436,10 @@ function NavDropdown({
 interface AdminHeaderProps {
   activeTab: AdminTab;
   rightExtra?: React.ReactNode;
+  onSessionOpen?: (sessionId: number) => void;
 }
 
-export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps) {
+export default function AdminHeader({ activeTab, rightExtra, onSessionOpen }: AdminHeaderProps) {
   return (
     <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#E5E5E5" }}>
       {/* Logo row */}
@@ -462,7 +463,7 @@ export default function AdminHeader({ activeTab, rightExtra }: AdminHeaderProps)
           <WebhookHealthBadge />
           <SyncHealthBadge />
           {rightExtra}
-          <NotificationBell />
+          <NotificationBell onSessionOpen={onSessionOpen} />
           <PreviewAgentButton />
         </div>
       </div>

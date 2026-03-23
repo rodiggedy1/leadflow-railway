@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Bell } from "lucide-react";
+import { Bell, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,11 @@ function timeAgo(date: Date | string): string {
   return `${diffDay}d ago`;
 }
 
-export default function NotificationBell() {
+interface NotificationBellProps {
+  onSessionOpen?: (sessionId: number) => void;
+}
+
+export default function NotificationBell({ onSessionOpen }: NotificationBellProps = {}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -112,7 +116,14 @@ export default function NotificationBell() {
                   return (
                     <div
                       key={item.id}
-                      className={`flex gap-3 px-4 py-3 transition-colors hover:bg-muted/50 ${isUnread ? "bg-blue-50/40 dark:bg-blue-950/20" : ""}`}
+                      className={`flex gap-3 px-4 py-3 transition-colors hover:bg-muted/50 ${isUnread ? "bg-blue-50/40 dark:bg-blue-950/20" : ""} ${onSessionOpen && item.meta?.sessionId ? "cursor-pointer" : ""}`}
+                      onClick={() => {
+                        const sid = item.meta?.sessionId;
+                        if (onSessionOpen && typeof sid === "number") {
+                          onSessionOpen(sid);
+                          setOpen(false);
+                        }
+                      }}
                     >
                       {/* Icon */}
                       <div className="flex-shrink-0 mt-0.5 text-lg leading-none">{cfg.icon}</div>
@@ -137,12 +148,16 @@ export default function NotificationBell() {
                         </Badge>
                       </div>
 
-                      {/* Unread dot */}
-                      {isUnread && (
+                      {/* Unread dot or clickable arrow */}
+                      {onSessionOpen && item.meta?.sessionId ? (
+                        <div className="flex-shrink-0 mt-1 text-muted-foreground opacity-50">
+                          <ChevronRight className="h-4 w-4" />
+                        </div>
+                      ) : isUnread ? (
                         <div className="flex-shrink-0 mt-1.5">
                           <div className="h-2 w-2 rounded-full bg-blue-500" />
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}

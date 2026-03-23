@@ -2290,6 +2290,26 @@ export default function AdminDashboard() {
     enabled: isAdmin,
   });
 
+  // ── Activity feed → open drawer by session ID ────────────────────────────────
+  const trpcUtils = trpc.useUtils();
+  const handleSessionOpen = useCallback(async (sessionId: number) => {
+    // First check if the session is already in the loaded list
+    const existing = sessions.find(s => s.id === sessionId);
+    if (existing) {
+      setSelectedSession(existing as unknown as DrawerSession);
+      return;
+    }
+    // Otherwise fetch it directly
+    try {
+      const session = await trpcUtils.leads.getById.fetch({ id: sessionId });
+      if (session) {
+        setSelectedSession(session as unknown as DrawerSession);
+      }
+    } catch (err) {
+      console.error("[ActivityFeed] Failed to load session", sessionId, err);
+    }
+  }, [sessions, trpcUtils]);
+
   // Collect unique agent names for the agent filter dropdown (declared unconditionally)
   const agentNames = useMemo(() => {
     const names = new Set<string>();
@@ -2358,6 +2378,7 @@ export default function AdminDashboard() {
       {/* Top bar — unified AdminHeader (includes AI Center + all nav) */}
       <AdminHeader
         activeTab={activeTab === "callbacks" ? "callbacks" : activeTab === "agents" ? "agents" : activeTab === "leaderboard" ? "leaderboard" : activeTab === "pipeline" ? "pipeline" : "leads"}
+        onSessionOpen={handleSessionOpen}
         rightExtra={
           <>
             {unhandledCount > 0 && activeTab === "leads" && (

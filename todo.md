@@ -2178,3 +2178,7 @@
 - [x] Update Launch27 sync to populate bedrooms/bathrooms from booking extras
 - [x] Backfill 77 existing completed_jobs rows via Launch27 API
 - [ ] Show bedrooms/bathrooms in leads table SERVICE column for campaign leads (deferred — frequency shown instead)
+
+## Activity Feed Clickable Items — March 22
+- [x] Make activity feed items clickable — clicking an item opens the lead's conversation drawer
+- [x] Ensure sessionId is included in activity feed event data for lookup (already in meta for lead_reply events)

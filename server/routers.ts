@@ -1104,10 +1104,22 @@ export const appRouter = router({
     }),
 
     /**
-     * leads.getCustomerHistory — returns the most recent completed_jobs row for a phone number.
-     * Used by the ConversationDrawer to show full customer info (name, address, last price)
-     * for campaign leads whose conversation_sessions don't carry that data.
+     * leads.getById — fetch a single conversation session by its ID.
+     * Used by the activity feed to open the drawer for a specific lead.
      */
+    getById: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const rows = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.id))
+          .limit(1);
+        return rows[0] ?? null;
+      }),
+
     getCustomerHistory: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
