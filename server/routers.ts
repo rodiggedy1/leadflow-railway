@@ -287,21 +287,38 @@ export const appRouter = router({
         if (!db) return { total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0, revenueBySource: { form: 0, widget: 0, reactivation: 0 } };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
 
-        // Stage breakdown — exclude review sessions (they belong in the Reviews tab)
-        // Also exclude reactivation/campaign leads from the total count so the LEADS
-        // metric reflects only organic inbound leads (form, widget, voice, bark, etc.)
-        const reviewExclude = ne(conversationSessions.leadSource, "review");
-        const organicOnlyFilter = sql`(
-          ${conversationSessions.leadSource} IS NULL OR
-          (
-            ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
-            ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-            ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
+        // Stage breakdown — use the EXACT same visibility filter as leads.list so the
+        // count matches the number of rows the user actually sees in the leads table.
+        //
+        // Rules (mirrors leads.list sourceFilter):
+        //   1. Never count review-flow sessions
+        //   2. Organic/form leads (no leadSource): always counted
+        //   3. Non-campaign sources: always counted
+        //   4. Campaign sessions (always-on, reactivation, command-center, campaign:*):
+        //      counted ONLY if the customer has sent at least one inbound reply
+        const listVisibilityFilter = and(
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+          or(
+            sql`${conversationSessions.leadSource} IS NULL`,
+            sql`(
+              ${conversationSessions.leadSource} IS NOT NULL AND
+              ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+              ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
+            )`,
+            sql`(
+              (
+                ${conversationSessions.leadSource} LIKE 'always-on%' OR
+                ${conversationSessions.leadSource} LIKE 'campaign:%' OR
+                ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
+              ) AND
+              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+            )`
           )
-        )`;
+        );
         const statsConditions = conditions
-          ? and(conditions, reviewExclude, organicOnlyFilter)
-          : and(reviewExclude, organicOnlyFilter);
+          ? and(conditions, listVisibilityFilter)
+          : listVisibilityFilter;
 
         const rows = await db
           .select({
