@@ -570,13 +570,13 @@ export async function handleCallNotificationEmail(
   if (existingSessions.length > 0) {
     console.log(`[EmailLead] Active session already exists for ${normalizedPhone} — skipping call notification lead creation`);
     // Still alert CS so they know someone called
-    const alertMsg = `📞 Missed call: ${normalizedPhone}${callTime ? ` at ${callTime}` : ""} — already has active session`;
+    const alertMsg = `📞 Received call: ${normalizedPhone}${callTime ? ` at ${callTime}` : ""} — active session already exists`;
     sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(() => {});
     return;
   }
 
   // Build intro SMS for a voice/call lead
-  const introSms = `Hi! This is Madison from Maids in Black 😊 I saw you gave us a call — I'd love to help you get a cleaning quote! What type of cleaning are you looking for?`;
+  const introSms = `Hi! This is Madison from Maids in Black 😊 I saw you gave us a call — I'd love to help you get a quote! What type of cleaning are you looking for?`;
   const displayName = "Voice Lead";
 
   // Send intro SMS
@@ -584,7 +584,7 @@ export async function handleCallNotificationEmail(
   console.log(`[EmailLead] Call lead intro SMS sent: ${sms1.success}`);
 
   // Alert CS
-  const alertMsg = `📞 Missed call lead: ${normalizedPhone}${callTime ? ` at ${callTime}` : ""} — intro SMS sent`;
+  const alertMsg = `📞 Received call: ${normalizedPhone}${callTime ? ` at ${callTime}` : ""} — intro SMS sent`;
   sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(() => {});
   sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(() => {});
 
@@ -610,13 +610,13 @@ export async function handleCallNotificationEmail(
 
   logActivity({
     eventType: "new_lead",
-    title: `Missed call lead: ${normalizedPhone}`,
-    body: callTime ? `Called at ${callTime}` : "Missed call",
+    title: `Received call: ${normalizedPhone}`,
+    body: callTime ? `Called at ${callTime}` : "Received call",
     meta: { leadPhone: normalizedPhone, leadName: displayName, source: "voice" },
   }).catch(() => {});
 
   notifyOwner({
-    title: `Missed Call Lead: ${normalizedPhone}`,
+    title: `Received Call: ${normalizedPhone}`,
     content: `Caller: ${normalizedPhone}${callTime ? `\nTime: ${callTime}` : ""}\n\nIntro SMS sent automatically.`,
   }).catch(() => {});
 }
