@@ -2330,3 +2330,10 @@
 - [x] Steps that fired (sent/failed) always show regardless of time
 - [x] Status change events always show
 - [x] Update tests for the new filter behaviour
+
+## Field Management — Timeline Accuracy Fix
+
+- [x] Past-due unfired time-based steps show as "Failed to Send" (red), not "Pending"
+- [x] Conditional no-show steps (no_checkin_alert, escalation_call, no_show_cs_alert) hidden unless a log row exists for them
+- [x] Mid-job nudge hidden until its expected fire time has passed AND job is in_progress
+- [x] Update tests for the corrected behaviour

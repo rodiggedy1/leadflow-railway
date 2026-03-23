@@ -231,14 +231,24 @@ function buildTimeline(
   }
 
   const serviceTime = job.serviceDateTime ? parseServiceDateTime(job.serviceDateTime) : null;
+  const now = new Date();
 
-  // 1. Full step sequence — every step always appears
+  // ── Step classification ───────────────────────────────────────────────────
+  // TIME-BASED: always expected to fire at a specific time relative to serviceDateTime.
+  //   If the window has passed and no log row exists → show as "failed" (red).
+  // STATUS-TRIGGERED: only fire when cleaner taps a button (on_the_way, arrived, etc.).
+  //   Never "failed" if not fired — only show if a log row exists.
+  // CONDITIONAL: only fire if something went wrong (no check-in, no-show).
+  //   Only show if a log row exists.
+  const TIME_BASED_STEPS = new Set(["pre_job_reminder", "client_pre_job"]);
+
+  // 1. Process each step in the defined sequence
   for (const stepDef of STEP_SEQUENCE) {
     const row = logByStep.get(stepDef.step);
     const type = deriveEventType(stepDef.step);
 
     if (row) {
-      // Step fired — show real result
+      // Step fired — show real result (sent or failed)
       events.push({
         id: `log-${row.id}`,
         logId: row.id,
@@ -252,26 +262,31 @@ function buildTimeline(
         errorDetail: row.errorDetail ?? undefined,
         step: stepDef.step,
       });
-    } else {
-      // Step not yet fired — only show if its expected fire time has already passed
+    } else if (TIME_BASED_STEPS.has(stepDef.step)) {
+      // Time-based step that didn't fire — only show if its window has passed
       const expectedTs = serviceTime ? stepDef.expectedTime(serviceTime) : null;
-      if (expectedTs && expectedTs <= new Date()) {
-        // Due but not fired — show as failed/missed
+      if (expectedTs && expectedTs <= now) {
+        // Window passed, never fired — show as failed
         events.push({
-          id: `pending-${stepDef.step}-${job.id}`,
+          id: `missed-${stepDef.step}-${job.id}`,
           type,
-          status: "pending",
+          status: "failed",
           timestamp: expectedTs,
           label: stepDef.label,
+          errorDetail: "Step was not fired by the engine",
           success: false,
           step: stepDef.step,
         });
       }
-      // If expectedTs is in the future, skip entirely — don't show it
+      // Future time-based step — hide entirely
     }
+    // Status-triggered and conditional steps: only show if log row exists (handled above)
+    // If no log row → skip entirely, never show as pending or failed
   }
 
-  // 2. Status change events — interleaved at correct chronological position
+  // 2. Status change events — ALL statuses always show when set
+  // We show each status transition that has occurred.
+  // jobStatus holds the CURRENT status; we show it with job.updatedAt.
   if (job.jobStatus) {
     events.push({
       id: `status-${job.id}`,
