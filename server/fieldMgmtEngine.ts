@@ -489,10 +489,18 @@ export async function sendArrivedCheckin(cleanerJobId: number): Promise<void> {
 // ── Step 4: Mid-Job Nudge (~45-60 min after arrived) ─────────────────────────
 
 /**
- * Runs every 5 minutes. Finds jobs where:
- * - jobStatus is "in_progress" (set when cleaner marks arrived)
- * - arrived_checkin step was fired 45–65 minutes ago
- * - mid_job_nudge has NOT been sent yet
+ * Runs every 5 minutes. Finds jobs where the mid-job nudge should fire.
+ *
+ * PRIMARY path: arrived_checkin log row fired 45–65 minutes ago.
+ *   Used when the cleaner has a phone number and the arrival SMS was sent.
+ *
+ * FALLBACK path: jobStatus = 'in_progress' AND updatedAt was 45–65 minutes ago,
+ *   AND no arrived_checkin log row exists for that job.
+ *   Used when the cleaner has no phone (arrival SMS was skipped) but the cleaner
+ *   still tapped Arrived in the app, setting the job to in_progress.
+ *
+ * In both cases: mid_job_nudge must NOT have been sent yet, and the job must
+ * still be in_progress (not completed or cancelled).
  */
 export async function runMidJobNudges(): Promise<{ checked: number; sent: number; errors: number }> {
   if (!FIELD_MGMT_ENABLED) return { checked: 0, sent: 0, errors: 0 };
@@ -502,13 +510,13 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
 
   const now = Date.now();
   const windowStart = new Date(now - 65 * 60 * 1000); // 65 min ago
-  const windowEnd = new Date(now - 45 * 60 * 1000);   // 45 min ago
+  const windowEnd   = new Date(now - 45 * 60 * 1000); // 45 min ago
 
-  // Find arrived_checkin log entries in the window
+  // ── PRIMARY: jobs with an arrived_checkin log in the window ─────────────────
   const checkinLogs = await db
     .select({
       cleanerJobId: fieldMgmtLog.cleanerJobId,
-      firedAt: fieldMgmtLog.firedAt,
+      anchorTime:   fieldMgmtLog.firedAt,
     })
     .from(fieldMgmtLog)
     .where(
@@ -519,26 +527,83 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       )
     );
 
+  // ── FALLBACK: in_progress jobs whose updatedAt is in the window
+  //    but have NO arrived_checkin log row at all ──────────────────────────────
+  const primaryIds = new Set(checkinLogs.map(r => r.cleanerJobId));
+
+  const fallbackJobs = await db
+    .select({
+      id:               cleanerJobs.id,
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName:      cleanerJobs.cleanerName,
+      jobStatus:        cleanerJobs.jobStatus,
+      bookingStatus:    cleanerJobs.bookingStatus,
+      updatedAt:        cleanerJobs.updatedAt,
+    })
+    .from(cleanerJobs)
+    .where(
+      and(
+        eq(cleanerJobs.jobStatus, "in_progress"),
+        gte(cleanerJobs.updatedAt, windowStart),
+        lte(cleanerJobs.updatedAt, windowEnd)
+      )
+    );
+
+  // Build unified candidate list: { cleanerJobId, anchorTime, jobData? }
+  type Candidate = {
+    cleanerJobId: number;
+    anchorTime: Date;
+    prefetchedJob?: typeof fallbackJobs[0];
+  };
+
+  const candidates: Candidate[] = [
+    ...checkinLogs.map(r => ({ cleanerJobId: r.cleanerJobId, anchorTime: r.anchorTime })),
+    ...fallbackJobs
+      .filter(j => !primaryIds.has(j.id)) // skip if already covered by primary
+      .map(j => ({ cleanerJobId: j.id, anchorTime: j.updatedAt!, prefetchedJob: j })),
+  ];
+
   let sent = 0;
   let errors = 0;
 
-  for (const log of checkinLogs) {
-    if (await stepAlreadyFired(log.cleanerJobId, "mid_job_nudge")) continue;
+  for (const candidate of candidates) {
+    if (await stepAlreadyFired(candidate.cleanerJobId, "mid_job_nudge")) continue;
 
-    // Get job + cleaner info
-    const jobRows = await db
-      .select({
-        id: cleanerJobs.id,
-        cleanerProfileId: cleanerJobs.cleanerProfileId,
-        cleanerName: cleanerJobs.cleanerName,
-        jobStatus: cleanerJobs.jobStatus,
-        bookingStatus: cleanerJobs.bookingStatus,
-      })
-      .from(cleanerJobs)
-      .where(eq(cleanerJobs.id, log.cleanerJobId))
-      .limit(1);
-    const job = jobRows[0];
-    if (!job) continue;
+    // For fallback candidates, also verify no arrived_checkin log exists at all
+    // (not just outside the window) — avoids double-nudging edge cases
+    if (candidate.prefetchedJob) {
+      const existingCheckin = await db
+        .select({ id: fieldMgmtLog.id })
+        .from(fieldMgmtLog)
+        .where(
+          and(
+            eq(fieldMgmtLog.cleanerJobId, candidate.cleanerJobId),
+            eq(fieldMgmtLog.step, "arrived_checkin")
+          )
+        )
+        .limit(1);
+      if (existingCheckin.length > 0) continue; // primary path will handle it (or already did)
+    }
+
+    // Get job info (use prefetched for fallback, fetch for primary)
+    let job: { id: number; cleanerProfileId: number; cleanerName: string; jobStatus: string | null; bookingStatus: string | null };
+    if (candidate.prefetchedJob) {
+      job = candidate.prefetchedJob;
+    } else {
+      const jobRows = await db
+        .select({
+          id:               cleanerJobs.id,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
+          cleanerName:      cleanerJobs.cleanerName,
+          jobStatus:        cleanerJobs.jobStatus,
+          bookingStatus:    cleanerJobs.bookingStatus,
+        })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, candidate.cleanerJobId))
+        .limit(1);
+      if (!jobRows[0]) continue;
+      job = jobRows[0];
+    }
 
     // Only nudge if still in progress (not completed or cancelled)
     if (job.jobStatus === "completed" || job.bookingStatus === "completed") continue;
@@ -549,7 +614,18 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       .where(eq(cleanerProfiles.id, job.cleanerProfileId))
       .limit(1);
     const profile = profileRows[0];
-    if (!profile?.phone) continue;
+    if (!profile?.phone) {
+      // No phone on file — log as a skipped (failed) step so the timeline shows it
+      await recordStep({
+        cleanerJobId: job.id,
+        step: "mid_job_nudge",
+        success: false,
+        errorDetail: "No phone number on file for this cleaner",
+      });
+      errors++;
+      console.warn(`[FieldMgmt] Mid-job nudge SKIPPED for job ${job.id} — no phone for cleaner profile ${job.cleanerProfileId}`);
+      continue;
+    }
 
     const loginEmail = profile.email ?? "your login email";
 
@@ -586,7 +662,7 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
     }
   }
 
-  return { checked: checkinLogs.length, sent, errors };
+  return { checked: candidates.length, sent, errors };
 }
 
 // ── Step 5: Completion Flow ───────────────────────────────────────────────────

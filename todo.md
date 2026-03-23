@@ -2345,3 +2345,9 @@
 - [x] Write to jobStatusHistory on every updateJobStatus call in cleanerRouter
 - [x] Update buildTimeline to include jobStatusHistory rows as trigger events before their resulting SMS
 - [x] Update tests for status history in timeline (920 tests pass)
+
+## Mid-Job Nudge Fix
+
+- [x] Implement fallback in runMidJobNudges: use in_progress + updatedAt when no arrived_checkin log row exists
+- [x] Investigate where cleaner phone numbers come from (Launch27 sync vs manual entry — phones must be entered manually in admin UI, Launch27 team records have no phone field)
+- [x] Update tests for the new fallback logic (929 tests pass)

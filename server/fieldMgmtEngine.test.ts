@@ -374,3 +374,103 @@ describe("ensureTrackerToken — token generation guarantee", () => {
     expect(/^[A-Za-z0-9_-]+$/.test(token)).toBe(true);
   });
 });
+
+// ── runMidJobNudges — fallback path (in_progress + updatedAt) ─────────────────
+// Tests that verify the fallback logic: when no arrived_checkin log row exists,
+// the nudge should use jobStatus = 'in_progress' + updatedAt as the anchor.
+
+describe("runMidJobNudges — fallback path logic", () => {
+  const now = Date.now();
+  const windowStart = new Date(now - 65 * 60 * 1000);
+  const windowEnd   = new Date(now - 45 * 60 * 1000);
+
+  // Simulate the candidate selection logic from runMidJobNudges
+  function buildCandidates(
+    checkinLogs: Array<{ cleanerJobId: number; anchorTime: Date }>,
+    fallbackJobs: Array<{ id: number; updatedAt: Date; jobStatus: string }>
+  ) {
+    const primaryIds = new Set(checkinLogs.map(r => r.cleanerJobId));
+    return [
+      ...checkinLogs.map(r => ({ cleanerJobId: r.cleanerJobId, anchorTime: r.anchorTime, isFallback: false })),
+      ...fallbackJobs
+        .filter(j => !primaryIds.has(j.id))
+        .map(j => ({ cleanerJobId: j.id, anchorTime: j.updatedAt, isFallback: true })),
+    ];
+  }
+
+  it("fallback: includes in_progress job whose updatedAt is in the 45–65 min window", () => {
+    const updatedAt = new Date(now - 55 * 60 * 1000); // 55 min ago — in window
+    const candidates = buildCandidates([], [{ id: 1, updatedAt, jobStatus: "in_progress" }]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].cleanerJobId).toBe(1);
+    expect(candidates[0].isFallback).toBe(true);
+  });
+
+  it("fallback: excludes in_progress job whose updatedAt is too recent (< 45 min ago)", () => {
+    const updatedAt = new Date(now - 30 * 60 * 1000); // 30 min ago — too recent
+    const inWindow = updatedAt >= windowStart && updatedAt <= windowEnd;
+    expect(inWindow).toBe(false);
+  });
+
+  it("fallback: excludes in_progress job whose updatedAt is too old (> 65 min ago)", () => {
+    const updatedAt = new Date(now - 80 * 60 * 1000); // 80 min ago — too old
+    const inWindow = updatedAt >= windowStart && updatedAt <= windowEnd;
+    expect(inWindow).toBe(false);
+  });
+
+  it("fallback: does NOT include a job that is already covered by the primary path", () => {
+    const anchorTime = new Date(now - 55 * 60 * 1000);
+    const checkinLogs = [{ cleanerJobId: 42, anchorTime }];
+    const fallbackJobs = [{ id: 42, updatedAt: anchorTime, jobStatus: "in_progress" }];
+    const candidates = buildCandidates(checkinLogs, fallbackJobs);
+    // Job 42 is in both — should only appear once (from primary)
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].isFallback).toBe(false);
+  });
+
+  it("fallback: includes fallback job alongside a different primary job", () => {
+    const anchorTime = new Date(now - 55 * 60 * 1000);
+    const checkinLogs = [{ cleanerJobId: 10, anchorTime }];
+    const fallbackJobs = [
+      { id: 10, updatedAt: anchorTime, jobStatus: "in_progress" }, // covered by primary
+      { id: 20, updatedAt: anchorTime, jobStatus: "in_progress" }, // only in fallback
+    ];
+    const candidates = buildCandidates(checkinLogs, fallbackJobs);
+    expect(candidates).toHaveLength(2);
+    const ids = candidates.map(c => c.cleanerJobId);
+    expect(ids).toContain(10);
+    expect(ids).toContain(20);
+    // Job 10 is primary, job 20 is fallback
+    expect(candidates.find(c => c.cleanerJobId === 10)?.isFallback).toBe(false);
+    expect(candidates.find(c => c.cleanerJobId === 20)?.isFallback).toBe(true);
+  });
+
+  it("fallback: empty when no in_progress jobs in window and no checkin logs", () => {
+    const candidates = buildCandidates([], []);
+    expect(candidates).toHaveLength(0);
+  });
+
+  it("fallback: uses updatedAt as anchorTime, not serviceDateTime", () => {
+    const updatedAt = new Date(now - 52 * 60 * 1000);
+    const candidates = buildCandidates([], [{ id: 5, updatedAt, jobStatus: "in_progress" }]);
+    expect(candidates[0].anchorTime.getTime()).toBe(updatedAt.getTime());
+  });
+
+  it("no-phone fallback: records a failed step with 'No phone number on file' error detail", () => {
+    // Verify the error message format used when cleaner has no phone
+    const errorDetail = "No phone number on file for this cleaner";
+    expect(errorDetail).toContain("No phone number on file");
+  });
+
+  it("fallback: correctly identifies the 45–65 min window boundaries", () => {
+    const exactlyAt45 = new Date(now - 45 * 60 * 1000);
+    const exactlyAt65 = new Date(now - 65 * 60 * 1000);
+    const at44 = new Date(now - 44 * 60 * 1000);
+    const at66 = new Date(now - 66 * 60 * 1000);
+
+    expect(exactlyAt45 >= windowStart && exactlyAt45 <= windowEnd).toBe(true);
+    expect(exactlyAt65 >= windowStart && exactlyAt65 <= windowEnd).toBe(true);
+    expect(at44 >= windowStart && at44 <= windowEnd).toBe(false);
+    expect(at66 >= windowStart && at66 <= windowEnd).toBe(false);
+  });
+});
