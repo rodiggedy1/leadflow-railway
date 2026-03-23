@@ -477,6 +477,13 @@
       "when": 1774249992639,
       "tag": "0067_elite_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1774275076063,
+      "tag": "0068_groovy_amphibian",
+      "breakpoints": true
     }
   ]
 }

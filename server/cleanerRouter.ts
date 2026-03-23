@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory } from "../drizzle/schema";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
@@ -417,6 +417,31 @@ export const cleanerRouter = router({
           title: `🚨 Issue at Property — ${cleanerName}`,
           content: `${cleanerName} reported an issue at: ${jobLabel}${input.issueNote ? `\n\nNote: ${input.issueNote}` : ""}`,
         }).catch(() => {});
+      }
+
+      // ── Status history audit log ───────────────────────────────────────────────
+      // Write both the raw input status (e.g. "on_the_way") and the effective
+      // status (e.g. "in_progress" after arrived auto-transition) so the timeline
+      // can show exactly what the cleaner tapped.
+      db.insert(jobStatusHistory)
+        .values({
+          cleanerJobId: input.cleanerJobId,
+          status: input.status,          // what the cleaner tapped
+          source: "cleaner_app",
+          changedAt: new Date(),
+        })
+        .catch(err => console.error("[StatusHistory] insert error:", err));
+
+      // If arrived auto-transitioned to in_progress, log that too
+      if (input.status === "arrived") {
+        db.insert(jobStatusHistory)
+          .values({
+            cleanerJobId: input.cleanerJobId,
+            status: "in_progress",
+            source: "engine",
+            changedAt: new Date(Date.now() + 100), // 100ms after to preserve order
+          })
+          .catch(err => console.error("[StatusHistory] insert error:", err));
       }
 
       return { success: true, status: effectiveStatus };

@@ -1253,3 +1253,25 @@ export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
 
 export type FieldMgmtLog = typeof fieldMgmtLog.$inferSelect;
 export type InsertFieldMgmtLog = typeof fieldMgmtLog.$inferInsert;
+
+// ── Job Status History — audit log of every cleaner status tap ────────────────
+// Written on every updateJobStatus call so the Field Management timeline can
+// show the trigger event ("Cleaner set On the Way — 7:53 AM") before the
+// resulting SMS ("On the Way Notification — Sent 7:54 AM").
+
+export const jobStatusHistory = mysqlTable("job_status_history", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to cleanerJobs.id */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** The new status that was set */
+  status: varchar("status", { length: 64 }).notNull(),
+  /** Who/what triggered the change: "cleaner_app" | "admin" | "engine" */
+  source: varchar("source", { length: 32 }).default("cleaner_app").notNull(),
+  /** When the status was set */
+  changedAt: timestamp("changedAt").defaultNow().notNull(),
+}, (table) => ({
+  idxCleanerJobId: index("idx_jsh_cleaner_job_id").on(table.cleanerJobId),
+}));
+
+export type JobStatusHistory = typeof jobStatusHistory.$inferSelect;
+export type InsertJobStatusHistory = typeof jobStatusHistory.$inferInsert;

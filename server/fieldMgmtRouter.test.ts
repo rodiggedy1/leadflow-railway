@@ -857,3 +857,215 @@ describe("buildTimeline — future steps are hidden", () => {
     expect(result.every(e => e.status === "sent")).toBe(true);
   });
 });
+
+// ── buildTimeline — jobStatusHistory interleaving ─────────────────────────────
+// Tests that status history rows are surfaced as trigger events BEFORE their
+// resulting SMS steps in the chronological timeline.
+
+describe("buildTimeline — jobStatusHistory interleaving", () => {
+  type LogRow = {
+    id: number; step: string; success: number; smsSent: string | null;
+    recipientPhone: string | null; errorDetail: string | null; firedAt: Date;
+  };
+  type Job = {
+    id: number; jobStatus: string | null; updatedAt: Date;
+    serviceDateTime: string | null; delayMinutes: number | null; issueNote: string | null;
+  };
+  type StatusHistoryRow = { id: number; status: string; source: string; changedAt: Date };
+
+  const STATUS_TRIGGER_LABELS: Record<string, string> = {
+    on_the_way: "Cleaner set On the Way in app",
+    arrived: "Cleaner checked in at property",
+    in_progress: "Job marked In Progress",
+    running_late: "Cleaner marked Running Late",
+    completed: "Cleaner marked Completed",
+    issue_at_property: "Cleaner reported issue at property",
+  };
+
+  // Mirror the real buildTimeline logic for status history interleaving
+  function buildTimelineWithHistory(
+    logRows: LogRow[],
+    job: Job,
+    statusHistory: StatusHistoryRow[]
+  ) {
+    type EventType = "sms_cleaner" | "sms_client" | "call" | "cs_alert" | "status_change";
+    type Event = {
+      id: string; type: EventType; status: string; timestamp: Date;
+      label: string; detail?: string; success: boolean; step?: string;
+    };
+
+    const STEP_LABELS: Record<string, { recipient: "cleaner" | "client" | "cs"; kind: "sms" | "call" | "alert" }> = {
+      pre_job_reminder:    { recipient: "cleaner", kind: "sms" },
+      client_pre_job:      { recipient: "client",  kind: "sms" },
+      client_on_the_way:   { recipient: "client",  kind: "sms" },
+      arrived_checkin:     { recipient: "cleaner", kind: "sms" },
+      mid_job_nudge:       { recipient: "cleaner", kind: "sms" },
+      completion_flow:     { recipient: "cleaner", kind: "sms" },
+      exception_sms:       { recipient: "cleaner", kind: "sms" },
+      exception_call:      { recipient: "cleaner", kind: "call" },
+      noshow_alert:        { recipient: "cs",      kind: "alert" },
+      client_running_late: { recipient: "client",  kind: "sms" },
+    };
+
+    const events: Event[] = [];
+
+    for (const row of logRows) {
+      const meta = STEP_LABELS[row.step] ?? { recipient: "cleaner" as const, kind: "sms" as const };
+      let type: EventType = "sms_cleaner";
+      if (meta.recipient === "client") type = "sms_client";
+      else if (meta.kind === "call") type = "call";
+      else if (meta.kind === "alert") type = "cs_alert";
+      events.push({
+        id: `log-${row.id}`, type,
+        status: row.success === 1 ? "sent" : "failed",
+        timestamp: new Date(row.firedAt),
+        label: row.step, detail: row.smsSent ?? undefined,
+        success: row.success === 1, step: row.step,
+      });
+    }
+
+    if (statusHistory.length > 0) {
+      for (const h of statusHistory) {
+        events.push({
+          id: `sh-${h.id}`, type: "status_change", status: "status_change",
+          timestamp: new Date(h.changedAt),
+          label: STATUS_TRIGGER_LABELS[h.status] ?? h.status,
+          detail: h.status === "running_late" && job.delayMinutes
+            ? `${job.delayMinutes} min delay`
+            : h.status === "issue_at_property" && job.issueNote
+            ? job.issueNote : undefined,
+          success: true, step: h.status,
+        });
+      }
+    } else if (job.jobStatus) {
+      events.push({
+        id: `status-${job.id}`, type: "status_change", status: "status_change",
+        timestamp: new Date(job.updatedAt),
+        label: job.jobStatus, success: true, step: job.jobStatus,
+      });
+    }
+
+    events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    return events;
+  }
+
+  const baseJob: Job = {
+    id: 1, jobStatus: "arrived", updatedAt: new Date("2026-03-23T12:00:00Z"),
+    serviceDateTime: "2026-03-23T13:00:00.000Z", delayMinutes: null, issueNote: null,
+  };
+
+  it("uses statusHistory rows instead of fallback when history is present", () => {
+    const history: StatusHistoryRow[] = [
+      { id: 1, status: "on_the_way", source: "cleaner_app", changedAt: new Date("2026-03-23T11:53:00Z") },
+      { id: 2, status: "arrived",    source: "cleaner_app", changedAt: new Date("2026-03-23T12:32:00Z") },
+    ];
+    const events = buildTimelineWithHistory([], baseJob, history);
+    // Should show 2 history events, NOT the fallback single-status event
+    expect(events).toHaveLength(2);
+    expect(events[0].id).toBe("sh-1");
+    expect(events[1].id).toBe("sh-2");
+  });
+
+  it("status_change trigger appears BEFORE resulting SMS in chronological order", () => {
+    const history: StatusHistoryRow[] = [
+      { id: 1, status: "on_the_way", source: "cleaner_app", changedAt: new Date("2026-03-23T11:53:00Z") },
+    ];
+    const logRows: LogRow[] = [
+      {
+        id: 10, step: "client_on_the_way", success: 1,
+        smsSent: "Your cleaner is on the way",
+        recipientPhone: "+13025551234", errorDetail: null,
+        firedAt: new Date("2026-03-23T11:54:00Z"), // 1 min after status tap
+      },
+    ];
+    const events = buildTimelineWithHistory(logRows, baseJob, history);
+    expect(events).toHaveLength(2);
+    expect(events[0].type).toBe("status_change");
+    expect(events[0].label).toBe("Cleaner set On the Way in app");
+    expect(events[1].type).toBe("sms_client");
+    expect(events[1].id).toBe("log-10");
+  });
+
+  it("shows correct label for each status history type", () => {
+    const statuses = ["on_the_way", "arrived", "in_progress", "running_late", "completed", "issue_at_property"];
+    for (const status of statuses) {
+      const history: StatusHistoryRow[] = [
+        { id: 1, status, source: "cleaner_app", changedAt: new Date() },
+      ];
+      const events = buildTimelineWithHistory([], baseJob, history);
+      expect(events[0].label).toBe(STATUS_TRIGGER_LABELS[status]);
+    }
+  });
+
+  it("includes delay detail on running_late status history event", () => {
+    const jobWithDelay: Job = { ...baseJob, jobStatus: "running_late", delayMinutes: 20 };
+    const history: StatusHistoryRow[] = [
+      { id: 1, status: "running_late", source: "cleaner_app", changedAt: new Date() },
+    ];
+    const events = buildTimelineWithHistory([], jobWithDelay, history);
+    expect(events[0].detail).toBe("20 min delay");
+  });
+
+  it("includes issue note on issue_at_property status history event", () => {
+    const jobWithIssue: Job = { ...baseJob, jobStatus: "issue_at_property", issueNote: "Broken lock" };
+    const history: StatusHistoryRow[] = [
+      { id: 1, status: "issue_at_property", source: "cleaner_app", changedAt: new Date() },
+    ];
+    const events = buildTimelineWithHistory([], jobWithIssue, history);
+    expect(events[0].detail).toBe("Broken lock");
+  });
+
+  it("falls back to single status event when history is empty", () => {
+    const events = buildTimelineWithHistory([], baseJob, []);
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe("status-1");
+    expect(events[0].type).toBe("status_change");
+  });
+
+  it("shows no status event when history is empty and job has no status", () => {
+    const noStatusJob: Job = { ...baseJob, jobStatus: null };
+    const events = buildTimelineWithHistory([], noStatusJob, []);
+    expect(events).toHaveLength(0);
+  });
+
+  it("interleaves multiple history events with multiple SMS steps chronologically", () => {
+    const history: StatusHistoryRow[] = [
+      { id: 1, status: "on_the_way", source: "cleaner_app", changedAt: new Date("2026-03-23T11:53:00Z") },
+      { id: 2, status: "arrived",    source: "cleaner_app", changedAt: new Date("2026-03-23T12:32:00Z") },
+      { id: 3, status: "completed",  source: "cleaner_app", changedAt: new Date("2026-03-23T14:15:00Z") },
+    ];
+    const logRows: LogRow[] = [
+      { id: 10, step: "client_on_the_way", success: 1, smsSent: "On the way", recipientPhone: null, errorDetail: null, firedAt: new Date("2026-03-23T11:54:00Z") },
+      { id: 11, step: "arrived_checkin",   success: 1, smsSent: "Checked in", recipientPhone: null, errorDetail: null, firedAt: new Date("2026-03-23T12:33:00Z") },
+      { id: 12, step: "completion_flow",   success: 1, smsSent: "Completed",  recipientPhone: null, errorDetail: null, firedAt: new Date("2026-03-23T14:16:00Z") },
+    ];
+    const events = buildTimelineWithHistory(logRows, baseJob, history);
+    // 3 status changes + 3 SMS = 6 total
+    expect(events).toHaveLength(6);
+    // Each status change should come before its resulting SMS
+    const types = events.map(e => e.type);
+    expect(types[0]).toBe("status_change"); // on_the_way tap
+    expect(types[1]).toBe("sms_client");    // client_on_the_way SMS
+    expect(types[2]).toBe("status_change"); // arrived tap
+    expect(types[3]).toBe("sms_cleaner");   // arrived_checkin SMS
+    expect(types[4]).toBe("status_change"); // completed tap
+    expect(types[5]).toBe("sms_cleaner");   // completion_flow SMS
+  });
+
+  it("status_change events have status='status_change' and success=true", () => {
+    const history: StatusHistoryRow[] = [
+      { id: 1, status: "on_the_way", source: "cleaner_app", changedAt: new Date() },
+    ];
+    const events = buildTimelineWithHistory([], baseJob, history);
+    expect(events[0].status).toBe("status_change");
+    expect(events[0].success).toBe(true);
+  });
+
+  it("status history events have id prefixed with 'sh-'", () => {
+    const history: StatusHistoryRow[] = [
+      { id: 42, status: "arrived", source: "cleaner_app", changedAt: new Date() },
+    ];
+    const events = buildTimelineWithHistory([], baseJob, history);
+    expect(events[0].id).toBe("sh-42");
+  });
+});

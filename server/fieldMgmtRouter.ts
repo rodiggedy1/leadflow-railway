@@ -23,7 +23,7 @@ import { eq, asc, inArray } from "drizzle-orm";
 import { router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import {
   parseServiceDateTime,
@@ -216,7 +216,13 @@ function buildTimeline(
     serviceDateTime: string | null;
     delayMinutes: number | null;
     issueNote: string | null;
-  }
+  },
+  statusHistory: Array<{
+    id: number;
+    status: string;
+    source: string;
+    changedAt: Date;
+  }> = []
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -284,10 +290,39 @@ function buildTimeline(
     // If no log row → skip entirely, never show as pending or failed
   }
 
-  // 2. Status change events — ALL statuses always show when set
-  // We show each status transition that has occurred.
-  // jobStatus holds the CURRENT status; we show it with job.updatedAt.
-  if (job.jobStatus) {
+  // 2. Status change events — from jobStatusHistory audit log
+  // Each row is a distinct status tap by the cleaner (or engine auto-transition).
+  // These show as trigger events BEFORE the resulting SMS in the timeline.
+  const STATUS_TRIGGER_LABELS: Record<string, string> = {
+    on_the_way: "Cleaner set On the Way in app",
+    arrived: "Cleaner checked in at property",
+    in_progress: "Job marked In Progress",
+    running_late: "Cleaner marked Running Late",
+    completed: "Cleaner marked Completed",
+    issue_at_property: "Cleaner reported issue at property",
+  };
+
+  if (statusHistory.length > 0) {
+    // Use the rich history log — one event per status tap
+    for (const h of statusHistory) {
+      events.push({
+        id: `sh-${h.id}`,
+        type: "status_change",
+        status: "status_change",
+        timestamp: new Date(h.changedAt),
+        label: STATUS_TRIGGER_LABELS[h.status] ?? h.status,
+        detail:
+          h.status === "running_late" && job.delayMinutes
+            ? `${job.delayMinutes} min delay`
+            : h.status === "issue_at_property" && job.issueNote
+            ? job.issueNote
+            : undefined,
+        success: true,
+        step: h.status,
+      });
+    }
+  } else if (job.jobStatus) {
+    // Fallback for jobs before history logging was added: show current status with updatedAt
     events.push({
       id: `status-${job.id}`,
       type: "status_change",
@@ -528,6 +563,19 @@ export const fieldMgmtRouter = router({
         .where(inArray(fieldMgmtLog.cleanerJobId, jobIds))
         .orderBy(asc(fieldMgmtLog.firedAt));
 
+      // Query 3: all status history rows for all jobs in one shot
+      const allStatusHistory = await db
+        .select({
+          id: jobStatusHistory.id,
+          cleanerJobId: jobStatusHistory.cleanerJobId,
+          status: jobStatusHistory.status,
+          source: jobStatusHistory.source,
+          changedAt: jobStatusHistory.changedAt,
+        })
+        .from(jobStatusHistory)
+        .where(inArray(jobStatusHistory.cleanerJobId, jobIds))
+        .orderBy(asc(jobStatusHistory.changedAt));
+
       // Group log rows by job ID
       const logsByJob = new Map<number, typeof allLogRows>();
       for (const row of allLogRows) {
@@ -536,10 +584,19 @@ export const fieldMgmtRouter = router({
         logsByJob.set(row.cleanerJobId, existing);
       }
 
+      // Group status history rows by job ID
+      const statusHistoryByJob = new Map<number, typeof allStatusHistory>();
+      for (const row of allStatusHistory) {
+        const existing = statusHistoryByJob.get(row.cleanerJobId) ?? [];
+        existing.push(row);
+        statusHistoryByJob.set(row.cleanerJobId, existing);
+      }
+
       // Assemble final result: each job carries its timeline
       return jobs.map((job) => {
         const jobLogs = logsByJob.get(job.id) ?? [];
-        const timeline = buildTimeline(jobLogs, job);
+        const statusHistory = statusHistoryByJob.get(job.id) ?? [];
+        const timeline = buildTimeline(jobLogs, job, statusHistory);
         const stepsFired = jobLogs.length;
         const stepsSuccess = jobLogs.filter((r) => r.success === 1).length;
 

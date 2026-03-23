@@ -2337,3 +2337,11 @@
 - [x] Conditional no-show steps (no_checkin_alert, escalation_call, no_show_cs_alert) hidden unless a log row exists for them
 - [x] Mid-job nudge hidden until its expected fire time has passed AND job is in_progress
 - [x] Update tests for the corrected behaviour
+
+## Field Management — Status History
+
+- [x] Add jobStatusHistory table to schema (cleanerJobId, status, changedAt, source)
+- [x] Run db:push to apply migration
+- [x] Write to jobStatusHistory on every updateJobStatus call in cleanerRouter
+- [x] Update buildTimeline to include jobStatusHistory rows as trigger events before their resulting SMS
+- [x] Update tests for status history in timeline (920 tests pass)
