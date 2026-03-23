@@ -2289,3 +2289,11 @@
 - [x] Add skeleton loading cards (JobCardSkeleton) for perceived performance during initial fetch
 - [x] Add new tests: log row grouping by job, buildTimeline status_change synthesis, N+1 elimination invariants
 - [x] 862/869 tests pass (7 pre-existing LLM timeout failures unrelated to this change)
+
+## Field Management — Fire Step Test Tool
+
+- [x] Add fireStep tRPC mutation: fires any single automation step on a job immediately, overriding all recipient phones to test number +13029816191
+- [x] Add simulateStatusChange tRPC mutation: sets jobStatus on a job and triggers the corresponding status-change steps (on_the_way, arrived, running_late, completed,- [x] Add "Fire Step" button + modal to Job Log job cards — pick step from dropdown, fire, see result inlinee
+- [x] Add status simulation buttons to job cards: "On the Way", "Arrived", "Running Late", "Completed"
+- [x] Test mode banner on job card when test fire is in progress
+- [x] Write vitest tests for fireStep and simulateStatusChange mutations

@@ -41,7 +41,12 @@ import {
   XCircle,
   Activity,
   Loader2,
+  FlaskConical,
+  Play,
+  ChevronRight,
+  Send,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WORKFLOW TAB TYPES & DATA
@@ -604,6 +609,8 @@ type JobWithTimeline = {
 
 function JobCard({ job }: { job: JobWithTimeline }) {
   const [open, setOpen] = useState(false);
+  const [showTest, setShowTest] = useState(false);
+  const utils = trpc.useUtils();
 
   const serviceTime = useMemo(() => {
     if (!job.serviceDateTime) return null;
@@ -686,7 +693,7 @@ function JobCard({ job }: { job: JobWithTimeline }) {
 
       {/* Expanded timeline — data is already available, no loading state needed */}
       {open && (
-        <div className="border-t border-gray-100 px-4 pt-4 pb-2">
+        <div className="border-t border-gray-100 px-4 pt-4 pb-4">
           {events.length === 0 ? (
             <div className="py-6 text-center">
               <Activity className="w-8 h-8 text-gray-200 mx-auto mb-2" />
@@ -712,8 +719,157 @@ function JobCard({ job }: { job: JobWithTimeline }) {
               </div>
             </div>
           )}
+
+          {/* Test tool toggle */}
+          <div className="mt-3">
+            <button
+              onClick={() => setShowTest((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 transition-colors"
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              {showTest ? "Hide test tools" : "Test this job"}
+              <ChevronRight className={`w-3 h-3 transition-transform ${showTest ? "rotate-90" : ""}`} />
+            </button>
+            {showTest && (
+              <TestPanel
+                jobId={job.id}
+                onDone={() => {
+                  // Invalidate the day query so the timeline refreshes with the new log row
+                  utils.fieldMgmt.getJobsForDay.invalidate();
+                }}
+              />
+            )}
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOG TAB — TEST PANEL (admin fire-step + status simulation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALL_STEPS: { value: string; label: string; recipient: string }[] = [
+  { value: "pre_job_reminder",    label: "Pre-Job Reminder",        recipient: "Cleaner" },
+  { value: "client_pre_job",      label: "Pre-Job Notification",    recipient: "Client" },
+  { value: "client_on_the_way",   label: "On the Way Notification", recipient: "Client" },
+  { value: "client_running_late", label: "Running Late Alert",       recipient: "Client" },
+  { value: "arrived_checkin",     label: "Arrival Check-In",        recipient: "Cleaner" },
+  { value: "mid_job_nudge",       label: "Mid-Job Nudge",           recipient: "Cleaner" },
+  { value: "completion_flow",     label: "Completion Checklist",    recipient: "Cleaner" },
+  { value: "exception_sms",       label: "No Check-In Alert",       recipient: "Cleaner" },
+  { value: "noshow_alert",        label: "No-Show CS Alert",        recipient: "CS" },
+];
+
+const STATUS_SIM_BUTTONS: { status: string; label: string; color: string }[] = [
+  { status: "on_the_way",        label: "On the Way",    color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+  { status: "arrived",           label: "Arrived",       color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+  { status: "running_late",      label: "Running Late",  color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+  { status: "completed",         label: "Completed",     color: "bg-green-50 text-green-700 border-green-200 hover:bg-green-100" },
+  { status: "issue_at_property", label: "Issue",         color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
+];
+
+const TEST_PHONE_DISPLAY = "+1 (302) 981-6191";
+
+function TestPanel({ jobId, onDone }: { jobId: number; onDone: () => void }) {
+  const [selectedStep, setSelectedStep] = useState<string>(ALL_STEPS[0].value);
+
+  const fireStep = trpc.fieldMgmt.fireStep.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`SMS sent to ${TEST_PHONE_DISPLAY}`, {
+          description: `Step: ${ALL_STEPS.find((s) => s.value === data.step)?.label ?? data.step}`,
+        });
+      } else {
+        toast.error(`Step failed`, { description: data.errorDetail ?? "Unknown error" });
+      }
+      onDone();
+    },
+    onError: (err) => {
+      toast.error("Fire step failed", { description: err.message });
+    },
+  });
+
+  const simulateStatus = trpc.fieldMgmt.simulateStatusChange.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`Status set + SMS sent to ${TEST_PHONE_DISPLAY}`, {
+          description: `Status: ${STATUS_SIM_BUTTONS.find((s) => s.status === data.status)?.label ?? data.status}`,
+        });
+      } else {
+        toast.error(`Status simulation failed`, { description: data.errorDetail ?? "Unknown error" });
+      }
+      onDone();
+    },
+    onError: (err) => {
+      toast.error("Simulate status failed", { description: err.message });
+    },
+  });
+
+  const isBusy = fireStep.isPending || simulateStatus.isPending;
+
+  return (
+    <div className="mt-4 border-t border-dashed border-amber-200 pt-4">
+      {/* Test mode header */}
+      <div className="flex items-center gap-2 mb-3">
+        <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
+        <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Test Mode</span>
+        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+          All SMS → {TEST_PHONE_DISPLAY}
+        </span>
+      </div>
+
+      {/* Status simulation */}
+      <div className="mb-3">
+        <p className="text-xs text-gray-500 mb-2 font-medium">Simulate cleaner status tap:</p>
+        <div className="flex flex-wrap gap-1.5">
+          {STATUS_SIM_BUTTONS.map((btn) => (
+            <button
+              key={btn.status}
+              disabled={isBusy}
+              onClick={() => simulateStatus.mutate({ cleanerJobId: jobId, status: btn.status as any })}
+              className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2.5 py-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${btn.color}`}
+            >
+              {simulateStatus.isPending && simulateStatus.variables?.status === btn.status
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Play className="w-3 h-3" />
+              }
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Fire individual step */}
+      <div>
+        <p className="text-xs text-gray-500 mb-2 font-medium">Fire a specific step:</p>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedStep}
+            onChange={(e) => setSelectedStep(e.target.value)}
+            disabled={isBusy}
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50"
+          >
+            {ALL_STEPS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label} → {s.recipient}
+              </option>
+            ))}
+          </select>
+          <button
+            disabled={isBusy}
+            onClick={() => fireStep.mutate({ cleanerJobId: jobId, step: selectedStep as any })}
+            className="inline-flex items-center gap-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {fireStep.isPending
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <Send className="w-3 h-3" />
+            }
+            {fireStep.isPending ? "Sending…" : "Send"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

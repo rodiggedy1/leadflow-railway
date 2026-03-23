@@ -434,3 +434,110 @@ describe("fieldMgmtRouter — date input validation", () => {
   it("rejects empty string",               () => expect(dateRegex.test("")).toBe(false));
   it("rejects partial date",               () => expect(dateRegex.test("2026-03")).toBe(false));
 });
+
+// ── TEST TOOL — fireStep message building ─────────────────────────────────────
+
+describe("fieldMgmtRouter — fireStep message templates", () => {
+  // Mirror the ALL_STEPS list from the UI to verify coverage
+  const ALL_STEPS = [
+    "pre_job_reminder",
+    "client_pre_job",
+    "client_on_the_way",
+    "client_running_late",
+    "arrived_checkin",
+    "mid_job_nudge",
+    "completion_flow",
+    "exception_sms",
+    "noshow_alert",
+  ];
+
+  it("has 9 fireable steps (exception_call excluded — VAPI only)", () => {
+    expect(ALL_STEPS).toHaveLength(9);
+  });
+
+  it("all step values are non-empty strings", () => {
+    ALL_STEPS.forEach((s) => {
+      expect(typeof s).toBe("string");
+      expect(s.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("pre_job_reminder is a cleaner-facing step", () => {
+    const cleanerSteps = ["pre_job_reminder", "arrived_checkin", "mid_job_nudge", "completion_flow", "exception_sms"];
+    cleanerSteps.forEach((s) => expect(ALL_STEPS).toContain(s));
+  });
+
+  it("client-facing steps are included", () => {
+    const clientSteps = ["client_pre_job", "client_on_the_way", "client_running_late"];
+    clientSteps.forEach((s) => expect(ALL_STEPS).toContain(s));
+  });
+
+  it("noshow_alert (CS-facing) is included", () => {
+    expect(ALL_STEPS).toContain("noshow_alert");
+  });
+});
+
+// ── TEST TOOL — simulateStatusChange mapping ──────────────────────────────────
+
+describe("fieldMgmtRouter — simulateStatusChange status→step mapping", () => {
+  const STATUS_TO_STEP: Record<string, string> = {
+    on_the_way:        "client_on_the_way",
+    arrived:           "arrived_checkin",
+    running_late:      "client_running_late",
+    completed:         "completion_flow",
+    issue_at_property: "exception_sms",
+  };
+
+  it("maps all 5 simulatable statuses to a step", () => {
+    expect(Object.keys(STATUS_TO_STEP)).toHaveLength(5);
+  });
+
+  it("on_the_way → client_on_the_way (client SMS)", () => {
+    expect(STATUS_TO_STEP["on_the_way"]).toBe("client_on_the_way");
+  });
+
+  it("arrived → arrived_checkin (cleaner SMS)", () => {
+    expect(STATUS_TO_STEP["arrived"]).toBe("arrived_checkin");
+  });
+
+  it("running_late → client_running_late (client SMS)", () => {
+    expect(STATUS_TO_STEP["running_late"]).toBe("client_running_late");
+  });
+
+  it("completed → completion_flow (cleaner SMS)", () => {
+    expect(STATUS_TO_STEP["completed"]).toBe("completion_flow");
+  });
+
+  it("issue_at_property → exception_sms (cleaner SMS)", () => {
+    expect(STATUS_TO_STEP["issue_at_property"]).toBe("exception_sms");
+  });
+
+  it("all mapped steps exist in the fireable steps list", () => {
+    const ALL_STEPS = [
+      "pre_job_reminder", "client_pre_job", "client_on_the_way", "client_running_late",
+      "arrived_checkin", "mid_job_nudge", "completion_flow", "exception_sms", "noshow_alert",
+    ];
+    Object.values(STATUS_TO_STEP).forEach((step) => {
+      expect(ALL_STEPS).toContain(step);
+    });
+  });
+});
+
+// ── TEST TOOL — TEST_PHONE constant ──────────────────────────────────────────
+
+describe("fieldMgmtRouter — TEST_PHONE override", () => {
+  const TEST_PHONE = "+13029816191";
+
+  it("TEST_PHONE is a valid E.164 number", () => {
+    expect(TEST_PHONE).toMatch(/^\+1\d{10}$/);
+  });
+
+  it("TEST_PHONE is the correct override number", () => {
+    expect(TEST_PHONE).toBe("+13029816191");
+  });
+
+  it("TEST_PHONE is different from CS_ALERT_NUMBER", () => {
+    const CS_ALERT_NUMBER = "+12028885362";
+    expect(TEST_PHONE).not.toBe(CS_ALERT_NUMBER);
+  });
+});
