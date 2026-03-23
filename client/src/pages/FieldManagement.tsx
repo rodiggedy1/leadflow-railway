@@ -535,7 +535,7 @@ function JobCard({ job }: { job: JobSummary }) {
 
   const { data: timeline, isLoading: timelineLoading, refetch } = trpc.fieldMgmt.getJobTimeline.useQuery(
     { cleanerJobId: job.id },
-    { enabled: open, refetchInterval: open ? 60_000 : false }
+    { enabled: open, refetchInterval: open ? 60_000 : false, retry: false, throwOnError: false }
   );
 
   const serviceTime = job.serviceDateTime
@@ -667,7 +667,7 @@ function LogTab() {
 
   const { data: jobs, isLoading, error, refetch, isFetching } = trpc.fieldMgmt.getJobsForDay.useQuery(
     { date },
-    { refetchInterval: 60_000 }
+    { refetchInterval: 60_000, retry: false, throwOnError: false }
   );
 
   const handleDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
