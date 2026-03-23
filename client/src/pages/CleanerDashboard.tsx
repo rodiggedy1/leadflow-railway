@@ -240,6 +240,10 @@ function PhotoUploadButton({
                     src={p.photoUrl}
                     alt={p.filename ?? `Photo ${i + 1}`}
                     className="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                    width={48}
+                    height={48}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
                     <ZoomIn className="w-3 h-3 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -633,6 +637,10 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const isFlagged = isLowRating || hasMissed;
   const serviceTime = formatServiceTime(job.serviceDateTime);
 
+  // Collapsible notes/checklist — open by default only when flagged
+  const [notesOpen, setNotesOpen] = useState(isFlagged);
+  const [checklistOpen, setChecklistOpen] = useState(isFlagged);
+
   // ETA alert: re-evaluate every 30s so cards update live
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -737,51 +745,76 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               </div>
             )}
 
-            {/* Customer notes from Launch27 */}
-            {job.cleanerAssignment?.customerNotes && (
-              <div className="mt-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2">
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-0.5">Customer Notes</p>
-                <p className="text-xs text-blue-800 dark:text-blue-300 whitespace-pre-wrap">{job.cleanerAssignment.customerNotes}</p>
+            {/* Customer + Staff notes — collapsible */}
+            {(job.cleanerAssignment?.customerNotes || job.cleanerAssignment?.staffNotes) && (
+              <div className="mt-2">
+                <button
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setNotesOpen(o => !o)}
+                >
+                  <ChevronRight className={`w-3 h-3 transition-transform ${notesOpen ? "rotate-90" : ""}`} />
+                  Notes
+                  {!notesOpen && (
+                    <span className="ml-1 text-muted-foreground/60">
+                      {[job.cleanerAssignment?.customerNotes && "customer", job.cleanerAssignment?.staffNotes && "staff"].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </button>
+                {notesOpen && (
+                  <div className="mt-1.5 space-y-1.5">
+                    {job.cleanerAssignment?.customerNotes && (
+                      <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2">
+                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-0.5">Customer Notes</p>
+                        <p className="text-xs text-blue-800 dark:text-blue-300 whitespace-pre-wrap">{job.cleanerAssignment.customerNotes}</p>
+                      </div>
+                    )}
+                    {job.cleanerAssignment?.staffNotes && (
+                      <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Staff Notes</p>
+                        <p className="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">{job.cleanerAssignment.staffNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Staff notes from Launch27 */}
-            {job.cleanerAssignment?.staffNotes && (
-              <div className="mt-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Staff Notes</p>
-                <p className="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">{job.cleanerAssignment.staffNotes}</p>
-              </div>
-            )}
-
-            {/* AI Checklist — read-only progress for admin */}
+            {/* AI Checklist — collapsible, read-only progress for admin */}
             {job.cleanerAssignment?.checklistItems && job.cleanerAssignment.checklistItems.length > 0 && (() => {
               const items = job.cleanerAssignment!.checklistItems!;
               const done = items.filter(i => i.checked).length;
               const allDone = done === items.length;
               return (
-                <div className="mt-2 rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">✅ Checklist</p>
-                    <span className={`text-xs font-medium ${
-                      allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                <div className="mt-2">
+                  <button
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setChecklistOpen(o => !o)}
+                  >
+                    <ChevronRight className={`w-3 h-3 transition-transform ${checklistOpen ? "rotate-90" : ""}`} />
+                    Checklist
+                    <span className={`ml-1 font-medium ${
+                      allDone ? "text-emerald-600" : "text-amber-600"
                     }`}>{done}/{items.length}</span>
-                  </div>
-                  <div className="space-y-1">
-                    {items.map((item, idx) => (
-                      <div key={idx} className="flex items-start gap-1.5">
-                        <span className={`mt-0.5 shrink-0 w-3 h-3 rounded border flex items-center justify-center text-[9px] ${
-                          item.checked
-                            ? "bg-emerald-500 border-emerald-500 text-white"
-                            : "border-slate-400 dark:border-slate-600"
-                        }`}>
-                          {item.checked && "✓"}
-                        </span>
-                        <span className={`text-xs leading-snug ${
-                          item.checked ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"
-                        }`}>{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
+                    {allDone && <span className="ml-1 text-emerald-600">✓ complete</span>}
+                  </button>
+                  {checklistOpen && (
+                    <div className="mt-1.5 rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                      {items.map((item, idx) => (
+                        <div key={idx} className="flex items-start gap-1.5">
+                          <span className={`mt-0.5 shrink-0 w-3 h-3 rounded border flex items-center justify-center text-[9px] ${
+                            item.checked
+                              ? "bg-emerald-500 border-emerald-500 text-white"
+                              : "border-slate-400 dark:border-slate-600"
+                          }`}>
+                            {item.checked && "✓"}
+                          </span>
+                          <span className={`text-xs leading-snug ${
+                            item.checked ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"
+                          }`}>{item.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1299,6 +1332,71 @@ export default function CleanerDashboard() {
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
+        {/* Summary bar — job count + revenue total */}
+        {!isLoading && jobs && jobs.length > 0 && (() => {
+          const totalRevenue = jobs.reduce((sum, j) => sum + (j.lastBookingPrice ?? 0), 0);
+          const withPhotos = jobs.filter(j => j.photos.length > 0).length;
+          const withRating = jobs.filter(j => j.cleanerAssignment?.customerRating !== null && j.cleanerAssignment?.customerRating !== undefined).length;
+          const flagged = jobs.filter(j => (j.cleanerAssignment?.customerRating ?? 5) <= 3 || j.cleanerAssignment?.missedSomething === 1).length;
+          return (
+            <div className="flex items-center gap-4 flex-wrap text-sm">
+              <div className="flex items-center gap-1.5 font-medium">
+                <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                <span>{totalJobs} job{totalJobs !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                <DollarSign className="w-4 h-4" />
+                <span>${totalRevenue.toFixed(0)} revenue</span>
+              </div>
+              {withPhotos > 0 && (
+                <div className="flex items-center gap-1.5 text-blue-600">
+                  <Camera className="w-4 h-4" />
+                  <span>{withPhotos} with photos</span>
+                </div>
+              )}
+              {withRating > 0 && (
+                <div className="flex items-center gap-1.5 text-amber-600">
+                  <Star className="w-4 h-4" />
+                  <span>{withRating} rated</span>
+                </div>
+              )}
+              {flagged > 0 && (
+                <div className="flex items-center gap-1.5 text-red-500 font-medium">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>{flagged} flagged</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Skeleton loading state */}
+        {isLoading && (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="animate-pulse">
+                <CardContent className="py-4">
+                  <div className="flex gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex gap-2">
+                        <div className="h-5 w-16 bg-muted rounded-full" />
+                        <div className="h-5 w-32 bg-muted rounded" />
+                      </div>
+                      <div className="h-4 w-48 bg-muted rounded" />
+                      <div className="h-4 w-24 bg-muted rounded" />
+                    </div>
+                    <div className="space-y-2 items-end flex flex-col">
+                      <div className="h-5 w-24 bg-muted rounded" />
+                      <div className="h-5 w-16 bg-muted rounded" />
+                      <div className="h-7 w-24 bg-muted rounded" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
         {/* Rating SMS Queue — always shown when there are any items today (pending, approved, sent, skipped) */}
         {pendingList && pendingList.length > 0 && (
           <Card className={`border-amber-200 ${pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) ? 'bg-amber-50 dark:bg-amber-950/20' : 'bg-muted/30'}`}>
@@ -1462,12 +1560,17 @@ export default function CleanerDashboard() {
                   const r = j.cleanerAssignment?.customerRating ?? null;
                   return (r !== null && r <= 3) || j.cleanerAssignment?.missedSomething === 1;
                 }).length;
+                const ratedJobs = groupJobs.filter(j => j.cleanerAssignment?.customerRating !== null && j.cleanerAssignment?.customerRating !== undefined);
+                const avgRating = ratedJobs.length > 0
+                  ? ratedJobs.reduce((sum, j) => sum + (j.cleanerAssignment?.customerRating ?? 0), 0) / ratedJobs.length
+                  : null;
+                const photosSubmitted = groupJobs.filter(j => j.photos.length > 0 || j.cleanerAssignment?.photoSubmitted === 1).length;
 
                 return (
                   <div key={cleanerName}>
                     {/* Cleaner group header */}
                     <div className="flex items-center justify-between mb-2 px-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`w-3 h-3 rounded-full shrink-0 ${dotBgClass}`} />
                         <span className="font-semibold text-sm">{cleanerName}</span>
                         <Badge variant="secondary" className="text-xs">{groupJobs.length} job{groupJobs.length !== 1 ? "s" : ""}</Badge>
@@ -1476,6 +1579,17 @@ export default function CleanerDashboard() {
                             <AlertTriangle className="w-3 h-3" />
                             {flaggedCount} flagged
                           </Badge>
+                        )}
+                        {avgRating !== null && (
+                          <span className="inline-flex items-center gap-0.5 text-xs text-amber-600 font-medium">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            {avgRating.toFixed(1)}
+                          </span>
+                        )}
+                        {photosSubmitted > 0 && (
+                          <span className="text-xs text-blue-600">
+                            {photosSubmitted}/{groupJobs.length} photos
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">

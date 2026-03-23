@@ -2355,3 +2355,13 @@
 ## Cleaner Profile Editor UI
 
 - [x] Add cleaner profile edit section to Quality Dashboard so admins can set phone numbers per team
+
+## Quality Dashboard Performance & UX Overhaul
+
+- [x] Fix photo loading: add loading="lazy" + thumbnail sizing to img tags (currently loads full S3 URLs at full resolution eagerly)
+- [x] Add skeleton loading states for job cards (currently blank during 30s refetch interval)
+- [x] Add photo count summary to card header so photos are visible without scrolling
+- [x] Collapse checklist and notes sections by default (they expand the card significantly)
+- [x] Add job count + revenue total summary bar at top
+- [x] Add per-cleaner job count badge in By Cleaner view header (avg rating + photos/jobs)
+- [x] Improve loading state: show skeleton cards instead of blank space
