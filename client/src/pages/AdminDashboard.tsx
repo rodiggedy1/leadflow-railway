@@ -2993,7 +2993,7 @@ export default function AdminDashboard() {
 
                       {/* Quote — quoted price for form leads, last booking price for campaign leads */}
                       <TableCell className="py-2">
-                        {session.quotedPrice ? (() => {
+                        {(session.quotedPrice && parseInt(session.quotedPrice, 10) > 0) ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
                           return (
                             <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>

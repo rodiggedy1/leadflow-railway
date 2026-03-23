@@ -2192,3 +2192,4 @@
 - [ ] Organic view: form/widget/voice/bark/null-source leads only
 - [ ] Campaign view: reactivation/always-on/command-center/campaign:* contacts who have replied
 - [x] Fix booked revenue missing from leads page metrics after organic/campaign stats change
+- [x] Fix campaign Done leads showing $0 quote — use reactivationLastPrice when quotedPrice and bookedAmount are null

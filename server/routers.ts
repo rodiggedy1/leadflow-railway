@@ -2492,19 +2492,27 @@ function calcBookedRevenue(row: {
     return Number(row.bookedAmount);
   }
   // 2. Form/widget leads: quotedPrice + extras
+  // Campaign leads get a placeholder "0" written to quotedPrice — skip it so we fall
+  // through to reactivationLastPrice which IS the actual booked amount (no discount).
   if (row.quotedPrice !== null && row.quotedPrice !== undefined && row.quotedPrice !== '') {
     const base = parseFloat(row.quotedPrice);
-    let extrasTotal = 0;
-    try {
-      const keys: string[] = JSON.parse(row.extras ?? '[]');
-      extrasTotal = calculateExtrasTotal(keys);
-    } catch { /* ignore */ }
-    return (isNaN(base) ? 0 : base) + extrasTotal;
+    if (!isNaN(base) && base > 0) {
+      let extrasTotal = 0;
+      try {
+        const keys: string[] = JSON.parse(row.extras ?? '[]');
+        extrasTotal = calculateExtrasTotal(keys);
+      } catch { /* ignore */ }
+      return base + extrasTotal;
+    }
+    // base === 0: use reactivationLastPrice as the booked amount (no discount — it is the price)
+    if (row.reactivationLastPrice !== null && row.reactivationLastPrice !== undefined) {
+      return Number(row.reactivationLastPrice);
+    }
+    return 0;
   }
-  // 3. Reactivation leads: last price with discount applied
+  // 3. Reactivation/campaign leads: reactivationLastPrice IS the actual price paid
   if (row.reactivationLastPrice !== null && row.reactivationLastPrice !== undefined) {
-    const discountPct = row.reactivationDiscountPct ?? 10;
-    return Math.round(row.reactivationLastPrice * (1 - discountPct / 100));
+    return Number(row.reactivationLastPrice);
   }
   return 0;
 }
