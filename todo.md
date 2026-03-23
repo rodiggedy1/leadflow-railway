@@ -2365,3 +2365,8 @@
 - [x] Add job count + revenue total summary bar at top
 - [x] Add per-cleaner job count badge in By Cleaner view header (avg rating + photos/jobs)
 - [x] Improve loading state: show skeleton cards instead of blank space
+
+## Photo Thumbnail Overflow Fix
+
+- [x] Cap visible thumbnails at 5 in job cards, show "+N more" chip that opens lightbox
+- [x] Remove empty placeholder boxes (no longer rendered — only real photos shown)

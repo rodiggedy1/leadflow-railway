@@ -222,15 +222,15 @@ function PhotoUploadButton({
 
     return (
       <>
-        {/* Thumbnail grid */}
+        {/* Thumbnail strip — max 5 visible + overflow chip */}
         {photos.length > 0 ? (
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <Images className="w-3.5 h-3.5 text-emerald-600" />
               <span className="text-xs font-medium text-emerald-700">{photos.length} photo{photos.length !== 1 ? 's' : ''} submitted</span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {photos.map((p, i) => (
+            <div className="flex items-center gap-1.5">
+              {photos.slice(0, 5).map((p, i) => (
                 <button
                   key={p.id}
                   onClick={() => setLightboxIndex(i)}
@@ -250,6 +250,15 @@ function PhotoUploadButton({
                   </div>
                 </button>
               ))}
+              {photos.length > 5 && (
+                <button
+                  onClick={() => setLightboxIndex(5)}
+                  className="w-12 h-12 rounded-md border border-slate-200 bg-slate-100 hover:bg-slate-200 transition-all flex-shrink-0 flex flex-col items-center justify-center gap-0.5"
+                >
+                  <span className="text-xs font-bold text-slate-600">+{photos.length - 5}</span>
+                  <span className="text-[9px] text-slate-400 leading-none">more</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (
