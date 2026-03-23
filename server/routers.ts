@@ -1227,7 +1227,10 @@ export const appRouter = router({
      * Sets stage to LOST, turns off AI mode, and logs activity.
      */
     markAsLost: adminAgentProcedure
-      .input(z.object({ sessionId: z.number().int().positive() }))
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        lostReason: z.enum(["price", "timing", "no_response", "competitor", "other"]).optional(),
+      }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
@@ -1240,13 +1243,16 @@ export const appRouter = router({
         const session = rows[0];
         await db
           .update(conversationSessions)
-          .set({ stage: "LOST" as any, aiMode: 0, isBooked: 0 })
+          .set({ stage: "LOST" as any, aiMode: 0, isBooked: 0, lostReason: input.lostReason ?? null })
           .where(eq(conversationSessions.id, input.sessionId));
+        const reasonLabel = input.lostReason
+          ? { price: "Price", timing: "Timing", no_response: "No Response", competitor: "Competitor", other: "Other" }[input.lostReason]
+          : "Unknown";
         logActivity({
           eventType: "lead_lost",
           title: `${session?.leadName ?? session?.leadPhone ?? "Lead"} marked as Lost`,
-          body: "Manually marked as lost via pipeline card menu.",
-          meta: { sessionId: input.sessionId, leadPhone: session?.leadPhone, leadName: session?.leadName },
+          body: `Reason: ${reasonLabel}. Marked via pipeline card menu.`,
+          meta: { sessionId: input.sessionId, leadPhone: session?.leadPhone, leadName: session?.leadName, lostReason: input.lostReason },
         }).catch(() => {});
         return { success: true };
       }),

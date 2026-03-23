@@ -449,6 +449,13 @@
       "when": 1774233225291,
       "tag": "0063_abandoned_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1774234538960,
+      "tag": "0064_sparkling_bullseye",
+      "breakpoints": true
     }
   ]
 }

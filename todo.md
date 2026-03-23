@@ -2198,3 +2198,6 @@
 - [x] Mark as Lost via 3-dot menu on pipeline cards + Lost filter toggle
 - [x] Restore Lead from Lost via 3-dot menu in Lost column
 - [x] Fix pipeline stats bar booked revenue showing $0
+- [x] Lost reason picker modal when marking as lost (Price, Timing, No Response, Competitor)
+- [x] Store lostReason in DB on conversation_sessions
+- [x] Lost Reasons analytics panel in pipeline header

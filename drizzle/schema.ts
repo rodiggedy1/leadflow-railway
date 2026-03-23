@@ -210,6 +210,11 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * When this reaches 2, the lead is moved to COLD and all follow-ups stop.
    */
   nudgeCount: int("nudgeCount").default(0).notNull(),
+  /**
+   * Reason the lead was marked as lost. One of: price, timing, no_response, competitor, other.
+   * Set when stage is changed to LOST via the pipeline card menu.
+   */
+  lostReason: varchar("lostReason", { length: 50 }),
 
   // ── Language / Multilingual fields ────────────────────────────────────────
   /**

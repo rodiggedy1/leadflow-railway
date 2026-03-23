@@ -47,6 +47,8 @@ import {
   Megaphone,
   XCircle,
   Eye,
+  BarChart2,
+  TrendingDown,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -69,6 +71,7 @@ type LeadRow = {
   reactivationLastPrice?: number | null;
   reactivationDiscountPct?: number | null;
   followUpDate?: string | null;
+  lostReason?: string | null;
 };
 
 // ── Kanban column definitions ─────────────────────────────────────────────────
@@ -563,6 +566,74 @@ function StatsBar({ leads }: { leads: LeadRow[] }) {
   );
 }
 
+// ── Lost Reasons Panel ───────────────────────────────────────────────────────
+
+const LOST_REASON_LABELS: Record<string, string> = {
+  price: "Price",
+  timing: "Timing",
+  no_response: "No Response",
+  competitor: "Competitor",
+  other: "Other",
+};
+
+const LOST_REASON_COLORS: Record<string, string> = {
+  price: "#ef4444",
+  timing: "#f97316",
+  no_response: "#6b7280",
+  competitor: "#8b5cf6",
+  other: "#94a3b8",
+};
+
+function LostReasonsPanel({ leads }: { leads: LeadRow[] }) {
+  const lostLeads = leads.filter(l => l.stage === "LOST");
+  const total = lostLeads.length;
+
+  const counts = lostLeads.reduce<Record<string, number>>((acc, l) => {
+    const key = l.lostReason ?? "other";
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  if (total === 0) {
+    return (
+      <div className="mb-4 rounded-xl border border-gray-100 bg-amber-50/50 p-4 flex items-center gap-3">
+        <TrendingDown className="w-5 h-5 text-amber-400 shrink-0" />
+        <p className="text-sm text-amber-700 font-medium">No lost leads yet — reasons will appear here once you mark leads as lost.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50/40 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingDown className="w-4 h-4 text-amber-600" />
+        <span className="text-xs font-bold tracking-widest text-amber-700 uppercase">Lost Reasons — {total} lead{total !== 1 ? "s" : ""}</span>
+      </div>
+      <div className="space-y-2">
+        {sorted.map(([reason, count]) => {
+          const pct = Math.round((count / total) * 100);
+          const color = LOST_REASON_COLORS[reason] ?? "#94a3b8";
+          const label = LOST_REASON_LABELS[reason] ?? reason;
+          return (
+            <div key={reason} className="flex items-center gap-3">
+              <span className="w-24 text-xs font-semibold text-gray-600 shrink-0">{label}</span>
+              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, backgroundColor: color }}
+                />
+              </div>
+              <span className="text-xs font-bold tabular-nums" style={{ color }}>{count} <span className="text-gray-400 font-normal">({pct}%)</span></span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Board ────────────────────────────────────────────────────────────────
 
 type KanbanBoardProps = {
@@ -579,6 +650,8 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
   const [overId, setOverId] = useState<string | null>(null);
   const justDraggedRef = useRef(false);
   const [showLost, setShowLost] = useState(false);
+  const [showLostReasons, setShowLostReasons] = useState(false);
+  const [lostPickerLead, setLostPickerLead] = useState<LeadRow | null>(null);
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
   const markAsLostMutation = trpc.leads.markAsLost.useMutation();
@@ -652,9 +725,15 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
   }
 
   function handleMarkAsLost(lead: LeadRow) {
+    // Open the reason picker instead of immediately marking as lost
+    setLostPickerLead(lead);
+  }
+
+  function confirmMarkAsLost(lead: LeadRow, reason: "price" | "timing" | "no_response" | "competitor" | "other") {
+    setLostPickerLead(null);
     setLocalStages(prev => ({ ...prev, [lead.id]: "LOST" }));
     markAsLostMutation.mutate(
-      { sessionId: lead.id },
+      { sessionId: lead.id, lostReason: reason },
       {
         onSuccess: () => {
           utils.leads.list.invalidate();
@@ -756,8 +835,19 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
 
   return (
     <div>
-      {/* Show Lost toggle */}
-      <div className="flex justify-end mb-3">
+      {/* Header row: Show Lost toggle + Lost Reasons analytics */}
+      <div className="flex justify-end gap-2 mb-3">
+        <button
+          onClick={() => setShowLostReasons(v => !v)}
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+            showLostReasons
+              ? "bg-amber-50 border-amber-200 text-amber-700"
+              : "bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+          }`}
+        >
+          <BarChart2 className="w-3.5 h-3.5" />
+          Lost Reasons
+        </button>
         <button
           onClick={() => setShowLost(v => !v)}
           className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
@@ -770,6 +860,9 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
           {showLost ? "Hide Lost" : `Show Lost${lostCount > 0 ? ` (${lostCount})` : ""}`}
         </button>
       </div>
+
+      {/* Lost Reasons analytics panel */}
+      {showLostReasons && <LostReasonsPanel leads={effectiveLeads} />}
 
       <DndContext
         sensors={sensors}
@@ -829,6 +922,56 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
       </DndContext>
 
       <StatsBar leads={effectiveLeads} />
+
+      {/* Lost Reason Picker Modal */}
+      {lostPickerLead && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setLostPickerLead(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl p-6 w-80 max-w-[90vw]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <XCircle className="w-4 h-4 text-red-500" />
+              <span className="text-sm font-bold text-gray-800">Mark as Lost</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Why is <span className="font-semibold text-gray-700">{lostPickerLead.leadName ?? lostPickerLead.leadPhone}</span> not moving forward?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: "price" as const, label: "Price", color: "#ef4444", bg: "bg-red-50 hover:bg-red-100 border-red-200" },
+                { key: "timing" as const, label: "Timing", color: "#f97316", bg: "bg-orange-50 hover:bg-orange-100 border-orange-200" },
+                { key: "no_response" as const, label: "No Response", color: "#6b7280", bg: "bg-gray-50 hover:bg-gray-100 border-gray-200" },
+                { key: "competitor" as const, label: "Competitor", color: "#8b5cf6", bg: "bg-violet-50 hover:bg-violet-100 border-violet-200" },
+              ]).map(r => (
+                <button
+                  key={r.key}
+                  onClick={() => confirmMarkAsLost(lostPickerLead, r.key)}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${r.bg}`}
+                  style={{ color: r.color }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => confirmMarkAsLost(lostPickerLead, "other")}
+              className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 transition-colors"
+            >
+              Other
+            </button>
+            <button
+              onClick={() => setLostPickerLead(null)}
+              className="mt-2 w-full text-xs text-gray-400 hover:text-gray-600 transition-colors py-1"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
