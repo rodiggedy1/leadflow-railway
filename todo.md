@@ -2147,3 +2147,6 @@
 
 ## Pipeline Board Fix — March 22
 - [x] Campaign leads only appear in pipeline New Leads column if they have replied (have at least one inbound/user message in messageHistory) — not all 50 sent leads
+
+## Pipeline Card Campaign Badge — March 22
+- [x] Show human-readable campaign name + megaphone icon on pipeline cards for campaign/reactivation leads (instead of "form")

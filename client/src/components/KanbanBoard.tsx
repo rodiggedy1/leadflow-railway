@@ -36,6 +36,7 @@ import {
   Clock,
   CalendarCheck,
   UserCheck,
+  Megaphone,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -167,11 +168,33 @@ function computeTotal(quotedPrice: string | null, _extras: string | null): numbe
   return isNaN(base) ? 0 : base;
 }
 
-function getSourceInfo(source: string | null): { label: string; icon: React.ReactNode } {
+/** Maps a campaign ID slug to a human-readable label */
+function campaignLabel(campaignId: string): string {
+  const map: Record<string, string> = {
+    tomorrow_slots: "Tomorrow Campaign",
+    reactivation: "Reactivation",
+    quote_followup: "Quote Follow-up",
+    always_on: "Always-On",
+  };
+  if (map[campaignId]) return map[campaignId];
+  // Fallback: title-case the slug
+  return campaignId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) + " Campaign";
+}
+
+function getSourceInfo(source: string | null): { label: string; icon: React.ReactNode; isCampaign?: boolean } {
   if (!source) return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
   if (source === "widget") return { label: "widget", icon: <Globe className="w-2.5 h-2.5" /> };
   if (source === "voice") return { label: "voice", icon: <Mic className="w-2.5 h-2.5" /> };
-  if (source === "reactivation" || source.startsWith("always-on")) return { label: "sms", icon: <MessageSquare className="w-2.5 h-2.5" /> };
+  if (source === "bark") return { label: "bark", icon: <MessageSquare className="w-2.5 h-2.5" /> };
+  // Campaign blast sources: campaign:{id}
+  if (source.startsWith("campaign:")) {
+    const id = source.replace("campaign:", "");
+    return { label: campaignLabel(id), icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
+  }
+  // Legacy reactivation / always-on
+  if (source === "reactivation") return { label: "Reactivation", icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
+  if (source.startsWith("always-on")) return { label: "Always-On", icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
+  if (source === "command-center") return { label: "Campaign", icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
   return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
 }
 
@@ -210,7 +233,7 @@ function LeadCard({
   };
 
   const total = computeTotal(lead.quotedPrice, lead.extras);
-  const { label: srcLabel, icon: srcIcon } = getSourceInfo(lead.leadSource);
+  const { label: srcLabel, icon: srcIcon, isCampaign } = getSourceInfo(lead.leadSource);
 
   // Urgency glow — based on idle time since last activity (or creation if no activity)
   const activityDate = lead.lastActivityAt ?? lead.createdAt;
@@ -312,7 +335,13 @@ function LeadCard({
 
       {/* Footer: source + time */}
       <div className="flex items-center justify-between flex-shrink-0">
-        <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
+        <span
+          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+            isCampaign
+              ? "bg-purple-100 text-purple-600"
+              : "text-gray-400 font-medium"
+          }`}
+        >
           {srcIcon}
           {srcLabel}
         </span>
