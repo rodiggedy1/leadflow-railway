@@ -2323,3 +2323,10 @@
 - [x] Rebuild timeline UI: green=sent, red=failed, grey=pending, purple=status change
 - [x] Status change markers remain interleaved at correct chronological position
 - [x] Retry button on failed steps, "View message" on sent steps
+
+## Field Management — Timeline Filter Fix
+
+- [x] buildTimeline: only include steps whose expected fire time has already passed (hide future steps)
+- [x] Steps that fired (sent/failed) always show regardless of time
+- [x] Status change events always show
+- [x] Update tests for the new filter behaviour

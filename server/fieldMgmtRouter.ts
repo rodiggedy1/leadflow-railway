@@ -253,19 +253,21 @@ function buildTimeline(
         step: stepDef.step,
       });
     } else {
-      // Step not yet fired — show pending with expected time
+      // Step not yet fired — only show if its expected fire time has already passed
       const expectedTs = serviceTime ? stepDef.expectedTime(serviceTime) : null;
-      // Use expected time if in the future or recent past; otherwise use serviceDateTime as anchor
-      const pendingTs = expectedTs ?? serviceTime ?? new Date();
-      events.push({
-        id: `pending-${stepDef.step}-${job.id}`,
-        type,
-        status: "pending",
-        timestamp: pendingTs,
-        label: stepDef.label,
-        success: false,
-        step: stepDef.step,
-      });
+      if (expectedTs && expectedTs <= new Date()) {
+        // Due but not fired — show as failed/missed
+        events.push({
+          id: `pending-${stepDef.step}-${job.id}`,
+          type,
+          status: "pending",
+          timestamp: expectedTs,
+          label: stepDef.label,
+          success: false,
+          step: stepDef.step,
+        });
+      }
+      // If expectedTs is in the future, skip entirely — don't show it
     }
   }
 

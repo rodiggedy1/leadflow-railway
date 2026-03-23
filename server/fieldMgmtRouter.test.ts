@@ -775,3 +775,85 @@ describe("buildTimeline — full step sequence with pending/sent/failed states",
     }
   });
 });
+
+// ── TIMELINE FILTER — future steps hidden ────────────────────────────────────
+
+describe("buildTimeline — future steps are hidden", () => {
+  // Mirror the filter logic: only include pending steps whose expectedTs <= now
+  function filterPendingSteps(
+    steps: Array<{ step: string; expectedOffsetMs: number }>,
+    logSteps: Set<string>,
+    serviceTime: Date,
+    now: Date
+  ): Array<{ step: string; status: "sent" | "pending" }> {
+    return steps
+      .filter((s) => {
+        if (logSteps.has(s.step)) return true; // fired — always include
+        const expectedTs = new Date(serviceTime.getTime() + s.expectedOffsetMs);
+        return expectedTs <= now; // only include if due
+      })
+      .map((s) => ({
+        step: s.step,
+        status: logSteps.has(s.step) ? "sent" : "pending",
+      }));
+  }
+
+  const serviceTime = new Date("2026-03-23T12:30:00Z"); // 8:30 AM ET
+
+  it("hides steps whose expected fire time is in the future", () => {
+    // serviceTime = 8:30 AM ET (12:30 UTC)
+    // now = 6:35 AM ET (10:35 UTC) — after pre_job_reminder (-2h = 6:30 AM) but before arrived_checkin (0h = 8:30 AM)
+    const now = new Date("2026-03-23T10:35:00Z"); // 6:35 AM ET
+    const steps = [
+      { step: "pre_job_reminder", expectedOffsetMs: -2 * 60 * 60 * 1000 }, // 6:30 AM ET — past (10:30 UTC)
+      { step: "client_pre_job",   expectedOffsetMs: -2 * 60 * 60 * 1000 + 90_000 }, // 6:31:30 AM ET — past
+      { step: "arrived_checkin",  expectedOffsetMs: 0 }, // 8:30 AM ET — future (12:30 UTC)
+      { step: "mid_job_nudge",    expectedOffsetMs: 60 * 60 * 1000 }, // 9:30 AM ET — future
+    ];
+    const result = filterPendingSteps(steps, new Set(), serviceTime, now);
+    expect(result.map(e => e.step)).toEqual(["pre_job_reminder", "client_pre_job"]);
+    expect(result.every(e => e.status === "pending")).toBe(true);
+  });
+
+  it("shows fired steps regardless of whether their time has passed", () => {
+    // now = 6:35 AM ET — pre_job_reminder (-2h = 6:30 AM) is past, arrived_checkin (0h = 8:30 AM) is future
+    const now = new Date("2026-03-23T10:35:00Z"); // 6:35 AM ET
+    const steps = [
+      { step: "pre_job_reminder", expectedOffsetMs: -2 * 60 * 60 * 1000 }, // 6:30 AM ET — past
+      { step: "arrived_checkin",  expectedOffsetMs: 0 }, // 8:30 AM ET — future but fired
+    ];
+    const fired = new Set(["arrived_checkin"]);
+    const result = filterPendingSteps(steps, fired, serviceTime, now);
+    // pre_job_reminder: past + not fired → pending (shown)
+    // arrived_checkin: future + fired → sent (shown)
+    expect(result).toHaveLength(2);
+    expect(result.find(e => e.step === "arrived_checkin")?.status).toBe("sent");
+    expect(result.find(e => e.step === "pre_job_reminder")?.status).toBe("pending");
+  });
+
+  it("shows nothing for a future job with no fired steps", () => {
+    const futureServiceTime = new Date(Date.now() + 5 * 60 * 60 * 1000); // 5 hours from now
+    const now = new Date();
+    const steps = [
+      { step: "pre_job_reminder", expectedOffsetMs: -2 * 60 * 60 * 1000 }, // 3 hours from now — future
+      { step: "arrived_checkin",  expectedOffsetMs: 0 }, // 5 hours from now — future
+    ];
+    const result = filterPendingSteps(steps, new Set(), futureServiceTime, now);
+    expect(result).toHaveLength(0);
+  });
+
+  it("shows all steps for a completed past job", () => {
+    const pastServiceTime = new Date("2026-03-23T08:00:00Z"); // 4 AM ET
+    const now = new Date("2026-03-23T18:00:00Z"); // 2 PM ET — well after all steps
+    const steps = [
+      { step: "pre_job_reminder", expectedOffsetMs: -2 * 60 * 60 * 1000 },
+      { step: "client_pre_job",   expectedOffsetMs: -2 * 60 * 60 * 1000 + 90_000 },
+      { step: "arrived_checkin",  expectedOffsetMs: 0 },
+      { step: "mid_job_nudge",    expectedOffsetMs: 60 * 60 * 1000 },
+    ];
+    const fired = new Set(["pre_job_reminder", "client_pre_job", "arrived_checkin", "mid_job_nudge"]);
+    const result = filterPendingSteps(steps, fired, pastServiceTime, now);
+    expect(result).toHaveLength(4);
+    expect(result.every(e => e.status === "sent")).toBe(true);
+  });
+});
