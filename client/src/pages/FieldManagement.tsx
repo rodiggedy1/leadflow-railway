@@ -59,8 +59,8 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Hey {{name}} — reminder for your cleaning at {{time}}.\n\nBefore you arrive:\n• Review notes: {{platform login link}}\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.",
-        note: "{{name}}, {{time}}, {{platform login link}} are filled in automatically from the job record.",
+          "Hey {{name}} — reminder for your cleaning at {{time}}.\n\nBefore you arrive:\n• Review notes: {{platform login link}}\n  (Login: {{cleaner_login_email}})\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.",
+        note: "{{name}}, {{time}}, {{platform login link}}, and {{cleaner_login_email}} are filled in automatically from the job record.",
       },
     ],
     notes: [
@@ -119,7 +119,7 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Quick check — everything going smoothly?\n\nRemember:\n• Kitchens + bathrooms = highest priority\n• Don't miss floors + surfaces\n\nReply if any issues.",
+          "Quick check — everything going smoothly?\n\nRemember:\n• Kitchens + bathrooms = highest priority\n• Don't miss floors + surfaces\n\nLog in and double check your notes + checklist: {{login link}}\n(Login: {{cleaner_login_email}})\n\nReply if any issues.",
       },
     ],
     notes: [
@@ -138,8 +138,8 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Before leaving:\n\n1. Upload photos: {{login link}}\n2. Double check the checklist\n3. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.",
-        note: "{{login link}} links directly to the photo upload screen for this job.",
+          "Before leaving:\n\n1. Upload photos + double check notes + checklist: {{login link}}\n   (Login: {{cleaner_login_email}})\n2. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.",
+        note: "{{login link}} links directly to the photo upload screen for this job. {{cleaner_login_email}} is the cleaner's platform login.",
       },
     ],
     notes: [
