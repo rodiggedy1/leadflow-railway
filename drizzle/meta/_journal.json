@@ -498,6 +498,13 @@
       "when": 1774288066726,
       "tag": "0070_lucky_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1774300942814,
+      "tag": "0071_productive_luke_cage",
+      "breakpoints": true
     }
   ]
 }

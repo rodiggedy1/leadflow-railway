@@ -1105,6 +1105,7 @@ function BoardTab() {
   const [date, setDate] = useState(() =>
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" })
   );
+  const utils = trpc.useUtils();
 
   const { data: jobs, isLoading, isFetching } = trpc.fieldMgmt.getJobsForDay.useQuery(
     { date },
@@ -1117,6 +1118,20 @@ function BoardTab() {
     }
   );
 
+  const confirmMutation = trpc.fieldMgmt.confirmAssignment.useMutation({
+    onSuccess: () => {
+      toast.success("Assignment confirmed — automation will now include this job.");
+      utils.fieldMgmt.getJobsForDay.invalidate({ date });
+    },
+    onError: (err) => {
+      toast.error(`Failed to confirm: ${err.message}`);
+    },
+  });
+
+  const handleConfirmAssignment = useCallback((jobId: number) => {
+    confirmMutation.mutate({ cleanerJobId: jobId });
+  }, [confirmMutation]);
+
   return (
     <DayBoard
       jobs={jobs ?? []}
@@ -1124,6 +1139,7 @@ function BoardTab() {
       date={date}
       onDateChange={setDate}
       isFetching={isFetching}
+      onConfirmAssignment={handleConfirmAssignment}
     />
   );
 }

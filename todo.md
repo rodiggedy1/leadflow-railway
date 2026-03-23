@@ -2443,3 +2443,10 @@
 - [x] Fix duplicate no-show alert — same job fires twice in same cron tick (record-before-send pattern)
 - [x] Research Knox Greene bookingStatus='new' — Launch27 returns 'new' for unconfirmed bookings; noshow now includes both 'assigned' and 'new'
 - [x] Add VAPI auto-call to CS team after no-show SMS (10 min delay via sleep)
+
+## noshow_call log + Confirm Assignment button
+- [x] Add noshow_call to fieldMgmtLog step enum in schema and run db:push
+- [x] Log noshow_call step in engine after VAPI call completes
+- [x] Show noshow_call in Control Tower and Job Log timeline (via STEP_SEQUENCE entry)
+- [x] Add Confirm Assignment button to Day Board detail panel for bookingStatus='new' jobs
+- [x] Add confirmAssignment tRPC procedure to set bookingStatus='assigned'

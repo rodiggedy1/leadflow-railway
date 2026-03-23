@@ -71,6 +71,7 @@ type Job = {
   stepsSuccess: number;
   totalSteps: number;
   timeline: TimelineEvent[];
+  bookingStatus: string | null;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -507,7 +508,7 @@ function SmsHealthStrip({ jobs }: { jobs: Job[] }) {
 }
 
 /** Slide-in detail panel for a selected job */
-function DetailPanel({ job, onClose }: { job: Job; onClose: () => void }) {
+function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose: () => void; onConfirmAssignment?: (jobId: number) => void }) {
   const sc = getStatusConfig(job.jobStatus);
 
   const startTime = job.serviceDateTime
@@ -584,6 +585,27 @@ function DetailPanel({ job, onClose }: { job: Job; onClose: () => void }) {
           />
         </div>
       </div>
+
+      {/* Unconfirmed assignment banner */}
+      {job.bookingStatus === "new" && (
+        <div className="mx-5 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-800">Unconfirmed in Launch27</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">Booking status is &ldquo;new&rdquo; — automation may skip this job. Confirm to enable pre-job reminders.</p>
+            </div>
+          </div>
+          {onConfirmAssignment && (
+            <button
+              onClick={() => onConfirmAssignment(job.id)}
+              className="mt-2 w-full text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              Confirm Assignment
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Issue note */}
       {job.issueNote && (
@@ -707,9 +729,10 @@ export type DayBoardProps = {
   date: string;
   onDateChange: (date: string) => void;
   isFetching?: boolean;
+  onConfirmAssignment?: (jobId: number) => void;
 };
 
-export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetching }: DayBoardProps) {
+export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetching, onConfirmAssignment }: DayBoardProps) {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -847,7 +870,7 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
           className="fixed right-0 top-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-2xl z-30 flex flex-col overflow-hidden"
           style={{ animation: "slideInRight 150ms ease-out" }}
         >
-          <DetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} />
+          <DetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onConfirmAssignment={onConfirmAssignment} />
         </div>
       )}
 

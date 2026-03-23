@@ -1,0 +1,1 @@
+ALTER TABLE `field_mgmt_log` MODIFY COLUMN `step` enum('pre_job_reminder','client_pre_job','client_on_the_way','client_running_late','arrived_checkin','mid_job_nudge','completion_flow','exception_sms','exception_call','noshow_alert','noshow_call') NOT NULL;

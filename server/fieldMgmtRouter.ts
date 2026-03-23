@@ -72,6 +72,7 @@ const STEP_LABELS: Record<string, {
   exception_sms:       { label: "No Check-In Alert",       recipient: "cleaner", kind: "sms" },
   exception_call:      { label: "Escalation Call",         recipient: "cleaner", kind: "call" },
   noshow_alert:        { label: "No-Show CS Alert",        recipient: "cs",      kind: "alert" },
+  noshow_call:         { label: "No-Show CS Call",         recipient: "cs",      kind: "call" },
 };
 
 // ── Human-readable labels for jobStatus values ────────────────────────────────
@@ -194,6 +195,13 @@ const STEP_SEQUENCE: Array<{
     recipient: "client",
     kind: "sms",
     expectedTime: () => null, // status-triggered: running_late
+  },
+  {
+    step: "noshow_call",
+    label: "No-Show CS Call",
+    recipient: "cs",
+    kind: "call",
+    expectedTime: (t) => new Date(t.getTime() - 0 * 60 * 1000), // T (10min after noshow_alert)
   },
 ];
 
@@ -541,6 +549,7 @@ export const fieldMgmtRouter = router({
           issueNote: cleanerJobs.issueNote,
           updatedAt: cleanerJobs.updatedAt,
           createdAt: cleanerJobs.createdAt,
+          bookingStatus: cleanerJobs.bookingStatus,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.jobDate, input.date))
@@ -623,6 +632,7 @@ export const fieldMgmtRouter = router({
           stepsSuccess,
           totalSteps: fieldMgmtSteps.length,
           timeline,
+          bookingStatus: job.bookingStatus,
         };
       });
     }),
@@ -917,5 +927,37 @@ export const fieldMgmtRouter = router({
         smsSent: result.smsSent,
         errorDetail: result.errorDetail,
       };
+    }),
+
+  /**
+   * Manually confirm a job assignment when Launch27 returns bookingStatus='new'
+   * but the job is already on the cleaner's schedule. Sets bookingStatus to
+   * 'assigned' so the automation engine picks it up for pre-job reminders etc.
+   */
+  confirmAssignment: adminProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const rows = await db
+        .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus, cleanerName: cleanerJobs.cleanerName })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+
+      const job = rows[0];
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      if (job.bookingStatus === "assigned") {
+        return { success: true, alreadyAssigned: true, cleanerName: job.cleanerName };
+      }
+
+      await db
+        .update(cleanerJobs)
+        .set({ bookingStatus: "assigned" })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      console.log(`[FieldMgmt] Manually confirmed assignment for job ${input.cleanerJobId} (${job.cleanerName})`);
+      return { success: true, alreadyAssigned: false, cleanerName: job.cleanerName };
     }),
 });

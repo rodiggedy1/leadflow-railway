@@ -920,15 +920,38 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
         meta: { cleanerJobId: job.id },
       }).catch(() => {});
 
-      // Auto-call CS team 10 minutes after the SMS alert
-      sleep(10 * 60 * 1000).then(() =>
-        placeNoCheckinEscalationCall({
-          cleanerName: job.cleanerName ?? "Unknown",
-          customerName: job.customerName ?? "Unknown",
-          jobAddress: job.jobAddress ?? "Unknown",
-          scheduledTime: timeStr,
+      // Auto-call CS team 10 minutes after the SMS alert, then log the call
+      const jobIdForCall = job.id;
+      const cleanerNameForCall = job.cleanerName ?? "Unknown";
+      sleep(10 * 60 * 1000)
+        .then(() =>
+          placeNoCheckinEscalationCall({
+            cleanerName: cleanerNameForCall,
+            customerName: job.customerName ?? "Unknown",
+            jobAddress: job.jobAddress ?? "Unknown",
+            scheduledTime: timeStr,
+          })
+        )
+        .then((callResult) => {
+          const success = callResult === true;
+          return recordStep({
+            cleanerJobId: jobIdForCall,
+            step: "noshow_call",
+            success,
+            recipientPhone: CS_ALERT_NUMBER,
+            errorDetail: success ? undefined : "VAPI call did not return a call ID",
+          });
         })
-      ).catch((err) => console.error(`[FieldMgmt] Auto-call scheduling failed for job ${job.id}:`, err));
+        .catch((err) => {
+          console.error(`[FieldMgmt] Auto-call failed for job ${jobIdForCall}:`, err);
+          recordStep({
+            cleanerJobId: jobIdForCall,
+            step: "noshow_call",
+            success: false,
+            recipientPhone: CS_ALERT_NUMBER,
+            errorDetail: String(err?.message ?? err),
+          }).catch(() => {});
+        });
     } else {
       errors++;
       console.error(`[FieldMgmt] No-show alert FAILED for job ${job.id}:`, result.error);

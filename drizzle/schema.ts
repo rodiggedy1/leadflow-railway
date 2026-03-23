@@ -1225,7 +1225,8 @@ export type InsertCommandCenterCache = typeof commandCenterCache.$inferInsert;
  *   "completion_flow"    → Step 5: Completion checklist SMS to cleaner
  *   "exception_sms"      → Step 6a: No check-in SMS to cleaner
  *   "exception_call"     → Step 6b: Auto-call escalation after no SMS reply
- *   "noshow_alert"       → Step 7: No-show CS team alert
+ *   "noshow_alert"       → Step 7a: No-show CS team SMS alert
+ *   "noshow_call"        → Step 7b: Auto-call to CS team 10min after noshow SMS
  */
 export const fieldMgmtSteps = [
   "pre_job_reminder",
@@ -1238,6 +1239,7 @@ export const fieldMgmtSteps = [
   "exception_sms",
   "exception_call",
   "noshow_alert",
+  "noshow_call",
 ] as const;
 
 export type FieldMgmtStep = (typeof fieldMgmtSteps)[number];
