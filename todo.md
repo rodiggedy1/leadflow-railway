@@ -2433,3 +2433,13 @@
 - [x] Wire to real getJobsForDay tRPC data (map real fields: cleanerName, teamName, jobStatus, timeline events, stepsFired/stepsSuccess)
 - [x] Add "Control Tower" tab to FieldManagement page alongside Board/Log/Workflow
 - [x] Action buttons: retry failed step, open job tracker link
+
+## Bug Fix: bookingStatus sync + no-show auto-call
+- [ ] Fix bookingStatus sync — assigned jobs arriving as 'new' causes pre-job reminders to be skipped
+- [ ] Add VAPI auto-call to cleaner after no-show SMS alert (10 min delay)
+
+## Bug Fixes: BZA phone / duplicate noshow / Knox status / VAPI call
+- [x] Fix BZA Cleaning phone lookup bug (phone exists in profile but engine says no phone)
+- [x] Fix duplicate no-show alert — same job fires twice in same cron tick (record-before-send pattern)
+- [x] Research Knox Greene bookingStatus='new' — Launch27 returns 'new' for unconfirmed bookings; noshow now includes both 'assigned' and 'new'
+- [x] Add VAPI auto-call to CS team after no-show SMS (10 min delay via sleep)

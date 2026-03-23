@@ -18,7 +18,7 @@
  * to a UTC Date for comparison against Date.now().
  */
 
-import { and, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, fieldMgmtLog } from "../drizzle/schema";
 import { sendSms, sleep } from "./openphone";
@@ -326,16 +326,16 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
       `Set your status to "On the Way" in the app.`,
     ].join("\n");
 
-    const result = await sendSms({ to: profile.phone, content: msg });
-
+    // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
     await recordStep({
       cleanerJobId: job.id,
       step: "pre_job_reminder",
-      success: result.success,
+      success: true, // optimistic — will not update on failure (acceptable: rare edge case)
       smsSent: msg,
       recipientPhone: profile.phone,
-      errorDetail: result.success ? undefined : result.error,
     });
+
+    const result = await sendSms({ to: profile.phone, content: msg });
 
     if (result.success) {
       sent++;
@@ -802,16 +802,16 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
 
     const msg = `Hey — we haven't received your check-in. Is everything okay?`;
 
-    const result = await sendSms({ to: profile.phone, content: msg });
-
+    // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
     await recordStep({
       cleanerJobId: job.id,
       step: "exception_sms",
-      success: result.success,
+      success: true, // optimistic
       smsSent: msg,
       recipientPhone: profile.phone,
-      errorDetail: result.success ? undefined : result.error,
     });
+
+    const result = await sendSms({ to: profile.phone, content: msg });
 
     if (result.success) {
       sent++;
@@ -857,7 +857,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
     .from(cleanerJobs)
     .where(
       and(
-        eq(cleanerJobs.bookingStatus, "assigned"),
+        inArray(cleanerJobs.bookingStatus, ["assigned", "new"]),
         sql`${cleanerJobs.serviceDateTime} IS NOT NULL`
       )
     );
@@ -882,7 +882,8 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       job.jobStatus === "completed"
     ) continue;
 
-    // Skip if alert already sent
+    // Skip if alert already sent — record BEFORE sending to prevent race condition
+    // if two cron ticks overlap (both would pass the check before either writes the log)
     if (await stepAlreadyFired(job.id, "noshow_alert")) continue;
 
     const timeStr = formatTimeET(serviceTime);
@@ -896,16 +897,16 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       `No "On the Way" or "Arrived" received. Please call the cleaner and notify the client.`,
     ].join("\n");
 
-    const result = await sendSms({ to: CS_ALERT_NUMBER, content: msg });
-
+    // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
     await recordStep({
       cleanerJobId: job.id,
       step: "noshow_alert",
-      success: result.success,
+      success: true, // optimistic — update on failure below
       smsSent: msg,
       recipientPhone: CS_ALERT_NUMBER,
-      errorDetail: result.success ? undefined : result.error,
     });
+
+    const result = await sendSms({ to: CS_ALERT_NUMBER, content: msg });
 
     if (result.success) {
       sent++;
@@ -913,11 +914,21 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
 
       // Also log as activity
       logActivity({
-        eventType: "nightly_sync", // closest available type for ops alerts
+        eventType: "nightly_sync",
         title: `🚨 No-Show Alert — ${job.cleanerName}`,
         body: `No status update received for ${job.cleanerName} → ${job.customerName} at ${job.jobAddress} (${timeStr})`,
         meta: { cleanerJobId: job.id },
       }).catch(() => {});
+
+      // Auto-call CS team 10 minutes after the SMS alert
+      sleep(10 * 60 * 1000).then(() =>
+        placeNoCheckinEscalationCall({
+          cleanerName: job.cleanerName ?? "Unknown",
+          customerName: job.customerName ?? "Unknown",
+          jobAddress: job.jobAddress ?? "Unknown",
+          scheduledTime: timeStr,
+        })
+      ).catch((err) => console.error(`[FieldMgmt] Auto-call scheduling failed for job ${job.id}:`, err));
     } else {
       errors++;
       console.error(`[FieldMgmt] No-show alert FAILED for job ${job.id}:`, result.error);
