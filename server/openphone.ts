@@ -5,8 +5,17 @@
  */
 
 import { ENV } from "./_core/env";
+import { normalizePhone } from "./routers";
 
 const OPENPHONE_API_URL = "https://api.openphone.com/v1/messages";
+
+/**
+ * Waits for the specified number of milliseconds.
+ * Used to space out back-to-back OpenPhone API calls and avoid 429 rate limits.
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export interface SendSmsParams {
   to: string;       // Recipient phone number in E.164 format, e.g. "+12025551234"
@@ -32,6 +41,12 @@ export async function sendSms({ to, content, mediaUrl }: SendSmsParams): Promise
     return { success: false, error: "OpenPhone credentials not configured" };
   }
 
+  // Normalize to E.164 before sending — handles (301) 706-4517, 301-706-4517, etc.
+  const normalizedTo = normalizePhone(to);
+  if (normalizedTo !== to) {
+    console.log(`[OpenPhone] Normalized phone: "${to}" → "${normalizedTo}"`);
+  }
+
   try {
     const response = await fetch(OPENPHONE_API_URL, {
       method: "POST",
@@ -42,7 +57,7 @@ export async function sendSms({ to, content, mediaUrl }: SendSmsParams): Promise
       body: JSON.stringify({
         content,
         from: fromNumberId,
-        to: [to],
+        to: [normalizedTo],
         setInboxStatus: "done",
         ...(mediaUrl ? { media: [mediaUrl] } : {}),
       }),

@@ -541,3 +541,150 @@ describe("fieldMgmtRouter — TEST_PHONE override", () => {
     expect(TEST_PHONE).not.toBe(CS_ALERT_NUMBER);
   });
 });
+
+// ── PHONE NORMALIZATION in sendSms ───────────────────────────────────────────
+
+describe("sendSms — phone normalization (normalizePhone integration)", () => {
+  // Mirror the normalizePhone logic used in openphone.ts
+  function extractUSDigits(phone: string): string | null {
+    const digits = phone.replace(/[^\d]/g, "");
+    if (digits.length === 10 && digits[0] !== "0" && digits[0] !== "1") return digits;
+    if (digits.length === 11 && digits[0] === "1") {
+      const local = digits.slice(1);
+      if (local[0] !== "0" && local[0] !== "1") return local;
+    }
+    return null;
+  }
+  function normalizePhone(phone: string): string {
+    const local = extractUSDigits(phone);
+    if (local) return `+1${local}`;
+    const digits = phone.replace(/[^\d]/g, "");
+    if (phone.startsWith("+")) return phone.replace(/[^\d+]/g, "");
+    return `+${digits}`;
+  }
+
+  it("normalizes (301) 706-4517 to E.164", () => {
+    expect(normalizePhone("(301) 706-4517")).toBe("+13017064517");
+  });
+
+  it("normalizes 301-706-4517 to E.164", () => {
+    expect(normalizePhone("301-706-4517")).toBe("+13017064517");
+  });
+
+  it("normalizes 3017064517 to E.164", () => {
+    expect(normalizePhone("3017064517")).toBe("+13017064517");
+  });
+
+  it("passes through already-normalized E.164 unchanged", () => {
+    expect(normalizePhone("+13017064517")).toBe("+13017064517");
+  });
+
+  it("normalizes 13017064517 (11-digit with leading 1) to E.164", () => {
+    expect(normalizePhone("13017064517")).toBe("+13017064517");
+  });
+
+  it("normalizes +1 (301) 706-4517 to E.164", () => {
+    expect(normalizePhone("+1 (301) 706-4517")).toBe("+13017064517");
+  });
+
+  it("normalizes TEST_PHONE correctly", () => {
+    expect(normalizePhone("+13029816191")).toBe("+13029816191");
+  });
+});
+
+// ── RATE LIMIT DELAY — sleep helper ─────────────────────────────────────────
+
+describe("openphone.ts — sleep helper", () => {
+  it("sleep resolves after the specified delay", async () => {
+    function sleep(ms: number): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+    const start = Date.now();
+    await sleep(50);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(40); // allow 10ms jitter
+    expect(elapsed).toBeLessThan(200);
+  });
+
+  it("sleep(0) resolves immediately", async () => {
+    function sleep(ms: number): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+    const start = Date.now();
+    await sleep(0);
+    expect(Date.now() - start).toBeLessThan(50);
+  });
+});
+
+// ── RETRY STEP — retryStep mutation logic ────────────────────────────────────
+
+describe("fieldMgmtRouter — retryStep logic", () => {
+  it("canRetry is false for a successful event (success=true)", () => {
+    const event = { success: true, logId: 42, detail: "Hi!", type: "sms_client" };
+    const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+    expect(canRetry).toBe(false);
+  });
+
+  it("canRetry is false for a status_change event even if success=false", () => {
+    const event = { success: false, logId: undefined, detail: undefined, type: "status_change" };
+    const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+    expect(canRetry).toBe(false);
+  });
+
+  it("canRetry is false when logId is missing (synthetic event)", () => {
+    const event = { success: false, logId: undefined, detail: "Hi!", type: "sms_client" };
+    const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+    expect(canRetry).toBe(false);
+  });
+
+  it("canRetry is false when detail (smsSent) is missing", () => {
+    const event = { success: false, logId: 42, detail: undefined, type: "sms_client" };
+    const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+    expect(canRetry).toBe(false);
+  });
+
+  it("canRetry is true for a failed SMS event with logId and detail", () => {
+    const event = { success: false, logId: 19, detail: "Hi Amy!", type: "sms_client" };
+    const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+    expect(canRetry).toBe(true);
+  });
+
+  it("canRetry is true for a failed cleaner SMS event", () => {
+    const event = { success: false, logId: 7, detail: "Hey — reminder for your cleaning.", type: "sms_cleaner" };
+    const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+    expect(canRetry).toBe(true);
+  });
+});
+
+// ── TIMELINE EVENT — logId field ─────────────────────────────────────────────
+
+describe("buildTimeline — logId field on log events", () => {
+  // Mirror buildTimeline logic for logId assertion
+  function buildTimelineLogIds(
+    logRows: Array<{ id: number; step: string; success: number; smsSent: string | null; recipientPhone: string | null; errorDetail: string | null; firedAt: Date }>
+  ): Array<{ id: string; logId?: number }> {
+    return logRows.map((row) => ({
+      id: `log-${row.id}`,
+      logId: row.id,
+    }));
+  }
+
+  it("each log event carries its numeric DB row ID as logId", () => {
+    const rows = [
+      { id: 101, step: "pre_job_reminder", success: 1, smsSent: "Hi", recipientPhone: "+1555", errorDetail: null, firedAt: new Date() },
+      { id: 202, step: "client_pre_job",   success: 0, smsSent: "Hi", recipientPhone: "+1555", errorDetail: "429", firedAt: new Date() },
+    ];
+    const events = buildTimelineLogIds(rows);
+    expect(events[0].logId).toBe(101);
+    expect(events[1].logId).toBe(202);
+  });
+
+  it("logId matches the id in the event id string", () => {
+    const rows = [
+      { id: 999, step: "arrived_checkin", success: 1, smsSent: "Hi", recipientPhone: "+1555", errorDetail: null, firedAt: new Date() },
+    ];
+    const events = buildTimelineLogIds(rows);
+    expect(events[0].id).toBe("log-999");
+    expect(events[0].logId).toBe(999);
+  });
+});

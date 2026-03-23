@@ -21,7 +21,7 @@
 import { and, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, fieldMgmtLog } from "../drizzle/schema";
-import { sendSms } from "./openphone";
+import { sendSms, sleep } from "./openphone";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
@@ -340,8 +340,9 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Pre-job reminder sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
-      // Also fire the client pre-job SMS (T-2hrs with 7:30 AM floor)
-      sendClientPreJobSms(job.id).catch((err) =>
+      // Delay 1.5s before client pre-job SMS to avoid OpenPhone 429 rate limit
+      // (two back-to-back API calls within the same second triggers a 429)
+      sleep(1500).then(() => sendClientPreJobSms(job.id)).catch((err) =>
         console.error(`[FieldMgmt] Client pre-job SMS error for job ${job.id}:`, err)
       );
     } else {

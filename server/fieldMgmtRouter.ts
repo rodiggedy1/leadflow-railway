@@ -89,6 +89,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export type TimelineEvent = {
   id: string;
+  logId?: number;  // numeric DB row ID — present for field_mgmt_log events, absent for synthetic status_change events
   type: "sms_cleaner" | "sms_client" | "call" | "cs_alert" | "status_change";
   timestamp: Date;
   label: string;
@@ -136,6 +137,7 @@ function buildTimeline(
     const meta = STEP_LABELS[row.step] ?? { label: row.step, recipient: "cleaner", kind: "sms" };
     events.push({
       id: `log-${row.id}`,
+      logId: row.id,
       type: deriveEventType(row.step),
       timestamp: new Date(row.firedAt),
       label: meta.label,
@@ -568,6 +570,71 @@ export const fieldMgmtRouter = router({
    *
    * Admin only.
    */
+  /**
+   * RETRY — Re-fires a failed automation step using the real recipient phone number.
+   *
+   * Unlike fireStep (which always uses TEST_PHONE), retryStep:
+   *   - Looks up the original log row by ID to get the real recipientPhone and smsSent
+   *   - Sends to the REAL phone number (not TEST_PHONE)
+   *   - Writes a new log row with the retry result (does NOT update the original row)
+   *   - Only allowed on rows where success = 0
+   *
+   * Admin only.
+   */
+  retryStep: adminProcedure
+    .input(z.object({
+      logId: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Load the original failed log row
+      const logRows = await db
+        .select()
+        .from(fieldMgmtLog)
+        .where(eq(fieldMgmtLog.id, input.logId))
+        .limit(1);
+      const logRow = logRows[0];
+      if (!logRow) throw new TRPCError({ code: "NOT_FOUND", message: "Log entry not found" });
+      if (logRow.success === 1) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This step already succeeded — retry not needed" });
+      }
+      if (!logRow.smsSent) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No message body stored — cannot retry" });
+      }
+      if (!logRow.recipientPhone) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No recipient phone stored — cannot retry" });
+      }
+
+      // Re-send to the REAL recipient phone (normalizePhone is called inside sendSms)
+      const result = await sendSms({
+        to: logRow.recipientPhone,
+        content: logRow.smsSent,
+      });
+
+      // Write a new log row for the retry attempt
+      await recordStep({
+        cleanerJobId: logRow.cleanerJobId,
+        step: logRow.step,
+        success: result.success,
+        smsSent: logRow.smsSent,
+        recipientPhone: logRow.recipientPhone,
+        errorDetail: result.success ? undefined : result.error,
+      });
+
+      console.log(
+        `[FieldMgmt] retryStep: logId ${input.logId}, step ${logRow.step}, job ${logRow.cleanerJobId} → ${result.success ? "OK" : "FAILED"}`
+      );
+
+      return {
+        success: result.success,
+        step: logRow.step,
+        recipientPhone: logRow.recipientPhone,
+        errorDetail: result.success ? undefined : result.error,
+      };
+    }),
+
   simulateStatusChange: adminProcedure
     .input(z.object({
       cleanerJobId: z.number(),

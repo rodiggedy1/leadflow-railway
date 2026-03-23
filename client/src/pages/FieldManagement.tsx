@@ -438,6 +438,7 @@ type EventType = "sms_cleaner" | "sms_client" | "call" | "cs_alert" | "status_ch
 
 interface TimelineEvent {
   id: string;
+  logId?: number;  // numeric DB row ID — present for field_mgmt_log events, absent for synthetic status_change events
   type: EventType;
   timestamp: Date;
   label: string;
@@ -466,10 +467,29 @@ const EVENT_STYLES: Record<EventType, {
   status_change: { dot: "bg-violet-500",  line: "bg-violet-200",  icon: <Activity className="w-3.5 h-3.5" />,      badge: "bg-violet-50 text-violet-700 border-violet-200",   label: "Status Change" },
 };
 
-function TimelineEventRow({ event, isLast }: { event: TimelineEvent; isLast: boolean }) {
+function TimelineEventRow({ event, isLast, onRetrySuccess }: { event: TimelineEvent; isLast: boolean; onRetrySuccess?: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const s = EVENT_STYLES[event.type];
   const hasDetail = !!event.detail;
+
+  const retryMutation = trpc.fieldMgmt.retryStep.useMutation({
+    onSuccess: (data) => {
+      setRetrying(false);
+      if (data.success) {
+        toast.success(`Retry sent`, { description: `${event.label} → ${data.recipientPhone}` });
+        onRetrySuccess?.();
+      } else {
+        toast.error(`Retry failed`, { description: data.errorDetail ?? "Unknown error" });
+      }
+    },
+    onError: (err) => {
+      setRetrying(false);
+      toast.error("Retry failed", { description: err.message });
+    },
+  });
+
+  const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
 
   const time = new Date(event.timestamp).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York",
@@ -495,6 +515,20 @@ function TimelineEventRow({ event, isLast }: { event: TimelineEvent; isLast: boo
               <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
                 <XCircle className="w-3 h-3" /> Failed
               </span>
+            )}
+            {canRetry && (
+              <button
+                onClick={() => {
+                  if (!event.logId) return;
+                  setRetrying(true);
+                  retryMutation.mutate({ logId: event.logId });
+                }}
+                disabled={retrying}
+                className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 transition-colors disabled:opacity-50"
+              >
+                {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                {retrying ? "Retrying…" : "Retry"}
+              </button>
             )}
           </div>
           <span className="text-xs text-gray-400 shrink-0">{time} ET</span>
@@ -714,6 +748,7 @@ function JobCard({ job }: { job: JobWithTimeline }) {
                     key={event.id}
                     event={event}
                     isLast={idx === events.length - 1}
+                    onRetrySuccess={() => utils.fieldMgmt.getJobsForDay.invalidate()}
                   />
                 ))}
               </div>

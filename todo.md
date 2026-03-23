@@ -2309,3 +2309,9 @@
 - [x] Fix recordStep pattern: move to after SMS result, single write with correct success value, no duplicate rows on failure
 - [x] Fix existing bad DB rows: flip success=0 to success=1 for steps where SMS was actually delivered
 - [x] Update tests to cover correct success/failure recording
+
+## Field Management — Three Fixes
+
+- [x] Investigate OpenPhone 429 rate limit: add delay between pre_job_reminder and sendClientPreJobSms
+- [x] Add phone number normalization to E.164 format in sendSms helper (strip parens, spaces, dashes)
+- [x] Add Retry Failed Step button to timeline in FieldManagement UI
