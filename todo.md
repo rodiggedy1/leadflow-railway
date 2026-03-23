@@ -2405,3 +2405,14 @@
 ## Job Log Timeline Event Rows Default Expanded
 
 - [x] Default timeline event message detail rows to open on Job Log page
+
+## Day Board — Visual Operations View
+
+- [x] Build DayBoard component: horizontal time axis (7AM–9PM ET), cleaner swim lanes, job blocks
+- [x] Live "now" line that updates every minute
+- [x] Job block colors encode real-time status (not started / on the way / in progress / completed / issue / late)
+- [x] SMS Health Strip below board: dot per SMS on time axis, green/red/amber
+- [x] Slide-out detail panel on job block click (full timeline, no page navigation)
+- [x] Loading skeleton for the board
+- [x] Empty state when no jobs for the day
+- [x] Add "Day Board" as a third tab on During-Field Mgmt page (929 tests pass)

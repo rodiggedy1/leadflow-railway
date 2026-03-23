@@ -879,6 +879,10 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   jobAddress: varchar("jobAddress", { length: 500 }),
   /** Service type / names (comma-separated, e.g. "1 bedroom, 1 Bathroom") */
   serviceType: varchar("serviceType", { length: 500 }),
+  /** Number of bedrooms from the booking (parsed from service name) */
+  bedrooms: int("bedrooms"),
+  /** Number of bathrooms from the booking (parsed from pricing_parameters) */
+  bathrooms: int("bathrooms"),
   /** Booking status from Launch27 (assigned, completed, cancelled) */
   bookingStatus: varchar("bookingStatus", { length: 50 }),
   /** Customer notes from Launch27 */

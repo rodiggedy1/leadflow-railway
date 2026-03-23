@@ -1210,6 +1210,8 @@ export const qualityRouter = router({
               customerPhone: booking.phone || null,
               jobAddress: booking.address || null,
               serviceType: serviceNames || null,
+              bedrooms: booking.bedrooms ?? null,
+              bathrooms: booking.bathrooms ?? null,
               bookingStatus: booking.bookingStatus,
               customerNotes: booking.customerNotes || null,
               staffNotes: booking.staffNotes || null,

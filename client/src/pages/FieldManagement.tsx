@@ -14,6 +14,7 @@
  */
 import { useState, useCallback, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
+import DayBoard from "@/components/DayBoard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
@@ -1099,14 +1100,43 @@ function LogTab() {
 // PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
+function BoardTab() {
+  const [date, setDate] = useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" })
+  );
+
+  const { data: jobs, isLoading, isFetching } = trpc.fieldMgmt.getJobsForDay.useQuery(
+    { date },
+    {
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+      refetchIntervalInBackground: false,
+      retry: false,
+      throwOnError: false,
+    }
+  );
+
+  return (
+    <DayBoard
+      jobs={jobs ?? []}
+      isLoading={isLoading}
+      date={date}
+      onDateChange={setDate}
+      isFetching={isFetching}
+    />
+  );
+}
+
 export default function FieldManagement() {
-  const [activeTab, setActiveTab] = useState<"workflow" | "log">("log");
+  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board">("board");
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminHeader activeTab="field-management" />
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+      <div className={`mx-auto px-4 sm:px-6 py-8 ${
+        activeTab === "board" ? "max-w-7xl" : "max-w-3xl"
+      }`}>
         {/* Page header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Field Management</h1>
@@ -1117,7 +1147,7 @@ export default function FieldManagement() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
-          {(["workflow", "log"] as const).map((tab) => (
+          {(["board", "log", "workflow"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1127,12 +1157,14 @@ export default function FieldManagement() {
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {tab === "workflow" ? "Workflow" : "Job Log"}
+              {tab === "board" ? "Day Board" : tab === "log" ? "Job Log" : "Workflow"}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
+        {activeTab === "board" && <BoardTab />}
+
         {activeTab === "workflow" && (
           <>
             {/* Legend */}
