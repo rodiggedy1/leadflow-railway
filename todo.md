@@ -2221,3 +2221,7 @@
 - [x] Stage 3: Mid-Job Nudge (~45-60min after start) — SMS content
 - [x] Stage 4: Completion Flow (cleaner marks complete) — checklist SMS
 - [x] Stage 5: Exception Handling (no check-in 30min before) — SMS + auto-call escalation
+
+## Field Management — Step additions (March 22)
+- [x] Add Step 2a: Client "On the Way" SMS — fires when cleaner taps On the Way in app
+- [x] Add Step 6: No-Show / Late Escalation — CS team call alert 10 min before job start if no On the Way or ARRIVED
