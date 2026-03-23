@@ -2303,3 +2303,9 @@
 - [x] Delete 5 seed jobs (Maria Santos, Claudia Reyes, Fatima Diallo, Ana Gutierrez, Lucia Morales) + their field_mgmt_log rows
 - [x] Keep Priya Nair seed job as permanent test job (phone → +13029816191)
 - [x] Enable FIELD_MGMT_ENABLED = true in server/fieldMgmtEngine.ts
+
+## Field Management — recordStep Bug Fix
+
+- [x] Fix recordStep pattern: move to after SMS result, single write with correct success value, no duplicate rows on failure
+- [x] Fix existing bad DB rows: flip success=0 to success=1 for steps where SMS was actually delivered
+- [x] Update tests to cover correct success/failure recording

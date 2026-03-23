@@ -326,16 +326,16 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
       `Set your status to "On the Way" in the app.`,
     ].join("\n");
 
-    // Record BEFORE sending (so DB error never blocks SMS)
+    const result = await sendSms({ to: profile.phone, content: msg });
+
     await recordStep({
       cleanerJobId: job.id,
       step: "pre_job_reminder",
-      success: false, // will update after send
+      success: result.success,
       smsSent: msg,
       recipientPhone: profile.phone,
+      errorDetail: result.success ? undefined : result.error,
     });
-
-    const result = await sendSms({ to: profile.phone, content: msg });
 
     if (result.success) {
       sent++;
@@ -347,13 +347,6 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
     } else {
       errors++;
       console.error(`[FieldMgmt] Pre-job reminder FAILED for job ${job.id}:`, result.error);
-      await recordStep({
-        cleanerJobId: job.id,
-        step: "pre_job_reminder",
-        success: false,
-        errorDetail: result.error,
-        recipientPhone: profile.phone,
-      });
     }
   }
 
@@ -415,27 +408,21 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
     `If you have any last-minute notes, reply here.`,
   ].join("\n");
 
+  const result = await sendSms({ to: clientPhone, content: msg });
+
   await recordStep({
     cleanerJobId,
     step: "client_on_the_way",
-    success: false,
+    success: result.success,
     smsSent: msg,
     recipientPhone: clientPhone,
+    errorDetail: result.success ? undefined : result.error,
   });
-
-  const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Client on-the-way SMS sent to ${clientPhone} for job ${cleanerJobId}`);
   } else {
     console.error(`[FieldMgmt] Client on-the-way SMS FAILED for job ${cleanerJobId}:`, result.error);
-    await recordStep({
-      cleanerJobId,
-      step: "client_on_the_way",
-      success: false,
-      errorDetail: result.error,
-      recipientPhone: clientPhone,
-    });
   }
 }
 
@@ -480,27 +467,21 @@ export async function sendArrivedCheckin(cleanerJobId: number): Promise<void> {
     `Take photos of anything broken that you cannot be blamed for.`,
   ].join("\n");
 
+  const result = await sendSms({ to: profile.phone, content: msg });
+
   await recordStep({
     cleanerJobId,
     step: "arrived_checkin",
-    success: false,
+    success: result.success,
     smsSent: msg,
     recipientPhone: profile.phone,
+    errorDetail: result.success ? undefined : result.error,
   });
-
-  const result = await sendSms({ to: profile.phone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Arrived check-in sent to ${job.cleanerName} (${profile.phone}) for job ${cleanerJobId}`);
   } else {
     console.error(`[FieldMgmt] Arrived check-in FAILED for job ${cleanerJobId}:`, result.error);
-    await recordStep({
-      cleanerJobId,
-      step: "arrived_checkin",
-      success: false,
-      errorDetail: result.error,
-      recipientPhone: profile.phone,
-    });
   }
 }
 
@@ -584,15 +565,16 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       `Reply if any issues.`,
     ].join("\n");
 
+    const result = await sendSms({ to: profile.phone, content: msg });
+
     await recordStep({
       cleanerJobId: job.id,
       step: "mid_job_nudge",
-      success: false,
+      success: result.success,
       smsSent: msg,
       recipientPhone: profile.phone,
+      errorDetail: result.success ? undefined : result.error,
     });
-
-    const result = await sendSms({ to: profile.phone, content: msg });
 
     if (result.success) {
       sent++;
@@ -600,13 +582,6 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
     } else {
       errors++;
       console.error(`[FieldMgmt] Mid-job nudge FAILED for job ${job.id}:`, result.error);
-      await recordStep({
-        cleanerJobId: job.id,
-        step: "mid_job_nudge",
-        success: false,
-        errorDetail: result.error,
-        recipientPhone: profile.phone,
-      });
     }
   }
 
@@ -663,27 +638,21 @@ export async function sendCompletionFlow(cleanerJobId: number): Promise<void> {
     `Reply DONE when finished.`,
   ].join("\n");
 
+  const result = await sendSms({ to: profile.phone, content: msg });
+
   await recordStep({
     cleanerJobId,
     step: "completion_flow",
-    success: false,
+    success: result.success,
     smsSent: msg,
     recipientPhone: profile.phone,
+    errorDetail: result.success ? undefined : result.error,
   });
-
-  const result = await sendSms({ to: profile.phone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Completion flow sent to ${job.cleanerName} (${profile.phone}) for job ${cleanerJobId}`);
   } else {
     console.error(`[FieldMgmt] Completion flow FAILED for job ${cleanerJobId}:`, result.error);
-    await recordStep({
-      cleanerJobId,
-      step: "completion_flow",
-      success: false,
-      errorDetail: result.error,
-      recipientPhone: profile.phone,
-    });
   }
 }
 
@@ -756,15 +725,16 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
 
     const msg = `Hey — we haven't received your check-in. Is everything okay?`;
 
+    const result = await sendSms({ to: profile.phone, content: msg });
+
     await recordStep({
       cleanerJobId: job.id,
       step: "exception_sms",
-      success: false,
+      success: result.success,
       smsSent: msg,
       recipientPhone: profile.phone,
+      errorDetail: result.success ? undefined : result.error,
     });
-
-    const result = await sendSms({ to: profile.phone, content: msg });
 
     if (result.success) {
       sent++;
@@ -772,13 +742,6 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
     } else {
       errors++;
       console.error(`[FieldMgmt] Exception SMS FAILED for job ${job.id}:`, result.error);
-      await recordStep({
-        cleanerJobId: job.id,
-        step: "exception_sms",
-        success: false,
-        errorDetail: result.error,
-        recipientPhone: profile.phone,
-      });
     }
   }
 
@@ -856,15 +819,16 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       `No "On the Way" or "Arrived" received. Please call the cleaner and notify the client.`,
     ].join("\n");
 
+    const result = await sendSms({ to: CS_ALERT_NUMBER, content: msg });
+
     await recordStep({
       cleanerJobId: job.id,
       step: "noshow_alert",
-      success: false,
+      success: result.success,
       smsSent: msg,
       recipientPhone: CS_ALERT_NUMBER,
+      errorDetail: result.success ? undefined : result.error,
     });
-
-    const result = await sendSms({ to: CS_ALERT_NUMBER, content: msg });
 
     if (result.success) {
       sent++;
@@ -880,13 +844,6 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
     } else {
       errors++;
       console.error(`[FieldMgmt] No-show alert FAILED for job ${job.id}:`, result.error);
-      await recordStep({
-        cleanerJobId: job.id,
-        step: "noshow_alert",
-        success: false,
-        errorDetail: result.error,
-        recipientPhone: CS_ALERT_NUMBER,
-      });
     }
   }
 
@@ -989,27 +946,21 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
     `We'll update this in real time if anything changes, including arrival timing.`,
   ].join("\n");
 
+  const result = await sendSms({ to: clientPhone, content: msg });
+
   await recordStep({
     cleanerJobId,
     step: "client_pre_job",
-    success: false,
+    success: result.success,
     smsSent: msg,
     recipientPhone: clientPhone,
+    errorDetail: result.success ? undefined : result.error,
   });
-
-  const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${cleanerJobId}`);
   } else {
     console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${cleanerJobId}:`, result.error);
-    await recordStep({
-      cleanerJobId,
-      step: "client_pre_job",
-      success: false,
-      errorDetail: result.error,
-      recipientPhone: clientPhone,
-    });
   }
 }
 
@@ -1061,26 +1012,20 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
     `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
   ].join("\n");
 
+  const result = await sendSms({ to: clientPhone, content: msg });
+
   await recordStep({
     cleanerJobId,
     step: "client_running_late",
-    success: false,
+    success: result.success,
     smsSent: msg,
     recipientPhone: clientPhone,
+    errorDetail: result.success ? undefined : result.error,
   });
-
-  const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Running late SMS sent to ${clientPhone} for job ${cleanerJobId}`);
   } else {
     console.error(`[FieldMgmt] Running late SMS FAILED for job ${cleanerJobId}:`, result.error);
-    await recordStep({
-      cleanerJobId,
-      step: "client_running_late",
-      success: false,
-      errorDetail: result.error,
-      recipientPhone: clientPhone,
-    });
   }
 }
