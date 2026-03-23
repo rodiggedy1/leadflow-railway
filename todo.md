@@ -2472,3 +2472,12 @@
 - [x] Frontend: Job Log tab — include rescheduled/cancelled with gray badge
 - [x] Frontend: Cleaner Portal — show stripped card (client name + Rescheduled/Cancelled badge only, no actions)
 - [x] Frontend: Client Tracker — show "This appointment has been rescheduled" message instead of live tracker
+
+## Unread Message Badge System (Mar 23)
+
+- [x] Backend: getJobUnreadReplies tRPC procedure — returns latestReplyAt per job from jobSmsReplies (last 24h)
+- [x] Frontend: DayBoard polls getJobUnreadReplies every 60s for all visible job IDs
+- [x] Frontend: localStorage tracks lastReadAt per job (key: dayboard_last_read)
+- [x] Frontend: JobBlock shows red dot badge (top-right corner) when hasUnread=true
+- [x] Frontend: DetailPanel Messages tab shows red dot badge when hasUnread=true
+- [x] Frontend: clicking Messages tab calls onMarkRead(jobId) to update localStorage and clear badge

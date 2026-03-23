@@ -289,10 +289,12 @@ function JobBlock({
   job,
   onClick,
   isSelected,
+  hasUnread,
 }: {
   job: Job;
   onClick: (job: Job) => void;
   isSelected: boolean;
+  hasUnread?: boolean;
 }) {
   const startMin = parseToMinutes(job.serviceDateTime);
   if (startMin === null || startMin > BOARD_MINUTES || startMin < -30) return null;
@@ -330,6 +332,10 @@ function JobBlock({
       {/* Active pulse ring */}
       {isActive && (
         <span className="absolute inset-0 rounded-lg ring-1 ring-inset ring-current opacity-20 animate-ping pointer-events-none" />
+      )}
+      {/* Unread reply badge */}
+      {hasUnread && (
+        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 shadow-sm z-10 pointer-events-none" />
       )}
 
       {/* SMS health bar at bottom */}
@@ -372,11 +378,13 @@ function SwimLane({
   jobs,
   selectedJobId,
   onJobClick,
+  unreadJobIds,
 }: {
   cleanerName: string;
   jobs: Job[];
   selectedJobId: number | null;
   onJobClick: (job: Job) => void;
+  unreadJobIds?: Set<number>;
 }) {
   return (
     <div className="flex items-stretch border-b border-slate-100 last:border-b-0 group">
@@ -405,6 +413,7 @@ function SwimLane({
             job={job}
             onClick={onJobClick}
             isSelected={selectedJobId === job.id}
+            hasUnread={unreadJobIds?.has(job.id)}
           />
         ))}
       </div>
@@ -529,7 +538,19 @@ function formatDurationFM(seconds: number): string {
 }
 
 /** Slide-in detail panel for a selected job */
-function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose: () => void; onConfirmAssignment?: (jobId: number) => void }) {
+function DetailPanel({
+  job,
+  onClose,
+  onConfirmAssignment,
+  hasUnread,
+  onMarkRead,
+}: {
+  job: Job;
+  onClose: () => void;
+  onConfirmAssignment?: (jobId: number) => void;
+  hasUnread?: boolean;
+  onMarkRead?: (jobId: number) => void;
+}) {
   const sc = getStatusConfig(job.jobStatus);
   const [activeTab, setActiveTab] = useState<"timeline" | "messages" | "calls">("timeline");
   const [replyBody, setReplyBody] = useState("");
@@ -698,14 +719,20 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
         {(["timeline", "messages", "calls"] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2.5 text-xs font-semibold capitalize transition-colors ${
+            onClick={() => {
+              setActiveTab(tab);
+              if (tab === "messages" && hasUnread && onMarkRead) onMarkRead(job.id);
+            }}
+            className={`relative flex-1 py-2.5 text-xs font-semibold capitalize transition-colors ${
               activeTab === tab
                 ? "text-slate-900 border-b-2 border-slate-900 -mb-px"
                 : "text-slate-400 hover:text-slate-600"
             }`}
           >
             {tab}
+            {tab === "messages" && hasUnread && (
+              <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-red-500" />
+            )}
           </button>
         ))}
       </div>
@@ -992,6 +1019,9 @@ export type DayBoardProps = {
 export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetching, onConfirmAssignment }: DayBoardProps) {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const [lastReadMap, setLastReadMap] = useState<Record<number, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("dayboard_last_read") ?? "{}"); } catch { return {}; }
+  });
 
   // Close panel on Escape
   useEffect(() => {
@@ -1003,6 +1033,33 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
   const handleJobClick = useCallback((job: Job) => {
     setSelectedJob((prev) => prev?.id === job.id ? null : job);
   }, []);
+
+  // Mark job as read when Messages tab is opened — called from DetailPanel
+  const markJobRead = useCallback((jobId: number) => {
+    setLastReadMap(prev => {
+      const next = { ...prev, [jobId]: Date.now() };
+      try { localStorage.setItem("dayboard_last_read", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Poll for unread replies every 60s
+  const allJobIds = useMemo(() => jobs.map(j => j.id), [jobs]);
+  const { data: unreadReplies } = trpc.fieldMgmt.getJobUnreadReplies.useQuery(
+    { cleanerJobIds: allJobIds },
+    { enabled: allJobIds.length > 0, refetchInterval: 60_000, staleTime: 55_000, retry: false, throwOnError: false }
+  );
+
+  // Compute set of job IDs with unread replies
+  const unreadJobIds = useMemo(() => {
+    if (!unreadReplies) return new Set<number>();
+    const s = new Set<number>();
+    for (const r of unreadReplies) {
+      const lastRead = lastReadMap[r.cleanerJobId] ?? 0;
+      if (r.latestReplyAt > lastRead) s.add(r.cleanerJobId);
+    }
+    return s;
+  }, [unreadReplies, lastReadMap]);
 
   // Split active vs removed jobs
   const activeJobs = useMemo(() => jobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled"), [jobs]);
@@ -1100,6 +1157,7 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
                       jobs={laneJobs}
                       selectedJobId={selectedJob?.id ?? null}
                       onJobClick={handleJobClick}
+                      unreadJobIds={unreadJobIds}
                     />
                   ))}
                 </div>
@@ -1188,7 +1246,13 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
           className="fixed right-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col overflow-hidden"
           style={{ top: "var(--admin-header-height, 120px)", animation: "slideInRight 150ms ease-out" }}
         >
-          <DetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onConfirmAssignment={onConfirmAssignment} />
+          <DetailPanel
+            job={selectedJob}
+            onClose={() => setSelectedJob(null)}
+            onConfirmAssignment={onConfirmAssignment}
+            hasUnread={unreadJobIds.has(selectedJob.id)}
+            onMarkRead={markJobRead}
+          />
         </div>
       )}
 

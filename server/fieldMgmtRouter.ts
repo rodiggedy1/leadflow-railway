@@ -19,7 +19,7 @@
  */
 
 import { z } from "zod";
-import { eq, asc, inArray, notInArray, and } from "drizzle-orm";
+import { eq, asc, desc, gte, inArray, notInArray, and } from "drizzle-orm";
 import { router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -1101,6 +1101,47 @@ export const fieldMgmtRouter = router({
       }
 
       return { success: true };
+    }),
+
+  /**
+   * Returns the latest inbound reply timestamp for each job in a given list.
+   * Used by the Day Board to show unread badges on job cards.
+   */
+  getJobUnreadReplies: adminProcedure
+    .input(z.object({ cleanerJobIds: z.array(z.number()), since: z.number().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      if (input.cleanerJobIds.length === 0) return [];
+
+      const since = input.since ? new Date(input.since) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const rows = await db
+        .select({
+          cleanerJobId: jobSmsReplies.cleanerJobId,
+          latestReplyAt: jobSmsReplies.receivedAt,
+        })
+        .from(jobSmsReplies)
+        .where(
+          and(
+            inArray(jobSmsReplies.cleanerJobId, input.cleanerJobIds),
+            gte(jobSmsReplies.receivedAt, since)
+          )
+        )
+        .orderBy(desc(jobSmsReplies.receivedAt));
+
+      // Return the latest reply timestamp per job
+      const latestByJob = new Map<number, number>();
+      for (const row of rows) {
+        const ts = row.latestReplyAt ? new Date(row.latestReplyAt).getTime() : 0;
+        const existing = latestByJob.get(row.cleanerJobId) ?? 0;
+        if (ts > existing) latestByJob.set(row.cleanerJobId, ts);
+      }
+
+      return Array.from(latestByJob.entries()).map(([cleanerJobId, latestReplyAt]) => ({
+        cleanerJobId,
+        latestReplyAt,
+      }));
     }),
 
   confirmAssignment: adminProcedure

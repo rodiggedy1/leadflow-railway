@@ -324,14 +324,25 @@ const NAV_ENTRIES: NavEntry[] = [
   // Happiness nav item hidden — to be redesigned later
   // { id: "completed-jobs", label: "Happiness", icon: <Smile className="w-3.5 h-3.5" />, href: "/admin/completed-jobs", tabId: "completed-jobs" },
   {
-    id: "jobs-group",
-    label: "Operations",
+    id: "field-management",
+    label: "Field Mgmt",
     icon: <Briefcase className="w-3.5 h-3.5" />,
-    children: [
-      { id: "quality",          label: "Work & Photos",          href: "/admin/quality",          icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
-      { id: "field-management", label: "During-Field Mgmt",      href: "/admin/field-management", icon: <Briefcase className="w-3.5 h-3.5" /> },
-      { id: "tracker-flow",     label: "After-Reviews & Rebook", href: "/admin/tracker-flow",     icon: <Smartphone className="w-3.5 h-3.5" /> },
-    ],
+    href: "/admin/field-management",
+    tabId: "field-management",
+  },
+  {
+    id: "quality",
+    label: "Jobs",
+    icon: <ClipboardCheck className="w-3.5 h-3.5" />,
+    href: "/admin/quality",
+    tabId: "quality",
+  },
+  {
+    id: "tracker-flow",
+    label: "Journey",
+    icon: <Smartphone className="w-3.5 h-3.5" />,
+    href: "/admin/tracker-flow",
+    tabId: "tracker-flow",
   },
   {
     id: "settings",
