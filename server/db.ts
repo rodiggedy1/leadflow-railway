@@ -5,6 +5,15 @@ import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+/**
+ * Reset the DB singleton so the next call to getDb() creates a fresh connection.
+ * Call this whenever a fatal connection error (ECONNRESET, ECONNREFUSED, etc.) is
+ * detected so the pool can recover without a server restart.
+ */
+export function resetDb() {
+  _db = null;
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -73,6 +82,13 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
+    // Reset the DB singleton on connection errors so the pool can recover
+    // on the next request without requiring a server restart.
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+      console.warn('[Database] Connection error detected — resetting DB singleton for recovery');
+      resetDb();
+    }
     throw error;
   }
 }
@@ -83,10 +99,17 @@ export async function getUserByOpenId(openId: string) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
-
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+  try {
+    const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+      console.warn('[Database] Connection error in getUserByOpenId — resetting DB singleton');
+      resetDb();
+    }
+    throw error;
+  }
 }
 
 // ── Agent DB helpers ──────────────────────────────────────────────────────────

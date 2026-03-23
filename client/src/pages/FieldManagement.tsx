@@ -1127,8 +1127,78 @@ function BoardTab() {
   );
 }
 
+function FieldManagementLoginScreen({ onSuccess }: { onSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const loginMutation = trpc.agents.login.useMutation({
+    onSuccess: (data) => {
+      if (!data.agent.isAdmin) {
+        toast.error("Admin access required.");
+        return;
+      }
+      toast.success(`Welcome back, ${data.agent.name}!`);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Login failed"),
+  });
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-sm w-full mx-4">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-gray-900 flex items-center justify-center mx-auto mb-3">
+            <ClipboardList className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Field Management</h1>
+          <p className="text-sm text-gray-500 mt-1">Admin access required</p>
+        </div>
+        <div className="space-y-3">
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && loginMutation.mutate({ email, password })}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+          />
+          <button
+            onClick={() => loginMutation.mutate({ email, password })}
+            disabled={loginMutation.isPending}
+            className="w-full py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loginMutation.isPending ? "Signing in…" : "Sign In"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FieldManagement() {
   const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board">("board");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, throwOnError: false });
+  const isAdmin = meQuery.data?.isAdmin === true;
+  const authChecked = !meQuery.isLoading;
+  const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (!isAdmin && !isAuthenticated) {
+    return <FieldManagementLoginScreen onSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -2420,3 +2420,9 @@
 ## Day Board — Status Badge on Job Blocks
 
 - [x] Show status label badge inside each job block (e.g. "Not Started", "Completed")
+
+## Bug Fix: HTML parse error on /admin/field-management — COMPLETED
+
+- [x] Diagnose root cause: DB ECONNRESET during OAuth callback → missing session cookie → adminProcedure returns "Please login (10001)" → global redirect fires → in-flight tRPC requests receive HTML login page → JSON parse error
+- [x] Fix 1: Reset DB singleton on ECONNRESET/ECONNREFUSED/ETIMEDOUT in upsertUser and getUserByOpenId so the pool reconnects on next request
+- [x] Fix 2: Add auth guard to FieldManagement page (agent login screen) so fieldMgmt queries only fire when authenticated — prevents the 401 → redirect → HTML cycle
