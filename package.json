@@ -81,6 +81,8 @@
     "react-resizable-panels": "^3.0.6",
     "recharts": "^2.15.2",
     "sharp": "^0.34.5",
+    "@img/sharp-linux-x64": "0.34.5",
+    "@img/sharp-libvips-linux-x64": "1.2.4",
     "sonner": "^2.0.7",
     "streamdown": "^1.4.0",
     "superjson": "^1.13.3",

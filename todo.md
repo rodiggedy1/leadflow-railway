@@ -2390,3 +2390,7 @@
 
 - [x] Add 30s startup delay to VAPI bootstrap so health checks pass first
 - [x] Add 60s startup delay to AI cache warmup first run (929 tests pass)
+
+## Sharp Platform Binary Pinning
+
+- [x] Pin @img/sharp-linux-x64 and @img/sharp-libvips-linux-x64 as explicit deps in package.json (929 tests pass)

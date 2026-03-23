@@ -34,6 +34,12 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.64.0(react@19.2.1))
+      '@img/sharp-libvips-linux-x64':
+        specifier: 1.2.4
+        version: 1.2.4
+      '@img/sharp-linux-x64':
+        specifier: 0.34.5
+        version: 0.34.5
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
         version: 1.2.12(@types/react-dom@19.2.1(@types/react@19.2.1))(@types/react@19.2.1)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
@@ -5590,8 +5596,7 @@ snapshots:
   '@img/sharp-libvips-linux-s390x@1.2.4':
     optional: true
 
-  '@img/sharp-libvips-linux-x64@1.2.4':
-    optional: true
+  '@img/sharp-libvips-linux-x64@1.2.4': {}
 
   '@img/sharp-libvips-linuxmusl-arm64@1.2.4':
     optional: true
@@ -5627,7 +5632,6 @@ snapshots:
   '@img/sharp-linux-x64@0.34.5':
     optionalDependencies:
       '@img/sharp-libvips-linux-x64': 1.2.4
-    optional: true
 
   '@img/sharp-linuxmusl-arm64@0.34.5':
     optionalDependencies:
