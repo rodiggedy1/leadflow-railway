@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 import { eq, asc, inArray } from "drizzle-orm";
-import { router, adminAgentProcedure } from "./_core/trpc";
+import { router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs, fieldMgmtLog, fieldMgmtSteps } from "../drizzle/schema";
@@ -49,7 +49,7 @@ export const fieldMgmtRouter = router({
    *   - job metadata (cleaner, address, service time, status)
    *   - count of field_mgmt_log rows fired for each job
    */
-  getJobsForDay: adminAgentProcedure
+  getJobsForDay: adminProcedure
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -114,7 +114,7 @@ export const fieldMgmtRouter = router({
    * Merges field_mgmt_log rows (automated SMS/calls) with jobStatus events.
    * Sorted chronologically ascending.
    */
-  getJobTimeline: adminAgentProcedure
+  getJobTimeline: adminProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();

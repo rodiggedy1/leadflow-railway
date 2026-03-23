@@ -705,7 +705,7 @@ function LogTab() {
         </div>
       )}
 
-      {error && (
+      {error && !error.message?.includes('login required') && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-start gap-2">
           <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
           Failed to load jobs. {error.message}
