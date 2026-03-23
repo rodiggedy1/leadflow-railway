@@ -1,4 +1,4 @@
-import { bigint, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -938,7 +938,7 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   delayMinutes: int("delayMinutes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => [index("idx_cleaner_jobs_job_date").on(t.jobDate)]);
 export type CleanerJob = typeof cleanerJobs.$inferSelect;
 export type InsertCleanerJob = typeof cleanerJobs.$inferInsert;
 

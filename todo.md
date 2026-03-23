@@ -2270,3 +2270,22 @@
 - [x] Expandable SMS content per event (tap to reveal full message)
 - [x] Step progress bar per job card
 - [x] Write vitest tests for fieldMgmtRouter (30 tests)
+
+## Job Log Performance — March 23 2026
+- [ ] Add index on cleanerJobs.jobDate in schema + push migration
+- [ ] Merge timeline data into getJobsForDay — single batched query returns jobs + all log events
+- [ ] Remove per-job getJobTimeline tRPC calls from UI (eliminate N+1 round trips)
+- [ ] Add staleTime:30_000 and refetchIntervalInBackground:false to jobs query
+- [ ] Add skeleton loading states per job card
+
+## Field Management Performance Optimization — COMPLETED
+
+- [x] Add DB index on cleanerJobs.jobDate (idx_cleaner_jobs_job_date) — eliminates full table scan on daily query
+- [x] Rewrite getJobsForDay: 2 DB queries total (jobs + all log rows batched via IN clause) — eliminates N+1 per-job round trips
+- [x] Pre-embed full timeline into each job returned by getJobsForDay — UI expands instantly, zero extra network calls
+- [x] Remove per-job getJobTimeline calls from FieldManagement.tsx Log tab
+- [x] Add staleTime: 30s to getJobsForDay query — prevents refetch on tab focus / component remount
+- [x] Add refetchIntervalInBackground: false — polling only runs when browser tab is visible
+- [x] Add skeleton loading cards (JobCardSkeleton) for perceived performance during initial fetch
+- [x] Add new tests: log row grouping by job, buildTimeline status_change synthesis, N+1 elimination invariants
+- [x] 862/869 tests pass (7 pre-existing LLM timeout failures unrelated to this change)

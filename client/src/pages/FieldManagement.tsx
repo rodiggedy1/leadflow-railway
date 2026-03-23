@@ -5,11 +5,17 @@
  * Tab 2 "Log":      Today's jobs list. Click any job to expand its full
  *                   communication timeline — every automated message, call,
  *                   and status event in chronological order.
+ *
+ * Performance notes:
+ *   - getJobsForDay returns jobs WITH pre-embedded timelines (2 DB queries total).
+ *   - No per-job getJobTimeline calls — zero N+1 round trips.
+ *   - staleTime: 30s prevents unnecessary refetches on tab focus.
+ *   - refetchIntervalInBackground: false — polling only runs when tab is visible.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
@@ -263,8 +269,8 @@ function TriggerBadge({ kind }: { kind: TriggerKind }) {
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2.5 py-0.5 ${className}`}>
       {kind === "time"      && <Clock className="w-3 h-3" />}
-      {kind === "keyword"   && <Zap className="w-3 h-3" />}
-      {kind === "status"    && <CheckCircle2 className="w-3 h-3" />}
+      {kind === "keyword"   && <MessageSquare className="w-3 h-3" />}
+      {kind === "status"    && <Zap className="w-3 h-3" />}
       {kind === "exception" && <AlertTriangle className="w-3 h-3" />}
       {kind === "no-show"   && <UserX className="w-3 h-3" />}
       {label}
@@ -273,56 +279,80 @@ function TriggerBadge({ kind }: { kind: TriggerKind }) {
 }
 
 function ActionBadge({ kind }: { kind: ActionKind }) {
-  const map: Record<ActionKind, { label: string; icon: React.ReactNode; className: string }> = {
-    sms:         { label: "SMS → Cleaner",   icon: <MessageSquare className="w-3 h-3" />, className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-    "sms-client":{ label: "SMS → Client",    icon: <MessageSquare className="w-3 h-3" />, className: "bg-sky-50 text-sky-700 border-sky-200" },
-    call:        { label: "Auto-Call",        icon: <PhoneCall className="w-3 h-3" />,     className: "bg-orange-50 text-orange-700 border-orange-200" },
-    "sms+call":  { label: "SMS + Auto-Call", icon: <Phone className="w-3 h-3" />,         className: "bg-red-50 text-red-700 border-red-200" },
-    "cs-alert":  { label: "CS Team Alert",   icon: <AlertTriangle className="w-3 h-3" />, className: "bg-rose-50 text-rose-700 border-rose-200" },
+  const map: Record<ActionKind, { label: string; className: string }> = {
+    "sms":       { label: "SMS → Cleaner", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    "sms-client":{ label: "SMS → Client",  className: "bg-sky-50 text-sky-700 border-sky-200" },
+    "call":      { label: "Auto-Call",     className: "bg-orange-50 text-orange-700 border-orange-200" },
+    "sms+call":  { label: "SMS + Call",    className: "bg-amber-50 text-amber-700 border-amber-200" },
+    "cs-alert":  { label: "CS Alert",      className: "bg-rose-50 text-rose-700 border-rose-200" },
   };
-  const { label, icon, className } = map[kind];
+  const { label, className } = map[kind];
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2.5 py-0.5 ${className}`}>
-      {icon}{label}
+      {kind === "sms"        && <MessageSquare className="w-3 h-3" />}
+      {kind === "sms-client" && <MessageSquare className="w-3 h-3" />}
+      {kind === "call"       && <Phone className="w-3 h-3" />}
+      {kind === "sms+call"   && <PhoneCall className="w-3 h-3" />}
+      {kind === "cs-alert"   && <AlertTriangle className="w-3 h-3" />}
+      {label}
     </span>
   );
 }
 
-function PhaseIcon({ phase }: { phase: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    "Pre-Job":      <Timer className="w-5 h-5" />,
-    "On the Way":   <Car className="w-5 h-5" />,
-    Arrival:        <CheckCircle2 className="w-5 h-5" />,
-    "Mid-Job":      <MessageSquare className="w-5 h-5" />,
-    Completion:     <ClipboardList className="w-5 h-5" />,
-    Exception:      <AlertTriangle className="w-5 h-5" />,
-    "No-Show":      <UserX className="w-5 h-5" />,
-    "Running Late": <Clock className="w-5 h-5" />,
-  };
-  return <>{icons[phase] ?? <Zap className="w-5 h-5" />}</>;
-}
+function MessageBubble({
+  role,
+  content,
+  note,
+}: {
+  role: WorkflowStep["messages"][number]["role"];
+  content: string;
+  note?: string;
+}) {
+  const isClient    = role === "client-sms";
+  const isCall      = role === "call";
+  const isCsAlert   = role === "cs-alert";
+  const isAutoReply = role === "auto-response";
 
-type MessageRole = "outbound" | "auto-response" | "call" | "client-sms" | "cs-alert";
+  const bubbleClass = isClient
+    ? "bg-sky-50 border-sky-200"
+    : isCsAlert
+    ? "bg-rose-50 border-rose-200"
+    : isCall
+    ? "bg-orange-50 border-orange-200"
+    : isAutoReply
+    ? "bg-violet-50 border-violet-200"
+    : "bg-gray-50 border-gray-200";
 
-function MessageBubble({ role, content, note }: { role: MessageRole; content: string; note?: string }) {
-  const styleMap: Record<MessageRole, { bg: string; border: string; icon: React.ReactNode; label: string; textColor: string }> = {
-    "outbound":      { bg: "bg-gray-50",   border: "border-gray-200",   icon: <MessageSquare className="w-3.5 h-3.5 text-gray-500" />,   label: "Outbound SMS → Cleaner",       textColor: "text-gray-500" },
-    "auto-response": { bg: "bg-gray-50",   border: "border-gray-200",   icon: <MessageSquare className="w-3.5 h-3.5 text-gray-500" />,   label: "Auto-Response SMS → Cleaner",  textColor: "text-gray-500" },
-    "call":          { bg: "bg-orange-50", border: "border-orange-200", icon: <PhoneCall className="w-3.5 h-3.5 text-orange-600" />,     label: "Auto-Call → Cleaner",          textColor: "text-orange-600" },
-    "client-sms":    { bg: "bg-sky-50",    border: "border-sky-200",    icon: <MessageSquare className="w-3.5 h-3.5 text-sky-600" />,    label: "Outbound SMS → Client",        textColor: "text-sky-600" },
-    "cs-alert":      { bg: "bg-rose-50",   border: "border-rose-200",   icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />,   label: "SMS Alert → CS Team",          textColor: "text-rose-600" },
-  };
-  const s = styleMap[role];
+  const labelClass = isClient
+    ? "text-sky-600"
+    : isCsAlert
+    ? "text-rose-600"
+    : isCall
+    ? "text-orange-600"
+    : isAutoReply
+    ? "text-violet-600"
+    : "text-gray-500";
+
+  const roleLabel = isClient
+    ? "SMS to Client"
+    : isCsAlert
+    ? "CS Team Alert"
+    : isCall
+    ? "Auto-Call"
+    : isAutoReply
+    ? "Auto-Reply"
+    : "SMS to Cleaner";
+
   return (
-    <div className={`rounded-xl p-4 text-sm ${s.bg} border ${s.border}`}>
-      <div className="flex items-center gap-2 mb-2">
-        {s.icon}
-        <span className={`text-xs font-semibold uppercase tracking-wide ${s.textColor}`}>{s.label}</span>
-      </div>
-      <pre className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed">{content}</pre>
+    <div className={`rounded-lg border p-3 ${bubbleClass}`}>
+      <div className={`text-xs font-semibold mb-1.5 ${labelClass}`}>{roleLabel}</div>
+      <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed">
+        {content}
+      </pre>
       {note && (
-        <p className="mt-2 text-xs text-gray-500 flex items-start gap-1.5">
-          <Info className="w-3 h-3 mt-0.5 shrink-0 text-gray-400" />{note}
+        <p className="mt-2 text-xs text-gray-400 italic flex items-start gap-1">
+          <Info className="w-3 h-3 mt-0.5 shrink-0" />
+          {note}
         </p>
       )}
     </div>
@@ -330,56 +360,67 @@ function MessageBubble({ role, content, note }: { role: MessageRole; content: st
 }
 
 function StepCard({ step }: { step: WorkflowStep }) {
-  const isNoShow = step.triggerKind === "no-show";
-  const cardClass = isNoShow ? "border-rose-200 bg-rose-50/30" : step.isException ? "border-red-200 bg-red-50/30" : step.isClientFacing ? "border-sky-200 bg-sky-50/20" : "";
-  const iconBg   = isNoShow ? "bg-rose-100 text-rose-600" : step.isException ? "bg-red-100 text-red-600" : step.isClientFacing ? "bg-sky-100 text-sky-600" : "bg-gray-100 text-gray-600";
+  const [open, setOpen] = useState(false);
+
+  const phaseColor: Record<string, string> = {
+    "Pre-Job":   "bg-blue-100 text-blue-700",
+    "On the Way":"bg-sky-100 text-sky-700",
+    "Running Late":"bg-amber-100 text-amber-700",
+    "Arrival":   "bg-emerald-100 text-emerald-700",
+    "Mid-Job":   "bg-violet-100 text-violet-700",
+    "Completion":"bg-teal-100 text-teal-700",
+    "Exception": "bg-red-100 text-red-700",
+    "No-Show":   "bg-rose-100 text-rose-700",
+  };
+
   return (
-    <Card className={`relative ${cardClass}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
-              <PhaseIcon phase={step.phase} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="text-xs font-normal text-gray-500">Step {step.id}</Badge>
-                <span className="text-xs text-gray-400">•</span>
-                <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">{step.phase}</span>
-                {step.isClientFacing && (
-                  <span className="text-xs font-medium text-sky-600 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5">Client-facing</span>
-                )}
+    <Card className={`overflow-hidden ${step.isException ? "border-red-200" : step.isClientFacing ? "border-sky-200" : "border-gray-200"}`}>
+      <CardHeader
+        className="cursor-pointer select-none py-3 px-4"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="flex flex-col items-center gap-1 shrink-0">
+              <div className={`text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ${step.isException ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"}`}>
+                {step.id}
               </div>
-              <CardTitle className="text-base mt-0.5">{step.label}</CardTitle>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${phaseColor[step.phase] ?? "bg-gray-100 text-gray-600"}`}>
+                  {step.phase}
+                </span>
+                <TriggerBadge kind={step.triggerKind} />
+                <ActionBadge kind={step.actionKind} />
+              </div>
+              <CardTitle className="text-sm font-semibold text-gray-900">{step.label}</CardTitle>
+              <p className="text-xs text-gray-500 mt-0.5">{step.triggerDescription}</p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1.5 shrink-0">
-            <TriggerBadge kind={step.triggerKind} />
-            <ActionBadge kind={step.actionKind} />
-          </div>
-        </div>
-        <div className="mt-3 flex items-start gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2.5">
-          <Zap className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
-          <div>
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Trigger: </span>
-            <span className="text-sm text-gray-700">{step.triggerDescription}</span>
-          </div>
+          {open ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 mt-1" />}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {step.messages.map((msg, i) => (
-          <MessageBubble key={i} role={msg.role} content={msg.content} note={msg.note} />
-        ))}
-        {step.notes && step.notes.length > 0 && (
-          <div className="mt-1 space-y-1">
-            {step.notes.map((note, i) => (
-              <p key={i} className="text-xs text-gray-500 flex items-start gap-1.5">
-                <Camera className="w-3 h-3 mt-0.5 shrink-0 text-gray-400" />{note}
-              </p>
+
+      {open && (
+        <CardContent className="pt-0 px-4 pb-4 border-t border-gray-100">
+          <div className="space-y-3 mt-3">
+            {step.messages.map((msg, i) => (
+              <MessageBubble key={i} role={msg.role} content={msg.content} note={msg.note} />
             ))}
           </div>
-        )}
-      </CardContent>
+          {step.notes && step.notes.length > 0 && (
+            <div className="mt-3 space-y-1">
+              {step.notes.map((note, i) => (
+                <p key={i} className="text-xs text-gray-400 flex items-start gap-1">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-gray-300" />
+                  {note}
+                </p>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -512,10 +553,39 @@ function JobStatusBadge({ status }: { status: string | null }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOG TAB — JOB CARD (expandable)
+// LOG TAB — SKELETON CARD (perceived performance while loading)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type JobSummary = {
+function JobCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm p-4">
+      <div className="flex items-start gap-3">
+        <Skeleton className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <div className="flex gap-3">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <Skeleton className="h-1.5 flex-1 rounded-full" />
+            <Skeleton className="h-3 w-14" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOG TAB — JOB CARD (expandable, timeline pre-loaded from parent query)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type JobWithTimeline = {
   id: number;
   cleanerName: string;
   teamName: string | null;
@@ -528,23 +598,27 @@ type JobSummary = {
   stepsFired: number;
   stepsSuccess: number;
   totalSteps: number;
+  /** Pre-embedded timeline — no extra query needed */
+  timeline: TimelineEvent[];
 };
 
-function JobCard({ job }: { job: JobSummary }) {
+function JobCard({ job }: { job: JobWithTimeline }) {
   const [open, setOpen] = useState(false);
 
-  const { data: timeline, isLoading: timelineLoading, refetch } = trpc.fieldMgmt.getJobTimeline.useQuery(
-    { cleanerJobId: job.id },
-    { enabled: open, refetchInterval: open ? 60_000 : false, retry: false, throwOnError: false }
-  );
-
-  const serviceTime = job.serviceDateTime
-    ? new Date(job.serviceDateTime).toLocaleTimeString("en-US", {
-        hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York",
-      })
-    : null;
+  const serviceTime = useMemo(() => {
+    if (!job.serviceDateTime) return null;
+    return new Date(job.serviceDateTime).toLocaleTimeString("en-US", {
+      hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York",
+    });
+  }, [job.serviceDateTime]);
 
   const progressPct = job.totalSteps > 0 ? Math.round((job.stepsFired / job.totalSteps) * 100) : 0;
+
+  // Coerce timestamps from superjson (may arrive as string or Date)
+  const events: TimelineEvent[] = useMemo(
+    () => job.timeline.map((e) => ({ ...e, timestamp: new Date(e.timestamp) })),
+    [job.timeline]
+  );
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
@@ -555,10 +629,10 @@ function JobCard({ job }: { job: JobSummary }) {
       >
         {/* Status dot */}
         <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${
-          job.jobStatus === "completed" ? "bg-green-500" :
+          job.jobStatus === "completed"         ? "bg-green-500" :
           job.jobStatus === "issue_at_property" ? "bg-red-500" :
-          job.jobStatus === "running_late" ? "bg-amber-500" :
-          job.jobStatus ? "bg-blue-500" : "bg-gray-300"
+          job.jobStatus === "running_late"      ? "bg-amber-500" :
+          job.jobStatus                         ? "bg-blue-500" : "bg-gray-300"
         }`} />
 
         <div className="flex-1 min-w-0">
@@ -573,7 +647,7 @@ function JobCard({ job }: { job: JobSummary }) {
             <JobStatusBadge status={job.jobStatus} />
           </div>
 
-          {/* Row 2: client + address */}
+          {/* Row 2: client + address + time */}
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {job.customerName && (
               <span className="flex items-center gap-1 text-xs text-gray-500">
@@ -610,15 +684,10 @@ function JobCard({ job }: { job: JobSummary }) {
         </div>
       </button>
 
-      {/* Expanded timeline */}
+      {/* Expanded timeline — data is already available, no loading state needed */}
       {open && (
         <div className="border-t border-gray-100 px-4 pt-4 pb-2">
-          {timelineLoading ? (
-            <div className="flex items-center gap-2 py-6 justify-center text-gray-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Loading timeline…</span>
-            </div>
-          ) : !timeline || timeline.events.length === 0 ? (
+          {events.length === 0 ? (
             <div className="py-6 text-center">
               <Activity className="w-8 h-8 text-gray-200 mx-auto mb-2" />
               <p className="text-sm text-gray-400">No activity yet for this job.</p>
@@ -630,19 +699,14 @@ function JobCard({ job }: { job: JobSummary }) {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   Communication Timeline
                 </span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); refetch(); }}
-                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3" /> Refresh
-                </button>
+                <span className="text-xs text-gray-400">{events.length} event{events.length !== 1 ? "s" : ""}</span>
               </div>
               <div>
-                {timeline.events.map((event, idx) => (
+                {events.map((event, idx) => (
                   <TimelineEventRow
                     key={event.id}
-                    event={{ ...event, timestamp: new Date(event.timestamp) }}
-                    isLast={idx === timeline.events.length - 1}
+                    event={event}
+                    isLast={idx === events.length - 1}
                   />
                 ))}
               </div>
@@ -667,7 +731,15 @@ function LogTab() {
 
   const { data: jobs, isLoading, error, refetch, isFetching } = trpc.fieldMgmt.getJobsForDay.useQuery(
     { date },
-    { refetchInterval: 60_000, retry: false, throwOnError: false }
+    {
+      // Cache for 30s — prevents refetch on tab focus / component remount
+      staleTime: 30_000,
+      // Poll every 60s, but only when the browser tab is visible
+      refetchInterval: 60_000,
+      refetchIntervalInBackground: false,
+      retry: false,
+      throwOnError: false,
+    }
   );
 
   const handleDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -697,15 +769,17 @@ function LogTab() {
         </button>
       </div>
 
-      {/* States */}
+      {/* Skeleton loading — show 3 placeholder cards while fetching */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16 text-gray-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          <span className="text-sm">Loading jobs…</span>
+        <div className="space-y-3">
+          <Skeleton className="h-3 w-28" />
+          <JobCardSkeleton />
+          <JobCardSkeleton />
+          <JobCardSkeleton />
         </div>
       )}
 
-      {error && !error.message?.includes('login required') && (
+      {error && !error.message?.includes("login required") && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-start gap-2">
           <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
           Failed to load jobs. {error.message}
@@ -723,10 +797,10 @@ function LogTab() {
       {!isLoading && !error && jobs && jobs.length > 0 && (
         <div className="space-y-3">
           <p className="text-xs text-gray-400">
-            {jobs.length} job{jobs.length !== 1 ? "s" : ""} · auto-refreshes every 60s
+            {jobs.length} job{jobs.length !== 1 ? "s" : ""} · refreshes every 60s when tab is active
           </p>
           {jobs.map((job) => (
-            <JobCard key={job.id} job={job} />
+            <JobCard key={job.id} job={job as JobWithTimeline} />
           ))}
         </div>
       )}

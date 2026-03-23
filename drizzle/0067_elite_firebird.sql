@@ -1,0 +1,1 @@
+CREATE INDEX `idx_cleaner_jobs_job_date` ON `cleaner_jobs` (`jobDate`);

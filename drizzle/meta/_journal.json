@@ -470,6 +470,13 @@
       "when": 1774245245719,
       "tag": "0066_breezy_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1774249992639,
+      "tag": "0067_elite_firebird",
+      "breakpoints": true
     }
   ]
 }
