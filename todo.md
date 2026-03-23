@@ -2203,3 +2203,11 @@
 - [x] Lost Reasons analytics panel in pipeline header
 - [x] Fix drag-and-drop: card disappears when dragged to Follow-Up column
 - [x] Definitively fix pipeline cards disappearing when dragged (Bronia case)
+
+## Zapier Email Integration — March 22
+- [x] Add Zapier secret token auth to /api/webhooks/email-lead (X-Zapier-Secret header)
+- [x] Add phone call email parser: "Google Calls" label — extract phone + timestamp, create voice lead
+- [x] Add form submission email parser: "LeadFlow Forms" label — extract Email, Phone, Cleaning Type, Bedrooms, Bathrooms
+- [x] Add email field extraction to form submission parser
+- [x] Detect email type (call vs form) from subject/body content automatically
+- [x] Write vitest tests for both new parsers

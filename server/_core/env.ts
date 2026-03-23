@@ -15,4 +15,5 @@ export const ENV = {
   vapiPrivateKey: process.env.VAPI_PRIVATE_KEY ?? "",
   vapiPublicKey: process.env.VAPI_PUBLIC_KEY ?? "",
   mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? "",
+  zapierWebhookSecret: process.env.ZAPIER_WEBHOOK_SECRET ?? "",
 };

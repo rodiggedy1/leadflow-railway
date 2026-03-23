@@ -1,20 +1,34 @@
 /**
- * Email Lead Integration — Mailgun Inbound Webhook Handler
+ * Email Lead Integration — Zapier Webhook Handler
  *
- * Flow:
- *  1. Gmail auto-forwards lead emails (from zapiermail.com) to leads@mg.heyeverywhere.com
- *  2. Mailgun receives the email and POSTs to POST /api/webhooks/email-lead
- *  3. We parse the structured email body:
- *       Phone: +1 202 365 6619
- *       Cleaning Type: BiWeekly 0.85
- *       Bedrooms: Two 179
- *       Bathrooms: One 30
- *  4. We price the job, create a conversationSessions row with leadSource="email"
- *  5. We send the same SMS flow as the quote form (smsFlow A or B per settings)
- *  6. We alert the CS team and log the activity
+ * Handles two email types sent via Zapier:
  *
- * Adding a new email source: just add another Gmail forwarding rule to the same
- * Mailgun inbound address — zero code changes needed.
+ * 1. FORM SUBMISSION (Gmail label: "LeadFlow Forms")
+ *    Zapier trigger: Gmail → New Email matching label "LeadFlow Forms"
+ *    Body format:
+ *      Email: rohan@innclusive.com
+ *      Phone: +1 302 981 6191
+ *      Cleaning Type: BiWeekly 0.85
+ *      Bedrooms: One 149
+ *      Bathrooms: Five 150
+ *    Action: Create conversation session + send SMS quote flow
+ *
+ * 2. PHONE CALL NOTIFICATION (Gmail label: "Google Calls")
+ *    Zapier trigger: Gmail → New Email matching label "Google Calls"
+ *    Body format:
+ *      Hi,
+ *      You received a call from:
+ *      (858) 776-5144
+ *      at
+ *      2026-03-21 09:57 AM -04:00
+ *    Action: Create a "voice" lead session + send SMS intro
+ *
+ * Authentication: Both Zapier Zaps send X-Zapier-Secret header with the
+ * ZAPIER_WEBHOOK_SECRET env var value. Requests without the correct secret
+ * are rejected with 401.
+ *
+ * Endpoint: POST /api/webhooks/email-lead
+ * Zapier sends JSON body with fields: subject, body_plain, body_html, from_email
  */
 
 import type { Express } from "express";
@@ -28,6 +42,7 @@ import { notifyOwner } from "./_core/notification";
 import { normalizePhone } from "./routers";
 import { getSetting, getFlowTemplate } from "./settingsRouter";
 import { ENV } from "./_core/env";
+import { and, eq, ne } from "drizzle-orm";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -77,6 +92,7 @@ const CLEANING_TYPE_MAP: Record<string, CleaningTypeMapping> = {
 
 export interface EmailLeadParsed {
   phone: string | null;
+  email: string | null;
   bedrooms: string | null;
   bathrooms: string | null;
   serviceType: string;
@@ -84,25 +100,117 @@ export interface EmailLeadParsed {
   rawCleaningType: string | null;
 }
 
-// ── Mailgun Inbound Payload ───────────────────────────────────────────────────
-
-export interface MailgunInboundPayload {
-  // Mailgun sends these fields as form-encoded
-  recipient?: string;
+/** Unified Zapier webhook payload — fields sent as JSON */
+export interface ZapierEmailPayload {
+  subject?: string;
+  body_plain?: string;
+  body_html?: string;
+  from_email?: string;
+  from_name?: string;
+  // Legacy Mailgun field names (kept for backwards compatibility)
+  "body-plain"?: string;
+  "stripped-text"?: string;
   sender?: string;
   from?: string;
-  subject?: string;
-  "body-plain"?: string;
-  "body-html"?: string;
-  "stripped-text"?: string;
   timestamp?: string;
   token?: string;
   signature?: string;
-  // Any other Mailgun fields
   [key: string]: unknown;
 }
 
-// ── Email Body Parser ─────────────────────────────────────────────────────────
+// ── Email type detection ──────────────────────────────────────────────────────
+
+export type EmailType = "form_submission" | "phone_call" | "unknown";
+
+/**
+ * Detects whether an email is a form submission or a Google Voice/Fi call notification.
+ *
+ * Form submissions contain structured "Phone:", "Cleaning Type:", etc. lines.
+ * Call notifications contain the phrase "You received a call from".
+ */
+export function detectEmailType(body: string, subject?: string): EmailType {
+  const bodyLower = body.toLowerCase();
+  const subjectLower = (subject ?? "").toLowerCase();
+
+  // Google Voice/Fi call notification
+  if (
+    bodyLower.includes("you received a call from") ||
+    subjectLower.includes("missed call") ||
+    subjectLower.includes("received a call")
+  ) {
+    return "phone_call";
+  }
+
+  // Form submission: has at least a Phone field and one of the service fields
+  if (
+    (bodyLower.includes("phone:") || bodyLower.includes("phone number:")) &&
+    (bodyLower.includes("cleaning type:") || bodyLower.includes("service type:") || bodyLower.includes("bedrooms:"))
+  ) {
+    return "form_submission";
+  }
+
+  return "unknown";
+}
+
+// ── Phone Call Email Parser ───────────────────────────────────────────────────
+
+/**
+ * Parses a Google Voice/Fi call notification email body.
+ *
+ * Expected format:
+ *   Hi,
+ *   You received a call from:
+ *   (858) 776-5144
+ *   at
+ *   2026-03-21 09:57 AM -04:00
+ *
+ * Returns the caller's phone number, or null if not found.
+ */
+export function parseCallNotificationBody(body: string): { phone: string | null; callTime: string | null } {
+  const lines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  let phone: string | null = null;
+  let callTime: string | null = null;
+  let foundCallFrom = false;
+  let foundAt = false;
+
+  for (const line of lines) {
+    const lineLower = line.toLowerCase();
+
+    if (lineLower.includes("you received a call from") || lineLower === "call from:") {
+      foundCallFrom = true;
+      continue;
+    }
+
+    if (foundCallFrom && !phone) {
+      // Next non-empty line after "call from:" is the phone number
+      // Matches formats: (858) 776-5144, +18587765144, 858-776-5144, etc.
+      const cleaned = line.replace(/[^\d+\-\(\)\s]/g, "").trim();
+      if (cleaned.length >= 7) {
+        phone = cleaned;
+        continue;
+      }
+    }
+
+    if (foundCallFrom && phone && (lineLower === "at" || lineLower.startsWith("at "))) {
+      foundAt = true;
+      // "at" might have the timestamp on the same line
+      const afterAt = line.slice(2).trim();
+      if (afterAt.length > 5) {
+        callTime = afterAt;
+      }
+      continue;
+    }
+
+    if (foundAt && !callTime) {
+      callTime = line;
+    }
+  }
+
+  return { phone, callTime };
+}
+
+// ── Form Submission Email Parser ──────────────────────────────────────────────
 
 /**
  * Strips a trailing numeric suffix from a value string.
@@ -122,13 +230,11 @@ export function parseBedroomCount(raw: string): string | null {
 
   if (cleaned === "studio") return "Studio";
 
-  // Try word-to-number map first
   const fromWord = WORD_TO_NUMBER[cleaned];
   if (fromWord !== undefined) {
     return fromWord === 1 ? "1 Bedroom" : `${fromWord} Bedrooms`;
   }
 
-  // Try parsing as a digit
   const num = parseInt(cleaned, 10);
   if (!isNaN(num) && num >= 0 && num <= 10) {
     if (num === 0) return "Studio";
@@ -145,13 +251,11 @@ export function parseBedroomCount(raw: string): string | null {
 export function parseBathroomCount(raw: string): string | null {
   const cleaned = stripNumericSuffix(raw).trim().toLowerCase();
 
-  // Try word-to-number map
   const fromWord = WORD_TO_NUMBER[cleaned];
   if (fromWord !== undefined) {
     return fromWord === 1 ? "1 Bathroom" : `${fromWord} Bathrooms`;
   }
 
-  // Try parsing as a number (supports decimals like 1.5, 2.5)
   const num = parseFloat(cleaned);
   if (!isNaN(num) && num >= 0 && num <= 10) {
     return num === 1 ? "1 Bathroom" : `${num} Bathrooms`;
@@ -170,12 +274,14 @@ export function parseCleaningType(raw: string): CleaningTypeMapping {
 }
 
 /**
- * Parses the structured email body into lead fields.
+ * Parses the structured form submission email body into lead fields.
+ *
  * Handles the format:
- *   Phone: +1 202 365 6619
+ *   Email: rohan@innclusive.com
+ *   Phone: +1 302 981 6191
  *   Cleaning Type: BiWeekly 0.85
- *   Bedrooms: Two 179
- *   Bathrooms: One 30
+ *   Bedrooms: One 149
+ *   Bathrooms: Five 150
  *
  * Field names are matched case-insensitively. Extra whitespace is trimmed.
  * Unknown or missing fields fall back to safe defaults.
@@ -193,6 +299,13 @@ export function parseEmailLeadBody(body: string): EmailLeadParsed {
       fields[key] = value;
     }
   }
+
+  // Extract email
+  const rawEmail =
+    fields["email"] ??
+    fields["email address"] ??
+    fields["e-mail"] ??
+    null;
 
   // Extract phone — try multiple field name variants
   const rawPhone =
@@ -232,6 +345,7 @@ export function parseEmailLeadBody(body: string): EmailLeadParsed {
 
   return {
     phone: rawPhone,
+    email: rawEmail,
     bedrooms: rawBedrooms ? parseBedroomCount(rawBedrooms) : null,
     bathrooms: rawBathrooms ? parseBathroomCount(rawBathrooms) : null,
     serviceType,
@@ -240,20 +354,15 @@ export function parseEmailLeadBody(body: string): EmailLeadParsed {
   };
 }
 
-// ── Mailgun Signature Verification ───────────────────────────────────────────
+// ── Mailgun Signature Verification (legacy, kept for backwards compat) ─────────
 
-/**
- * Verifies the Mailgun webhook signature to prevent spoofed requests.
- * Returns true if valid, false if invalid or if API key is not configured.
- * In development (no key set), skips verification to allow local testing.
- */
 export function verifyMailgunSignature(
   timestamp: string,
   token: string,
   signature: string,
   apiKey: string
 ): boolean {
-  if (!apiKey) return true; // dev mode: skip verification
+  if (!apiKey) return true;
   const value = timestamp + token;
   const expected = crypto
     .createHmac("sha256", apiKey)
@@ -261,18 +370,31 @@ export function verifyMailgunSignature(
     .digest("hex");
   const expectedBuf = Buffer.from(expected);
   const sigBuf = Buffer.from(signature);
-  // timingSafeEqual requires same-length buffers — length mismatch means invalid
   if (expectedBuf.length !== sigBuf.length) return false;
   return crypto.timingSafeEqual(expectedBuf, sigBuf);
 }
 
-// ── SMS Builder ───────────────────────────────────────────────────────────────
+// ── Zapier Secret Verification ────────────────────────────────────────────────
 
 /**
- * Builds the intro SMS for an email lead.
- * Uses the same Flow A (Madison) template as the quote form for consistency.
- * References the frequency if it's a recurring service.
+ * Verifies the X-Zapier-Secret header against the configured secret.
+ * Returns true if:
+ *   - No secret is configured (dev mode — allow all)
+ *   - The header matches the configured secret
+ * Returns false if the secret is configured but the header is missing or wrong.
  */
+export function verifyZapierSecret(headerValue: string | undefined, configuredSecret: string): boolean {
+  if (!configuredSecret) return true; // dev mode: no secret configured
+  if (!headerValue) return false;
+  // Constant-time comparison to prevent timing attacks
+  const expected = Buffer.from(configuredSecret);
+  const provided = Buffer.from(headerValue);
+  if (expected.length !== provided.length) return false;
+  return crypto.timingSafeEqual(expected, provided);
+}
+
+// ── SMS Builder ───────────────────────────────────────────────────────────────
+
 export async function buildEmailLeadIntroSms(
   firstName: string,
   serviceType: string,
@@ -286,7 +408,7 @@ export async function buildEmailLeadIntroSms(
     : "";
   const fallback = `Hi ${firstName}! Madison here from Maids in Black. Your ${serviceType} quote for a ${bedrooms} bed / ${bathrooms} bath home is $${price}${freqNote} — our fully insured team handles everything. 🏠`;
 
-  return getFlowTemplate("emailFlowA_sms1", fallback, {
+  return getFlowTemplate("email_lead_intro", fallback, {
     "{firstName}": firstName,
     "{serviceType}": serviceType,
     "{bedrooms}": bedrooms,
@@ -296,34 +418,24 @@ export async function buildEmailLeadIntroSms(
   });
 }
 
-/**
- * Builds the scheduling follow-up SMS for an email lead.
- */
 export function buildEmailLeadSchedulingSms(): string {
   const slots = getNextAvailableSlots(2);
   return formatAvailabilityQuestion(slots);
 }
 
-// ── Main Handler ──────────────────────────────────────────────────────────────
+// ── Handler: Form Submission Lead ─────────────────────────────────────────────
 
-/**
- * Processes an inbound email lead from Mailgun.
- * Called by the webhook route handler after signature verification.
- */
-export async function handleEmailLead(payload: MailgunInboundPayload): Promise<void> {
-  // Prefer stripped-text (Mailgun removes quoted replies), fall back to body-plain
-  const emailBody = payload["stripped-text"] ?? payload["body-plain"] ?? "";
-  const fromAddress = payload.sender ?? payload.from ?? "unknown";
+export async function handleFormSubmissionEmail(
+  body: string,
+  fromAddress: string
+): Promise<void> {
+  console.log(`[EmailLead] Processing form submission from: ${fromAddress}`);
 
-  console.log(`[EmailLead] New email from: ${fromAddress}`);
-  console.log(`[EmailLead] Body preview: ${emailBody.slice(0, 200)}`);
-
-  // ── Step 1: Parse the email body ──────────────────────────────────────────
-  const parsed = parseEmailLeadBody(emailBody);
-  console.log(`[EmailLead] Parsed: phone=${parsed.phone}, bedrooms=${parsed.bedrooms}, bathrooms=${parsed.bathrooms}, serviceType=${parsed.serviceType}, frequency=${parsed.frequency}`);
+  const parsed = parseEmailLeadBody(body);
+  console.log(`[EmailLead] Parsed: phone=${parsed.phone}, email=${parsed.email}, bedrooms=${parsed.bedrooms}, bathrooms=${parsed.bathrooms}, serviceType=${parsed.serviceType}, frequency=${parsed.frequency}`);
 
   if (!parsed.phone) {
-    console.error("[EmailLead] No phone number found in email body — dropping lead");
+    console.error("[EmailLead] No phone number found in form submission email — dropping lead");
     return;
   }
 
@@ -333,46 +445,30 @@ export async function handleEmailLead(payload: MailgunInboundPayload): Promise<v
     return;
   }
 
-  // ── Step 2: Use parsed data with safe fallbacks ────────────────────────────
   const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
   const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
   const serviceType = parsed.serviceType;
   const frequency = parsed.frequency;
-
-  // Use "Customer" as name since email leads don't include a name field
   const firstName = "there";
-  const displayName = "Email Lead";
+  const displayName = parsed.email ? `Form Lead (${parsed.email})` : "Form Lead";
 
-  // ── Step 3: Price the job ──────────────────────────────────────────────────
   const price = estimatePrice({ bedrooms, bathrooms, serviceType });
 
-  // ── Step 4: Build SMS messages ─────────────────────────────────────────────
-  const introSms = await buildEmailLeadIntroSms(
-    firstName,
-    serviceType,
-    bedrooms,
-    bathrooms,
-    price,
-    frequency
-  );
+  const introSms = await buildEmailLeadIntroSms(firstName, serviceType, bedrooms, bathrooms, price, frequency);
   const schedulingSms = buildEmailLeadSchedulingSms();
 
-  // ── Step 5: Send SMS #1 (intro + photo) ───────────────────────────────────
-  const sms1 = await sendSms({
-    to: normalizedPhone,
-    content: introSms,
-    mediaUrl: MADISON_PHOTO_URL,
-  });
+  // Send SMS #1 (intro + photo)
+  const sms1 = await sendSms({ to: normalizedPhone, content: introSms, mediaUrl: MADISON_PHOTO_URL });
   console.log(`[EmailLead] Intro SMS sent: ${sms1.success}`);
 
-  // ── Step 6: Send SMS #2 (scheduling) with natural delay ───────────────────
+  // Send SMS #2 (scheduling) with natural delay
   await new Promise((r) => setTimeout(r, 2000));
   const sms2 = await sendSms({ to: normalizedPhone, content: schedulingSms });
   console.log(`[EmailLead] Scheduling SMS sent: ${sms2.success}`);
 
-  // ── Step 7: Alert CS team ──────────────────────────────────────────────────
+  // Alert CS team
   const freqLabel = frequency ? ` (${frequency})` : "";
-  const alertMsg = `📧 New Email lead: ${normalizedPhone} — ${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}`;
+  const alertMsg = `📧 New Form lead: ${normalizedPhone} — ${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}${parsed.email ? `\nEmail: ${parsed.email}` : ""}`;
   sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch((err) =>
     console.error("[EmailLead] CS alert failed:", err)
   );
@@ -380,7 +476,7 @@ export async function handleEmailLead(payload: MailgunInboundPayload): Promise<v
     console.error("[EmailLead] Secondary alert failed:", err)
   );
 
-  // ── Step 8: Create conversation session ───────────────────────────────────
+  // Create conversation session
   const db = await getDb();
   if (!db) {
     console.error("[EmailLead] No DB connection — skipping session creation");
@@ -396,10 +492,9 @@ export async function handleEmailLead(payload: MailgunInboundPayload): Promise<v
   const emailSummary = [
     parsed.rawCleaningType ? `Cleaning Type: ${parsed.rawCleaningType}` : null,
     frequency ? `Frequency: ${frequency}` : null,
+    parsed.email ? `Email: ${parsed.email}` : null,
     `From: ${fromAddress}`,
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  ].filter(Boolean).join(" | ");
 
   try {
     await db.insert(conversationSessions).values({
@@ -412,72 +507,181 @@ export async function handleEmailLead(payload: MailgunInboundPayload): Promise<v
       bathrooms,
       messageHistory: initialHistory,
       leadSource: "email",
-      barkQA: emailSummary, // reuse barkQA column for email summary notes
+      barkQA: emailSummary,
     });
     console.log(`[EmailLead] Session created for ${normalizedPhone}`);
   } catch (dbErr) {
     console.error("[EmailLead] Failed to create session:", dbErr);
   }
 
-  // ── Step 9: Log activity ───────────────────────────────────────────────────
   logActivity({
     eventType: "new_lead",
-    title: `New Email lead: ${normalizedPhone}`,
+    title: `New Form lead: ${normalizedPhone}`,
     body: `${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}`,
-    meta: {
-      leadPhone: normalizedPhone,
-      leadName: displayName,
-      serviceType,
-      price,
-      source: "email",
-    },
+    meta: { leadPhone: normalizedPhone, leadName: displayName, serviceType, price, source: "email" },
   }).catch(() => {});
 
-  // ── Step 10: Notify owner ──────────────────────────────────────────────────
   notifyOwner({
-    title: `New Email Lead: ${normalizedPhone}`,
-    content: `${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}\n\nFrom: ${fromAddress}`,
+    title: `New Form Lead: ${normalizedPhone}`,
+    content: `${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}\n\nFrom: ${fromAddress}${parsed.email ? `\nEmail: ${parsed.email}` : ""}`,
   }).catch(() => {});
+}
+
+// ── Handler: Phone Call Notification ─────────────────────────────────────────
+
+export async function handleCallNotificationEmail(
+  body: string,
+  fromAddress: string
+): Promise<void> {
+  console.log(`[EmailLead] Processing call notification from: ${fromAddress}`);
+
+  const { phone: rawPhone, callTime } = parseCallNotificationBody(body);
+  console.log(`[EmailLead] Call notification: phone=${rawPhone}, callTime=${callTime}`);
+
+  if (!rawPhone) {
+    console.error("[EmailLead] No phone number found in call notification — dropping");
+    return;
+  }
+
+  const normalizedPhone = normalizePhone(rawPhone);
+  if (!normalizedPhone) {
+    console.error(`[EmailLead] Could not normalize call phone: ${rawPhone}`);
+    return;
+  }
+
+  // Check if we already have an active session for this number — avoid duplicates
+  const db = await getDb();
+  if (!db) {
+    console.error("[EmailLead] No DB connection");
+    return;
+  }
+
+  const existingSessions = await db
+    .select()
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.leadPhone, normalizedPhone),
+        ne(conversationSessions.stage, "DONE" as any)
+      )
+    )
+    .limit(1);
+
+  if (existingSessions.length > 0) {
+    console.log(`[EmailLead] Active session already exists for ${normalizedPhone} — skipping call notification lead creation`);
+    // Still alert CS so they know someone called
+    const alertMsg = `📞 Missed call: ${normalizedPhone}${callTime ? ` at ${callTime}` : ""} — already has active session`;
+    sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(() => {});
+    return;
+  }
+
+  // Build intro SMS for a voice/call lead
+  const introSms = `Hi! This is Madison from Maids in Black 😊 I saw you gave us a call — I'd love to help you get a cleaning quote! What type of cleaning are you looking for?`;
+  const displayName = "Voice Lead";
+
+  // Send intro SMS
+  const sms1 = await sendSms({ to: normalizedPhone, content: introSms, mediaUrl: MADISON_PHOTO_URL });
+  console.log(`[EmailLead] Call lead intro SMS sent: ${sms1.success}`);
+
+  // Alert CS
+  const alertMsg = `📞 Missed call lead: ${normalizedPhone}${callTime ? ` at ${callTime}` : ""} — intro SMS sent`;
+  sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(() => {});
+  sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(() => {});
+
+  // Create session
+  const now = Date.now();
+  const initialHistory = JSON.stringify([
+    { role: "assistant", content: introSms, ts: now },
+  ]);
+
+  try {
+    await db.insert(conversationSessions).values({
+      leadPhone: normalizedPhone,
+      leadName: displayName,
+      stage: "NEW" as any,
+      messageHistory: initialHistory,
+      leadSource: "voice",
+      barkQA: callTime ? `Missed call at: ${callTime}` : "Missed call (time unknown)",
+    });
+    console.log(`[EmailLead] Voice lead session created for ${normalizedPhone}`);
+  } catch (dbErr) {
+    console.error("[EmailLead] Failed to create voice lead session:", dbErr);
+  }
+
+  logActivity({
+    eventType: "new_lead",
+    title: `Missed call lead: ${normalizedPhone}`,
+    body: callTime ? `Called at ${callTime}` : "Missed call",
+    meta: { leadPhone: normalizedPhone, leadName: displayName, source: "voice" },
+  }).catch(() => {});
+
+  notifyOwner({
+    title: `Missed Call Lead: ${normalizedPhone}`,
+    content: `Caller: ${normalizedPhone}${callTime ? `\nTime: ${callTime}` : ""}\n\nIntro SMS sent automatically.`,
+  }).catch(() => {});
+}
+
+// ── Main dispatcher ───────────────────────────────────────────────────────────
+
+/**
+ * Dispatches an inbound Zapier email payload to the correct handler
+ * based on the detected email type.
+ */
+export async function handleEmailLead(payload: ZapierEmailPayload): Promise<void> {
+  // Normalize body field: Zapier uses body_plain, Mailgun uses body-plain or stripped-text
+  const emailBody =
+    payload.body_plain ??
+    payload["stripped-text"] ??
+    payload["body-plain"] ??
+    "";
+
+  const fromAddress = payload.from_email ?? payload.sender ?? payload.from ?? "unknown";
+  const subject = payload.subject ?? "";
+
+  console.log(`[EmailLead] New email from: ${fromAddress}, subject: "${subject}"`);
+  console.log(`[EmailLead] Body preview: ${emailBody.slice(0, 200)}`);
+
+  const emailType = detectEmailType(emailBody, subject);
+  console.log(`[EmailLead] Detected email type: ${emailType}`);
+
+  if (emailType === "form_submission") {
+    await handleFormSubmissionEmail(emailBody, fromAddress);
+  } else if (emailType === "phone_call") {
+    await handleCallNotificationEmail(emailBody, fromAddress);
+  } else {
+    console.warn(`[EmailLead] Unknown email type — subject="${subject}", body preview="${emailBody.slice(0, 100)}". Dropping.`);
+  }
 }
 
 // ── Route Registration ────────────────────────────────────────────────────────
 
 /**
  * Registers POST /api/webhooks/email-lead on the Express app.
- * Called from webhooks.ts.
  *
- * Mailgun sends inbound email data as multipart/form-data or
- * application/x-www-form-urlencoded — Express body-parser handles both.
+ * Authentication: Zapier sends X-Zapier-Secret header.
+ * Set ZAPIER_WEBHOOK_SECRET env var to enable verification.
+ * Without the env var, all requests are accepted (dev mode).
  *
- * Signature verification uses MAILGUN_WEBHOOK_SIGNING_KEY (from Mailgun dashboard
- * → Settings → Webhooks → HTTP webhook signing key).
+ * Zapier sends JSON body with fields:
+ *   subject, body_plain, from_email, from_name
  */
 export function registerEmailLeadWebhookRoute(app: Express): void {
   app.post("/api/webhooks/email-lead", async (req, res) => {
-    // Respond immediately — Mailgun expects a 200 within a few seconds
+    // Verify Zapier secret before acknowledging
+    const zapierSecret = ENV.zapierWebhookSecret;
+    const providedSecret = req.headers["x-zapier-secret"] as string | undefined;
+
+    if (!verifyZapierSecret(providedSecret, zapierSecret)) {
+      console.warn("[EmailLead] Rejected: invalid or missing X-Zapier-Secret header");
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    // Acknowledge immediately — Zapier expects a 200 within a few seconds
     res.status(200).json({ received: true });
 
     try {
-      const body = req.body as MailgunInboundPayload;
-
-      // ── Signature verification ──────────────────────────────────────────
-      const signingKey = ENV.mailgunWebhookSigningKey ?? "";
-      const timestamp = String(body.timestamp ?? "");
-      const token = String(body.token ?? "");
-      const signature = String(body.signature ?? "");
-
-      if (signingKey && timestamp && token && signature) {
-        const valid = verifyMailgunSignature(timestamp, token, signature, signingKey);
-        if (!valid) {
-          console.error("[EmailLead] Invalid Mailgun signature — dropping request");
-          return;
-        }
-      } else if (signingKey) {
-        // Key is set but signature fields are missing — suspicious, drop it
-        console.warn("[EmailLead] Mailgun signature fields missing — dropping request");
-        return;
-      }
-
+      const body = req.body as ZapierEmailPayload;
       await handleEmailLead(body);
     } catch (err) {
       console.error("[EmailLead] Unhandled error:", err);
