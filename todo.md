@@ -2394,3 +2394,10 @@
 ## Sharp Platform Binary Pinning
 
 - [x] Pin @img/sharp-linux-x64 and @img/sharp-libvips-linux-x64 as explicit deps in package.json (929 tests pass)
+
+## During-Field Mgmt UX Updates
+
+- [x] Default tab to "Job Log" on the During-Field Mgmt page
+- [x] Add "Group by Cleaner" toggle in the tab settings area of Job Log
+- [x] Default workflow steps (accordion) to expanded
+- [x] Default job log cards to expanded

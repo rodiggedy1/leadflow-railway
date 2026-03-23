@@ -365,7 +365,7 @@ function MessageBubble({
 }
 
 function StepCard({ step }: { step: WorkflowStep }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true); // default expanded
 
   const phaseColor: Record<string, string> = {
     "Pre-Job":   "bg-blue-100 text-blue-700",
@@ -675,7 +675,7 @@ type JobWithTimeline = {
 };
 
 function JobCard({ job }: { job: JobWithTimeline }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true); // default expanded
   const [showTest, setShowTest] = useState(false);
   const utils = trpc.useUtils();
 
@@ -968,6 +968,7 @@ function todayET(): string {
 
 function LogTab() {
   const [date, setDate] = useState(() => todayET());
+  const [groupByCleaner, setGroupByCleaner] = useState(false);
 
   const { data: jobs, isLoading, error, refetch, isFetching } = trpc.fieldMgmt.getJobsForDay.useQuery(
     { date },
@@ -986,6 +987,17 @@ function LogTab() {
     setDate(e.target.value);
   }, []);
 
+  const grouped = useMemo(() => {
+    if (!jobs || !groupByCleaner) return null;
+    const map = new Map<string, typeof jobs>();
+    for (const job of jobs) {
+      const key = job.cleanerName || "Unknown";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(job);
+    }
+    return map;
+  }, [jobs, groupByCleaner]);
+
   return (
     <div>
       {/* Controls */}
@@ -999,14 +1011,29 @@ function LogTab() {
             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 bg-white transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
-          {isFetching ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Settings: Group by Cleaner */}
+          <button
+            onClick={() => setGroupByCleaner((v) => !v)}
+            title="Toggle group by cleaner"
+            className={`flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors ${
+              groupByCleaner
+                ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                : "bg-white text-gray-500 border-gray-200 hover:text-gray-700"
+            }`}
+          >
+            <User className="w-3 h-3" />
+            Group by Cleaner
+          </button>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 bg-white transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
       </div>
 
       {/* Skeleton loading — show 3 placeholder cards while fetching */}
@@ -1039,9 +1066,29 @@ function LogTab() {
           <p className="text-xs text-gray-400">
             {jobs.length} job{jobs.length !== 1 ? "s" : ""} · refreshes every 60s when tab is active
           </p>
-          {jobs.map((job) => (
-            <JobCard key={job.id} job={job as JobWithTimeline} />
-          ))}
+          {grouped ? (
+            // Grouped by cleaner view
+            Array.from(grouped.entries()).map(([cleanerName, cleanerJobs]) => (
+              <div key={cleanerName}>
+                <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
+                  <User className="w-3.5 h-3.5 text-gray-400" />
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{cleanerName}</span>
+                  <span className="text-xs text-gray-400">({cleanerJobs.length} job{cleanerJobs.length !== 1 ? "s" : ""})</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+                <div className="space-y-3">
+                  {cleanerJobs.map((job) => (
+                    <JobCard key={job.id} job={job as JobWithTimeline} />
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            // Flat view
+            jobs.map((job) => (
+              <JobCard key={job.id} job={job as JobWithTimeline} />
+            ))
+          )}
         </div>
       )}
     </div>
@@ -1053,7 +1100,7 @@ function LogTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function FieldManagement() {
-  const [activeTab, setActiveTab] = useState<"workflow" | "log">("workflow");
+  const [activeTab, setActiveTab] = useState<"workflow" | "log">("log");
 
   return (
     <div className="min-h-screen bg-gray-50">
