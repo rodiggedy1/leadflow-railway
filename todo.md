@@ -2196,3 +2196,5 @@
 - [x] Add follow-up date to follow-up stage cards in the pipeline kanban view
 - [ ] Follow-up date cron: fire notification bell alert each morning for due follow-ups
 - [x] Mark as Lost via 3-dot menu on pipeline cards + Lost filter toggle
+- [x] Restore Lead from Lost via 3-dot menu in Lost column
+- [x] Fix pipeline stats bar booked revenue showing $0

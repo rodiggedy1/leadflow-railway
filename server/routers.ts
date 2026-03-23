@@ -1250,6 +1250,33 @@ export const appRouter = router({
         }).catch(() => {});
         return { success: true };
       }),
+
+    /**
+     * leads.restoreFromLost — restore a LOST lead back to FOLLOW_UP_SCHEDULED.
+     */
+    restoreFromLost: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const rows = await db
+          .select({ leadName: conversationSessions.leadName, leadPhone: conversationSessions.leadPhone })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        const session = rows[0];
+        await db
+          .update(conversationSessions)
+          .set({ stage: "FOLLOW_UP_SCHEDULED" as any })
+          .where(eq(conversationSessions.id, input.sessionId));
+        logActivity({
+          eventType: "new_lead",
+          title: `${session?.leadName ?? session?.leadPhone ?? "Lead"} restored from Lost`,
+          body: "Lead restored to Follow-Up Scheduled via pipeline card menu.",
+          meta: { sessionId: input.sessionId, leadPhone: session?.leadPhone, leadName: session?.leadName },
+        }).catch(() => {});
+        return { success: true };
+      }),
   }),
 
   /**

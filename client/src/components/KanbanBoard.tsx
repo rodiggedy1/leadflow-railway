@@ -175,10 +175,12 @@ function timeAgo(date: Date | string | null): string {
   return `${diffDays}d ago`;
 }
 
-function computeTotal(quotedPrice: string | null, _extras: string | null): number {
-  if (!quotedPrice) return 0;
-  const base = parseInt(quotedPrice, 10);
-  return isNaN(base) ? 0 : base;
+function computeTotal(quotedPrice: string | null, _extras: string | null, reactivationLastPrice?: number | null): number {
+  const base = quotedPrice ? parseInt(quotedPrice, 10) : 0;
+  const parsed = isNaN(base) ? 0 : base;
+  // Campaign leads have quotedPrice="0" but reactivationLastPrice is the actual amount
+  if (parsed === 0 && reactivationLastPrice) return reactivationLastPrice;
+  return parsed;
 }
 
 /** Maps a campaign ID slug to a human-readable label */
@@ -219,6 +221,7 @@ function LeadCard({
   onClick,
   onMoveToBooked,
   onMarkAsLost,
+  onRestoreFromLost,
   animationDelay = 0,
 }: {
   lead: LeadRow;
@@ -226,6 +229,7 @@ function LeadCard({
   onClick?: () => void;
   onMoveToBooked?: () => void;
   onMarkAsLost?: () => void;
+  onRestoreFromLost?: () => void;
   animationDelay?: number;
 }) {
   const [visible, setVisible] = useState(false);
@@ -343,13 +347,23 @@ function LeadCard({
               View Details
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={e => { e.stopPropagation(); onMarkAsLost?.(); }}
-              className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-            >
-              <XCircle className="w-3.5 h-3.5" />
-              Mark as Lost
-            </DropdownMenuItem>
+            {lead.stage === "LOST" ? (
+              <DropdownMenuItem
+                onClick={e => { e.stopPropagation(); onRestoreFromLost?.(); }}
+                className="gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Restore Lead
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                onClick={e => { e.stopPropagation(); onMarkAsLost?.(); }}
+                className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Mark as Lost
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -431,6 +445,7 @@ function KanbanColumnView({
   justDraggedRef,
   onMoveToBooked,
   onMarkAsLost,
+  onRestoreFromLost,
 }: {
   column: KanbanColumn;
   leads: LeadRow[];
@@ -439,11 +454,12 @@ function KanbanColumnView({
   justDraggedRef: React.RefObject<boolean>;
   onMoveToBooked?: (lead: LeadRow) => void;
   onMarkAsLost?: (lead: LeadRow) => void;
+  onRestoreFromLost?: (lead: LeadRow) => void;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
   // Total value for this column
-  const columnTotal = leads.reduce((sum, l) => sum + computeTotal(l.quotedPrice, l.extras), 0);
+  const columnTotal = leads.reduce((sum, l) => sum + computeTotal(l.quotedPrice, l.extras, l.reactivationLastPrice), 0);
 
   return (
     <div className="flex flex-col flex-1 min-w-[220px] max-w-[300px]">
@@ -505,6 +521,7 @@ function KanbanColumnView({
               }}
               onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
               onMarkAsLost={onMarkAsLost ? () => onMarkAsLost(lead) : undefined}
+              onRestoreFromLost={onRestoreFromLost ? () => onRestoreFromLost(lead) : undefined}
             />
           ))
         )}
@@ -521,7 +538,7 @@ function StatsBar({ leads }: { leads: LeadRow[] }) {
 
   const todayLeads = leads.filter(l => new Date(l.createdAt) >= today);
   const bookedToday = todayLeads.filter(l => STAGE_TO_COLUMN[l.stage] === "booked");
-  const revenueToday = bookedToday.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras), 0);
+  const revenueToday = bookedToday.reduce((s, l) => s + computeTotal(l.quotedPrice, l.extras, l.reactivationLastPrice), 0);
 
   const stats = [
     { value: todayLeads.length, label: "LEADS TODAY" },
@@ -565,6 +582,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
 
   const updateStage = trpc.leads.adminUpdateStage.useMutation();
   const markAsLostMutation = trpc.leads.markAsLost.useMutation();
+  const restoreFromLostMutation = trpc.leads.restoreFromLost.useMutation();
   const utils = trpc.useUtils();
 
   function handleMoveToBooked(lead: LeadRow) {
@@ -612,6 +630,26 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
     }
     return effectiveLeads.filter(l => new Date(l.createdAt) >= cutoff);
   }, [effectiveLeads, externalDateFilter]);
+
+  function handleRestoreFromLost(lead: LeadRow) {
+    setLocalStages(prev => ({ ...prev, [lead.id]: "FOLLOW_UP_SCHEDULED" }));
+    restoreFromLostMutation.mutate(
+      { sessionId: lead.id },
+      {
+        onSuccess: () => {
+          utils.leads.list.invalidate();
+          onStageChange?.(lead.id, "FOLLOW_UP_SCHEDULED");
+        },
+        onError: () => {
+          setLocalStages(prev => {
+            const next = { ...prev };
+            delete next[lead.id];
+            return next;
+          });
+        },
+      }
+    );
+  }
 
   function handleMarkAsLost(lead: LeadRow) {
     setLocalStages(prev => ({ ...prev, [lead.id]: "LOST" }));
@@ -752,6 +790,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
                 justDraggedRef={justDraggedRef}
                 onMoveToBooked={col.id === "quoted" ? handleMoveToBooked : undefined}
                 onMarkAsLost={handleMarkAsLost}
+                onRestoreFromLost={handleRestoreFromLost}
               />
             ))}
             {/* Lost column — only rendered when showLost is toggled on */}
@@ -773,6 +812,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
                 isOver={false}
                 onCardClick={onCardClick}
                 justDraggedRef={justDraggedRef}
+                onRestoreFromLost={handleRestoreFromLost}
               />
             )}
           </div>
