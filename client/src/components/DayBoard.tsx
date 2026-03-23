@@ -141,68 +141,77 @@ type StatusConfig = {
   label: string;
   icon: React.ReactNode;
   pulse?: boolean;
+  /** Tailwind classes for the pill badge inside the job block */
+  badgeClass: string;
 };
 
 const STATUS_CONFIG: Record<string, StatusConfig> = {
   not_started: {
     bg: "bg-slate-100",
-    border: "border-slate-200",
+    border: "border-slate-300",
     text: "text-slate-600",
     dot: "bg-slate-400",
     label: "Not Started",
     icon: <Clock className="w-3 h-3" />,
+    badgeClass: "bg-slate-200 text-slate-600",
   },
   on_the_way: {
     bg: "bg-blue-50",
-    border: "border-blue-200",
+    border: "border-blue-300",
     text: "text-blue-700",
     dot: "bg-blue-500",
     label: "On the Way",
     icon: <Car className="w-3 h-3" />,
     pulse: true,
+    badgeClass: "bg-blue-100 text-blue-700",
   },
   in_progress: {
     bg: "bg-emerald-50",
-    border: "border-emerald-300",
+    border: "border-emerald-400",
     text: "text-emerald-800",
     dot: "bg-emerald-500",
     label: "In Progress",
     icon: <Zap className="w-3 h-3" />,
     pulse: true,
+    badgeClass: "bg-emerald-100 text-emerald-700",
   },
   running_late: {
     bg: "bg-amber-50",
-    border: "border-amber-300",
+    border: "border-amber-400",
     text: "text-amber-800",
     dot: "bg-amber-500",
     label: "Running Late",
     icon: <AlertTriangle className="w-3 h-3" />,
     pulse: true,
+    badgeClass: "bg-amber-100 text-amber-700",
   },
   issue_at_property: {
     bg: "bg-rose-50",
-    border: "border-rose-300",
+    border: "border-rose-400",
     text: "text-rose-800",
     dot: "bg-rose-500",
     label: "Issue",
     icon: <XCircle className="w-3 h-3" />,
     pulse: true,
+    badgeClass: "bg-rose-100 text-rose-700",
   },
   completed: {
-    bg: "bg-slate-50",
-    border: "border-slate-200",
-    text: "text-slate-500",
-    dot: "bg-slate-400",
+    bg: "bg-green-50",
+    border: "border-green-300",
+    text: "text-green-800",
+    dot: "bg-green-500",
     label: "Completed",
     icon: <CheckCircle2 className="w-3 h-3" />,
+    badgeClass: "bg-green-100 text-green-700",
   },
   no_show: {
     bg: "bg-rose-50",
-    border: "border-rose-200",
+    border: "border-rose-300",
     text: "text-rose-700",
     dot: "bg-rose-400",
     label: "No Show",
     icon: <XCircle className="w-3 h-3" />,
+    badgeClass: "bg-rose-100 text-rose-600",
   },
 };
 
@@ -322,27 +331,27 @@ function JobBlock({
         />
       </div>
 
-      {/* Content */}
-      <div className="px-2 py-1.5 flex flex-col gap-0.5 h-full justify-center">
+      {/* Content — fixed 56px height, badge always in bottom-left corner */}
+      <div className="absolute inset-0 px-2 pt-1.5 pb-5 flex flex-col justify-start overflow-hidden">
         <div className="flex items-center gap-1 min-w-0">
           <span className="shrink-0 opacity-70">{sc.icon}</span>
           <span className="text-xs font-semibold truncate leading-tight">{shortName}</span>
         </div>
         {widthPct > 8 && (
-          <span className="text-[10px] opacity-60 truncate leading-tight">{shortAddr}</span>
+          <span className="text-[10px] opacity-60 truncate leading-tight mt-0.5">{shortAddr}</span>
         )}
-        {widthPct > 12 && (
+      </div>
+      {/* Status badge pinned to bottom-left, never overflows */}
+      {widthPct > 12 && (
+        <div className="absolute bottom-1 left-2 right-2 flex items-center">
           <span
-            className={`
-              inline-flex items-center self-start gap-0.5 px-1 py-0 rounded text-[9px] font-semibold uppercase tracking-wide leading-4
-              ${sc.bg} ${sc.text} border ${sc.border} opacity-80
-            `}
+            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${sc.badgeClass}`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} shrink-0`} />
             {sc.label}
           </span>
-        )}
-      </div>
+        </div>
+      )}
     </button>
   );
 }
