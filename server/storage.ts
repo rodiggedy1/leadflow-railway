@@ -67,6 +67,31 @@ function buildAuthHeaders(apiKey: string): HeadersInit {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
+/**
+ * Generate a 200px-wide JPEG thumbnail from an image buffer using Sharp.
+ * Returns the thumbnail buffer and the suggested content type.
+ * Falls back gracefully — if Sharp fails for any reason, returns null.
+ */
+export async function generateThumbnail(
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  // Only process image types Sharp supports
+  const supportedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"];
+  if (!supportedTypes.includes(mimeType.toLowerCase())) return null;
+  try {
+    const sharp = (await import("sharp")).default;
+    const thumbBuffer = await sharp(buffer)
+      .resize({ width: 200, withoutEnlargement: true })
+      .jpeg({ quality: 80, progressive: true })
+      .toBuffer();
+    return { buffer: thumbBuffer, contentType: "image/jpeg" };
+  } catch (err) {
+    console.warn("[Storage] Thumbnail generation failed:", err);
+    return null;
+  }
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,

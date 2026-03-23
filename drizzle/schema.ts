@@ -957,6 +957,10 @@ export const jobPhotos = mysqlTable("job_photos", {
   photoUrl: varchar("photoUrl", { length: 1024 }).notNull(),
   /** S3 key for the photo */
   photoKey: varchar("photoKey", { length: 512 }).notNull(),
+  /** S3 URL of the 200px thumbnail (generated on upload). Null for photos uploaded before this feature.) */
+  thumbnailUrl: varchar("thumbnailUrl", { length: 1024 }),
+  /** S3 key for the thumbnail */
+  thumbnailKey: varchar("thumbnailKey", { length: 512 }),
   /** Original filename */
   filename: varchar("filename", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

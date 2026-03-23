@@ -34,7 +34,7 @@ import {
   conversationSessions,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
-import { storagePut } from "./storage";
+import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
 import { invokeLLM } from "./_core/llm";
@@ -830,7 +830,14 @@ export const qualityRouter = router({
             ? (JSON.parse(cj.checklistItems) as Array<{ text: string; checked: boolean }>)
             : null,
         },
-        photos: photos.filter((p) => p.cleanerJobId === cj.id),
+        photos: photos
+          .filter((p) => p.cleanerJobId === cj.id)
+          .map((p) => ({
+            id: p.id,
+            photoUrl: p.photoUrl,
+            thumbnailUrl: p.thumbnailUrl ?? null,
+            filename: p.filename ?? null,
+          })),
       }));
     }),
 
@@ -924,11 +931,22 @@ export const qualityRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      // Decode base64 and upload to S3
+      // Decode base64 and upload full-resolution photo to S3
       const buffer = Buffer.from(input.base64Data, "base64");
       const suffix = Date.now().toString(36);
       const fileKey = `job-photos/${input.completedJobId}/${input.cleanerProfileId}-${suffix}-${input.filename}`;
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
+
+      // Generate and upload 200px thumbnail
+      let thumbnailUrl: string | null = null;
+      let thumbnailKey: string | null = null;
+      const thumb = await generateThumbnail(buffer, input.mimeType);
+      if (thumb) {
+        const tKey = `job-photos/${input.completedJobId}/${input.cleanerProfileId}-${suffix}-thumb.jpg`;
+        const { url: tUrl } = await storagePut(tKey, thumb.buffer, thumb.contentType);
+        thumbnailUrl = tUrl;
+        thumbnailKey = tKey;
+      }
 
       // Save to DB
       await db.insert(jobPhotos).values({
@@ -937,6 +955,8 @@ export const qualityRouter = router({
         cleanerProfileId: input.cleanerProfileId,
         photoUrl: url,
         photoKey: fileKey,
+        thumbnailUrl,
+        thumbnailKey,
         filename: input.filename,
       });
 
@@ -946,7 +966,7 @@ export const qualityRouter = router({
         .set({ photoSubmitted: 1 })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
-      return { ok: true, photoUrl: url };
+      return { ok: true, photoUrl: url, thumbnailUrl };
     }),
 
   // ── Admin Quality Dashboard ─────────────────────────────────────────────────

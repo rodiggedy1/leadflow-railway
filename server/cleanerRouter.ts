@@ -16,7 +16,7 @@ import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
 import { parse as parseCookie } from "cookie";
 import { publicProcedure, cleanerProcedure, adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { storagePut } from "./storage";
+import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
 
@@ -215,12 +215,23 @@ export const cleanerRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
       }
 
-      // Upload to S3
+      // Upload full-resolution photo to S3
       const ext = input.filename.split(".").pop() ?? "jpg";
       const randomSuffix = Math.random().toString(36).slice(2, 10);
       const fileKey = `cleaner-photos/${ctx.cleaner.cleanerId}/${input.cleanerJobId}-${randomSuffix}.${ext}`;
       const buffer = Buffer.from(input.dataBase64, "base64");
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
+
+      // Generate and upload 200px thumbnail
+      let thumbnailUrl: string | undefined;
+      let thumbnailKey: string | undefined;
+      const thumb = await generateThumbnail(buffer, input.mimeType);
+      if (thumb) {
+        const thumbKey = `cleaner-photos/${ctx.cleaner.cleanerId}/${input.cleanerJobId}-${randomSuffix}-thumb.jpg`;
+        const { url: tUrl } = await storagePut(thumbKey, thumb.buffer, thumb.contentType);
+        thumbnailUrl = tUrl;
+        thumbnailKey = thumbKey;
+      }
 
       // Save photo record
       await db.insert(jobPhotos).values({
@@ -229,6 +240,8 @@ export const cleanerRouter = router({
         cleanerProfileId: ctx.cleaner.cleanerId,
         photoUrl: url,
         photoKey: fileKey,
+        thumbnailUrl: thumbnailUrl ?? null,
+        thumbnailKey: thumbnailKey ?? null,
         filename: input.filename,
       });
 

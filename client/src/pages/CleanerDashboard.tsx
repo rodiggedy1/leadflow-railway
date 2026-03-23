@@ -149,7 +149,7 @@ function PhotoUploadButton({
   job: {
     id: number;
     cleanerAssignment: { id: number; cleanerProfileId: number; photoSubmitted: number | null } | null;
-    photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
+    photos: Array<{ id: number; photoUrl: string; thumbnailUrl: string | null; filename: string | null }>;
   };
   onSuccess: () => void;
 }) {
@@ -237,7 +237,7 @@ function PhotoUploadButton({
                   className="relative group w-12 h-12 rounded-md overflow-hidden border border-slate-200 hover:border-emerald-400 transition-all flex-shrink-0"
                 >
                   <img
-                    src={p.photoUrl}
+                    src={p.thumbnailUrl ?? p.photoUrl}
                     alt={p.filename ?? `Photo ${i + 1}`}
                     className="w-full h-full object-cover"
                     loading="lazy"
@@ -415,7 +415,7 @@ type JobRow = {
     staffNotes: string | null;
     checklistItems: Array<{ text: string; checked: boolean }> | null;
   };
-  photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
+  photos: Array<{ id: number; photoUrl: string; thumbnailUrl: string | null; filename: string | null }>;
 };
 
 function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {

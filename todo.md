@@ -2370,3 +2370,10 @@
 
 - [x] Cap visible thumbnails at 5 in job cards, show "+N more" chip that opens lightbox
 - [x] Remove empty placeholder boxes (no longer rendered — only real photos shown)
+
+## S3 Thumbnail Generation
+
+- [x] Install Sharp for server-side image resizing
+- [x] On photo upload, generate 200px thumbnail and store to S3 as separate key
+- [x] Add thumbnailUrl column to job_photos schema, run db:push
+- [x] Update Quality Dashboard: use thumbnailUrl for 48px chips, photoUrl for lightbox (929 tests pass)
