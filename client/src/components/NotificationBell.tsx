@@ -40,7 +40,7 @@ export default function NotificationBell({ onSessionOpen }: NotificationBellProp
   // Poll every 30 seconds for new activity
   const { data, refetch } = trpc.activity.getFeed.useQuery(
     { limit: 50 },
-    { refetchInterval: 30_000, refetchIntervalInBackground: false }
+    { refetchInterval: 30_000, refetchIntervalInBackground: false, retry: false, throwOnError: false }
   );
 
   const markAllRead = trpc.activity.markAllRead.useMutation({

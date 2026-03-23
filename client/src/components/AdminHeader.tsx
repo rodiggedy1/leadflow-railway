@@ -45,6 +45,8 @@ export function WidgetHealthBadge() {
   const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
   if (!data && isFetching) {
     return (
@@ -86,6 +88,8 @@ export function WebhookHealthBadge() {
   const { data, isFetching, refetch } = trpc.system.webhookHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
   if (!data && isFetching) {
     return (
@@ -127,6 +131,8 @@ export function SyncHealthBadge() {
   const { data, isFetching, refetch } = trpc.syncHealth.getSummary.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
 
   if (!data && isFetching) {
@@ -175,6 +181,8 @@ export function QualityWidget() {
   const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 55_000,
+    retry: false,
+    throwOnError: false,
   });
 
   const hasPending = data && data.pending > 0;
@@ -343,7 +351,7 @@ const NAV_ENTRIES: NavEntry[] = [
 function VoicePendingBadge() {
   const { data } = trpc.voice.listCallbacks.useQuery(
     { includeCompleted: false },
-    { refetchInterval: 60_000, staleTime: 55_000 }
+    { refetchInterval: 60_000, staleTime: 55_000, retry: false, throwOnError: false }
   );
   const count = data?.length ?? 0;
   if (count === 0) return null;

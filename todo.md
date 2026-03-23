@@ -2240,3 +2240,6 @@
 - [x] Step 7: runNoShowEscalation cron (10min before, no on_the_way/arrived) + VAPI call
 - [x] Register field-mgmt cron in internalCron.ts (every 5min, 6AM-10PM ET, gated by FIELD_MGMT_ENABLED)
 - [x] Write vitest tests for fieldMgmtEngine (29 tests, 823 total passing)
+
+## Bug Fixes — March 23 2026
+- [x] Fix "Agent login required" error on /admin/field-management page — added retry:false + throwOnError:false to all AdminHeader badge queries and NotificationBell
