@@ -178,8 +178,11 @@ export function registerWebhookRoutes(app: Express) {
             )
           );
         // Drizzle mysql2 returns [ResultSetHeader, FieldPacket[]] — affectedRows is at [0].affectedRows
+        // IMPORTANT: default to 0 (safe-fail), NOT 1. If the result shape is unexpected,
+        // we must NOT proceed — the same ?? 1 fallback caused both outbound and inbound
+        // message doubling by letting both concurrent webhook calls through the gate.
         const claimHeader = (claimResult as any)?.[0];
-        const claimed = claimHeader?.affectedRows ?? claimHeader?.rowsAffected ?? (claimResult as any)?.affectedRows ?? (claimResult as any)?.rowsAffected ?? 1;
+        const claimed = claimHeader?.affectedRows ?? claimHeader?.rowsAffected ?? (claimResult as any)?.affectedRows ?? (claimResult as any)?.rowsAffected ?? 0;
         if (claimed === 0) {
           console.log(`[Webhook] Duplicate event (atomic claim lost) — messageId ${inboundMessageId} already claimed for session ${session.id}. Skipping.`);
           return;
@@ -324,8 +327,8 @@ export function registerWebhookRoutes(app: Express) {
       // To re-enable: remove this block and uncomment the handler below.
       if (session.stage === "REACTIVATION" || session.stage === "REACTIVATION_TIME") {
         console.log(`[Webhook] Reactivation reply received (auto-reply DISABLED): stage=${session.stage}, from=${fromPhone}, text="${inboundText}"`);
-        // Log the inbound message to history so it's visible in the leads drawer
-        history.push({ role: "user", content: inboundText, ts: Date.now() });
+        // NOTE: user message was already appended to history at line 256 above — do NOT push again here.
+        // Persisting the already-updated history is all that's needed.
         if (history.length > 20) history = history.slice(-20);
         await db
           .update(conversationSessions)
