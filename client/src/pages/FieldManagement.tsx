@@ -440,6 +440,7 @@ interface TimelineEvent {
   id: string;
   logId?: number;  // numeric DB row ID — present for field_mgmt_log events, absent for synthetic status_change events
   type: EventType;
+  status: "sent" | "failed" | "pending" | "status_change";  // display state
   timestamp: Date;
   label: string;
   detail?: string;
@@ -472,6 +473,9 @@ function TimelineEventRow({ event, isLast, onRetrySuccess }: { event: TimelineEv
   const [retrying, setRetrying] = useState(false);
   const s = EVENT_STYLES[event.type];
   const hasDetail = !!event.detail;
+  const isPending = event.status === "pending";
+  const isFailed = event.status === "failed";
+  const isSent = event.status === "sent";
 
   const retryMutation = trpc.fieldMgmt.retryStep.useMutation({
     onSuccess: (data) => {
@@ -489,31 +493,60 @@ function TimelineEventRow({ event, isLast, onRetrySuccess }: { event: TimelineEv
     },
   });
 
-  const canRetry = !event.success && event.logId !== undefined && !!event.detail && event.type !== "status_change";
+  const canRetry = isFailed && event.logId !== undefined && !!event.detail;
 
-  const time = new Date(event.timestamp).toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York",
-  });
+  const timeLabel = isPending
+    ? `Expected ${new Date(event.timestamp).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York",
+      })} ET`
+    : `${new Date(event.timestamp).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York",
+      })} ET`;
+
+  // Dot colour: green=sent, red=failed, grey=pending, violet=status_change
+  const dotClass = isPending
+    ? "bg-gray-300"
+    : isFailed
+    ? "bg-red-400"
+    : isSent
+    ? s.dot
+    : "bg-violet-500"; // status_change
+
+  // Badge style: muted for pending
+  const badgeClass = isPending
+    ? "bg-gray-50 text-gray-400 border-gray-200"
+    : s.badge;
 
   return (
-    <div className="flex gap-3">
+    <div className={`flex gap-3 ${isPending ? "opacity-50" : ""}`}>
       {/* Left: dot + line */}
       <div className="flex flex-col items-center">
-        <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${event.success ? s.dot : "bg-red-400"}`} />
-        {!isLast && <div className={`w-0.5 flex-1 mt-1 ${s.line} min-h-[20px]`} />}
+        <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${dotClass}`} />
+        {!isLast && <div className={`w-0.5 flex-1 mt-1 ${isPending ? "bg-gray-100" : s.line} min-h-[20px]`} />}
       </div>
 
       {/* Right: content */}
       <div className="flex-1 pb-4 min-w-0">
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2 py-0.5 ${s.badge}`}>
+            <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2 py-0.5 ${badgeClass}`}>
               {s.icon}{s.label}
             </span>
-            <span className="text-sm font-medium text-gray-800">{event.label}</span>
-            {!event.success && (
+            <span className={`text-sm font-medium ${isPending ? "text-gray-400" : "text-gray-800"}`}>{event.label}</span>
+            {/* Status pill */}
+            {isSent && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                <CheckCircle2 className="w-3 h-3" /> Sent
+              </span>
+            )}
+            {isFailed && (
               <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
                 <XCircle className="w-3 h-3" /> Failed
+              </span>
+            )}
+            {isPending && (
+              <span className="inline-flex items-center gap-1 text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5">
+                <Clock className="w-3 h-3" /> Pending
               </span>
             )}
             {canRetry && (
@@ -531,21 +564,21 @@ function TimelineEventRow({ event, isLast, onRetrySuccess }: { event: TimelineEv
               </button>
             )}
           </div>
-          <span className="text-xs text-gray-400 shrink-0">{time} ET</span>
+          <span className={`text-xs shrink-0 ${isPending ? "text-gray-300" : "text-gray-400"}`}>{timeLabel}</span>
         </div>
 
         {/* Recipient */}
-        {event.recipient && (
+        {event.recipient && !isPending && (
           <p className="text-xs text-gray-400 mt-0.5">To: {event.recipient}</p>
         )}
 
-        {/* Error */}
-        {!event.success && event.errorDetail && (
+        {/* Error detail */}
+        {isFailed && event.errorDetail && (
           <p className="text-xs text-red-500 mt-1">{event.errorDetail}</p>
         )}
 
-        {/* Expandable SMS content */}
-        {hasDetail && (
+        {/* Expandable SMS content — only for sent/failed rows with a message */}
+        {hasDetail && !isPending && (
           <div className="mt-2">
             <button
               onClick={() => setExpanded((v) => !v)}
@@ -740,7 +773,23 @@ function JobCard({ job }: { job: JobWithTimeline }) {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   Communication Timeline
                 </span>
-                <span className="text-xs text-gray-400">{events.length} event{events.length !== 1 ? "s" : ""}</span>
+                <div className="flex items-center gap-2">
+                  {events.filter(e => e.status === "sent").length > 0 && (
+                    <span className="text-xs text-emerald-600 font-medium">
+                      {events.filter(e => e.status === "sent").length} sent
+                    </span>
+                  )}
+                  {events.filter(e => e.status === "failed").length > 0 && (
+                    <span className="text-xs text-red-600 font-medium">
+                      {events.filter(e => e.status === "failed").length} failed
+                    </span>
+                  )}
+                  {events.filter(e => e.status === "pending").length > 0 && (
+                    <span className="text-xs text-gray-400">
+                      {events.filter(e => e.status === "pending").length} pending
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 {events.map((event, idx) => (

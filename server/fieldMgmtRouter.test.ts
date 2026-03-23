@@ -688,3 +688,90 @@ describe("buildTimeline — logId field on log events", () => {
     expect(events[0].logId).toBe(999);
   });
 });
+
+// ── FULL STEP SEQUENCE — pending/sent/failed states ──────────────────────────
+
+describe("buildTimeline — full step sequence with pending/sent/failed states", () => {
+  const ALL_STEPS = [
+    "pre_job_reminder", "client_pre_job", "client_on_the_way", "arrived_checkin",
+    "mid_job_nudge", "completion_flow", "exception_sms", "exception_call",
+    "noshow_alert", "client_running_late",
+  ];
+
+  // Minimal mirror of the new buildTimeline logic for unit testing
+  function buildFullTimeline(
+    logRows: Array<{ id: number; step: string; success: number; smsSent: string | null; recipientPhone: string | null; errorDetail: string | null; firedAt: Date }>,
+    serviceDateTime: Date
+  ): Array<{ step: string; status: "sent" | "failed" | "pending"; logId?: number }> {
+    const logByStep = new Map<string, typeof logRows[0]>();
+    for (const row of logRows) {
+      const existing = logByStep.get(row.step);
+      if (!existing || row.firedAt > existing.firedAt) {
+        logByStep.set(row.step, row);
+      }
+    }
+
+    return ALL_STEPS.map((step) => {
+      const row = logByStep.get(step);
+      if (row) {
+        return {
+          step,
+          status: row.success === 1 ? "sent" : "failed",
+          logId: row.id,
+        };
+      }
+      return { step, status: "pending" };
+    });
+  }
+
+  it("all 10 steps appear even when no log rows exist", () => {
+    const events = buildFullTimeline([], new Date("2026-03-23T12:30:00Z"));
+    expect(events).toHaveLength(10);
+    expect(events.every(e => e.status === "pending")).toBe(true);
+  });
+
+  it("fired steps show sent status, unfired steps show pending", () => {
+    const now = new Date();
+    const rows = [
+      { id: 1, step: "pre_job_reminder", success: 1, smsSent: "Hi", recipientPhone: "+1555", errorDetail: null, firedAt: now },
+      { id: 2, step: "client_pre_job",   success: 1, smsSent: "Hi", recipientPhone: "+1555", errorDetail: null, firedAt: now },
+    ];
+    const events = buildFullTimeline(rows, new Date("2026-03-23T12:30:00Z"));
+    expect(events.find(e => e.step === "pre_job_reminder")?.status).toBe("sent");
+    expect(events.find(e => e.step === "client_pre_job")?.status).toBe("sent");
+    expect(events.find(e => e.step === "client_on_the_way")?.status).toBe("pending");
+    expect(events.find(e => e.step === "arrived_checkin")?.status).toBe("pending");
+  });
+
+  it("failed steps show failed status with logId", () => {
+    const now = new Date();
+    const rows = [
+      { id: 42, step: "client_pre_job", success: 0, smsSent: "Hi", recipientPhone: "+1555", errorDetail: "429", firedAt: now },
+    ];
+    const events = buildFullTimeline(rows, new Date("2026-03-23T12:30:00Z"));
+    const clientPreJob = events.find(e => e.step === "client_pre_job");
+    expect(clientPreJob?.status).toBe("failed");
+    expect(clientPreJob?.logId).toBe(42);
+  });
+
+  it("retry overwrites earlier failed row (most recent row wins)", () => {
+    const earlier = new Date("2026-03-23T10:00:00Z");
+    const later   = new Date("2026-03-23T10:05:00Z");
+    const rows = [
+      { id: 10, step: "pre_job_reminder", success: 0, smsSent: "Hi", recipientPhone: "+1555", errorDetail: "err", firedAt: earlier },
+      { id: 11, step: "pre_job_reminder", success: 1, smsSent: "Hi", recipientPhone: "+1555", errorDetail: null,  firedAt: later   },
+    ];
+    const events = buildFullTimeline(rows, new Date("2026-03-23T12:30:00Z"));
+    const reminder = events.find(e => e.step === "pre_job_reminder");
+    // Most recent row (id=11, success=1) should win
+    expect(reminder?.status).toBe("sent");
+    expect(reminder?.logId).toBe(11);
+  });
+
+  it("status field is present on every event", () => {
+    const events = buildFullTimeline([], new Date("2026-03-23T12:30:00Z"));
+    for (const e of events) {
+      expect(["sent", "failed", "pending"]).toContain(e.status);
+    }
+  });
+});

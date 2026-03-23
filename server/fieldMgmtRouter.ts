@@ -91,6 +91,7 @@ export type TimelineEvent = {
   id: string;
   logId?: number;  // numeric DB row ID — present for field_mgmt_log events, absent for synthetic status_change events
   type: "sms_cleaner" | "sms_client" | "call" | "cs_alert" | "status_change";
+  status: "sent" | "failed" | "pending" | "status_change";  // display state
   timestamp: Date;
   label: string;
   detail?: string;
@@ -110,6 +111,92 @@ function deriveEventType(step: string): TimelineEvent["type"] {
   return "sms_cleaner";
 }
 
+// ── Ordered step sequence with expected fire times ───────────────────────────
+// Each entry defines: step key, human label, recipient, kind, and a function
+// that computes the expected fire time from serviceDateTime.
+// Status-triggered steps (on_the_way, arrived, completed, etc.) have no
+// predictable time — they show as "pending" until the status fires them.
+
+const STEP_SEQUENCE: Array<{
+  step: string;
+  label: string;
+  recipient: "cleaner" | "client" | "cs";
+  kind: "sms" | "call" | "alert";
+  // Returns expected fire time, or null if time is status-triggered (unpredictable)
+  expectedTime: (serviceDateTime: Date) => Date | null;
+}> = [
+  {
+    step: "pre_job_reminder",
+    label: "Pre-Job Reminder",
+    recipient: "cleaner",
+    kind: "sms",
+    expectedTime: (t) => new Date(t.getTime() - 2 * 60 * 60 * 1000), // T-2hrs
+  },
+  {
+    step: "client_pre_job",
+    label: "Pre-Job Notification",
+    recipient: "client",
+    kind: "sms",
+    expectedTime: (t) => new Date(t.getTime() - 2 * 60 * 60 * 1000 + 90 * 1000), // T-2hrs + 90s (after cleaner reminder)
+  },
+  {
+    step: "client_on_the_way",
+    label: "On the Way Notification",
+    recipient: "client",
+    kind: "sms",
+    expectedTime: () => null, // status-triggered: on_the_way
+  },
+  {
+    step: "arrived_checkin",
+    label: "Arrival Check-In",
+    recipient: "cleaner",
+    kind: "sms",
+    expectedTime: () => null, // status-triggered: arrived
+  },
+  {
+    step: "mid_job_nudge",
+    label: "Mid-Job Nudge",
+    recipient: "cleaner",
+    kind: "sms",
+    expectedTime: (t) => new Date(t.getTime() + 45 * 60 * 1000), // ~T+45min (after arrived)
+  },
+  {
+    step: "completion_flow",
+    label: "Completion Checklist",
+    recipient: "cleaner",
+    kind: "sms",
+    expectedTime: () => null, // status-triggered: completed
+  },
+  {
+    step: "exception_sms",
+    label: "No Check-In Alert",
+    recipient: "cleaner",
+    kind: "sms",
+    expectedTime: (t) => new Date(t.getTime() - 30 * 60 * 1000), // T-30min (if no arrived)
+  },
+  {
+    step: "exception_call",
+    label: "Escalation Call",
+    recipient: "cleaner",
+    kind: "call",
+    expectedTime: (t) => new Date(t.getTime() - 30 * 60 * 1000), // same window as exception_sms
+  },
+  {
+    step: "noshow_alert",
+    label: "No-Show CS Alert",
+    recipient: "cs",
+    kind: "alert",
+    expectedTime: (t) => new Date(t.getTime() - 10 * 60 * 1000), // T-10min
+  },
+  {
+    step: "client_running_late",
+    label: "Running Late Alert",
+    recipient: "client",
+    kind: "sms",
+    expectedTime: () => null, // status-triggered: running_late
+  },
+];
+
 // ── Helper: build timeline events from log rows + job status ─────────────────
 
 function buildTimeline(
@@ -126,34 +213,68 @@ function buildTimeline(
     id: number;
     jobStatus: string | null;
     updatedAt: Date;
+    serviceDateTime: string | null;
     delayMinutes: number | null;
     issueNote: string | null;
   }
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
-  // 1. Automated step events from field_mgmt_log
+  // Index log rows by step for O(1) lookup
+  const logByStep = new Map<string, typeof logRows[0]>();
   for (const row of logRows) {
-    const meta = STEP_LABELS[row.step] ?? { label: row.step, recipient: "cleaner", kind: "sms" };
-    events.push({
-      id: `log-${row.id}`,
-      logId: row.id,
-      type: deriveEventType(row.step),
-      timestamp: new Date(row.firedAt),
-      label: meta.label,
-      detail: row.smsSent ?? undefined,
-      recipient: row.recipientPhone ?? undefined,
-      success: row.success === 1,
-      errorDetail: row.errorDetail ?? undefined,
-      step: row.step,
-    });
+    // Keep the most recent row per step (in case of retries)
+    const existing = logByStep.get(row.step);
+    if (!existing || new Date(row.firedAt) > new Date(existing.firedAt)) {
+      logByStep.set(row.step, row);
+    }
   }
 
-  // 2. Job status change event (synthesized from current status + updatedAt)
+  const serviceTime = job.serviceDateTime ? parseServiceDateTime(job.serviceDateTime) : null;
+
+  // 1. Full step sequence — every step always appears
+  for (const stepDef of STEP_SEQUENCE) {
+    const row = logByStep.get(stepDef.step);
+    const type = deriveEventType(stepDef.step);
+
+    if (row) {
+      // Step fired — show real result
+      events.push({
+        id: `log-${row.id}`,
+        logId: row.id,
+        type,
+        status: row.success === 1 ? "sent" : "failed",
+        timestamp: new Date(row.firedAt),
+        label: stepDef.label,
+        detail: row.smsSent ?? undefined,
+        recipient: row.recipientPhone ?? undefined,
+        success: row.success === 1,
+        errorDetail: row.errorDetail ?? undefined,
+        step: stepDef.step,
+      });
+    } else {
+      // Step not yet fired — show pending with expected time
+      const expectedTs = serviceTime ? stepDef.expectedTime(serviceTime) : null;
+      // Use expected time if in the future or recent past; otherwise use serviceDateTime as anchor
+      const pendingTs = expectedTs ?? serviceTime ?? new Date();
+      events.push({
+        id: `pending-${stepDef.step}-${job.id}`,
+        type,
+        status: "pending",
+        timestamp: pendingTs,
+        label: stepDef.label,
+        success: false,
+        step: stepDef.step,
+      });
+    }
+  }
+
+  // 2. Status change events — interleaved at correct chronological position
   if (job.jobStatus) {
     events.push({
       id: `status-${job.id}`,
       type: "status_change",
+      status: "status_change",
       timestamp: new Date(job.updatedAt),
       label: STATUS_LABELS[job.jobStatus] ?? job.jobStatus,
       detail:

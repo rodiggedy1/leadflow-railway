@@ -2315,3 +2315,11 @@
 - [x] Investigate OpenPhone 429 rate limit: add delay between pre_job_reminder and sendClientPreJobSms
 - [x] Add phone number normalization to E.164 format in sendSms helper (strip parens, spaces, dashes)
 - [x] Add Retry Failed Step button to timeline in FieldManagement UI
+
+## Field Management — Full Step Sequence Timeline
+
+- [x] Update buildTimeline to return all expected steps (not just fired ones) with state: sent/failed/pending
+- [x] Each pending step shows expected fire time based on job serviceDateTime
+- [x] Rebuild timeline UI: green=sent, red=failed, grey=pending, purple=status change
+- [x] Status change markers remain interleaved at correct chronological position
+- [x] Retry button on failed steps, "View message" on sent steps
