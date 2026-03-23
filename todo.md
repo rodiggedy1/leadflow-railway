@@ -2351,3 +2351,7 @@
 - [x] Implement fallback in runMidJobNudges: use in_progress + updatedAt when no arrived_checkin log row exists
 - [x] Investigate where cleaner phone numbers come from (Launch27 sync vs manual entry — phones must be entered manually in admin UI, Launch27 team records have no phone field)
 - [x] Update tests for the new fallback logic (929 tests pass)
+
+## Cleaner Profile Editor UI
+
+- [x] Add cleaner profile edit section to Quality Dashboard so admins can set phone numbers per team

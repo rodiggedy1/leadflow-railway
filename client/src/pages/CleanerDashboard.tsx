@@ -971,6 +971,156 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
   );
 }
 
+// ── Cleaner Profiles Section ─────────────────────────────────────────────────
+/**
+ * Inline editor for cleaner profiles — lets admin set phone, email, pay %.
+ * Phone numbers are required for SMS steps (arrived_checkin, mid_job_nudge, etc.).
+ */
+function CleanerProfilesSection() {
+  const { data: cleaners, refetch } = trpc.quality.listCleaners.useQuery();
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState({ name: "", phone: "", email: "", payPercent: "" });
+  const utils = trpc.useUtils();
+
+  const updateCleaner = trpc.quality.updateCleaner.useMutation({
+    onSuccess: () => {
+      toast.success("Profile updated");
+      setEditId(null);
+      refetch();
+      utils.quality.listCleaners.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function startEdit(c: { id: number; name: string; phone: string | null; email: string | null; payPercent: string | null }) {
+    setEditId(c.id);
+    setForm({
+      name: c.name,
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+      payPercent: c.payPercent ?? "",
+    });
+  }
+
+  function saveEdit() {
+    if (!editId) return;
+    updateCleaner.mutate({
+      id: editId,
+      name: form.name || undefined,
+      phone: form.phone || undefined,
+      email: form.email || undefined,
+      payPercent: form.payPercent || undefined,
+    });
+  }
+
+  if (!cleaners || cleaners.length === 0) return null;
+
+  return (
+    <Card className="mt-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="w-4 h-4 text-primary" />
+          Cleaner Profiles
+          <span className="text-xs font-normal text-muted-foreground ml-1">Phone numbers required for SMS steps</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {cleaners.map((c) => {
+            const hasPhone = !!c.phone;
+            const isEditing = editId === c.id;
+            return (
+              <div key={c.id} className="p-3 rounded-lg bg-muted/40 border">
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1">Name</label>
+                        <Input
+                          value={form.name}
+                          onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1">Phone (SMS)</label>
+                        <Input
+                          value={form.phone}
+                          onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                          placeholder="+12025551234"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1">Email (portal login)</label>
+                        <Input
+                          type="email"
+                          value={form.email}
+                          onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                          placeholder="cleaner@example.com"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1">Pay % (e.g. 45)</label>
+                        <Input
+                          value={form.payPercent}
+                          onChange={e => setForm(f => ({ ...f, payPercent: e.target.value }))}
+                          placeholder="45"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="h-7 px-3 text-xs"
+                        onClick={saveEdit}
+                        disabled={updateCleaner.isPending}
+                        style={{ backgroundColor: "#E8603C", color: "white" }}
+                      >
+                        {updateCleaner.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                        Save
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 px-3 text-xs" onClick={() => setEditId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{c.name}</p>
+                        {!hasPhone && (
+                          <Badge variant="outline" className="text-xs border-amber-400 text-amber-600 bg-amber-50">
+                            No phone
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {c.phone ? c.phone : "—"} · {c.email ?? "no email"} · {c.payPercent ? `${c.payPercent}% pay` : "pay % not set"}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => startEdit(c)}
+                    >
+                      <Pencil className="w-3 h-3" /> Edit
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 type ViewMode = "by-time" | "by-cleaner";
 
@@ -1351,6 +1501,9 @@ export default function CleanerDashboard() {
 
         {/* Weekly Pay Summary */}
         <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); setResetEmail(""); }} />
+
+        {/* Cleaner Profiles (phone numbers, email, pay %) */}
+        <CleanerProfilesSection />
       </div>
     </div>
 
