@@ -41,6 +41,7 @@ import {
   Mic,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -551,6 +552,11 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
     },
   });
 
+  const voiceAlertMutation = trpc.fieldMgmt.voiceAlertCleaner.useMutation({
+    onSuccess: () => toast.success("Voice alert call placed to cleaner"),
+    onError: (err: { message?: string }) => toast.error(err.message || "Failed to place call"),
+  });
+
   const replyPhone = replyTo === "client" ? (job.customerPhone ?? "") : "";
 
 
@@ -669,6 +675,22 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
           </div>
         </div>
       )}
+
+      {/* Quick actions */}
+      <div className="px-5 py-3 border-b border-slate-100 shrink-0">
+        <button
+          onClick={() => voiceAlertMutation.mutate({ cleanerJobId: job.id })}
+          disabled={voiceAlertMutation.isPending}
+          className="w-full flex items-center justify-center gap-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl px-3 py-2 transition-colors disabled:opacity-50"
+        >
+          {voiceAlertMutation.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Phone className="w-3.5 h-3.5" />
+          )}
+          Voice Alert Cleaner
+        </button>
+      </div>
 
       {/* Tabs */}
       <div className="flex border-b border-slate-100 shrink-0">
