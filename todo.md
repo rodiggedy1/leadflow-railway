@@ -2251,3 +2251,22 @@
 ## Tracker Token — Early Generation (March 23 2026)
 - [x] Generate trackerToken at job creation/sync time (qualityRouter.ts both inserts) so every job always has a token
 - [x] Backfill any existing jobs that are missing a token (45 jobs backfilled)
+
+## Field Management Log Tab (March 23 2026)
+- [ ] Add tRPC procedure: fieldMgmt.getJobsForDay — returns today's jobs with status summary
+- [ ] Add tRPC procedure: fieldMgmt.getJobTimeline — returns full event timeline for a single job
+- [ ] Build Log tab on FieldManagement.tsx with jobs list (date picker, job cards)
+- [ ] Build expandable per-job communication timeline (visual event stream)
+- [ ] Timeline events: field_mgmt_log steps + jobStatus changes + manual notes
+- [ ] Visual design: color-coded by event type (SMS to client, SMS to cleaner, status change, call)
+- [ ] Show SMS message content inline in the timeline
+- [ ] Auto-refresh every 60s when Log tab is active
+
+## Field Management Log Tab — March 23 2026
+- [x] Create fieldMgmtRouter.ts with getJobsForDay and getJobTimeline procedures
+- [x] Register fieldMgmtRouter in routers.ts
+- [x] Build Log tab UI: jobs list with date picker, auto-refresh, and job cards
+- [x] Per-job expandable communication timeline with colored event rows
+- [x] Expandable SMS content per event (tap to reveal full message)
+- [x] Step progress bar per job card
+- [x] Write vitest tests for fieldMgmtRouter (30 tests)

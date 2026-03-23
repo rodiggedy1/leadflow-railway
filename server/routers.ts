@@ -28,6 +28,7 @@ import { cleanerRouter } from "./cleanerRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
+import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -2061,6 +2062,7 @@ export const appRouter = router({
   tracker: trackerRouter,
   settings: settingsRouter,
   commandCenter: commandCenterRouter,
+  fieldMgmt: fieldMgmtRouter,
 
   simulator: router({
     chat: publicProcedure
