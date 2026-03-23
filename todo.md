@@ -2450,3 +2450,7 @@
 - [x] Show noshow_call in Control Tower and Job Log timeline (via STEP_SEQUENCE entry)
 - [x] Add Confirm Assignment button to Day Board detail panel for bookingStatus='new' jobs
 - [x] Add confirmAssignment tRPC procedure to set bookingStatus='assigned'
+
+## Bug Fix: Rescheduled jobs still showing on original date
+- [x] Diagnose why Elizabeth Cutler's rescheduled job still appears on today's Day Board after manual sync
+- [x] Fix sync to mark stale jobs as 'rescheduled' when no longer in Launch27 response; filter rescheduled/cancelled from getJobsForDay

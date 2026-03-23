@@ -19,7 +19,7 @@
 
 import { randomBytes } from "crypto";
 import { z } from "zod";
-import { and, desc, eq, gte, isNull, sql, count, lt } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
 import { router, protectedProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -1245,11 +1245,47 @@ export const qualityRouter = router({
         }
       }
 
+      // ── Stale cleanup: mark rows that are no longer in Launch27's response as "rescheduled" ──
+      // Collect all (bookingId, cleanerProfileId) pairs returned by Launch27 for this date.
+      // Any DB row for this date whose bookingId is NOT in that set was removed/rescheduled
+      // in Launch27 after the last sync — mark it so it disappears from the Day Board.
+      let staleMarked = 0;
+      try {
+        const freshBookingIds = bookings.map((b) => b.id);
+        if (freshBookingIds.length > 0) {
+          // Find all DB rows for this date whose bookingId is no longer in the fresh list
+          const staleRows = await db
+            .select({ id: cleanerJobs.id })
+            .from(cleanerJobs)
+            .where(
+              and(
+                eq(cleanerJobs.jobDate, dateStr),
+                notInArray(cleanerJobs.bookingId, freshBookingIds),
+                ne(cleanerJobs.bookingStatus, "rescheduled"),
+                ne(cleanerJobs.bookingStatus, "cancelled")
+              )
+            );
+          if (staleRows.length > 0) {
+            // Update each stale row individually
+            for (const row of staleRows) {
+              await db
+                .update(cleanerJobs)
+                .set({ bookingStatus: "rescheduled" })
+                .where(eq(cleanerJobs.id, row.id));
+              staleMarked++;
+            }
+          }
+        }
+      } catch (staleErr) {
+        errors.push(`Stale cleanup error: ${staleErr instanceof Error ? staleErr.message : String(staleErr)}`);
+      }
+
       return {
         date: dateStr,
         bookingsFetched: bookings.length,
         jobsCreated: created,
         jobsUpdated: updated,
+        staleMarked,
         errors,
       };
     }),
@@ -1265,7 +1301,12 @@ export const qualityRouter = router({
       return db
         .select()
         .from(cleanerJobs)
-        .where(eq(cleanerJobs.jobDate, input.date))
+        .where(
+          and(
+            eq(cleanerJobs.jobDate, input.date),
+            notInArray(cleanerJobs.bookingStatus, ["rescheduled", "cancelled"])
+          )
+        )
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
     }),
 
