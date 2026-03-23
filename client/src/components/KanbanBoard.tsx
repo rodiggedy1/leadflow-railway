@@ -56,6 +56,8 @@ type LeadRow = {
   lastActivityText: string | null;
   lastActivityType: "sms" | "call" | null;
   createdAt: Date | string;
+  reactivationLastPrice?: number | null;
+  reactivationDiscountPct?: number | null;
 };
 
 // ── Kanban column definitions ─────────────────────────────────────────────────
@@ -235,6 +237,11 @@ function LeadCard({
   const total = computeTotal(lead.quotedPrice, lead.extras);
   const { label: srcLabel, icon: srcIcon, isCampaign } = getSourceInfo(lead.leadSource);
 
+  // For campaign leads with no quoted price yet, show their last booking amount
+  const lastBookingPrice = (total === 0 && isCampaign && lead.reactivationLastPrice)
+    ? lead.reactivationLastPrice
+    : null;
+
   // Urgency glow — based on idle time since last activity (or creation if no activity)
   const activityDate = lead.lastActivityAt ?? lead.createdAt;
   const idleMs = activityDate ? Date.now() - new Date(activityDate).getTime() : 0;
@@ -317,6 +324,11 @@ function LeadCard({
       <div className="flex items-center justify-between flex-1 mt-1">
         {total > 0 ? (
           <span className="text-base font-bold" style={{ color: "#16a34a" }}>${total}</span>
+        ) : lastBookingPrice ? (
+          <div className="flex items-center gap-1">
+            <span className="text-base font-bold text-purple-600">${lastBookingPrice}</span>
+            <span className="text-[10px] text-gray-400 font-medium">last booking</span>
+          </div>
         ) : (
           <span className="text-sm text-gray-300 font-medium">—</span>
         )}

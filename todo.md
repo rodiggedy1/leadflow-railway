@@ -2162,3 +2162,9 @@
 - [x] Add getBlastDetail tRPC procedure (per-contact reply/pipeline status for a blast)
 - [x] Build BlastDetailDrawer — slide-in panel showing replied contacts, stage, pipeline status
 - [x] Wire click handler on AI Center blast cards to open the drawer
+
+## Widget DOWN Fix — March 22
+- [ ] Diagnose and fix Widget DOWN status in admin header
+
+## Pipeline Card Last Booking Price — March 22
+- [x] Show last booking $ amount on pipeline cards for campaign/reactivation leads (same position as quoted price) — purple text + "last booking" label; backfilled 51 existing sessions

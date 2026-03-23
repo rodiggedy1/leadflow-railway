@@ -1897,6 +1897,13 @@ Respond in JSON with this exact schema:
             // Session-based funnel leads already have an active session — no need to create one.
             if (target.isPhoneOnly) {
               try {
+                // Look up the last booking price from completed_jobs for this phone
+                const [priceRow] = await db
+                  .select({ lastBookingPrice: completedJobs.lastBookingPrice })
+                  .from(completedJobs)
+                  .where(eq(completedJobs.phone, target.phone))
+                  .orderBy(desc(completedJobs.jobDate))
+                  .limit(1);
                 await db.insert(conversationSessions).values({
                   leadPhone: target.phone,
                   leadName: target.name ?? "",
@@ -1906,6 +1913,7 @@ Respond in JSON with this exact schema:
                   messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
                   aiMode: 1,
                   isBooked: 0,
+                  reactivationLastPrice: priceRow?.lastBookingPrice ?? null,
                 });
               } catch (sessionErr) {
                 // Non-fatal: session creation failure should not block the send count
