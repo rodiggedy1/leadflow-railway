@@ -50,6 +50,7 @@ type LeadRow = {
   serviceType: string | null;
   assignedAgentName: string | null;
   leadSource: string | null;
+  messageHistory?: string | null;
   lastActivityAt: Date | string | null;
   lastActivityText: string | null;
   lastActivityType: "sms" | "call" | null;
@@ -123,6 +124,28 @@ KANBAN_COLUMNS.forEach(col => {
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Returns true if this lead came from a campaign blast (not an organic form/widget/voice submission) */
+function isCampaignLead(lead: LeadRow): boolean {
+  const src = lead.leadSource ?? "";
+  return (
+    src.startsWith("campaign:") ||
+    src === "reactivation" ||
+    src === "command-center" ||
+    src.startsWith("always-on")
+  );
+}
+
+/** Returns true if the lead has at least one inbound (role:"user") message */
+function hasReplied(lead: LeadRow): boolean {
+  if (!lead.messageHistory) return false;
+  try {
+    const msgs: { role: string }[] = JSON.parse(lead.messageHistory);
+    return msgs.some(m => m.role === "user");
+  } catch {
+    return false;
+  }
+}
 
 function timeAgo(date: Date | string | null): string {
   if (!date) return "";
@@ -504,6 +527,10 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
     const map: Record<string, LeadRow[]> = {};
     KANBAN_COLUMNS.forEach(col => { map[col.id] = []; });
     filteredLeads.forEach(lead => {
+      // Campaign/reactivation leads only appear in the pipeline once the customer
+      // has replied (has at least one inbound message). Leads that were blasted
+      // but never responded should not clutter the pipeline board.
+      if (isCampaignLead(lead) && !hasReplied(lead)) return;
       const colId = STAGE_TO_COLUMN[lead.stage];
       if (colId) {
         map[colId].push(lead);

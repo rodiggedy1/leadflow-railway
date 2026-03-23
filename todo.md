@@ -2144,3 +2144,6 @@
 - [x] Add leads.getCustomerHistory tRPC procedure (queries completed_jobs by phone)
 - [x] Show Customer History panel in ConversationDrawer for campaign/reactivation leads
 - [x] Display: full name, last price, last service date, service type, frequency, address
+
+## Pipeline Board Fix — March 22
+- [x] Campaign leads only appear in pipeline New Leads column if they have replied (have at least one inbound/user message in messageHistory) — not all 50 sent leads
