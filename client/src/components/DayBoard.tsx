@@ -580,7 +580,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-start justify-between p-5 border-b border-slate-100">
+      <div className="flex items-start justify-between p-5 border-b border-slate-100 shrink-0">
         <div className="flex-1 min-w-0 pr-3">
           <div className="flex items-center gap-2 mb-1">
             <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${sc.bg} ${sc.border} ${sc.text}`}>
@@ -600,7 +600,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
       </div>
 
       {/* Meta row */}
-      <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100">
+      <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100 shrink-0">
         {[
           { icon: <Clock className="w-3.5 h-3.5" />, label: "Start", value: startTime },
           { icon: <Home className="w-3.5 h-3.5" />, label: "Duration", value: durationLabel },
@@ -614,7 +614,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
       </div>
 
       {/* Service info */}
-      <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+      <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3 shrink-0">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-slate-500">Service</p>
           <p className="text-sm text-slate-800 font-medium truncate">{job.serviceType ?? "—"}</p>
@@ -626,7 +626,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
       </div>
 
       {/* SMS progress */}
-      <div className="px-5 py-3 border-b border-slate-100">
+      <div className="px-5 py-3 border-b border-slate-100 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-slate-500">SMS Steps</span>
           <span className="text-xs font-semibold text-slate-700">{job.stepsSuccess}/{job.totalSteps}</span>
@@ -641,7 +641,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
 
       {/* Unconfirmed assignment banner */}
       {job.bookingStatus === "new" && (
-        <div className="mx-5 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="mx-5 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg shrink-0">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
@@ -662,7 +662,7 @@ function DetailPanel({ job, onClose, onConfirmAssignment }: { job: Job; onClose:
 
       {/* Issue note */}
       {job.issueNote && (
-        <div className="mx-5 mt-3 p-3 bg-rose-50 border border-rose-100 rounded-lg">
+        <div className="mx-5 mt-3 p-3 bg-rose-50 border border-rose-100 rounded-lg shrink-0">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-rose-500 mt-0.5 shrink-0" />
             <p className="text-xs text-rose-700">{job.issueNote}</p>
