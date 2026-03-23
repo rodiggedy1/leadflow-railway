@@ -70,7 +70,7 @@ const WORKFLOW: WorkflowStep[] = [
     phase: "Arrival",
     label: "Arrival Check-In",
     triggerKind: "keyword",
-    triggerDescription: 'Cleaner texts "ARRIVED" (or app marks On-Site)',
+    triggerDescription: 'Cleaner selects "ARRIVED" in app',
     actionKind: "sms",
     messages: [
       {
@@ -115,7 +115,7 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Before leaving:\n\n1. Upload photos: {{login link}}\n2. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.",
+          "Before leaving:\n\n1. Upload photos: {{login link}}\n2. Double check the checklist\n3. Confirm:\n   \u2022 All rooms completed\n   \u2022 Trash removed\n   \u2022 Lights off / doors locked\n   \u2022 Walk the client around and ask for a review\n\nReply DONE when finished.",
         note: "{{login link}} links directly to the photo upload screen for this job.",
       },
     ],
@@ -135,8 +135,8 @@ const WORKFLOW: WorkflowStep[] = [
     messages: [
       {
         role: "outbound",
-        content:
-          "Hey — we haven't received your check-in. Is everything okay? Reply YES if you're on your way.",
+      content:
+          "Hey \u2014 we haven't received your check-in. Is everything okay?",
         note: "Step 1: SMS fires first.",
       },
       {
