@@ -345,6 +345,11 @@ export default function ControlTowerTab() {
     onError: (err) => toast.error(err.message || "Failed to send"),
   });
 
+  const voiceAlertMutation = trpc.fieldMgmt.voiceAlertCleaner.useMutation({
+    onSuccess: () => toast.success("Voice alert call placed to cleaner"),
+    onError: (err) => toast.error(err.message || "Failed to place call"),
+  });
+
   // Auto-scroll messages to bottom
   useEffect(() => {
     if (smsDrawer.open) {
@@ -746,15 +751,19 @@ export default function ControlTowerTab() {
                       Retry failed step
                     </Button>
                   )}
-                  {selectedJob.trackerToken && (
-                    <Button
-                      variant="outline"
-                      className="h-12 rounded-2xl"
-                      onClick={() => window.open(`/tracker/${selectedJob.trackerToken}`, "_blank")}
-                    >
-                      <ClipboardList className="mr-2 h-4 w-4" /> Open tracker
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-amber-300 text-amber-700 hover:bg-amber-50"
+                    disabled={voiceAlertMutation.isPending}
+                    onClick={() => voiceAlertMutation.mutate({ cleanerJobId: selectedJob.id })}
+                  >
+                    {voiceAlertMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Phone className="mr-2 h-4 w-4" />
+                    )}
+                    Voice Alert Cleaner
+                  </Button>
                   <Button
                     variant="outline"
                     className="h-12 rounded-2xl"

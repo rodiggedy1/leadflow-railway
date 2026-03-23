@@ -29,6 +29,7 @@ import {
   parseServiceDateTime,
   formatTimeET,
   recordStep,
+  placeNoCheckinEscalationCall,
 } from "./fieldMgmtEngine";
 
 // ── Test override phone ───────────────────────────────────────────────────────
@@ -1052,6 +1053,53 @@ export const fieldMgmtRouter = router({
         smsSent: input.body,
         recipientPhone: input.to,
       });
+      return { success: true };
+    }),
+
+  /**
+   * Manually trigger a VAPI check-in alert call to the cleaner for a specific job.
+   * Reuses the same placeNoCheckinEscalationCall used by the automation engine.
+   */
+  voiceAlertCleaner: adminProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const rows = await db
+        .select({
+          id: cleanerJobs.id,
+          cleanerName: cleanerJobs.cleanerName,
+          teamName: cleanerJobs.teamName,
+          customerName: cleanerJobs.customerName,
+          jobAddress: cleanerJobs.jobAddress,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
+        })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+
+      const job = rows[0];
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+
+      const scheduledTime = job.serviceDateTime
+        ? new Date(job.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })
+        : "scheduled time";
+
+      const success = await placeNoCheckinEscalationCall({
+        cleanerName: job.cleanerName ?? job.teamName ?? "the cleaner",
+        customerName: job.customerName ?? "the client",
+        jobAddress: job.jobAddress ?? "the job address",
+        scheduledTime,
+        cleanerJobId: input.cleanerJobId,
+        step: "manual_voice_alert",
+      });
+
+      if (!success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to place call — check VAPI credentials or kill switch" });
+      }
+
       return { success: true };
     }),
 
