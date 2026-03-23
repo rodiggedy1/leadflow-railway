@@ -331,6 +331,17 @@ function JobBlock({
         {widthPct > 8 && (
           <span className="text-[10px] opacity-60 truncate leading-tight">{shortAddr}</span>
         )}
+        {widthPct > 12 && (
+          <span
+            className={`
+              inline-flex items-center self-start gap-0.5 px-1 py-0 rounded text-[9px] font-semibold uppercase tracking-wide leading-4
+              ${sc.bg} ${sc.text} border ${sc.border} opacity-80
+            `}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} shrink-0`} />
+            {sc.label}
+          </span>
+        )}
       </div>
     </button>
   );

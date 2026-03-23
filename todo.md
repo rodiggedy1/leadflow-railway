@@ -2416,3 +2416,7 @@
 - [x] Loading skeleton for the board
 - [x] Empty state when no jobs for the day
 - [x] Add "Day Board" as a third tab on During-Field Mgmt page (929 tests pass)
+
+## Day Board — Status Badge on Job Blocks
+
+- [x] Show status label badge inside each job block (e.g. "Not Started", "Completed")
