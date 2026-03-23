@@ -9,7 +9,7 @@
  * Data: wired to fieldMgmt.getJobsForDay (same query as BoardTab / LogTab).
  * The component maps real DB fields to the display shape used in the prototype.
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ type Job = {
   teamName: string | null;
   customerName: string | null;
   customerPhone: string | null;
+  cleanerPhone: string | null;
   jobAddress: string | null;
   serviceDateTime: string | null;
   serviceType: string | null;
@@ -305,6 +307,13 @@ export default function ControlTowerTab() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
 
+  // SMS drawer state
+  const [smsDrawer, setSmsDrawer] = useState<{ open: boolean; jobId: number | null; to: string; toName: string; recipientType: "client" | "cleaner" }>({
+    open: false, jobId: null, to: "", toName: "", recipientType: "client",
+  });
+  const [replyBody, setReplyBody] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const { data: jobs = [], isLoading, isFetching, refetch } = trpc.fieldMgmt.getJobsForDay.useQuery(
     { date },
     { staleTime: 30_000, refetchInterval: 60_000, refetchIntervalInBackground: false, retry: false, throwOnError: false }
@@ -321,6 +330,27 @@ export default function ControlTowerTab() {
     },
     onError: (err) => toast.error(err.message || "Retry failed"),
   });
+
+  // ── SMS drawer queries ────────────────────────────────────────────────────
+  const { data: drawerMessages = [], isLoading: drawerMessagesLoading, refetch: refetchDrawerMessages } = trpc.fieldMgmt.getJobMessages.useQuery(
+    { cleanerJobId: smsDrawer.jobId! },
+    { enabled: smsDrawer.open && smsDrawer.jobId !== null }
+  );
+
+  const sendJobSms = trpc.fieldMgmt.sendJobSms.useMutation({
+    onSuccess: () => {
+      setReplyBody("");
+      void refetchDrawerMessages();
+    },
+    onError: (err) => toast.error(err.message || "Failed to send"),
+  });
+
+  // Auto-scroll messages to bottom
+  useEffect(() => {
+    if (smsDrawer.open) {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  }, [drawerMessages, smsDrawer.open]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
@@ -683,6 +713,24 @@ export default function ControlTowerTab() {
                       <Phone className="mr-2 h-4 w-4" /> Call client
                     </Button>
                   )}
+                  {selectedJob.customerPhone && (
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-2xl"
+                      onClick={() => setSmsDrawer({ open: true, jobId: selectedJob.id, to: selectedJob.customerPhone!, toName: selectedJob.customerName ?? "Client", recipientType: "client" })}
+                    >
+                      <MessageSquare className="mr-2 h-4 w-4" /> Text client
+                    </Button>
+                  )}
+                  {selectedJob.cleanerPhone && (
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-2xl"
+                      onClick={() => setSmsDrawer({ open: true, jobId: selectedJob.id, to: selectedJob.cleanerPhone!, toName: selectedJob.cleanerName ?? selectedJob.teamName ?? "Cleaner", recipientType: "cleaner" })}
+                    >
+                      <MessageSquare className="mr-2 h-4 w-4" /> Text cleaner
+                    </Button>
+                  )}
                   {firstFailedEvent?.logId != null && (
                     <Button
                       variant="outline"
@@ -743,6 +791,77 @@ export default function ControlTowerTab() {
           </div>
         </CardContent>
       </Card>
+      {/* SMS Chat Drawer */}
+      <Sheet open={smsDrawer.open} onOpenChange={(o) => setSmsDrawer(prev => ({ ...prev, open: o }))}>
+        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+            <SheetTitle className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              {smsDrawer.toName}
+              <span className="text-sm font-normal text-slate-500">{smsDrawer.to}</span>
+            </SheetTitle>
+          </SheetHeader>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            {drawerMessagesLoading && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              </div>
+            )}
+            {!drawerMessagesLoading && drawerMessages.length === 0 && (
+              <div className="text-center text-sm text-slate-400 py-8">No messages yet</div>
+            )}
+            {drawerMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={cn(
+                  "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
+                  msg.direction === "outbound"
+                    ? "ml-auto bg-slate-900 text-white rounded-br-sm"
+                    : "mr-auto bg-slate-100 text-slate-900 rounded-bl-sm"
+                )}
+              >
+                <div>{msg.body}</div>
+                <div className={cn("text-xs mt-1", msg.direction === "outbound" ? "text-slate-400" : "text-slate-500")}>
+                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {msg.direction === "inbound" && (
+                    <span className="ml-1 font-medium">· {msg.phone}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Compose */}
+          <div className="px-5 py-4 border-t shrink-0">
+            <div className="flex gap-2">
+              <textarea
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && replyBody.trim()) {
+                    e.preventDefault();
+                    sendJobSms.mutate({ cleanerJobId: smsDrawer.jobId!, to: smsDrawer.to, body: replyBody.trim() });
+                  }
+                }}
+                placeholder={`Message ${smsDrawer.toName}…`}
+                rows={2}
+                className="flex-1 resize-none rounded-2xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+              <Button
+                className="rounded-2xl px-4 self-end"
+                disabled={!replyBody.trim() || sendJobSms.isPending}
+                onClick={() => sendJobSms.mutate({ cleanerJobId: smsDrawer.jobId!, to: smsDrawer.to, body: replyBody.trim() })}
+              >
+                {sendJobSms.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Press Enter to send · Shift+Enter for new line</p>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

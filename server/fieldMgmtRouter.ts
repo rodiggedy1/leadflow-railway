@@ -530,7 +530,7 @@ export const fieldMgmtRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      // Query 1: jobs for the day
+      // Query 1: jobs for the day (left-join cleanerProfiles to get cleaner phone)
       const jobs = await db
         .select({
           id: cleanerJobs.id,
@@ -538,6 +538,7 @@ export const fieldMgmtRouter = router({
           teamName: cleanerJobs.teamName,
           customerName: cleanerJobs.customerName,
           customerPhone: cleanerJobs.customerPhone,
+          cleanerPhone: cleanerProfiles.phone,
           jobAddress: cleanerJobs.jobAddress,
           serviceDateTime: cleanerJobs.serviceDateTime,
           serviceType: cleanerJobs.serviceType,
@@ -550,8 +551,10 @@ export const fieldMgmtRouter = router({
           updatedAt: cleanerJobs.updatedAt,
           createdAt: cleanerJobs.createdAt,
           bookingStatus: cleanerJobs.bookingStatus,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
         })
         .from(cleanerJobs)
+        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
         .where(eq(cleanerJobs.jobDate, input.date))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.cleanerName);
 
@@ -617,6 +620,7 @@ export const fieldMgmtRouter = router({
           teamName: job.teamName,
           customerName: job.customerName,
           customerPhone: job.customerPhone,
+          cleanerPhone: job.cleanerPhone ?? null,
           jobAddress: job.jobAddress,
           serviceDateTime: job.serviceDateTime,
           serviceType: job.serviceType,
