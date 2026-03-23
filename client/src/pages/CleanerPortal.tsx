@@ -905,10 +905,13 @@ export default function CleanerPortal() {
   }
 
   const cleaner = meQuery.data;
-  const jobs = (jobsQuery.data ?? []) as Job[];
+  const allJobs = (jobsQuery.data ?? []) as Job[];
+  // Split: active jobs (show full card) vs removed (show stripped badge card)
+  const jobs = allJobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
+  const removedJobs = allJobs.filter(j => j.bookingStatus === "rescheduled" || j.bookingStatus === "cancelled");
   const weekJobs = weekJobs0;
 
-  // Earnings summary
+  // Earnings summary — only count active (non-removed) jobs
   // Always sum components directly so photoAdjustment is always included
   const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null }) => {
     const base = parseFloat(j.basePay ?? "0") || 0;
@@ -1112,7 +1115,7 @@ export default function CleanerPortal() {
           <div className="flex justify-center py-12">
             <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
           </div>
-        ) : jobs.length === 0 ? (
+        ) : jobs.length === 0 && removedJobs.length === 0 ? (
           <div className="text-center py-12">
             <CalendarDays className="w-10 h-10 text-slate-600 mx-auto mb-3" />
             <p className="text-slate-400 font-medium">No jobs scheduled</p>
@@ -1129,6 +1132,38 @@ export default function CleanerPortal() {
                 onStatusUpdated={refetch}
               />
             ))}
+
+            {/* Removed / rescheduled jobs — stripped card */}
+            {removedJobs.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-slate-600 text-xs font-semibold uppercase tracking-widest px-1">Removed from Schedule</p>
+                {removedJobs.map(job => {
+                  const isRescheduled = job.bookingStatus === "rescheduled";
+                  return (
+                    <div
+                      key={job.id}
+                      className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 flex items-center justify-between opacity-60"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-slate-400 font-medium text-sm line-through truncate">
+                          {job.customerName ?? "Client"}
+                        </p>
+                        {job.serviceDateTime && (
+                          <p className="text-slate-600 text-xs mt-0.5">{formatTime(job.serviceDateTime)}</p>
+                        )}
+                      </div>
+                      <span className={`ml-3 shrink-0 inline-flex items-center text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${
+                        isRescheduled
+                          ? "bg-amber-900/30 text-amber-400 border-amber-700/40"
+                          : "bg-slate-700/50 text-slate-500 border-slate-600/40"
+                      }`}>
+                        {isRescheduled ? "Rescheduled" : "Cancelled"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
           </>

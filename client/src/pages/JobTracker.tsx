@@ -293,6 +293,35 @@ export default function JobTracker() {
     return <ErrorScreen message="This tracker link is invalid or has expired." />;
   }
 
+  // Show a clear message for rescheduled or cancelled appointments
+  if (job.bookingStatus === "rescheduled" || job.bookingStatus === "cancelled") {
+    const isRescheduled = job.bookingStatus === "rescheduled";
+    const firstName = job.customerName?.split(" ")[0] ?? "there";
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center px-6">
+        <div className="max-w-sm w-full text-center space-y-5">
+          <div className="text-5xl mb-2">{isRescheduled ? "📅" : "❌"}</div>
+          <h1 className="text-xl font-bold text-white">
+            {isRescheduled
+              ? `Hi ${firstName}, your appointment has been rescheduled`
+              : `Hi ${firstName}, your appointment has been cancelled`}
+          </h1>
+          <p className="text-white/50 text-sm leading-relaxed">
+            {isRescheduled
+              ? "This booking was moved to a new date or time. You'll receive a new confirmation when it's scheduled."
+              : "This booking has been cancelled. Please contact us if you have any questions."}
+          </p>
+          <a
+            href="tel:+12028885362"
+            className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/10 text-white text-sm font-medium px-5 py-3 rounded-xl transition-colors"
+          >
+            📞 Call Maids in Black
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const statusKey = (job.jobStatus as string) ?? "scheduled";
   const firstName = job.customerName?.split(" ")[0] ?? "there";
   const configFn = STATUS_CONFIG_FN[statusKey] ?? STATUS_CONFIG_FN.scheduled;

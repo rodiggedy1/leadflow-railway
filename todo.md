@@ -2454,3 +2454,21 @@
 ## Bug Fix: Rescheduled jobs still showing on original date
 - [x] Diagnose why Elizabeth Cutler's rescheduled job still appears on today's Day Board after manual sync
 - [x] Fix sync to mark stale jobs as 'rescheduled' when no longer in Launch27 response; filter rescheduled/cancelled from getJobsForDay
+
+## SMS Engine Bug Fixes (Mar 23)
+
+- [ ] Fix duplicate noshow_alert: cron runs all 4 functions in parallel (Promise.all) — two concurrent noshow runs can both pass stepAlreadyFired before either writes the log row; fix by serializing the cron or using DB-level unique constraint
+- [ ] Guard all engine cron steps (pre_job, exception, noshow) against rescheduled/cancelled jobs — currently only getJobsForDay filters them, but the engine queries don't
+- [ ] Add BZA Cleaning phone number to cleaner profile so mid_job_nudge doesn't fail
+
+## Rescheduled/Cancelled Job Treatment (Mar 23)
+
+- [x] Backend: getJobsForDay — include rescheduled/cancelled jobs (remove notInArray filter), return bookingStatus so UI can differentiate
+- [x] Backend: qualityRouter getJobsForDay — same change
+- [x] Backend: cleaner.myJobs — include rescheduled/cancelled jobs (currently no filter, but confirm bookingStatus is returned)
+- [x] Backend: tracker.getJob — return bookingStatus field so client tracker can show rescheduled message
+- [x] Frontend: Day Board — show rescheduled/cancelled jobs in a dimmed "Removed from Schedule" section at bottom of each swim lane
+- [x] Frontend: Control Tower — exclude rescheduled/cancelled from active metrics, show in separate section
+- [x] Frontend: Job Log tab — include rescheduled/cancelled with gray badge
+- [x] Frontend: Cleaner Portal — show stripped card (client name + Rescheduled/Cancelled badge only, no actions)
+- [x] Frontend: Client Tracker — show "This appointment has been rescheduled" message instead of live tracker

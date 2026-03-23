@@ -1301,12 +1301,7 @@ export const qualityRouter = router({
       return db
         .select()
         .from(cleanerJobs)
-        .where(
-          and(
-            eq(cleanerJobs.jobDate, input.date),
-            notInArray(cleanerJobs.bookingStatus, ["rescheduled", "cancelled"])
-          )
-        )
+        .where(eq(cleanerJobs.jobDate, input.date))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
     }),
 

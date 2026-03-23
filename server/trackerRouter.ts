@@ -55,6 +55,7 @@ export const trackerRouter = router({
           teamName: cleanerJobs.teamName,
           cleanerName: cleanerJobs.cleanerName,
           jobStatus: cleanerJobs.jobStatus,
+          bookingStatus: cleanerJobs.bookingStatus,
           etaTimestamp: cleanerJobs.etaTimestamp,
           issueNote: cleanerJobs.issueNote,
           customerRating: cleanerJobs.customerRating,

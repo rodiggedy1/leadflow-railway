@@ -505,6 +505,13 @@
       "when": 1774300942814,
       "tag": "0071_productive_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1774303406528,
+      "tag": "0072_smooth_shen",
+      "breakpoints": true
     }
   ]
 }

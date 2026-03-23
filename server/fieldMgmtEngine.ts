@@ -28,7 +28,7 @@ import { ENV } from "./_core/env";
 
 // ── Kill switch ───────────────────────────────────────────────────────────────
 // Set to true when ready to go live. All functions return early while false.
-export const FIELD_MGMT_ENABLED = true;
+export const FIELD_MGMT_ENABLED = false; // MANUALLY DISABLED — re-enable when ready
 
 // ── CS team alert number ──────────────────────────────────────────────────────
 const CS_ALERT_NUMBER = "+12028885362";

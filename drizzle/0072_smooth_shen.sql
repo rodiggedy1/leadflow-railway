@@ -1,0 +1,1 @@
+ALTER TABLE `field_mgmt_log` ADD CONSTRAINT `uniq_field_mgmt_job_step` UNIQUE(`cleanerJobId`,`step`);

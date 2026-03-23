@@ -72,6 +72,7 @@ type Job = {
   bedrooms: number | null;
   bathrooms: number | null;
   jobStatus: string | null;
+  bookingStatus: string | null;
   trackerToken: string | null;
   delayMinutes: number | null;
   issueNote: string | null;
@@ -323,8 +324,11 @@ export default function ControlTowerTab() {
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
+  // Exclude rescheduled/cancelled from active operations views
+  const activeJobs = useMemo(() => jobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled"), [jobs]);
+
   const filteredJobs = useMemo(() => {
-    return jobs.filter((job) => {
+    return activeJobs.filter((job) => {
       const text = [job.teamName, job.cleanerName, job.customerName, job.jobAddress].join(" ").toLowerCase();
       const textMatch = text.includes(query.toLowerCase());
       const failedSteps = job.stepsFired - job.stepsSuccess;
@@ -339,31 +343,31 @@ export default function ControlTowerTab() {
         true;
       return textMatch && filterMatch;
     });
-  }, [jobs, query, filter]);
+  }, [activeJobs, query, filter]);
 
   const selectedJob = useMemo(() => {
     if (selectedId !== null) {
-      return filteredJobs.find(j => j.id === selectedId) ?? jobs.find(j => j.id === selectedId) ?? filteredJobs[0] ?? null;
+      return filteredJobs.find(j => j.id === selectedId) ?? activeJobs.find(j => j.id === selectedId) ?? filteredJobs[0] ?? null;
     }
     return filteredJobs[0] ?? null;
-  }, [selectedId, filteredJobs, jobs]);
+  }, [selectedId, filteredJobs, activeJobs]);
 
   const totals = useMemo(() => ({
-    live:      jobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way" || j.jobStatus === "arrived").length,
-    attention: jobs.filter(j => deriveRisk(j) === "high").length,
-    completed: jobs.filter(j => j.jobStatus === "completed").length,
-    messages:  jobs.reduce((acc, j) => acc + j.stepsSuccess, 0),
-  }), [jobs]);
+    live:      activeJobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way" || j.jobStatus === "arrived").length,
+    attention: activeJobs.filter(j => deriveRisk(j) === "high").length,
+    completed: activeJobs.filter(j => j.jobStatus === "completed").length,
+    messages:  activeJobs.reduce((acc, j) => acc + j.stepsSuccess, 0),
+  }), [activeJobs]);
 
   const urgent = useMemo(() =>
-    jobs
+    activeJobs
       .filter(j => deriveRisk(j) === "high" || (j.stepsFired - j.stepsSuccess) > 0 || (j.delayMinutes ?? 0) > 5)
       .sort((a, b) => {
         const aFailed = a.stepsFired - a.stepsSuccess;
         const bFailed = b.stepsFired - b.stepsSuccess;
         return (bFailed + (b.delayMinutes ?? 0)) - (aFailed + (a.delayMinutes ?? 0));
       }),
-  [jobs]);
+  [activeJobs]);
 
   const handleSelect = useCallback((id: number) => setSelectedId(id), []);
 

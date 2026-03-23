@@ -747,10 +747,14 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
     setSelectedJob((prev) => prev?.id === job.id ? null : job);
   }, []);
 
-  // Group jobs by cleaner, sorted by first job start time
+  // Split active vs removed jobs
+  const activeJobs = useMemo(() => jobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled"), [jobs]);
+  const removedJobs = useMemo(() => jobs.filter(j => j.bookingStatus === "rescheduled" || j.bookingStatus === "cancelled"), [jobs]);
+
+  // Group active jobs by cleaner, sorted by first job start time
   const lanes = useMemo(() => {
     const map = new Map<string, Job[]>();
-    for (const job of jobs) {
+    for (const job of activeJobs) {
       const key = job.cleanerName ?? job.teamName ?? "Unknown";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(job);
@@ -761,17 +765,17 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
       const bMin = Math.min(...bJobs.map(j => parseToMinutes(j.serviceDateTime) ?? 9999));
       return aMin - bMin;
     });
-  }, [jobs]);
+  }, [activeJobs]);
 
-  // Summary stats
+  // Summary stats (active jobs only)
   const stats = useMemo(() => {
-    const total = jobs.length;
-    const active = jobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way").length;
-    const issues = jobs.filter(j => j.jobStatus === "issue_at_property" || j.jobStatus === "no_show").length;
-    const done   = jobs.filter(j => j.jobStatus === "completed").length;
-    const smsFailed = jobs.reduce((acc, j) => acc + j.timeline.filter(e => e.status === "failed").length, 0);
+    const total = activeJobs.length;
+    const active = activeJobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way").length;
+    const issues = activeJobs.filter(j => j.jobStatus === "issue_at_property" || j.jobStatus === "no_show").length;
+    const done   = activeJobs.filter(j => j.jobStatus === "completed").length;
+    const smsFailed = activeJobs.reduce((acc, j) => acc + j.timeline.filter(e => e.status === "failed").length, 0);
     return { total, active, issues, done, smsFailed };
-  }, [jobs]);
+  }, [activeJobs]);
 
   return (
     <div className="flex gap-0 h-full">
@@ -806,45 +810,102 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
         ) : jobs.length === 0 ? (
           <BoardEmpty date={date} />
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" ref={boardRef}>
-            {/* Time axis header */}
-            <div className="flex border-b border-slate-100 bg-slate-50/80">
-              <div className="w-28 shrink-0 border-r border-slate-100 px-3 py-2">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cleaner</span>
-              </div>
-              <div className="flex-1 relative">
-                <div className="flex">
-                  {HOUR_LABELS.map((label, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 text-[10px] text-slate-400 font-medium py-2 text-center first:text-left first:pl-1 last:text-right last:pr-1"
-                    >
-                      {label}
+          <>
+            {/* Active jobs board */}
+            {activeJobs.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" ref={boardRef}>
+                {/* Time axis header */}
+                <div className="flex border-b border-slate-100 bg-slate-50/80">
+                  <div className="w-28 shrink-0 border-r border-slate-100 px-3 py-2">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cleaner</span>
+                  </div>
+                  <div className="flex-1 relative">
+                    <div className="flex">
+                      {HOUR_LABELS.map((label, i) => (
+                        <div
+                          key={i}
+                          className="flex-1 text-[10px] text-slate-400 font-medium py-2 text-center first:text-left first:pl-1 last:text-right last:pr-1"
+                        >
+                          {label}
+                        </div>
+                      ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* Swim lanes + now line */}
+                <div className="relative">
+                  <NowLine boardDate={date} />
+                  {lanes.map(([cleanerName, laneJobs]) => (
+                    <SwimLane
+                      key={cleanerName}
+                      cleanerName={cleanerName}
+                      jobs={laneJobs}
+                      selectedJobId={selectedJob?.id ?? null}
+                      onJobClick={handleJobClick}
+                    />
                   ))}
                 </div>
+
+                {/* SMS health strip */}
+                <div className="px-4 pb-4 pt-2 border-t border-slate-100 bg-slate-50/50">
+                  <SmsHealthStrip jobs={activeJobs} />
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Swim lanes + now line */}
-            <div className="relative">
-              <NowLine boardDate={date} />
-              {lanes.map(([cleanerName, laneJobs]) => (
-                <SwimLane
-                  key={cleanerName}
-                  cleanerName={cleanerName}
-                  jobs={laneJobs}
-                  selectedJobId={selectedJob?.id ?? null}
-                  onJobClick={handleJobClick}
-                />
-              ))}
-            </div>
-
-            {/* SMS health strip */}
-            <div className="px-4 pb-4 pt-2 border-t border-slate-100 bg-slate-50/50">
-              <SmsHealthStrip jobs={jobs} />
-            </div>
-          </div>
+            {/* Removed from schedule section */}
+            {removedJobs.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Removed from Schedule ({removedJobs.length})
+                  </span>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-100 opacity-70">
+                  {removedJobs.map(job => {
+                    const isRescheduled = job.bookingStatus === "rescheduled";
+                    const startTime = job.serviceDateTime
+                      ? (() => {
+                          const d = new Date(job.serviceDateTime);
+                          return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+                        })()
+                      : null;
+                    return (
+                      <div
+                        key={job.id}
+                        className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-100/60 transition-colors"
+                        onClick={() => handleJobClick(job)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-500 line-through truncate">
+                              {job.customerName ?? "Client"}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                              isRescheduled
+                                ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                : "bg-slate-200 text-slate-500 border border-slate-300"
+                            }`}>
+                              {isRescheduled ? "Rescheduled" : "Cancelled"}
+                            </span>
+                          </div>
+                          {job.jobAddress && (
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{job.jobAddress.split(",")[0]}</p>
+                          )}
+                        </div>
+                        {startTime && (
+                          <span className="text-[11px] text-slate-400 shrink-0">{startTime}</span>
+                        )}
+                        <span className="text-[11px] text-slate-400 shrink-0">{job.cleanerName?.split(" ")[0] ?? "—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Status legend */}

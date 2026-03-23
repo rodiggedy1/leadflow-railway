@@ -1,4 +1,4 @@
-import { bigint, index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -1259,7 +1259,12 @@ export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
   /** Recipient phone (cleaner or client) */
   recipientPhone: varchar("recipientPhone", { length: 30 }),
   firedAt: timestamp("firedAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  /** DB-level dedup: only one log row per (job, step). If two cron ticks race,
+   * the second INSERT will throw a duplicate key error which we catch and ignore.
+   * This is the last line of defense — stepAlreadyFired() is still the primary guard. */
+  uniqJobStep: uniqueIndex("uniq_field_mgmt_job_step").on(table.cleanerJobId, table.step),
+}));
 
 export type FieldMgmtLog = typeof fieldMgmtLog.$inferSelect;
 export type InsertFieldMgmtLog = typeof fieldMgmtLog.$inferInsert;

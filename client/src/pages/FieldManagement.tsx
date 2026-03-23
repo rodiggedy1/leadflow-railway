@@ -669,6 +669,7 @@ type JobWithTimeline = {
   serviceDateTime: string | null;
   serviceType: string | null;
   jobStatus: string | null;
+  bookingStatus: string | null;
   stepsFired: number;
   stepsSuccess: number;
   totalSteps: number;
@@ -720,7 +721,18 @@ function JobCard({ job }: { job: JobWithTimeline }) {
                 <span className="text-xs text-gray-400">({job.teamName})</span>
               )}
             </div>
-            <JobStatusBadge status={job.jobStatus} />
+            <div className="flex items-center gap-1.5">
+              <JobStatusBadge status={job.jobStatus} />
+              {(job.bookingStatus === "rescheduled" || job.bookingStatus === "cancelled") && (
+                <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
+                  job.bookingStatus === "rescheduled"
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-slate-100 text-slate-500 border-slate-300"
+                }`}>
+                  {job.bookingStatus === "rescheduled" ? "Rescheduled" : "Cancelled"}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Row 2: client + address + time */}

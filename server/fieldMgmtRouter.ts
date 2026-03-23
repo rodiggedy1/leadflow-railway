@@ -552,12 +552,7 @@ export const fieldMgmtRouter = router({
           bookingStatus: cleanerJobs.bookingStatus,
         })
         .from(cleanerJobs)
-        .where(
-          and(
-            eq(cleanerJobs.jobDate, input.date),
-            notInArray(cleanerJobs.bookingStatus, ["rescheduled", "cancelled"])
-          )
-        )
+        .where(eq(cleanerJobs.jobDate, input.date))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.cleanerName);
 
       if (jobs.length === 0) return [];
