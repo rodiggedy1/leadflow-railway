@@ -2243,3 +2243,7 @@
 
 ## Bug Fixes — March 23 2026
 - [x] Fix "Agent login required" error on /admin/field-management page — added retry:false + throwOnError:false to all AdminHeader badge queries and NotificationBell
+
+## Bug Fixes — Tracker Token (March 23 2026)
+- [x] Add ensureTrackerToken helper to fieldMgmtEngine — generates + saves token if null before building tracking link
+- [x] Use ensureTrackerToken in sendClientPreJobSms, sendClientOnTheWaySms, sendRunningLateSms

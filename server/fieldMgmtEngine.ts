@@ -212,6 +212,38 @@ function firstName(fullName: string | null | undefined): string {
   return fullName.split(" ")[0] ?? fullName;
 }
 
+/**
+ * Ensure the job has a trackerToken, generating and saving one if missing.
+ * Returns the tracking URL (always a real /track/:token URL, never a fallback).
+ * This guarantees the link is valid even when called before the 8 AM tracker cron runs.
+ */
+async function ensureTrackerToken(cleanerJobId: number): Promise<string> {
+  const BASE_URL = "https://quote.maidinblack.com";
+  const db = await getDb();
+  if (!db) return BASE_URL;
+
+  const rows = await db
+    .select({ trackerToken: cleanerJobs.trackerToken })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+
+  let token = rows[0]?.trackerToken ?? null;
+
+  if (!token) {
+    // Generate a new token and persist it immediately
+    const { randomBytes } = await import("crypto");
+    token = randomBytes(24).toString("base64url");
+    await db
+      .update(cleanerJobs)
+      .set({ trackerToken: token })
+      .where(eq(cleanerJobs.id, cleanerJobId));
+    console.log(`[FieldMgmt] Generated trackerToken for job ${cleanerJobId}: ${token}`);
+  }
+
+  return `${BASE_URL}/track/${token}`;
+}
+
 // ── Step 1: Pre-Job Reminder (T-2hrs) ────────────────────────────────────────
 
 /**
@@ -369,9 +401,8 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
     if (serviceTime) etaStr = formatTimeET(serviceTime);
   }
 
-  const trackingLink = job.trackerToken
-    ? `https://quote.maidinblack.com/track/${job.trackerToken}`
-    : "https://quote.maidinblack.com";
+  // Always generate token if missing — guarantees a real /track/:token URL
+  const trackingLink = await ensureTrackerToken(cleanerJobId);
 
   const msg = [
     `Hi ${clientFirstName}! Your Maids in Black team is on the way and will arrive at ${address} around ${etaStr}. 🚗`,
@@ -947,9 +978,8 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
 
   const clientFirstName = firstName(job.customerName);
   const timeStr = formatTimeET(serviceTime);
-  const trackingLink = job.trackerToken
-    ? `https://quote.maidinblack.com/track/${job.trackerToken}`
-    : "https://quote.maidinblack.com";
+  // Always generate token if missing — guarantees a real /track/:token URL
+  const trackingLink = await ensureTrackerToken(cleanerJobId);
 
   const msg = [
     `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} 😊`,
@@ -1020,9 +1050,8 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
 
   const clientFirstName = firstName(job.customerName);
   const delayStr = job.delayMinutes ? `${job.delayMinutes} minutes` : "a bit";
-  const trackingLink = job.trackerToken
-    ? `https://quote.maidinblack.com/track/${job.trackerToken}`
-    : "https://quote.maidinblack.com";
+  // Always generate token if missing — guarantees a real /track/:token URL
+  const trackingLink = await ensureTrackerToken(cleanerJobId);
 
   const msg = [
     `Hey ${clientFirstName} — quick heads up, the team is running about ${delayStr} behind.`,

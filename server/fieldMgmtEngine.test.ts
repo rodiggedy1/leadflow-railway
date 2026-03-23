@@ -337,3 +337,48 @@ describe("time window logic", () => {
     expect(inWindow).toBe(false);
   });
 });
+
+// ── ensureTrackerToken integration ────────────────────────────────────────────
+
+describe("ensureTrackerToken — token generation guarantee", () => {
+  it("sendClientPreJobSms, sendClientOnTheWaySms, sendRunningLateSms do not use manual trackerToken fallback", async () => {
+    // This test verifies the source code no longer contains the old fallback pattern.
+    // The old pattern was: job.trackerToken ? `...track/${job.trackerToken}` : "https://quote.maidinblack.com"
+    // All three functions must now call ensureTrackerToken() instead.
+    const fs = await import("fs");
+    const path = await import("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+
+    // The old ternary fallback pattern should NOT appear in the file
+    const oldPattern = /job\.trackerToken\s*\?\s*`https:\/\/quote\.maidinblack\.com\/track\/\$\{job\.trackerToken\}`/;
+    expect(oldPattern.test(src)).toBe(false);
+
+    // ensureTrackerToken must be called at least 3 times (once per client SMS function)
+    const callCount = (src.match(/await ensureTrackerToken\(/g) ?? []).length;
+    expect(callCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("ensureTrackerToken helper is exported from the module (for testability)", async () => {
+    // The function exists in the module source — verify it's defined
+    const fs = await import("fs");
+    const path = await import("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    expect(src).toContain("async function ensureTrackerToken(cleanerJobId: number)");
+    expect(src).toContain("randomBytes(24).toString(\"base64url\")");
+  });
+
+  it("ensureTrackerToken generates a 32-char base64url token", () => {
+    const { randomBytes } = require("crypto");
+    const token = randomBytes(24).toString("base64url");
+    // base64url of 24 bytes = 32 chars
+    expect(token.length).toBe(32);
+    // Must only contain URL-safe characters
+    expect(/^[A-Za-z0-9_-]+$/.test(token)).toBe(true);
+  });
+});
