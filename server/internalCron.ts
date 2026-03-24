@@ -40,7 +40,7 @@ async function recordHeartbeat(jobName: string, resultSummary: string, didWork: 
     if (!db) return;
     await db.insert(cronHeartbeats).values({
       jobName,
-      resultSummary,
+      resultSummary: resultSummary.slice(0, 500),
       didWork: didWork ? 1 : 0,
       ranAt: new Date(),
     });
