@@ -2337,7 +2337,9 @@ export default function AdminDashboard() {
   // ── Daily recap modal ────────────────────────────────────────────────────────
   const [showRecap, setShowRecap] = useState(false);
   // Show recap once per day — fires when user logs in via form OR when already-authed page loads
-  const isLoggedIn = isAuthenticated || (!!meQuery.data?.isAdmin && !meQuery.isLoading);
+  // An agent with pagePermissions is also considered logged in — no second login needed
+  const hasAgentPermissions = !meQuery.isLoading && !!meQuery.data && (meQuery.data.pagePermissions?.length ?? 0) > 0;
+  const isLoggedIn = isAuthenticated || (!!meQuery.data?.isAdmin && !meQuery.isLoading) || hasAgentPermissions;
   useEffect(() => {
     if (isLoggedIn && !hasShownToday()) {
       // Small delay so the dashboard renders first
@@ -2503,7 +2505,8 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!isAdmin && !isAuthenticated) {
+  // Allow through: admins, form-authenticated users, OR agents with explicit page permissions
+  if (!isAdmin && !isAuthenticated && !hasAgentPermissions) {
     return <AdminLoginScreen onSuccess={handleLoginSuccess} />;
   }
 
