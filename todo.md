@@ -2539,3 +2539,8 @@
 - [x] Upgrade toolbar buttons to rounded-lg style matching FM
 - [x] Upgrade StatsBar and LostReasonsPanel to white bg, shadow-sm, rounded-2xl
 - [x] Replace lime #AAFF00 accents with indigo/amber/violet/emerald palette
+
+## Pipeline Spacing Fix — Mar 23
+
+- [x] Remove redundant inner "Pipeline" title/subtitle from KanbanBoard (page already has one)
+- [x] Fix bg-gray-50 wrapper to not create double-padding with outer page layout

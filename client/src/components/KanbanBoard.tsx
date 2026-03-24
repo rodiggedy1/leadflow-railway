@@ -832,40 +832,31 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 -m-6 p-6">
-      {/* Page header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Pipeline</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Drag leads between stages or click a card to view details</p>
-          </div>
-          {/* Toolbar: Show Lost toggle + Lost Reasons analytics */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowLostReasons(v => !v)}
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                showLostReasons
-                  ? "bg-amber-50 border-amber-200 text-amber-700"
-                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              <BarChart2 className="w-3.5 h-3.5" />
-              Lost Reasons
-            </button>
-            <button
-              onClick={() => setShowLost(v => !v)}
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                showLost
-                  ? "bg-red-50 border-red-200 text-red-600"
-                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              <XCircle className="w-3.5 h-3.5" />
-              {showLost ? "Hide Lost" : `Show Lost${lostCount > 0 ? ` (${lostCount})` : ""}`}
-            </button>
-          </div>
-        </div>
+    <div>
+      {/* Toolbar row: Show Lost toggle + Lost Reasons analytics */}
+      <div className="flex justify-end gap-2 mb-4">
+        <button
+          onClick={() => setShowLostReasons(v => !v)}
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+            showLostReasons
+              ? "bg-amber-50 border-amber-200 text-amber-700"
+              : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          }`}
+        >
+          <BarChart2 className="w-3.5 h-3.5" />
+          Lost Reasons
+        </button>
+        <button
+          onClick={() => setShowLost(v => !v)}
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+            showLost
+              ? "bg-red-50 border-red-200 text-red-600"
+              : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          }`}
+        >
+          <XCircle className="w-3.5 h-3.5" />
+          {showLost ? "Hide Lost" : `Show Lost${lostCount > 0 ? ` (${lostCount})` : ""}`}
+        </button>
       </div>
 
       {/* Lost Reasons analytics panel */}
