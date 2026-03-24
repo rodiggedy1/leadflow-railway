@@ -665,18 +665,18 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const accentBorder = cleanerAccentBorder(job.cleanerAssignment?.cleanerProfileId);
 
   const cardClass = etaOverdue
-    ? "border-l-4 border-l-red-500 bg-red-50/40 dark:bg-red-950/20 ring-1 ring-red-300"
+    ? `rounded-xl border-l-4 border-l-red-500 border-t border-r border-b border-red-200 bg-red-50 shadow-sm ring-1 ring-red-200`
     : etaDueSoon
-    ? "border-l-4 border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/20 ring-1 ring-amber-300"
+    ? `rounded-xl border-l-4 border-l-amber-500 border-t border-r border-b border-amber-200 bg-amber-50 shadow-sm ring-1 ring-amber-200`
     : isFlagged
-    ? `border-l-4 ${accentBorder} border-red-200 bg-red-50/30 dark:bg-red-950/10`
+    ? `rounded-xl border-l-4 ${accentBorder} border-t border-r border-b border-red-200 bg-red-50/60 shadow-sm`
     : job.cleanerAssignment
-    ? `border-l-4 ${accentBorder}`
-    : "";
+    ? `rounded-xl border-l-4 ${accentBorder} border-t border-r border-b border-gray-200 bg-white shadow-sm`
+    : "rounded-xl border border-gray-200 bg-white shadow-sm";
 
   return (
-    <Card className={`transition-all ${cardClass}`}>
-      <CardContent className="py-4">
+    <div className={`transition-all ${cardClass}`}>
+      <div className="p-4">
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           {/* Left: Job info */}
           <div className="flex-1 min-w-0">
@@ -913,8 +913,8 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
             <SendTrackerLinkButton job={job} />
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -934,38 +934,38 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
 
   if (!stats || stats.length === 0) {
     return (
-      <Card className="mt-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-gray-400" />
             Weekly Pay Summary
-            <span className="text-xs font-normal text-muted-foreground ml-1">
+            <span className="text-xs font-normal text-gray-400 ml-1">
               ({weekFrom} – {weekTo})
             </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">No jobs recorded for this week yet.</p>
-        </CardContent>
-      </Card>
+          </h3>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-gray-400">No jobs recorded for this week yet.</p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="mt-6">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" />
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-gray-400" />
           Weekly Pay Summary
-          <span className="text-xs font-normal text-muted-foreground ml-1">
+          <span className="text-xs font-normal text-gray-400 ml-1">
             ({weekFrom} – {weekTo})
           </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </h3>
+      </div>
+      <div className="p-4">
         <div className="space-y-3">
           {stats.map((s) => (
-            <div key={s.cleanerProfileId} className="p-3 rounded-lg bg-muted/40 border">
+            <div key={s.cleanerProfileId} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-sm">{s.cleanerName}</p>
@@ -1008,8 +1008,8 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -1058,21 +1058,21 @@ function CleanerProfilesSection() {
   if (!cleaners || cleaners.length === 0) return null;
 
   return (
-    <Card className="mt-6">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Users className="w-4 h-4 text-primary" />
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <Users className="w-4 h-4 text-gray-400" />
           Cleaner Profiles
-          <span className="text-xs font-normal text-muted-foreground ml-1">Phone numbers required for SMS steps</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+          <span className="text-xs font-normal text-gray-400 ml-1">Phone numbers required for SMS steps</span>
+        </h3>
+      </div>
+      <div className="p-4">
         <div className="space-y-2">
           {cleaners.map((c) => {
             const hasPhone = !!c.phone;
             const isEditing = editId === c.id;
             return (
-              <div key={c.id} className="p-3 rounded-lg bg-muted/40 border">
+              <div key={c.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                 {isEditing ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
@@ -1158,8 +1158,8 @@ function CleanerProfilesSection() {
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -1274,72 +1274,84 @@ export default function CleanerDashboard() {
 
   return (
     <>
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50">
       <AdminHeader activeTab="quality" />
 
       {/* Date navigation + controls */}
-      <div className="border-b bg-card">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-semibold text-sm text-muted-foreground">Cleaner Quality Dashboard</h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Date nav */}
-            <Button variant="ghost" size="icon" onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}>
+      <div className="border-b bg-white shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
+          {/* Date nav */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
               <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <div className="flex items-center gap-1.5 text-sm font-medium min-w-[180px] justify-center">
-              <CalendarDays className="w-4 h-4 text-muted-foreground" />
+            </button>
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 min-w-[190px] justify-center">
+              <CalendarDays className="w-4 h-4 text-gray-400" />
               {formatDisplayDate(selectedDate)}
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}>
+            <button
+              onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
               <ChevronRight className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
+            </button>
+            <button
               onClick={() => setSelectedDate(formatDate(new Date()))}
+              className="ml-1 text-xs font-medium text-gray-500 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1 bg-white hover:bg-gray-50 transition-colors"
             >
               Today
-            </Button>
+            </button>
+          </div>
 
+          <div className="flex items-center gap-2">
             {/* View mode toggle */}
-            <div className="flex items-center rounded-lg border bg-muted/40 p-0.5 gap-0.5">
-              <Button
-                variant={viewMode === "by-time" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 text-xs gap-1.5 px-2.5"
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+              <button
                 onClick={() => setViewMode("by-time")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  viewMode === "by-time"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
               >
                 <List className="w-3 h-3" />
                 By Time
-              </Button>
-              <Button
-                variant={viewMode === "by-cleaner" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 text-xs gap-1.5 px-2.5"
+              </button>
+              <button
                 onClick={() => setViewMode("by-cleaner")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  viewMode === "by-cleaner"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
               >
                 <Users className="w-3 h-3" />
                 By Cleaner
-              </Button>
+              </button>
             </div>
 
             {/* Sync */}
-            <Button
-              variant="default"
-              size="sm"
-              className="text-xs gap-1.5"
+            <button
               disabled={syncJobs.isPending}
               onClick={() => syncJobs.mutate({ date: selectedDate })}
+              className="flex items-center gap-1.5 text-xs font-medium bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white rounded-lg px-3 py-1.5 transition-colors"
             >
               {syncJobs.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
               {syncJobs.isPending ? "Syncing…" : "Sync from Launch27"}
-            </Button>
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+        {/* Page header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Jobs</h1>
+          <p className="text-gray-500 mt-1 text-sm">Daily job schedule, cleaner assignments, photos, and ratings.</p>
+        </div>
 
         {/* Summary bar — job count + revenue total */}
         {!isLoading && jobs && jobs.length > 0 && (() => {
@@ -1348,32 +1360,32 @@ export default function CleanerDashboard() {
           const withRating = jobs.filter(j => j.cleanerAssignment?.customerRating !== null && j.cleanerAssignment?.customerRating !== undefined).length;
           const flagged = jobs.filter(j => (j.cleanerAssignment?.customerRating ?? 5) <= 3 || j.cleanerAssignment?.missedSomething === 1).length;
           return (
-            <div className="flex items-center gap-4 flex-wrap text-sm">
-              <div className="flex items-center gap-1.5 font-medium">
-                <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                <span>{totalJobs} job{totalJobs !== 1 ? "s" : ""}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                <DollarSign className="w-4 h-4" />
-                <span>${totalRevenue.toFixed(0)} revenue</span>
-              </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-white border border-gray-200 text-gray-700 rounded-full px-3 py-1 shadow-sm">
+                <CalendarDays className="w-3.5 h-3.5 text-gray-400" />
+                {totalJobs} job{totalJobs !== 1 ? "s" : ""}
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full px-3 py-1">
+                <DollarSign className="w-3.5 h-3.5" />
+                ${totalRevenue.toFixed(0)} revenue
+              </span>
               {withPhotos > 0 && (
-                <div className="flex items-center gap-1.5 text-blue-600">
-                  <Camera className="w-4 h-4" />
-                  <span>{withPhotos} with photos</span>
-                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700 rounded-full px-3 py-1">
+                  <Camera className="w-3.5 h-3.5" />
+                  {withPhotos} with photos
+                </span>
               )}
               {withRating > 0 && (
-                <div className="flex items-center gap-1.5 text-amber-600">
-                  <Star className="w-4 h-4" />
-                  <span>{withRating} rated</span>
-                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-amber-50 border border-amber-200 text-amber-700 rounded-full px-3 py-1">
+                  <Star className="w-3.5 h-3.5" />
+                  {withRating} rated
+                </span>
               )}
               {flagged > 0 && (
-                <div className="flex items-center gap-1.5 text-red-500 font-medium">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>{flagged} flagged</span>
-                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-red-50 border border-red-200 text-red-600 rounded-full px-3 py-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {flagged} flagged
+                </span>
               )}
             </div>
           );
@@ -1383,33 +1395,31 @@ export default function CleanerDashboard() {
         {isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="py-4">
-                  <div className="flex gap-4">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex gap-2">
-                        <div className="h-5 w-16 bg-muted rounded-full" />
-                        <div className="h-5 w-32 bg-muted rounded" />
-                      </div>
-                      <div className="h-4 w-48 bg-muted rounded" />
-                      <div className="h-4 w-24 bg-muted rounded" />
+              <div key={i} className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 animate-pulse">
+                <div className="flex gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex gap-2">
+                      <div className="h-5 w-16 bg-gray-100 rounded-full" />
+                      <div className="h-5 w-32 bg-gray-100 rounded" />
                     </div>
-                    <div className="space-y-2 items-end flex flex-col">
-                      <div className="h-5 w-24 bg-muted rounded" />
-                      <div className="h-5 w-16 bg-muted rounded" />
-                      <div className="h-7 w-24 bg-muted rounded" />
-                    </div>
+                    <div className="h-4 w-48 bg-gray-100 rounded" />
+                    <div className="h-4 w-24 bg-gray-100 rounded" />
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="space-y-2 items-end flex flex-col">
+                    <div className="h-5 w-24 bg-gray-100 rounded" />
+                    <div className="h-5 w-16 bg-gray-100 rounded" />
+                    <div className="h-7 w-24 bg-gray-100 rounded" />
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}
 
         {/* Rating SMS Queue — always shown when there are any items today (pending, approved, sent, skipped) */}
         {pendingList && pendingList.length > 0 && (
-          <Card className={`border-amber-200 ${pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) ? 'bg-amber-50 dark:bg-amber-950/20' : 'bg-muted/30'}`}>
-            <CardContent className="py-4">
+          <div className={`rounded-xl border shadow-sm p-4 ${pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'}`}>
+            <div className="py-0">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <AlertTriangle className={`w-5 h-5 shrink-0 ${pendingSms && (pendingSms.pending > 0 || pendingSms.approved > 0) ? 'text-amber-500' : 'text-muted-foreground'}`} />
@@ -1511,39 +1521,39 @@ export default function CleanerDashboard() {
                   )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Jobs section */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-base">
+            <h2 className="font-semibold text-sm text-gray-500">
               {isLoading
                 ? "Loading jobs…"
                 : `${totalJobs} job${totalJobs !== 1 ? "s" : ""} on ${formatDisplayDate(selectedDate)}`}
             </h2>
             {!isLoading && totalJobs > 0 && viewMode === "by-cleaner" && (
-              <span className="text-xs text-muted-foreground">{cleanerGroups.length} team{cleanerGroups.length !== 1 ? "s" : ""}</span>
+              <span className="text-xs text-gray-400">{cleanerGroups.length} team{cleanerGroups.length !== 1 ? "s" : ""}</span>
             )}
           </div>
 
           {isLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />
+                <div key={i} className="h-32 rounded-xl bg-gray-100 animate-pulse" />
               ))}
             </div>
           ) : !jobs || jobs.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="py-12 text-center">
-                <CalendarDays className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">No jobs found for this date.</p>
-                <p className="text-xs text-muted-foreground mt-1">
+            <div className="rounded-xl border border-dashed border-gray-300 bg-white">
+              <div className="py-12 text-center">
+                <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">No jobs found for this date.</p>
+                <p className="text-xs text-gray-400 mt-1">
                   Run the nightly sync or select a different date.
                 </p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ) : viewMode === "by-time" ? (
             /* ── By Time view ── */
             <div className="space-y-3">

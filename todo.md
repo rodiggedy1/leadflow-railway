@@ -2490,3 +2490,14 @@
 - [x] Show browser Notification with client name + "replied to your message"
 - [x] Play chime audio on new reply (Web Audio API, respects browser autoplay policy)
 - [x] Wire hook into DayBoard component
+
+## Jobs Page Design Improvement — Mar 23
+
+- [x] Match bg-gray-50 page background (same as Field Mgmt)
+- [x] Add page header with title + subtitle (same pattern as Field Mgmt)
+- [x] Upgrade toolbar: styled pill toggle for By Time/By Cleaner, cleaner date nav bar
+- [x] Upgrade job cards: white bg, shadow-sm, rounded-xl border border-gray-200 (same as FM job blocks)
+- [x] Upgrade Weekly Pay Summary cards: white bg, shadow-sm, rounded-xl
+- [x] Upgrade Cleaner Profiles section: white bg, shadow-sm, rounded-xl
+- [x] Consistent typography: gray-900 headings, gray-500 subtitles, gray-600 body
+- [x] Summary stats bar: styled pill chips for job count, revenue, photos, ratings
