@@ -104,6 +104,17 @@ function showNotification(title: string, body: string) {
   }
 }
 
+// ─── Public export so callers can trigger a test chime ─────────────────────
+export async function triggerTestChime(): Promise<void> {
+  // Ensure buffer is loaded first (may not be if no replies have arrived yet)
+  if (!audioBuffer) {
+    await loadBuffer();
+  }
+  // Request notification permission as a side-effect of the test button click
+  await requestNotificationPermission();
+  playChime();
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useNewReplyNotifier(

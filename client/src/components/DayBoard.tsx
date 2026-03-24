@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { useNewReplyNotifier } from "@/hooks/useNewReplyNotifier";
+import { useNewReplyNotifier, triggerTestChime } from "@/hooks/useNewReplyNotifier";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1111,16 +1111,27 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
             {isFetching && <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />}
           </div>
 
-          {/* Stats pills */}
-          {!isLoading && jobs.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <StatPill label="Total" value={stats.total} color="text-slate-600 bg-slate-100" />
-              {stats.active > 0  && <StatPill label="Active"  value={stats.active}  color="text-emerald-700 bg-emerald-50 border border-emerald-200" pulse />}
-              {stats.issues > 0  && <StatPill label="Issues"  value={stats.issues}  color="text-rose-700 bg-rose-50 border border-rose-200" />}
-              {stats.done > 0    && <StatPill label="Done"    value={stats.done}    color="text-slate-500 bg-slate-50 border border-slate-200" />}
-              {stats.smsFailed > 0 && <StatPill label="SMS Failed" value={stats.smsFailed} color="text-rose-700 bg-rose-50 border border-rose-200" />}
-            </div>
-          )}
+          {/* Stats pills + test sound button */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {!isLoading && jobs.length > 0 && (
+              <>
+                <StatPill label="Total" value={stats.total} color="text-slate-600 bg-slate-100" />
+                {stats.active > 0  && <StatPill label="Active"  value={stats.active}  color="text-emerald-700 bg-emerald-50 border border-emerald-200" pulse />}
+                {stats.issues > 0  && <StatPill label="Issues"  value={stats.issues}  color="text-rose-700 bg-rose-50 border border-rose-200" />}
+                {stats.done > 0    && <StatPill label="Done"    value={stats.done}    color="text-slate-500 bg-slate-50 border border-slate-200" />}
+                {stats.smsFailed > 0 && <StatPill label="SMS Failed" value={stats.smsFailed} color="text-rose-700 bg-rose-50 border border-rose-200" />}
+              </>
+            )}
+            {/* Test notification sound */}
+            <button
+              title="Test notification sound"
+              onClick={() => void triggerTestChime()}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-slate-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+            >
+              <span>🔔</span>
+              Test Sound
+            </button>
+          </div>
         </div>
 
         {isLoading ? (

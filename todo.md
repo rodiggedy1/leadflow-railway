@@ -2510,3 +2510,8 @@
 - [x] Group right column: cleaner name + pay as a mini block, then photos below, then actions at bottom
 - [x] Add consistent padding and gap between all elements
 - [x] Align action buttons to bottom-right, not scattered vertically
+
+## Test Sound Button — Mar 23
+
+- [x] Expose playChime() from useNewReplyNotifier hook
+- [x] Add "Test Sound" button to Day Board header that calls playChime()
