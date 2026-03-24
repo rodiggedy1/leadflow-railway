@@ -970,7 +970,15 @@ function ConversationDrawer({
     withFallbackTs(messages, session.createdAt, session.updatedAt)
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  // Auto-scroll to bottom on first mount (skip past the AI banner)
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+  }, []);
+  // AI closing recommendation — fetched on drawer open, can be refreshed
+  const { data: closingRec, isLoading: isLoadingRec, refetch: refetchRec } = trpc.leads.getClosingRecommendation.useQuery(
+    { sessionId: session.id },
+    { staleTime: 5 * 60 * 1000, retry: 1 }
+  );
   // Auto-refresh conversation every 5s when drawer is open
   const { data: freshSession } = trpc.leads.list.useQuery(undefined, {
     refetchInterval: 5000,
@@ -1104,6 +1112,12 @@ function ConversationDrawer({
   };
   const [selectedAction, setSelectedAction] = useState<"lockDate" | "softCheckIn" | "urgency" | "discount">("lockDate");
   const [drawerTab, setDrawerTab] = useState<"conversation" | "flow" | "performance">("conversation");
+  // Pre-fill compose box with AI suggested message on first load
+  useEffect(() => {
+    if (closingRec?.suggestedMessage && !replyText) {
+      setReplyText(closingRec.suggestedMessage);
+    }
+  }, [closingRec?.suggestedMessage]);
   const applySuggestion = (key: string) => {
     setSelectedAction(key as "lockDate" | "softCheckIn" | "urgency" | "discount");
     setReplyText(suggestions[key] ?? "");
@@ -1228,8 +1242,27 @@ function ConversationDrawer({
               <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-white">
                 {/* AI recommendation banner — scrolls with messages */}
                 <div className="mb-4 px-4 py-3 rounded-xl bg-orange-50">
-                  <div className="text-sm font-semibold text-orange-500 mb-0.5">&#10024; AI recommendation</div>
-                  <div className="text-sm text-orange-600">{primaryRecommendation}</div>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <div className="text-sm font-semibold text-orange-500">&#10024; AI recommendation</div>
+                    <button
+                      onClick={() => refetchRec()}
+                      className="text-[11px] text-orange-400 hover:text-orange-600 transition-colors flex items-center gap-1"
+                      title="Refresh recommendation"
+                    >
+                      {isLoadingRec ? (
+                        <span className="animate-spin inline-block">&#8635;</span>
+                      ) : (
+                        <span>&#8635; refresh</span>
+                      )}
+                    </button>
+                  </div>
+                  {isLoadingRec ? (
+                    <div className="text-sm text-orange-400 animate-pulse">Analyzing conversation...</div>
+                  ) : closingRec ? (
+                    <div className="text-sm text-orange-600">{closingRec.objectionSummary}</div>
+                  ) : (
+                    <div className="text-sm text-orange-600">{primaryRecommendation}</div>
+                  )}
                 </div>
                 <div className="space-y-4">
                 {localMessages.length === 0 ? (
@@ -1523,8 +1556,18 @@ function ConversationDrawer({
             {/* Dark primary move card */}
             <div className="rounded-xl bg-gray-900 p-4 mb-4">
               <div className="text-[11px] font-semibold text-gray-400 mb-1.5">&#10024; Primary move</div>
-              <div className="text-[15px] font-bold text-white leading-snug mb-2">{primaryMoveTitle}</div>
-              <p className="text-xs text-gray-400 leading-relaxed">{primaryRecommendation}</p>
+              {isLoadingRec ? (
+                <div className="text-sm text-gray-400 animate-pulse">Analyzing conversation...</div>
+              ) : (
+                <>
+                  <div className="text-[15px] font-bold text-white leading-snug mb-2">
+                    {closingRec?.primaryMove ?? primaryMoveTitle}
+                  </div>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    {closingRec?.primaryMoveRationale ?? primaryRecommendation}
+                  </p>
+                </>
+              )}
             </div>
             {/* 2×2 action buttons — larger, squarer */}
             <div className="grid grid-cols-2 gap-2.5">
@@ -1533,19 +1576,19 @@ function ConversationDrawer({
                 className="py-3 px-3 rounded-xl text-sm font-semibold text-white transition-colors"
                 style={{ backgroundColor: "#F97316" }}
               >
-                Lock May Date
+                {closingRec?.alternativeMoves?.[0] ?? "Lock May Date"}
               </button>
               <button
                 onClick={() => applySuggestion("discount")}
                 className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
-                Offer Discount Fill
+                {closingRec?.alternativeMoves?.[1] ?? "Offer Discount Fill"}
               </button>
               <button
                 onClick={() => applySuggestion("softCheckIn")}
                 className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
-                Set Soft Reminder
+                {closingRec?.alternativeMoves?.[2] ?? "Set Soft Reminder"}
               </button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>

@@ -30,6 +30,7 @@ import { settingsRouter } from "./settingsRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
+import { invokeLLM } from "./_core/llm";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -1283,6 +1284,132 @@ export const appRouter = router({
           meta: { sessionId: input.sessionId, leadPhone: session?.leadPhone, leadName: session?.leadName },
         }).catch(() => {});
         return { success: true };
+      }),
+
+    /**
+     * leads.getClosingRecommendation — AI-powered closing recommendation.
+     *
+     * Analyzes the full conversation history, detects the objection type,
+     * and returns a world-class SMS closing strategy based on top-closer frameworks.
+     */
+    getClosingRecommendation: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        const rows = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        const session = rows[0];
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+        // Parse conversation history
+        let messages: Array<{ role: string; content: string; ts?: number }> = [];
+        try { messages = JSON.parse(session.messageHistory ?? "[]"); } catch { messages = []; }
+
+        // Build a compact conversation transcript for the LLM (last 20 messages)
+        const transcript = messages
+          .filter(m => m.role === "user" || m.role === "assistant")
+          .slice(-20)
+          .map(m => `${m.role === "user" ? "CUSTOMER" : "AGENT"}: ${m.content}`)
+          .join("\n");
+
+        const leadContext = [
+          session.leadName ? `Lead name: ${session.leadName}` : null,
+          session.quotedPrice ? `Quoted price: $${session.quotedPrice}` : null,
+          session.serviceType ? `Service: ${session.serviceType}` : null,
+          session.followUpDate ? `Follow-up date: ${session.followUpDate}` : null,
+          session.stage ? `Current stage: ${session.stage}` : null,
+          session.leadSource ? `Lead source: ${session.leadSource}` : null,
+        ].filter(Boolean).join("\n");
+
+        const systemPrompt = `You are an elite SMS sales closer who has studied the top 1% of home services closers.
+You specialize in converting warm leads who have gone quiet or raised objections via SMS.
+Your recommendations are based on proven frameworks used by top closers:
+- Pattern interrupt: break the lead's inertia with an unexpected angle
+- Soft lock: create a low-pressure commitment that's easy to say yes to
+- Social proof urgency: "we're filling up" without being pushy
+- Discount fill: use a schedule gap as a natural reason to offer value
+- Assumptive close: act as if the booking is happening, just confirming details
+- Re-engagement: for cold leads, a curiosity-driven opener that gets a reply
+
+Always write SMS messages that sound like a real human, not a bot. Short, warm, direct.`;
+
+        const userPrompt = `LEAD CONTEXT:
+${leadContext}
+
+CONVERSATION TRANSCRIPT (most recent 20 messages):
+${transcript || "(no messages yet — lead just submitted the form)"}
+
+Analyze this conversation and return a JSON object with exactly these fields:
+- objectionType: one of ["timing", "price", "not_ready", "trust", "competitor", "no_response", "needs_info", "none"]
+- objectionSummary: 1 sentence describing the specific objection or situation (be specific, e.g. "Lead said they won't need service until May")
+- primaryMove: the single best closing action right now (8 words max, action-oriented, e.g. "Soft-lock a May date now")
+- primaryMoveRationale: why this specific move works for this objection (1-2 sentences, name the framework)
+- suggestedMessage: the exact SMS to send — personalized to the lead's first name, conversational, no emojis, under 160 chars, sounds like a real person not a script
+- alternativeMoves: array of exactly 3 alternative action labels (4-6 words each)
+- urgencyLevel: one of ["low", "medium", "high"] based on how close this lead is to going cold forever
+- confidence: integer 0-100 representing confidence in this recommendation`;
+
+        try {
+          const response = await invokeLLM({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "closing_recommendation",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    objectionType: { type: "string" },
+                    objectionSummary: { type: "string" },
+                    primaryMove: { type: "string" },
+                    primaryMoveRationale: { type: "string" },
+                    suggestedMessage: { type: "string" },
+                    alternativeMoves: { type: "array", items: { type: "string" } },
+                    urgencyLevel: { type: "string" },
+                    confidence: { type: "number" },
+                  },
+                  required: ["objectionType", "objectionSummary", "primaryMove", "primaryMoveRationale", "suggestedMessage", "alternativeMoves", "urgencyLevel", "confidence"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          const rawContent = response.choices?.[0]?.message?.content;
+          const content = typeof rawContent === "string" ? rawContent : null;
+          if (!content) throw new Error("Empty LLM response");
+          const rec = JSON.parse(content) as {
+            objectionType: string;
+            objectionSummary: string;
+            primaryMove: string;
+            primaryMoveRationale: string;
+            suggestedMessage: string;
+            alternativeMoves: string[];
+            urgencyLevel: string;
+            confidence: number;
+          };
+          return { success: true as const, ...rec };
+        } catch {
+          // Graceful fallback — never crash the drawer
+          return {
+            success: false as const,
+            objectionType: "unknown",
+            objectionSummary: "Could not analyze conversation",
+            primaryMove: "Send a follow-up message",
+            primaryMoveRationale: "Keep the conversation warm.",
+            suggestedMessage: "",
+            alternativeMoves: ["Soft check-in", "Offer discount", "Set reminder"],
+            urgencyLevel: "medium",
+            confidence: 0,
+          };
+        }
       }),
   }),
 
