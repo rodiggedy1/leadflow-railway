@@ -2617,3 +2617,13 @@
 - [ ] Update AdminPageGuard to redirect to login if agent has no session at all (not just block by page)
 - [ ] Update isLoggedIn / enabled flags in AdminDashboard to work for non-admin agents with permissions
 - [ ] Ensure all other admin pages (CommandCenter, FieldManagement, etc.) don't show login screen for agents with valid session
+
+## Pay Rules Settings Page
+- [x] Add 7 pay rule keys to DEFAULT_SETTINGS in settingsRouter.ts (fiveStarBonus, lowRatingDeduction, photoBonus, noPhotoPenalty, streakBonus, streakTarget, recleanPenalty)
+- [x] Add getPayRules() helper to settingsRouter.ts that reads all 7 keys from DB
+- [x] Update calculatePayAdjustments() in qualityRouter.ts to accept a rules param
+- [x] Update setRecleanPenalty mutation to read recleanPenalty amount from DB
+- [x] Update all callers of calculatePayAdjustments to pass rules
+- [x] Add "Pay Rules" tab to SettingsPage with editable fields for all 7 rules
+- [x] Update CleanerPortal to fetch and display live pay rule amounts
+- [x] Add a "How Your Pay Works" summary card in CleanerPortal showing all current rules

@@ -38,23 +38,24 @@ import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
 import { invokeLLM } from "./_core/llm";
+import { getPayRules, DEFAULT_PAY_RULES, type PayRules } from "./settingsRouter";
 
 /** Generate a URL-safe random tracker token (32 chars). */
 function generateTrackerToken(): string {
   return randomBytes(24).toString("base64url");
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants (kept for backwards-compat; runtime values come from DB via getPayRules) ──────
 
-/** Pay adjustments */
-export const PAY_FIVE_STAR_BONUS = 10;      // +$10 for 5-star rating
-export const PAY_LOW_RATING_DEDUCTION = 20; // -$20 for ≤3 star or complaint
-export const PAY_PHOTO_BONUS = 5;           // +$5 for submitting a completion photo
-export const PAY_NO_PHOTO_PENALTY = 10;     // -$10 if no photo submitted
-export const PAY_STREAK_BONUS = 50;         // +$50 for completing a 10-job streak
-export const STREAK_TARGET = 10;            // Jobs needed to earn streak bonus
+/** @deprecated Use getPayRules() instead. These are now just the default fallback values. */
+export const PAY_FIVE_STAR_BONUS = DEFAULT_PAY_RULES.fiveStarBonus;
+export const PAY_LOW_RATING_DEDUCTION = DEFAULT_PAY_RULES.lowRatingDeduction;
+export const PAY_PHOTO_BONUS = DEFAULT_PAY_RULES.photoBonus;
+export const PAY_NO_PHOTO_PENALTY = DEFAULT_PAY_RULES.noPhotoPenalty;
+export const PAY_STREAK_BONUS = DEFAULT_PAY_RULES.streakBonus;
+export const STREAK_TARGET = DEFAULT_PAY_RULES.streakTarget;
 
-// ─── AI Checklist Parser ─────────────────────────────────────────────────────
+// ─── AI Checklist Parser ──────────────────────────────────────────────────────────────────────────────────
 
 /**
  * Uses LLM to parse customerNotes and staffNotes into a unified checklist of actionable tasks.
@@ -164,6 +165,7 @@ export function parseMissedReply(text: string): boolean | null {
 /**
  * Calculate pay adjustments for a cleaner job.
  * Returns the adjustment amounts (can be negative).
+ * Pass `rules` from getPayRules() for live DB values; omit to use defaults.
  */
 export function calculatePayAdjustments(params: {
   jobRevenue: number;
@@ -172,6 +174,7 @@ export function calculatePayAdjustments(params: {
   missedSomething: boolean | null;
   currentStreakAfterJob: number;
   photoSubmitted: boolean;
+  rules?: PayRules;
 }): {
   basePay: number;
   ratingAdjustment: number;
@@ -179,28 +182,25 @@ export function calculatePayAdjustments(params: {
   streakBonus: number;
   finalPay: number;
 } {
+  const rules = params.rules ?? DEFAULT_PAY_RULES;
   const basePay = Math.round(params.jobRevenue * params.payPercent * 100) / 100;
-
   let ratingAdjustment = 0;
   if (params.customerRating === 5) {
-    ratingAdjustment = PAY_FIVE_STAR_BONUS;
+    ratingAdjustment = rules.fiveStarBonus;
   } else if (
     params.customerRating !== null &&
     (params.customerRating <= 3 || params.missedSomething === true)
   ) {
-    ratingAdjustment = -PAY_LOW_RATING_DEDUCTION;
+    ratingAdjustment = -rules.lowRatingDeduction;
   }
-
   // Photo bonus/penalty — always applied once rating is received
-  const photoAdjustment = params.photoSubmitted ? PAY_PHOTO_BONUS : -PAY_NO_PHOTO_PENALTY;
-
+  const photoAdjustment = params.photoSubmitted ? rules.photoBonus : -rules.noPhotoPenalty;
   // Streak bonus fires when streak hits exactly the target (10, 20, 30, ...)
   const streakBonus =
     params.currentStreakAfterJob > 0 &&
-    params.currentStreakAfterJob % STREAK_TARGET === 0
-      ? PAY_STREAK_BONUS
+    params.currentStreakAfterJob % rules.streakTarget === 0
+      ? rules.streakBonus
       : 0;
-
   const finalPay = Math.round((basePay + ratingAdjustment + photoAdjustment + streakBonus) * 100) / 100;
   return { basePay, ratingAdjustment, photoAdjustment, streakBonus, finalPay };
 }
@@ -508,6 +508,7 @@ export async function handleRatingReply(
                 cj.cleanerProfileId,
                 isGoodJob
               );
+              const rules = await getPayRules();
               const adj = calculatePayAdjustments({
                 jobRevenue: revenue,
                 payPercent: payPct,
@@ -515,6 +516,7 @@ export async function handleRatingReply(
                 missedSomething: missed,
                 currentStreakAfterJob: newStreak,
                 photoSubmitted: cj.photoSubmitted === 1,
+                rules,
               });
               await db
                 .update(cleanerJobs)
@@ -1387,28 +1389,30 @@ export const qualityRouter = router({
       return { ok: true };
     }),
 
-  /**
-   * Admin applies or removes the reclean penalty (-$30) on a cleaner job.
+    /**
+   * Admin applies or removes the reclean penalty on a cleaner job.
+   * The penalty amount is read from app_settings (pay_recleanPenalty), defaulting to $30.
    * Pass apply=true to set the penalty, apply=false to clear it.
    */
   setRecleanPenalty: agentProcedure
     .input(
       z.object({
         cleanerJobId: z.number(),
-        apply: z.boolean(), // true = apply -30, false = clear
+        apply: z.boolean(),
       })
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-
+      let penaltyValue: string | null = null;
+      if (input.apply) {
+        const rules = await getPayRules();
+        penaltyValue = `-${rules.recleanPenalty.toFixed(2)}`;
+      }
       await db
         .update(cleanerJobs)
-        .set({
-          recleanPenalty: input.apply ? "-30.00" : null,
-        })
+        .set({ recleanPenalty: penaltyValue })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
-
-      return { ok: true };
+      return { ok: true, penaltyAmount: penaltyValue };
     }),
 });

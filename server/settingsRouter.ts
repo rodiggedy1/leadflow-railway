@@ -210,6 +210,56 @@ const DEFAULT_SETTINGS = [
     description: "Sent immediately when an email lead arrives via Mailgun. Use {firstName}, {frequency}, {serviceType}, {bedrooms}, {bathrooms}, {price}.",
     fieldType: "textarea",
   },
+  // ── Cleaner Pay Rules ────────────────────────────────────────────────────
+  {
+    key: "pay_fiveStarBonus",
+    value: "10",
+    label: "5-Star Rating Bonus",
+    description: "Bonus added to cleaner pay when a customer leaves a 5-star rating.",
+    fieldType: "number",
+  },
+  {
+    key: "pay_lowRatingDeduction",
+    value: "20",
+    label: "Low Rating Deduction (≤3 stars)",
+    description: "Amount deducted from cleaner pay when a customer leaves 3 stars or fewer, or reports a complaint.",
+    fieldType: "number",
+  },
+  {
+    key: "pay_photoBonus",
+    value: "5",
+    label: "Completion Photo Bonus",
+    description: "Bonus added to cleaner pay when they upload a completion photo after the job.",
+    fieldType: "number",
+  },
+  {
+    key: "pay_noPhotoPenalty",
+    value: "10",
+    label: "No Photo Penalty",
+    description: "Amount deducted from cleaner pay when no completion photo is submitted.",
+    fieldType: "number",
+  },
+  {
+    key: "pay_streakBonus",
+    value: "50",
+    label: "Streak Bonus Amount",
+    description: "Bonus paid to a cleaner when they complete a full streak of consecutive clean jobs with no issues.",
+    fieldType: "number",
+  },
+  {
+    key: "pay_streakTarget",
+    value: "10",
+    label: "Streak Target (jobs)",
+    description: "Number of consecutive clean jobs required to earn the streak bonus. Streak resets on any complaint or low rating.",
+    fieldType: "number",
+  },
+  {
+    key: "pay_recleanPenalty",
+    value: "30",
+    label: "Reclean / Poor Service Penalty",
+    description: "Amount deducted from cleaner pay when a job requires a reclean due to poor service.",
+    fieldType: "number",
+  },
 ] as const;
 
 async function seedDefaultSettings() {
@@ -261,6 +311,60 @@ export async function getFlowTemplate(
   return body;
 }
 
+/**
+ * Pay rules shape returned by getPayRules().
+ */
+export type PayRules = {
+  fiveStarBonus: number;
+  lowRatingDeduction: number;
+  photoBonus: number;
+  noPhotoPenalty: number;
+  streakBonus: number;
+  streakTarget: number;
+  recleanPenalty: number;
+};
+
+/** Default pay rules (used as fallback if DB is unavailable) */
+export const DEFAULT_PAY_RULES: PayRules = {
+  fiveStarBonus: 10,
+  lowRatingDeduction: 20,
+  photoBonus: 5,
+  noPhotoPenalty: 10,
+  streakBonus: 50,
+  streakTarget: 10,
+  recleanPenalty: 30,
+};
+
+/**
+ * Read all 7 pay rules from app_settings, falling back to defaults.
+ * Used server-side by calculatePayAdjustments and setRecleanPenalty.
+ */
+export async function getPayRules(): Promise<PayRules> {
+  const keys = [
+    "pay_fiveStarBonus",
+    "pay_lowRatingDeduction",
+    "pay_photoBonus",
+    "pay_noPhotoPenalty",
+    "pay_streakBonus",
+    "pay_streakTarget",
+    "pay_recleanPenalty",
+  ];
+  const results = await Promise.all(keys.map(k => getSetting(k, "")));
+  const parse = (val: string, fallback: number) => {
+    const n = parseFloat(val);
+    return isNaN(n) || n < 0 ? fallback : n;
+  };
+  return {
+    fiveStarBonus:       parse(results[0], DEFAULT_PAY_RULES.fiveStarBonus),
+    lowRatingDeduction:  parse(results[1], DEFAULT_PAY_RULES.lowRatingDeduction),
+    photoBonus:          parse(results[2], DEFAULT_PAY_RULES.photoBonus),
+    noPhotoPenalty:      parse(results[3], DEFAULT_PAY_RULES.noPhotoPenalty),
+    streakBonus:         parse(results[4], DEFAULT_PAY_RULES.streakBonus),
+    streakTarget:        Math.max(1, Math.round(parse(results[5], DEFAULT_PAY_RULES.streakTarget))),
+    recleanPenalty:      parse(results[6], DEFAULT_PAY_RULES.recleanPenalty),
+  };
+}
+
 export const settingsRouter = router({
   /**
    * Get all settings. Seeds defaults on first access.
@@ -302,6 +406,51 @@ export const settingsRouter = router({
         .update(appSettings)
         .set({ value: input.value })
         .where(eq(appSettings.key, input.key));
+      return { success: true };
+    }),
+
+  /**
+   * Get the current pay rules (7 keys) as a typed object.
+   * Used by the Pay Rules settings tab and the Cleaner Portal.
+   */
+  getPayRules: protectedProcedure.query(async () => {
+    await seedDefaultSettings();
+    return getPayRules();
+  }),
+
+  /**
+   * Update multiple pay rule keys at once.
+   */
+  updatePayRules: protectedProcedure
+    .input(
+      z.object({
+        fiveStarBonus:      z.number().min(0),
+        lowRatingDeduction: z.number().min(0),
+        photoBonus:         z.number().min(0),
+        noPhotoPenalty:     z.number().min(0),
+        streakBonus:        z.number().min(0),
+        streakTarget:       z.number().int().min(1),
+        recleanPenalty:     z.number().min(0),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await seedDefaultSettings();
+      const pairs: [string, number][] = [
+        ["pay_fiveStarBonus",      input.fiveStarBonus],
+        ["pay_lowRatingDeduction", input.lowRatingDeduction],
+        ["pay_photoBonus",         input.photoBonus],
+        ["pay_noPhotoPenalty",     input.noPhotoPenalty],
+        ["pay_streakBonus",        input.streakBonus],
+        ["pay_streakTarget",       input.streakTarget],
+        ["pay_recleanPenalty",     input.recleanPenalty],
+      ];
+      await Promise.all(
+        pairs.map(([key, val]) =>
+          db.update(appSettings).set({ value: String(val) }).where(eq(appSettings.key, key))
+        )
+      );
       return { success: true };
     }),
 });

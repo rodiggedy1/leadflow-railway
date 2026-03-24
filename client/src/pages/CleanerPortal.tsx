@@ -870,6 +870,9 @@ export default function CleanerPortal() {
     { enabled: !!meQuery.data }
   );
 
+  const payRulesQuery = trpc.cleaner.getPayRules.useQuery();
+  const payRules = payRulesQuery.data;
+
   const logoutMutation = trpc.cleaner.logout.useMutation({
     onSuccess: () => utils.cleaner.me.invalidate(),
   });
@@ -1017,6 +1020,29 @@ export default function CleanerPortal() {
                 {formatDate(weekStart)} – {formatDate(weekEnd)}
               </p>
             </div>
+
+            {/* How Your Pay Works */}
+            {payRules && (
+              <div className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4">
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">How Your Pay Works</p>
+                <div className="space-y-2">
+                  {([
+                    { label: "5-Star Rating", value: `+$${payRules.fiveStarBonus}`, color: "text-emerald-400" },
+                    { label: "Completion Photo", value: `+$${payRules.photoBonus}`, color: "text-emerald-400" },
+                    { label: `Streak Bonus (every ${payRules.streakTarget} jobs)`, value: `+$${payRules.streakBonus}`, color: "text-emerald-400" },
+                    { label: "Low Rating (\u22643 stars)", value: `-$${payRules.lowRatingDeduction}`, color: "text-red-400" },
+                    { label: "No Photo", value: `-$${payRules.noPhotoPenalty}`, color: "text-red-400" },
+                    { label: "Reclean / Poor Service", value: `-$${payRules.recleanPenalty}`, color: "text-red-400" },
+                  ] as { label: string; value: string; color: string }[]).map(row => (
+                    <div key={row.label} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">{row.label}</span>
+                      <span className={`font-semibold ${row.color}`}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-slate-600 text-xs mt-3">Bonuses and deductions are applied automatically when your job is rated.</p>
+              </div>
+            )}
 
             {/* Daily rows */}
             {weekDays.map(({ date: d, jobs: dayJobs }) => {

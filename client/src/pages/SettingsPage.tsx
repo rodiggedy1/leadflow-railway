@@ -26,7 +26,7 @@ import {
   Settings, Link, MessageSquare, Star, Phone, Building2,
   Save, Loader2, CheckCircle2, ToggleLeft, ToggleRight, Bell,
   FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText, Mail,
-  PhoneCall, RefreshCw,
+  PhoneCall, RefreshCw, DollarSign, TrendingUp, TrendingDown, AlertTriangle, Camera, Zap,
 } from "lucide-react";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 
@@ -555,13 +555,55 @@ function SmsTemplateCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general";
+type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general" | "pay";
 
 export default function SettingsPage() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
   const updateSetting = trpc.settings.update.useMutation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("form");
+
+  // ── Pay Rules state ─────────────────────────────────────────────────────────
+  const { data: payRulesData, isLoading: payRulesLoading, refetch: refetchPayRules } = trpc.settings.getPayRules.useQuery();
+  const updatePayRules = trpc.settings.updatePayRules.useMutation();
+  const [payEdits, setPayEdits] = useState<Record<string, string>>({});
+  const [payRulesSaving, setPayRulesSaving] = useState(false);
+
+  const handlePayFieldChange = useCallback((key: string, value: string) => {
+    setPayEdits(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleSavePayRules = async () => {
+    if (!payRulesData) return;
+    const merged = {
+      fiveStarBonus:      parseFloat(payEdits.fiveStarBonus      ?? String(payRulesData.fiveStarBonus)),
+      lowRatingDeduction: parseFloat(payEdits.lowRatingDeduction ?? String(payRulesData.lowRatingDeduction)),
+      photoBonus:         parseFloat(payEdits.photoBonus         ?? String(payRulesData.photoBonus)),
+      noPhotoPenalty:     parseFloat(payEdits.noPhotoPenalty     ?? String(payRulesData.noPhotoPenalty)),
+      streakBonus:        parseFloat(payEdits.streakBonus        ?? String(payRulesData.streakBonus)),
+      streakTarget:       parseInt(payEdits.streakTarget         ?? String(payRulesData.streakTarget), 10),
+      recleanPenalty:     parseFloat(payEdits.recleanPenalty     ?? String(payRulesData.recleanPenalty)),
+    };
+    if (Object.values(merged).some(v => isNaN(v) || v < 0)) {
+      toast.error("All values must be positive numbers");
+      return;
+    }
+    if (merged.streakTarget < 1) {
+      toast.error("Streak target must be at least 1 job");
+      return;
+    }
+    setPayRulesSaving(true);
+    try {
+      await updatePayRules.mutateAsync(merged);
+      await refetchPayRules();
+      setPayEdits({});
+      toast.success("Pay rules saved — changes take effect on the next rated job");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to save pay rules");
+    } finally {
+      setPayRulesSaving(false);
+    }
+  };
 
   // Lifted local edits — keyed by setting key, updated on every keystroke.
   // The preview reads from effectiveValues which merges server + local edits.
@@ -603,6 +645,7 @@ export default function SettingsPage() {
     { id: "email", label: "Email Leads", icon: <Mail className="w-4 h-4" /> },
     { id: "reactivation", label: "Reactivation", icon: <RefreshCw className="w-4 h-4" /> },
     { id: "general", label: "General", icon: <Settings className="w-4 h-4" /> },
+    { id: "pay", label: "Pay Rules", icon: <DollarSign className="w-4 h-4" /> },
   ];
 
   return (
@@ -986,6 +1029,251 @@ export default function SettingsPage() {
                     />
                   </CardContent>
                 </Card>
+              </div>
+            )}
+
+            {/* ── Pay Rules Tab ──────────────────────────────────────────────── */}
+            {activeTab === "pay" && (
+              <div className="space-y-6">
+                {/* Intro card */}
+                <Card className="border border-[#E8735A]/20 bg-[#E8735A]/5">
+                  <CardContent className="pt-5 pb-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-[#E8735A]/15 flex items-center justify-center shrink-0">
+                        <DollarSign className="w-4.5 h-4.5 text-[#E8735A]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Cleaner Pay Rules</p>
+                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                          These amounts are applied automatically when a job is rated. Changes take effect on the next rated job — they do not retroactively update past pay records.
+                          Cleaners can see these rules in their portal so they always know how their pay is calculated.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {payRulesLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-5 h-5 animate-spin text-[#E8735A]" />
+                  </div>
+                ) : payRulesData ? (
+                  <>
+                    {/* Bonuses */}
+                    <Card className="border border-gray-200 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-emerald-600" />
+                          Bonuses
+                        </CardTitle>
+                        <CardDescription className="text-xs text-gray-500">
+                          Amounts added to cleaner pay when they meet these criteria.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5 divide-y divide-gray-100">
+                        {/* 5-star bonus */}
+                        <div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3.5 h-3.5 text-amber-500" />
+                                <p className="text-sm font-medium text-gray-800">5-Star Rating Bonus</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Added to pay when a customer leaves a 5-star rating.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-sm text-gray-500">+$</span>
+                              <Input
+                                type="number" min="0" step="0.50"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.fiveStarBonus ?? String(payRulesData.fiveStarBonus)}
+                                onChange={e => handlePayFieldChange("fiveStarBonus", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Photo bonus */}
+                        <div className="pt-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Camera className="w-3.5 h-3.5 text-blue-500" />
+                                <p className="text-sm font-medium text-gray-800">Completion Photo Bonus</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Added to pay when the cleaner uploads a completion photo.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-sm text-gray-500">+$</span>
+                              <Input
+                                type="number" min="0" step="0.50"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.photoBonus ?? String(payRulesData.photoBonus)}
+                                onChange={e => handlePayFieldChange("photoBonus", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Streak bonus */}
+                        <div className="pt-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Zap className="w-3.5 h-3.5 text-purple-500" />
+                                <p className="text-sm font-medium text-gray-800">Streak Bonus</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Paid when a cleaner completes the streak target with no issues.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-sm text-gray-500">+$</span>
+                              <Input
+                                type="number" min="0" step="1"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.streakBonus ?? String(payRulesData.streakBonus)}
+                                onChange={e => handlePayFieldChange("streakBonus", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Streak target */}
+                        <div className="pt-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Zap className="w-3.5 h-3.5 text-purple-400" />
+                                <p className="text-sm font-medium text-gray-800">Streak Target (jobs)</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Number of consecutive clean jobs needed to earn the streak bonus. Resets on any complaint or low rating.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Input
+                                type="number" min="1" step="1"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.streakTarget ?? String(payRulesData.streakTarget)}
+                                onChange={e => handlePayFieldChange("streakTarget", e.target.value)}
+                              />
+                              <span className="text-sm text-gray-500">jobs</span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Deductions */}
+                    <Card className="border border-gray-200 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                          <TrendingDown className="w-4 h-4 text-red-500" />
+                          Deductions
+                        </CardTitle>
+                        <CardDescription className="text-xs text-gray-500">
+                          Amounts subtracted from cleaner pay when these issues occur.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5 divide-y divide-gray-100">
+                        {/* Low rating deduction */}
+                        <div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                                <p className="text-sm font-medium text-gray-800">Low Rating Deduction (≤3 stars)</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Deducted when a customer leaves 3 stars or fewer, or reports a complaint.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-sm text-gray-500">-$</span>
+                              <Input
+                                type="number" min="0" step="0.50"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.lowRatingDeduction ?? String(payRulesData.lowRatingDeduction)}
+                                onChange={e => handlePayFieldChange("lowRatingDeduction", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        {/* No photo penalty */}
+                        <div className="pt-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Camera className="w-3.5 h-3.5 text-gray-400" />
+                                <p className="text-sm font-medium text-gray-800">No Photo Penalty</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Deducted when the cleaner does not upload a completion photo.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-sm text-gray-500">-$</span>
+                              <Input
+                                type="number" min="0" step="0.50"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.noPhotoPenalty ?? String(payRulesData.noPhotoPenalty)}
+                                onChange={e => handlePayFieldChange("noPhotoPenalty", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Reclean penalty */}
+                        <div className="pt-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                                <p className="text-sm font-medium text-gray-800">Reclean / Poor Service Penalty</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">Deducted when a job requires a reclean due to poor service. Applied manually by an admin.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-sm text-gray-500">-$</span>
+                              <Input
+                                type="number" min="0" step="0.50"
+                                className="w-24 text-right h-8 text-sm"
+                                value={payEdits.recleanPenalty ?? String(payRulesData.recleanPenalty)}
+                                onChange={e => handlePayFieldChange("recleanPenalty", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Preview card */}
+                    <Card className="border border-dashed border-gray-300 bg-gray-50/50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-gray-600">Live Preview — What Cleaners See</CardTitle>
+                        <CardDescription className="text-xs text-gray-400">This is how the rules appear in the cleaner portal right now.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 text-sm">
+                          {([
+                            { icon: <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />, label: "5-Star Rating", value: `+$${payEdits.fiveStarBonus ?? payRulesData.fiveStarBonus}`, color: "text-emerald-600" },
+                            { icon: <Camera className="w-3.5 h-3.5 text-emerald-500" />, label: "Completion Photo", value: `+$${payEdits.photoBonus ?? payRulesData.photoBonus}`, color: "text-emerald-600" },
+                            { icon: <Zap className="w-3.5 h-3.5 text-emerald-500" />, label: `Streak Bonus (every ${payEdits.streakTarget ?? payRulesData.streakTarget} jobs)`, value: `+$${payEdits.streakBonus ?? payRulesData.streakBonus}`, color: "text-emerald-600" },
+                            { icon: <TrendingDown className="w-3.5 h-3.5 text-red-500" />, label: "Low Rating (≤3 stars)", value: `-$${payEdits.lowRatingDeduction ?? payRulesData.lowRatingDeduction}`, color: "text-red-600" },
+                            { icon: <Camera className="w-3.5 h-3.5 text-red-500" />, label: "No Photo", value: `-$${payEdits.noPhotoPenalty ?? payRulesData.noPhotoPenalty}`, color: "text-red-600" },
+                            { icon: <AlertTriangle className="w-3.5 h-3.5 text-red-500" />, label: "Reclean / Poor Service", value: `-$${payEdits.recleanPenalty ?? payRulesData.recleanPenalty}`, color: "text-red-600" },
+                          ] as const).map(row => (
+                            <div key={row.label} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                              <div className="flex items-center gap-2 text-gray-600">{row.icon}{row.label}</div>
+                              <span className={`font-semibold ${row.color}`}>{row.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Save button */}
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleSavePayRules}
+                        disabled={payRulesSaving || Object.keys(payEdits).length === 0}
+                        className="gap-2 bg-[#E8735A] hover:bg-[#d4614a] text-white"
+                      >
+                        {payRulesSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {payRulesSaving ? "Saving..." : "Save Pay Rules"}
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
 

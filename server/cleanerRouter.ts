@@ -19,6 +19,7 @@ import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
+import { getPayRules } from "./settingsRouter";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -255,6 +256,7 @@ export const cleanerRouter = router({
       const job = jobRows[0]!;
       if (job.customerRating !== null && job.basePay && job.payPercent) {
         const { calculatePayAdjustments } = await import("./qualityRouter");
+        const rules = await getPayRules();
         const adj = calculatePayAdjustments({
           jobRevenue: parseFloat(job.jobRevenue ?? "0"),
           payPercent: parseFloat(job.payPercent ?? "0"),
@@ -262,6 +264,7 @@ export const cleanerRouter = router({
           missedSomething: job.missedSomething === 1,
           currentStreakAfterJob: 0, // streak already applied at rating time; don't re-apply
           photoSubmitted: true,
+          rules,
         });
         await db
           .update(cleanerJobs)
@@ -522,6 +525,14 @@ export const cleanerRouter = router({
 
       return { success: true, items };
     }),
+
+  /**
+   * cleaner.getPayRules — returns current pay rules for display in the cleaner portal.
+   * Public so it can be called without a cleaner session (shown on login screen too).
+   */
+  getPayRules: publicProcedure.query(async () => {
+    return getPayRules();
+  }),
 
   /**
    * cleaner.listProfiles — admin gets all cleaner profiles (for management UI).
