@@ -2547,3 +2547,15 @@
 - [x] Leads table: white bg-white rounded-2xl shadow-sm card wrapper for the table (via hj-table-wrap)
 - [ ] Leads table: page header with title + subtitle
 - [ ] Leads table: upgrade filter/search toolbar to match FM style
+
+## SMS Conversation Drawer Redesign — Mar 23
+
+- [x] Upgrade modal backdrop and container: deeper shadow, refined border-radius
+- [x] Upgrade header: larger avatar with gradient, better name/phone layout, cleaner badge placement
+- [x] Upgrade message bubbles: iMessage-style with proper tail shapes, better spacing, softer colors
+- [x] Upgrade compose box: taller, rounded-2xl, send button with icon, character count
+- [x] Upgrade right panel: bg-gray-50 sections with white card blocks, section dividers
+- [x] Upgrade Admin Controls section: clean white card with orange gradient header
+- [x] Upgrade Customer History section: clean card with subtle indigo accent
+- [x] Upgrade Follow-Up section: clean card with violet gradient header
+- [x] Upgrade Call History / Voice Calls: better card design matching FM style

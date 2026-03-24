@@ -1101,23 +1101,26 @@ function ConversationDrawer({
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Wide two-column modal: left = conversation, right = details */}
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-4xl h-[92vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-4xl h-[92vh] sm:max-h-[92vh] flex flex-col overflow-hidden" style={{ boxShadow: '0 25px 60px -10px rgba(0,0,0,0.25), 0 10px 25px -5px rgba(0,0,0,0.15)' }}>
 
         {/* ── Shared header ── */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0">
-          <div className="flex items-center gap-3">
-            {/* Avatar circle */}
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: "#E8603C" }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ background: 'linear-gradient(135deg, #fff 0%, #fafafa 100%)' }}>
+          <div className="flex items-center gap-3.5">
+            {/* Avatar circle with gradient */}
+            <div
+              className="w-11 h-11 rounded-full flex items-center justify-center text-white text-base font-bold shrink-0 shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #E8603C 0%, #d44e2a 100%)' }}
+            >
               {(session.leadName ?? "?").charAt(0).toUpperCase()}
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? "Unknown Lead"}</h2>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+              <h2 className="font-semibold text-gray-900 text-base leading-tight">{session.leadName ?? "Unknown Lead"}</h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-gray-500 font-medium">{formatPhone(session.leadPhone)}</p>
                 <a
                   href={`tel:${session.leadPhone}`}
                   title={`Call ${formatPhone(session.leadPhone)}`}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-all hover:opacity-90"
                   style={{ backgroundColor: "#E8603C", color: "white" }}
                   onClick={e => e.stopPropagation()}
                 >
@@ -1128,11 +1131,14 @@ function ConversationDrawer({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {getSourceBadge(session.leadSource)}
-            {getLanguageBadge(session.language)}
-            <StageBadge stage={session.stage} />
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
-              <X className="w-4 h-4" />
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              {getSourceBadge(session.leadSource)}
+              {getLanguageBadge(session.language)}
+              <StageBadge stage={session.stage} />
+            </div>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0 hover:bg-gray-100 rounded-full">
+              <X className="w-4 h-4 text-gray-500" />
             </Button>
           </div>
         </div>
@@ -1143,55 +1149,74 @@ function ConversationDrawer({
           {/* LEFT: full-height conversation + compose */}
           <div className="flex flex-col flex-1 min-w-0 border-r">
             {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-gray-50">
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4" style={{ background: 'linear-gradient(180deg, #f8f9fa 0%, #f3f4f6 100%)' }}>
               {localMessages.length === 0 ? (
-                <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
+                <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                    <span className="text-2xl">💬</span>
+                  </div>
+                  <p className="text-gray-400 text-sm font-medium">No messages yet</p>
+                  <p className="text-gray-300 text-xs">Start the conversation below</p>
+                </div>
               ) : (
                 localMessages.map((msg, i) => {
                   const isOutbound = msg.role === "assistant";
                   const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
                   const curTs = msg.ts;
-                  // Show a day separator whenever the calendar day changes (ts is always set now via fallback)
                   const showSeparator = curTs != null && (
                     i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
                   );
-                  // Small time label shown below each bubble (e.g. "2:34 PM")
                   const timeLabel = curTs != null
                     ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
                     : null;
                   const senderName = (msg as any).senderName as string | undefined;
                   const isAiMessage = isOutbound && !senderName;
+                  // Group consecutive messages from same sender (no avatar gap between them)
+                  const nextMsg = localMessages[i + 1];
+                  const isLastInGroup = !nextMsg || nextMsg.role !== msg.role;
                   return (
                     <div key={i}>
                       {showSeparator && curTs != null && (
                         <MessageDateSeparator label={formatMsgDate(curTs)} />
                       )}
-                      <div className={`flex mb-3 ${isOutbound ? "justify-end" : "justify-start"}`}>
-                        {/* Robot icon on left for AI messages */}
-                        {isAiMessage && (
-                          <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-1.5 mt-0.5" style={{ backgroundColor: "#e0f2fe", border: "1px solid #bae6fd" }}>
-                            <span className="text-[11px]">🤖</span>
+                      <div className={`flex ${isOutbound ? "justify-end" : "justify-start"} ${isLastInGroup ? "mb-3" : "mb-0.5"}`}>
+                        {/* Avatar for inbound messages — only on last in group */}
+                        {!isOutbound && (
+                          <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mr-2 mt-auto mb-0.5 text-xs font-bold text-white" style={{ background: isLastInGroup ? 'linear-gradient(135deg, #6b7280, #4b5563)' : 'transparent', minWidth: '28px' }}>
+                            {isLastInGroup ? (session.leadName ?? "?").charAt(0).toUpperCase() : ""}
                           </div>
                         )}
-                        <div className="flex flex-col" style={{ maxWidth: "78%" }}>
+                        {/* Robot icon for AI outbound */}
+                        {isAiMessage && (
+                          <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mr-2 mt-auto mb-0.5 order-first" style={{ backgroundColor: "#dbeafe", border: "1px solid #bfdbfe", minWidth: '28px' }}>
+                            <span className="text-sm">🤖</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col" style={{ maxWidth: "72%" }}>
                           <div
-                            className="rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                            style={
-                              isOutbound
-                                ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: isAiMessage ? "12px" : "4px", borderBottomLeftRadius: isAiMessage ? "4px" : "12px" }
-                                : { backgroundColor: "#ffffff", color: "#1f2937", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
-                            }
+                            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                            style={{
+                              borderRadius: isOutbound
+                                ? (isLastInGroup ? '20px 20px 4px 20px' : '20px 20px 20px 20px')
+                                : (isLastInGroup ? '20px 20px 20px 4px' : '20px 20px 20px 20px'),
+                              ...(isOutbound
+                                ? { background: 'linear-gradient(135deg, #E8603C 0%, #d44e2a 100%)', color: 'white', boxShadow: '0 2px 8px rgba(232,96,60,0.3)' }
+                                : { backgroundColor: '#ffffff', color: '#1f2937', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
+                              )
+                            }}
                           >
                             {msg.content}
                           </div>
-                          <div className={`flex items-center gap-1.5 mt-0.5 px-1 ${isOutbound ? (isAiMessage ? "justify-start" : "justify-end") : "justify-start"}`}>
-                            {isOutbound && senderName && (
-                              <span className="text-[10px] font-medium text-orange-500">{senderName}</span>
-                            )}
-                            {timeLabel && (
-                              <span className="text-[10px] text-gray-400">{timeLabel}</span>
-                            )}
-                          </div>
+                          {isLastInGroup && (
+                            <div className={`flex items-center gap-1.5 mt-1 px-1 ${isOutbound ? "justify-end" : "justify-start"}`}>
+                              {isOutbound && senderName && (
+                                <span className="text-[10px] font-semibold" style={{ color: '#E8603C' }}>{senderName}</span>
+                              )}
+                              {timeLabel && (
+                                <span className="text-[10px] text-gray-400">{timeLabel}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1202,20 +1227,20 @@ function ConversationDrawer({
             </div>
 
             {/* Compose box */}
-            <div className="px-4 pt-2.5 pb-3 border-t bg-white shrink-0">
+            <div className="px-4 pt-3 pb-4 border-t shrink-0" style={{ background: '#ffffff' }}>
               {/* AI / Manual toggle */}
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3 px-1">
                 <span className="text-xs">
                   {session.aiMode === 1
-                    ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
-                    : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you're in control</span>
+                    ? <span className="flex items-center gap-1.5 text-emerald-600 font-semibold"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
+                    : <span className="flex items-center gap-1.5 font-semibold" style={{ color: '#E8603C' }}><BotOff className="w-3.5 h-3.5" />You're in control</span>
                   }
                 </span>
                 <button
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
                     session.aiMode === 1
-                      ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                      : "border-green-300 text-green-700 hover:bg-green-50"
+                      ? "bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100"
+                      : "bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                   }`}
                   onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
                   disabled={setAiModeMutation.isPending}
@@ -1250,13 +1275,16 @@ function ConversationDrawer({
           </div>
 
           {/* RIGHT: lead details panel */}
-          <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
+          <div className="w-72 shrink-0 flex flex-col overflow-y-auto" style={{ background: '#f7f8fa' }}>
 
             {/* Customer History panel — shown for campaign/reactivation leads with completed_jobs data */}
             {isCampaignLead && customerHistory && (
-              <div className="px-4 py-4 border-b bg-indigo-50">
-                <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wide mb-3">Customer History</p>
-                <div className="space-y-2 text-sm">
+              <div className="mx-3 mt-3 rounded-xl bg-white border border-indigo-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-indigo-100" style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)' }}>
+                  <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Customer History</p>
+                </div>
+                <div className="px-4 py-3">
+                  <div className="space-y-2 text-sm">
                   {/* Full name */}
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 shrink-0">Full Name</span>
@@ -1297,14 +1325,18 @@ function ConversationDrawer({
                       <span className="font-medium text-xs leading-snug text-gray-800">{customerHistory.address}</span>
                     </div>
                   )}
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Lead info */}
-            <div className="px-4 py-4 border-b">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lead Details</p>
-              <div className="space-y-2 text-sm">
+            <div className="mx-3 mt-3 rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-gray-100" style={{ background: 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)' }}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Lead Details</p>
+              </div>
+              <div className="px-4 py-3">
+                <div className="space-y-2 text-sm">
                 {session.quotedPrice && (() => {
                   const total = computeTotalQuote(session.quotedPrice, session.extras);
                   const hasExtras = total !== session.quotedPrice;
@@ -1409,13 +1441,17 @@ function ConversationDrawer({
                 <div className="flex justify-between text-xs text-gray-400">
                   <span>Updated</span><span>{timeAgo(session.updatedAt)}</span>
                 </div>
+                </div>
               </div>
             </div>
 
             {/* Admin controls: stage + agent */}
             {isAdmin && (
-              <div className="px-4 py-4 border-b bg-orange-50 space-y-3">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin Controls</p>
+              <div className="mx-3 mt-3 rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-gray-100" style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)' }}>
+                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Admin Controls</p>
+                </div>
+                <div className="px-4 py-3 space-y-3">
                 <div className="space-y-1">
                   <span className="text-xs font-medium text-gray-600">Stage</span>
                   <div className="flex items-center gap-1.5">
@@ -1541,75 +1577,75 @@ function ConversationDrawer({
                     </p>
                   </div>
                 )}
+                </div>
               </div>
             )}
 
             {/* Follow-Up Scheduler */}
-            <div className="border-t">
-              <details className="group">
-                <summary className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:bg-gray-50 transition-colors cursor-pointer list-none">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Schedule Follow-Up
+            <div className="mx-3 mt-3 mb-3 rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-gray-100" style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)' }}>
+                <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />Schedule Follow-Up</p>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {/* Follow-up status badges */}
+                {(session.followUpDate || session.followUpSent === 1) && (
+                  <div className="flex items-center gap-1.5">
                     {session.followUpDate && !session.followUpSent && (
                       <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-violet-100 text-violet-700">{session.followUpDate}</span>
                     )}
                     {session.followUpSent === 1 && (
                       <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">Sent ✓</span>
                     )}
-                  </span>
-                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▾</span>
-                </summary>
-                <div className="px-4 pb-3 space-y-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Follow-up date</label>
-                    <Input
-                      type="date"
-                      value={followUpDate}
-                      onChange={e => setFollowUpDate(e.target.value)}
-                      className="h-8 text-xs"
-                      min={new Date().toISOString().split("T")[0]}
-                    />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Message (editable)</label>
-                    <Textarea
-                      value={followUpMessage}
-                      onChange={e => setFollowUpMessage(e.target.value)}
-                      rows={3}
-                      className="resize-none text-xs"
-                      placeholder="Hi, just circling back on this..."
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {followUpSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
-                      {followUpDate && (
-                        <button
-                          type="button"
-                          className="text-xs text-red-400 hover:text-red-600 underline"
-                          onClick={() => {
-                            setFollowUpDate("");
-                            setFollowUpMessage(DEFAULT_FOLLOWUP_MSG);
-                            setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: null, followUpMessage: null });
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-3 text-xs bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
-                      onClick={() => setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: followUpDate || null, followUpMessage })}
-                      disabled={setFollowUpMutation.isPending || !followUpDate}
-                    >
-                      {setFollowUpMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Follow-Up"}
-                    </Button>
-                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Follow-up date</label>
+                  <Input
+                    type="date"
+                    value={followUpDate}
+                    onChange={e => setFollowUpDate(e.target.value)}
+                    className="h-8 text-xs"
+                    min={new Date().toISOString().split("T")[0]}
+                  />
                 </div>
-              </details>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Message (editable)</label>
+                  <Textarea
+                    value={followUpMessage}
+                    onChange={e => setFollowUpMessage(e.target.value)}
+                    rows={3}
+                    className="resize-none text-xs"
+                    placeholder="Hi, just circling back on this..."
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {followUpSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+                    {followUpDate && (
+                      <button
+                        type="button"
+                        className="text-xs text-red-400 hover:text-red-600 underline"
+                        onClick={() => {
+                          setFollowUpDate("");
+                          setFollowUpMessage(DEFAULT_FOLLOWUP_MSG);
+                          setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: null, followUpMessage: null });
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-3 text-xs bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
+                    onClick={() => setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: followUpDate || null, followUpMessage })}
+                    disabled={setFollowUpMutation.isPending || !followUpDate}
+                  >
+                    {setFollowUpMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Follow-Up"}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Call History */}
