@@ -507,6 +507,7 @@ export async function handleFormSubmissionEmail(
       bathrooms,
       messageHistory: initialHistory,
       leadSource: "email",
+      smsFlow: "B",
       barkQA: emailSummary,
     });
     console.log(`[EmailLead] Session created for ${normalizedPhone}`);
@@ -597,15 +598,21 @@ export async function handleCallNotificationEmail(
   try {
     await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
-      leadName: displayName,
-      stage: "UNHANDLED",
+      leadName: "Anonymous (Google Ads Call)",
+      stage: "WIDGET_SIZING",
+      quotedPrice: null,
+      serviceType: null,
+      bedrooms: null,
+      bathrooms: null,
+      extras: null,
       messageHistory: initialHistory,
       leadSource: "voice",
+      aiMode: 0,
       barkQA: callTime ? `Missed call at: ${callTime}` : "Missed call (time unknown)",
     });
     console.log(`[EmailLead] Voice lead session created for ${normalizedPhone}`);
-  } catch (dbErr) {
-    console.error("[EmailLead] Failed to create voice lead session:", dbErr);
+  } catch (dbErr: any) {
+    console.error("[EmailLead] Failed to create voice lead session:", dbErr?.message ?? dbErr);
   }
 
   logActivity({
