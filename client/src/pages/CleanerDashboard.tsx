@@ -676,74 +676,76 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
 
   return (
     <div className={`transition-all ${cardClass}`}>
-      <div className="p-4">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-          {/* Left: Job info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Service time badge — prominent */}
-              {serviceTime && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-primary/10 text-primary rounded-full px-2 py-0.5">
-                  <Clock className="w-3 h-3" />
-                  {serviceTime}
-                </span>
-              )}
-              <span className="font-semibold text-sm">{job.name ?? "Unknown customer"}</span>
-              {isFlagged && (
-                <Badge variant="destructive" className="text-xs gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Flagged
-                </Badge>
-              )}
-              {rating !== null && !isFlagged && <RatingBadge rating={rating} />}
-              <JobStatusBadge
-                status={job.cleanerAssignment?.jobStatus ?? null}
-                issueNote={job.cleanerAssignment?.issueNote}
-                etaTimestamp={job.cleanerAssignment?.etaTimestamp}
-              />
-              {etaOverdue && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-red-500 text-white rounded-full px-2 py-0.5 animate-pulse">
-                  <AlertTriangle className="w-3 h-3" />
-                  Overdue
-                </span>
-              )}
-              {etaDueSoon && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-500 text-white rounded-full px-2 py-0.5">
-                  <Clock className="w-3 h-3" />
-                  Due Soon
-                </span>
-              )}
-            </div>
+      <div className="p-5">
 
-            <div className="mt-1.5 space-y-1">
-              {job.address && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <MapPin className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{job.address}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                {job.serviceType && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {job.serviceType}
-                  </span>
-                )}
-                {job.lastBookingPrice && (
-                  <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                    <DollarSign className="w-3 h-3" />
-                    ${job.lastBookingPrice} job revenue
-                  </span>
-                )}
-                {job.bookingStatus && (
-                  <span className="capitalize text-muted-foreground/70">{job.bookingStatus}</span>
-                )}
+        {/* ── Row 1: Header — time · name · status badges ── */}
+        <div className="flex items-center gap-2.5 flex-wrap mb-3">
+          {serviceTime && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold bg-gray-900 text-white rounded-full px-2.5 py-1">
+              <Clock className="w-3 h-3" />
+              {serviceTime}
+            </span>
+          )}
+          <span className="font-bold text-base text-gray-900">{job.name ?? "Unknown customer"}</span>
+          <JobStatusBadge
+            status={job.cleanerAssignment?.jobStatus ?? null}
+            issueNote={job.cleanerAssignment?.issueNote}
+            etaTimestamp={job.cleanerAssignment?.etaTimestamp}
+          />
+          {isFlagged && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-full px-2 py-0.5">
+              <AlertTriangle className="w-3 h-3" />
+              Flagged
+            </span>
+          )}
+          {rating !== null && !isFlagged && <RatingBadge rating={rating} />}
+          {etaOverdue && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-red-500 text-white rounded-full px-2 py-0.5 animate-pulse">
+              <AlertTriangle className="w-3 h-3" />
+              Overdue
+            </span>
+          )}
+          {etaDueSoon && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-500 text-white rounded-full px-2 py-0.5">
+              <Clock className="w-3 h-3" />
+              Due Soon
+            </span>
+          )}
+        </div>
+
+        {/* ── Row 2: Body — left info + right pay/actions ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+
+          {/* Left: address, service details, rating, notes */}
+          <div className="flex-1 min-w-0 space-y-2">
+            {job.address && (
+              <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                <MapPin className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+                <span className="truncate">{job.address}</span>
               </div>
+            )}
+
+            <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+              {job.serviceType && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-gray-400" />
+                  {job.serviceType}
+                </span>
+              )}
+              {job.lastBookingPrice && (
+                <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+                  <DollarSign className="w-3 h-3" />
+                  ${job.lastBookingPrice} revenue
+                </span>
+              )}
+              {job.bookingStatus && (
+                <span className="capitalize text-gray-400">{job.bookingStatus}</span>
+              )}
             </div>
 
-            {/* Rating — only shown once a rating has been received */}
+            {/* Rating stars */}
             {(rating !== null || hasMissed) && (
-              <div className="mt-2">
+              <div>
                 <RatingStars rating={rating} />
                 {hasMissed && (
                   <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
@@ -754,33 +756,33 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               </div>
             )}
 
-            {/* Customer + Staff notes — collapsible */}
+            {/* Notes — collapsible */}
             {(job.cleanerAssignment?.customerNotes || job.cleanerAssignment?.staffNotes) && (
-              <div className="mt-2">
+              <div>
                 <button
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors"
                   onClick={() => setNotesOpen(o => !o)}
                 >
                   <ChevronRight className={`w-3 h-3 transition-transform ${notesOpen ? "rotate-90" : ""}`} />
                   Notes
                   {!notesOpen && (
-                    <span className="ml-1 text-muted-foreground/60">
+                    <span className="ml-1 text-gray-300">
                       {[job.cleanerAssignment?.customerNotes && "customer", job.cleanerAssignment?.staffNotes && "staff"].filter(Boolean).join(" · ")}
                     </span>
                   )}
                 </button>
                 {notesOpen && (
-                  <div className="mt-1.5 space-y-1.5">
+                  <div className="mt-2 space-y-1.5">
                     {job.cleanerAssignment?.customerNotes && (
-                      <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2">
-                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-0.5">Customer Notes</p>
-                        <p className="text-xs text-blue-800 dark:text-blue-300 whitespace-pre-wrap">{job.cleanerAssignment.customerNotes}</p>
+                      <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2">
+                        <p className="text-xs font-semibold text-blue-700 mb-0.5">Customer Notes</p>
+                        <p className="text-xs text-blue-800 whitespace-pre-wrap">{job.cleanerAssignment.customerNotes}</p>
                       </div>
                     )}
                     {job.cleanerAssignment?.staffNotes && (
-                      <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
-                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Staff Notes</p>
-                        <p className="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">{job.cleanerAssignment.staffNotes}</p>
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                        <p className="text-xs font-semibold text-amber-700 mb-0.5">Staff Notes</p>
+                        <p className="text-xs text-amber-800 whitespace-pre-wrap">{job.cleanerAssignment.staffNotes}</p>
                       </div>
                     )}
                   </div>
@@ -788,15 +790,15 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               </div>
             )}
 
-            {/* AI Checklist — collapsible, read-only progress for admin */}
+            {/* Checklist — collapsible */}
             {job.cleanerAssignment?.checklistItems && job.cleanerAssignment.checklistItems.length > 0 && (() => {
               const items = job.cleanerAssignment!.checklistItems!;
               const done = items.filter(i => i.checked).length;
               const allDone = done === items.length;
               return (
-                <div className="mt-2">
+                <div>
                   <button
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors"
                     onClick={() => setChecklistOpen(o => !o)}
                   >
                     <ChevronRight className={`w-3 h-3 transition-transform ${checklistOpen ? "rotate-90" : ""}`} />
@@ -807,18 +809,18 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                     {allDone && <span className="ml-1 text-emerald-600">✓ complete</span>}
                   </button>
                   {checklistOpen && (
-                    <div className="mt-1.5 rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                    <div className="mt-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 space-y-1">
                       {items.map((item, idx) => (
                         <div key={idx} className="flex items-start gap-1.5">
                           <span className={`mt-0.5 shrink-0 w-3 h-3 rounded border flex items-center justify-center text-[9px] ${
                             item.checked
                               ? "bg-emerald-500 border-emerald-500 text-white"
-                              : "border-slate-400 dark:border-slate-600"
+                              : "border-gray-300"
                           }`}>
                             {item.checked && "✓"}
                           </span>
                           <span className={`text-xs leading-snug ${
-                            item.checked ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"
+                            item.checked ? "text-gray-400 line-through" : "text-gray-700"
                           }`}>{item.text}</span>
                         </div>
                       ))}
@@ -829,17 +831,40 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
             })()}
           </div>
 
-          {/* Right: Cleaner + pay + photo */}
-          <div className="flex flex-col gap-2 sm:items-end sm:min-w-[200px]">
-            {/* Cleaner assignment */}
-            <div className="flex items-center gap-2">
+          {/* Right: cleaner name + pay block, then action buttons at bottom */}
+          <div className="flex flex-col gap-3 sm:items-end sm:min-w-[220px]">
+
+            {/* Cleaner + pay info block */}
+            <div className="sm:text-right">
               {job.cleanerAssignment ? (
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cleanerAccentBorder(job.cleanerAssignment.cleanerProfileId).replace("border-l-", "bg-")}`} />
-              ) : (
-                <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              )}
-              {job.cleanerAssignment ? (
-                <span className="text-sm font-medium">{job.cleanerAssignment.cleanerName}</span>
+                <>
+                  <div className="flex items-center gap-2 sm:justify-end">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cleanerAccentBorder(job.cleanerAssignment.cleanerProfileId).replace("border-l-", "bg-")}`} />
+                    <span className="text-sm font-semibold text-gray-900">{job.cleanerAssignment.cleanerName}</span>
+                  </div>
+                  {job.cleanerAssignment.basePay && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Base pay: <span className="font-semibold text-gray-800">${parseFloat(job.cleanerAssignment.basePay).toFixed(2)}</span>
+                      {job.cleanerAssignment.payPercent && (
+                        <span className="text-gray-400 ml-1">({parseFloat(job.cleanerAssignment.payPercent)}%)</span>
+                      )}
+                    </p>
+                  )}
+                  {/* Pay adjustments */}
+                  <div className="text-xs mt-1 space-y-0.5">
+                    {rating === 5 && <p className="text-emerald-600">+$10 five-star bonus</p>}
+                    {rating !== null && rating <= 3 && <p className="text-red-500">-$20 low rating deduction</p>}
+                    {hasMissed && <p className="text-red-500">-$20 complaint deduction</p>}
+                    {job.cleanerAssignment.manualAdjustment && (
+                      <p className={parseFloat(job.cleanerAssignment.manualAdjustment) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                        {parseFloat(job.cleanerAssignment.manualAdjustment) >= 0 ? "+" : ""}${parseFloat(job.cleanerAssignment.manualAdjustment).toFixed(2)}
+                        {job.cleanerAssignment.manualAdjustmentNote && (
+                          <span className="text-gray-400"> ({job.cleanerAssignment.manualAdjustmentNote})</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </>
               ) : (
                 <CleanerAssignSelector
                   jobId={job.id}
@@ -849,68 +874,24 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
               )}
             </div>
 
-            {/* Base pay */}
-            {job.cleanerAssignment?.basePay && (
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <DollarSign className="w-3 h-3" />
-                Base pay: <span className="font-semibold text-foreground">${parseFloat(job.cleanerAssignment.basePay).toFixed(2)}</span>
-                {job.cleanerAssignment.payPercent && (
-                  <span className="text-muted-foreground/60">({parseFloat(job.cleanerAssignment.payPercent)}%)</span>
-                )}
-              </div>
-            )}
-
-            {/* Pay adjustments */}
-            {job.cleanerAssignment && (
-              <div className="text-xs space-y-0.5">
-                {rating === 5 && (
-                  <p className="text-emerald-600">+$10 five-star bonus</p>
-                )}
-                {rating !== null && rating <= 3 && (
-                  <p className="text-red-500">-$20 low rating deduction</p>
-                )}
-                {hasMissed && (
-                  <p className="text-red-500">-$20 complaint deduction</p>
-                )}
-                {job.cleanerAssignment.manualAdjustment && (
-                  <p className={parseFloat(job.cleanerAssignment.manualAdjustment) >= 0 ? "text-emerald-600" : "text-red-500"}>
-                    {parseFloat(job.cleanerAssignment.manualAdjustment) >= 0 ? "+" : ""}${parseFloat(job.cleanerAssignment.manualAdjustment).toFixed(2)}
-                    {job.cleanerAssignment.manualAdjustmentNote && (
-                      <span className="text-muted-foreground"> ({job.cleanerAssignment.manualAdjustmentNote})</span>
-                    )}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Manual adjustment button */}
-            {job.cleanerAssignment && (
-              <ManualAdjustButton job={job} onRefetch={onRefetch} />
-            )}
-
-            {/* Reclean penalty toggle */}
-            {job.cleanerAssignment && (
-              <RecleanPenaltyButton job={job} onRefetch={onRefetch} />
-            )}
-
-            {/* Reopen completed job for photo upload */}
-            <UncompleteButton job={job} onRefetch={onRefetch} />
-
-            {/* Photo upload */}
+            {/* Photo upload section */}
             {job.cleanerAssignment ? (
-              <PhotoUploadButton
-                job={job}
-                onSuccess={onRefetch}
-              />
+              <PhotoUploadButton job={job} onSuccess={onRefetch} />
             ) : (
-              <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs opacity-50">
+              <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs opacity-40">
                 <Upload className="w-3.5 h-3.5" />
                 Assign cleaner first
               </Button>
             )}
 
-            {/* Send Tracker Link button */}
-            <SendTrackerLinkButton job={job} />
+            {/* Action buttons row — grouped at bottom */}
+            <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+              {job.cleanerAssignment && <ManualAdjustButton job={job} onRefetch={onRefetch} />}
+              {job.cleanerAssignment && <RecleanPenaltyButton job={job} onRefetch={onRefetch} />}
+              <UncompleteButton job={job} onRefetch={onRefetch} />
+              <SendTrackerLinkButton job={job} />
+            </div>
+
           </div>
         </div>
       </div>

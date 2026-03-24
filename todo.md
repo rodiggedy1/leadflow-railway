@@ -2501,3 +2501,12 @@
 - [x] Upgrade Cleaner Profiles section: white bg, shadow-sm, rounded-xl
 - [x] Consistent typography: gray-900 headings, gray-500 subtitles, gray-600 body
 - [x] Summary stats bar: styled pill chips for job count, revenue, photos, ratings
+
+## JobCard Layout Redesign — Mar 23
+
+- [x] Redesign card into clear top/bottom rows: header row (time + name + status) and body row (address + details + pay + actions)
+- [x] Group left column: time badge, customer name, status pill — all on one line
+- [x] Group left body: address, bedroom/revenue/assignment on second line, notes on third
+- [x] Group right column: cleaner name + pay as a mini block, then photos below, then actions at bottom
+- [x] Add consistent padding and gap between all elements
+- [x] Align action buttons to bottom-right, not scattered vertically
