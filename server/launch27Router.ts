@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, router } from "./_core/trpc";
+import { agentProcedure, router } from "./_core/trpc";
 import { getCompletedBookingsForDate } from "./launch27";
 import { getDb } from "./db";
 import { completedJobBatches, completedJobs } from "../drizzle/schema";
@@ -18,7 +18,7 @@ export const launch27Router = router({
    * Sync completed bookings from Launch27 for a given date (or yesterday by default).
    * Inserts a new batch and job records. Skips duplicates by phone+date.
    */
-  syncCompletedJobs: protectedProcedure
+  syncCompletedJobs: agentProcedure
     .input(
       z.object({
         date: z
@@ -160,7 +160,7 @@ export const launch27Router = router({
   /**
    * Get the last sync result summary (most recent batch from Launch27 auto-sync).
    */
-  getLastSync: protectedProcedure.query(async () => {
+  getLastSync: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return null;
 

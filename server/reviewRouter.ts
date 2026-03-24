@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { and, desc, eq, gte, isNull, lt, sql, count } from "drizzle-orm";
-import { router, protectedProcedure } from "./_core/trpc";
+import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
@@ -390,7 +390,7 @@ export async function handleReviewReplyForJob(
 // ─── tRPC Router ──────────────────────────────────────────────────────────────
 export const reviewRouter = router({
   /** Upload a completed jobs CSV and create a batch */
-  upload: protectedProcedure
+  upload: agentProcedure
     .input(
       z.object({
         csvText: z.string().min(1),
@@ -432,7 +432,7 @@ export const reviewRouter = router({
     }),
 
   /** List all batches with stats */
-  listBatches: protectedProcedure.query(async () => {
+  listBatches: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
     return db
@@ -443,7 +443,7 @@ export const reviewRouter = router({
   }),
 
   /** Get contacts for a specific batch */
-  getBatchContacts: protectedProcedure
+  getBatchContacts: agentProcedure
     .input(z.object({ batchId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -456,7 +456,7 @@ export const reviewRouter = router({
     }),
 
   /** Manually trigger sending pending review SMS */
-  sendPendingNow: protectedProcedure.mutation(async () => {
+  sendPendingNow: agentProcedure.mutation(async () => {
     const sent = await sendPendingReviewSms();
     return { sent };
   }),
@@ -470,7 +470,7 @@ export const reviewRouter = router({
    *  - sentimentBreakdown: counts per status
    *  - serviceTypeBreakdown: happiness rate per service type
    */
-  analytics: protectedProcedure
+  analytics: agentProcedure
     .input(z.object({
       daysBack: z.number().int().min(1).max(365).default(30),
     }))
@@ -580,7 +580,7 @@ export const reviewRouter = router({
    * conversations — list all review conversation sessions for the Reviews tab.
    * These are sessions with leadSource = 'review', sorted by most recent first.
    */
-  conversations: protectedProcedure.query(async () => {
+  conversations: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
 
@@ -664,7 +664,7 @@ export const reviewRouter = router({
    * pendingApproval — returns jobs eligible for today's review send (yesterday's jobs,
    * not skipped, not yet sent). Used to show the approval card before sending.
    */
-  pendingApproval: protectedProcedure.query(async () => {
+  pendingApproval: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return { count: 0, jobs: [] };
 
@@ -700,7 +700,7 @@ export const reviewRouter = router({
    * approveDailyBatch — admin manually approves and sends today's review SMS batch.
    * Only sends to yesterday's jobs that are PENDING, not skipped, not yet sent.
    */
-  approveDailyBatch: protectedProcedure.mutation(async () => {
+  approveDailyBatch: agentProcedure.mutation(async () => {
     const sent = await sendPendingReviewSms();
     return { sent };
   }),
@@ -711,7 +711,7 @@ export const reviewRouter = router({
    * so the full flow — analytics, notifications, review confirmed counts — fires
    * exactly as it would for a real customer send.
    */
-  sendTest: protectedProcedure
+  sendTest: agentProcedure
     .input(
       z.object({
         testPhone: z.string().min(10).max(20),
