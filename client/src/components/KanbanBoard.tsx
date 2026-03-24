@@ -832,7 +832,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 -m-6 p-6">
+    <div className="min-h-screen bg-gray-50 -mx-6 -mb-6 mt-4 px-6 pt-6 pb-6">
       {/* Toolbar row */}
       <div className="mb-4">
         <div className="flex justify-end gap-2">
