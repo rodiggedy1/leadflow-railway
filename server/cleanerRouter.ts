@@ -14,7 +14,7 @@ import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
 import { parse as parseCookie } from "cookie";
-import { publicProcedure, cleanerProcedure, adminAgentProcedure, router } from "./_core/trpc";
+import { publicProcedure, cleanerProcedure, agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
@@ -465,7 +465,7 @@ export const cleanerRouter = router({
   /**
    * cleaner.setPassword — admin sets email + password for a cleaner's portal access.
    */
-  setPassword: adminAgentProcedure
+  setPassword: agentProcedure
     .input(z.object({
       cleanerProfileId: z.number(),
       email: z.string().email("Must be a valid email"),
@@ -526,7 +526,7 @@ export const cleanerRouter = router({
   /**
    * cleaner.listProfiles — admin gets all cleaner profiles (for management UI).
    */
-  listProfiles: adminAgentProcedure.query(async () => {
+  listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 

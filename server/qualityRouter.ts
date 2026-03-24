@@ -20,7 +20,7 @@
 import { randomBytes } from "crypto";
 import { z } from "zod";
 import { and, desc, eq, gte, isNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
-import { router, protectedProcedure, publicProcedure } from "./_core/trpc";
+import { router, agentProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 
@@ -576,14 +576,14 @@ export const qualityRouter = router({
   // ── Cleaner Profile Management ──────────────────────────────────────────────
 
   /** List all cleaner profiles */
-  listCleaners: protectedProcedure.query(async () => {
+  listCleaners: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     return db.select().from(cleanerProfiles).orderBy(cleanerProfiles.name);
   }),
 
   /** Create a new cleaner profile */
-  createCleaner: protectedProcedure
+  createCleaner: agentProcedure
     .input(
       z.object({
         name: z.string().min(1),
@@ -606,7 +606,7 @@ export const qualityRouter = router({
     }),
 
   /** Update a cleaner profile */
-  updateCleaner: protectedProcedure
+  updateCleaner: agentProcedure
     .input(
       z.object({
         id: z.number(),
@@ -628,7 +628,7 @@ export const qualityRouter = router({
   // ── Rating SMS Queue Management ─────────────────────────────────────────────
 
   /** List pending rating SMS awaiting admin approval (today's jobs) */
-  listPendingRatingSms: protectedProcedure.query(async () => {
+  listPendingRatingSms: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const today = getTodayET();
@@ -641,7 +641,7 @@ export const qualityRouter = router({
   }),
 
   /** Approve a rating SMS (mark as approved for 7pm send) */
-  approveRatingSms: protectedProcedure
+  approveRatingSms: agentProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -654,7 +654,7 @@ export const qualityRouter = router({
     }),
 
   /** Approve all pending rating SMS for today */
-  approveAllRatingSms: protectedProcedure.mutation(async ({ ctx }) => {
+  approveAllRatingSms: agentProcedure.mutation(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const today = getTodayET();
@@ -671,7 +671,7 @@ export const qualityRouter = router({
   }),
 
   /** Skip a rating SMS (won't be sent) */
-  skipRatingSms: protectedProcedure
+  skipRatingSms: agentProcedure
     .input(z.object({ id: z.number(), reason: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -684,7 +684,7 @@ export const qualityRouter = router({
     }),
 
   /** Re-queue a sent/skipped rating SMS back to pending so it can be re-approved and re-sent */
-  requeueRatingSms: protectedProcedure
+  requeueRatingSms: agentProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -743,7 +743,7 @@ export const qualityRouter = router({
     }),
 
   /** Get rating SMS queue summary (pending/approved/sent counts for today) */
-  ratingSmsQueueSummary: protectedProcedure.query(async () => {
+  ratingSmsQueueSummary: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     const today = getTodayET();
@@ -762,7 +762,7 @@ export const qualityRouter = router({
   // ── Cleaner Job Management ──────────────────────────────────────────────────
 
   /** Get jobs for a specific date (default: today) with cleaner assignments */
-  getJobsForDate: protectedProcedure
+  getJobsForDate: agentProcedure
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -842,7 +842,7 @@ export const qualityRouter = router({
     }),
 
   /** Assign a cleaner to a completed job */
-  assignCleaner: protectedProcedure
+  assignCleaner: agentProcedure
     .input(
       z.object({
         completedJobId: z.number(),
@@ -916,7 +916,7 @@ export const qualityRouter = router({
   // ── Photo Upload ────────────────────────────────────────────────────────────
 
   /** Upload a completion photo for a job (base64 encoded) */
-  uploadJobPhoto: protectedProcedure
+  uploadJobPhoto: agentProcedure
     .input(
       z.object({
         cleanerJobId: z.number(),
@@ -972,7 +972,7 @@ export const qualityRouter = router({
   // ── Admin Quality Dashboard ─────────────────────────────────────────────────
 
   /** Get per-cleaner quality stats for a date range */
-  cleanerStats: protectedProcedure
+  cleanerStats: agentProcedure
     .input(
       z.object({
         from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -1085,7 +1085,7 @@ export const qualityRouter = router({
     }),
 
   /** Get flagged jobs requiring admin attention */
-  getFlaggedJobs: protectedProcedure.query(async () => {
+  getFlaggedJobs: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     return db
@@ -1097,7 +1097,7 @@ export const qualityRouter = router({
   }),
 
   /** Resolve a flagged job (add admin note, unflag) */
-  resolveFlaggedJob: protectedProcedure
+  resolveFlaggedJob: agentProcedure
     .input(z.object({ id: z.number(), adminNotes: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -1110,7 +1110,7 @@ export const qualityRouter = router({
     }),
 
   /** Get cleaner streak data */
-  getCleanerStreaks: protectedProcedure.query(async () => {
+  getCleanerStreaks: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
     return db
@@ -1124,7 +1124,7 @@ export const qualityRouter = router({
    * upsert into cleaner_jobs with full team/price/customer data.
    * Creates cleaner_profiles automatically for new teams.
    */
-  syncTodayJobs: protectedProcedure
+  syncTodayJobs: agentProcedure
     .input(z.object({ date: z.string().optional() })) // YYYY-MM-DD, defaults to today
     .mutation(async ({ input }) => {
       const { getCompletedBookingsForDate } = await import("./launch27");
@@ -1316,7 +1316,7 @@ export const qualityRouter = router({
   /**
    * Get all cleaner jobs for a specific date (for the dashboard view).
    */
-  getJobsForDay: protectedProcedure
+  getJobsForDay: agentProcedure
     .input(z.object({ date: z.string() })) // YYYY-MM-DD
     .query(async ({ input }) => {
       const db = await getDb();
@@ -1332,7 +1332,7 @@ export const qualityRouter = router({
    * Immediately send all approved (unsent) rating SMS for today.
    * Use from the dashboard to fire SMS without waiting for the 7 PM cron.
    */
-  sendApprovedRatingSmsNow: protectedProcedure.mutation(async () => {
+  sendApprovedRatingSmsNow: agentProcedure.mutation(async () => {
     const result = await sendApprovedRatingSms();
     return result;
   }),
@@ -1342,7 +1342,7 @@ export const qualityRouter = router({
    * Pass amount as a decimal string (e.g. "-15.00" or "20.00").
    * Pass null to clear the adjustment.
    */
-  setManualAdjustment: protectedProcedure
+  setManualAdjustment: agentProcedure
     .input(
       z.object({
         cleanerJobId: z.number(),
@@ -1369,7 +1369,7 @@ export const qualityRouter = router({
    * Admin reopens a completed job so the cleaner can upload photos.
    * Sets bookingStatus back to "assigned" and clears photoAdjustment so it recalculates.
    */
-  uncompleteJob: protectedProcedure
+  uncompleteJob: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -1391,7 +1391,7 @@ export const qualityRouter = router({
    * Admin applies or removes the reclean penalty (-$30) on a cleaner job.
    * Pass apply=true to set the penalty, apply=false to clear it.
    */
-  setRecleanPenalty: protectedProcedure
+  setRecleanPenalty: agentProcedure
     .input(
       z.object({
         cleanerJobId: z.number(),

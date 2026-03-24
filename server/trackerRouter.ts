@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, publicProcedure, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs, appSettings } from "../drizzle/schema";
@@ -166,7 +166,7 @@ export const trackerRouter = router({
    * Called by the 8 AM cron and available as a manual trigger from the admin.
    * NOTE: Currently disabled during testing — returns immediately without sending.
    */
-  sendTodayLinks: protectedProcedure
+  sendTodayLinks: agentProcedure
     .input(z.object({ date: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -219,7 +219,7 @@ export const trackerRouter = router({
    * Used by the "Send Tracker Link" button on admin job cards.
    * NOTE: SMS is disabled during testing — returns the URL without sending.
    */
-  sendSingleLink: protectedProcedure
+  sendSingleLink: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
