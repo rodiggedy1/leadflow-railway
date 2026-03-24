@@ -31,6 +31,24 @@ import { sendSms, sleep } from "./openphone";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
+// isWithinBusinessHours is imported for reference; we define a stricter 8am–5pm variant
+import { isWithinBusinessHours as _isWithinBusinessHours } from "./vapiLeadNotification";
+
+/**
+ * Returns true if the current time is within escalation call hours: 8 AM – 5 PM ET.
+ * This is stricter than the lead-alert window (7am–7pm) because escalation calls
+ * wake people up and should never fire at night.
+ */
+export function isWithinEscalationHours(now: Date = new Date()): boolean {
+  const etFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    hour12: false,
+  });
+  const hour = parseInt(etFormatter.format(now), 10);
+  // 8 (8:00 am) inclusive → 16 (4:59 pm) inclusive; 17 (5:00 pm) is excluded
+  return hour >= 8 && hour < 17;
+}
 
 // ── Kill switch ───────────────────────────────────────────────────────────────
 // Set to true when ready to go live. All functions return early while false.
@@ -38,6 +56,10 @@ export const FIELD_MGMT_ENABLED = true;
 
 // ── CS team alert number ──────────────────────────────────────────────────────
 const CS_ALERT_NUMBER = "+12028885362";
+
+// ── Vapi outbound phone number (the number Vapi calls FROM) ──────────────────
+// Never call this number — it would create a self-call loop.
+const VAPI_OUTBOUND_PHONE_NUMBER = "+19347898077";
 
 // ── Cleaner portal login URL ──────────────────────────────────────────────────
 const CLEANER_PORTAL_URL = "https://quote.maidinblack.com/cleaner";
@@ -70,8 +92,13 @@ async function vapiPost(path: string, body: unknown): Promise<unknown> {
 }
 
 /**
- * Places an outbound VAPI call to the CS team alerting them of a no-check-in situation.
- * Uses TTS — no AI conversation, just reads the script and hangs up.
+ * Places an outbound VAPI call to the CLEANER alerting them that they have not
+ * checked in for their job. Uses TTS — no AI conversation, just reads the script
+ * and hangs up.
+ *
+ * Guards:
+ * - Business hours only (8 AM – 5 PM ET). Outside hours the call is silently skipped.
+ * - Never calls the Vapi outbound number itself (self-call loop protection).
  */
 export async function placeNoCheckinEscalationCall(params: {
   cleanerName: string;
@@ -80,6 +107,7 @@ export async function placeNoCheckinEscalationCall(params: {
   scheduledTime: string;
   cleanerJobId?: number;
   step?: string;
+  cleanerPhone?: string;
 }): Promise<boolean> {
   if (!FIELD_MGMT_ENABLED) return false;
   if (!ENV.vapiPrivateKey) {
@@ -87,17 +115,42 @@ export async function placeNoCheckinEscalationCall(params: {
     return false;
   }
 
-  const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step } = params;
-  const script =
-    `Hi Maids in Black team, this is an automated field alert. ` +
-    `Cleaner ${cleanerName} has not checked in for their job at ${jobAddress} for client ${customerName}, ` +
-    `scheduled at ${scheduledTime}. ` +
-    `Please call the cleaner immediately and notify the client. ` +
-    `This is a time-sensitive situation.`;
+  // ── Business hours guard (8 AM – 5 PM ET) ────────────────────────────────
+  if (!isWithinEscalationHours()) {
+    console.log("[FieldMgmt] Outside escalation call hours (8am–5pm ET) — skipping call");
+    return false;
+  }
+
+  const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step, cleanerPhone } = params;
+
+  // ── Determine the call target ─────────────────────────────────────────────
+  // Prefer the cleaner's own phone. Fall back to CS team only if no cleaner phone is available.
+  const callTarget = cleanerPhone && cleanerPhone.trim() ? cleanerPhone.trim() : CS_ALERT_NUMBER;
+
+  // ── Self-call protection ──────────────────────────────────────────────────
+  // Never call the Vapi outbound number — it would create an infinite loop.
+  const normalizedTarget = callTarget.startsWith("+") ? callTarget : `+1${callTarget.replace(/\D/g, "")}`;
+  if (normalizedTarget === VAPI_OUTBOUND_PHONE_NUMBER) {
+    console.error(`[FieldMgmt] Self-call protection triggered — refusing to call Vapi outbound number ${normalizedTarget}`);
+    return false;
+  }
+
+  const isCsTeam = normalizedTarget === CS_ALERT_NUMBER;
+  const script = isCsTeam
+    ? `Hi Maids in Black team, this is an automated field alert. ` +
+      `Cleaner ${cleanerName} has not checked in for their job at ${jobAddress} for client ${customerName}, ` +
+      `scheduled at ${scheduledTime}. ` +
+      `Please call the cleaner immediately and notify the client. ` +
+      `This is a time-sensitive situation.`
+    : `Hi ${cleanerName}, this is an automated reminder from Maids in Black. ` +
+      `You have a job at ${jobAddress} for ${customerName} scheduled at ${scheduledTime}. ` +
+      `We have not received your check-in yet. ` +
+      `Please open the Maids in Black app and mark your status, or call the office immediately. ` +
+      `Thank you.`;
 
   const payload = {
     phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
-    customer: { number: CS_ALERT_NUMBER },
+    customer: { number: normalizedTarget },
     assistant: {
       name: "FieldMgmtAlert",
       firstMessage: script,
@@ -124,8 +177,7 @@ export async function placeNoCheckinEscalationCall(params: {
   try {
     const result = await vapiPost("/call", payload) as { id?: string };
     const vapiCallId = result?.id ?? null;
-    console.log(`[FieldMgmt] Escalation call placed to CS team. VAPI call ID: ${vapiCallId ?? "unknown"}`);
-
+    console.log(`[FieldMgmt] Escalation call placed to ${normalizedTarget}. VAPI call ID: ${vapiCallId ?? "unknown"}`);
     // Store the call record in fieldMgmtCalls so we can update it when the end-of-call report arrives
     if (cleanerJobId && vapiCallId) {
       const db = await getDb();
@@ -134,7 +186,7 @@ export async function placeNoCheckinEscalationCall(params: {
           cleanerJobId,
           step: step ?? "noshow_call",
           vapiCallId,
-          calledPhone: CS_ALERT_NUMBER,
+          calledPhone: normalizedTarget,
           outcome: "no_answer", // will be updated by end-of-call webhook
           durationSeconds: 0,
           transcript: null,
@@ -884,8 +936,11 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       serviceDateTime: cleanerJobs.serviceDateTime,
       jobStatus: cleanerJobs.jobStatus,
       bookingStatus: cleanerJobs.bookingStatus,
+      // Include cleaner phone so the escalation call goes to the cleaner, not the office
+      cleanerPhone: cleanerProfiles.phone,
     })
     .from(cleanerJobs)
+    .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
     .where(
       and(
         inArray(cleanerJobs.bookingStatus, ["assigned", "new"]),
@@ -951,9 +1006,12 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
         meta: { cleanerJobId: job.id },
       }).catch(() => {});
 
-      // Auto-call CS team 10 minutes after the SMS alert, then log the call
+      // Auto-call the CLEANER 10 minutes after the SMS alert, then log the call.
+      // Falls back to CS team if no cleaner phone is available.
       const jobIdForCall = job.id;
       const cleanerNameForCall = job.cleanerName ?? "Unknown";
+      const cleanerPhoneForCall = job.cleanerPhone ?? undefined;
+      const callRecipient = cleanerPhoneForCall ?? CS_ALERT_NUMBER;
       sleep(10 * 60 * 1000)
         .then(() =>
           placeNoCheckinEscalationCall({
@@ -963,6 +1021,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
             scheduledTime: timeStr,
             cleanerJobId: jobIdForCall,
             step: "noshow_call",
+            cleanerPhone: cleanerPhoneForCall,
           })
         )
         .then((callResult) => {
@@ -971,7 +1030,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
             cleanerJobId: jobIdForCall,
             step: "noshow_call",
             success,
-            recipientPhone: CS_ALERT_NUMBER,
+            recipientPhone: callRecipient,
             errorDetail: success ? undefined : "VAPI call did not return a call ID",
           });
         })
@@ -981,7 +1040,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
             cleanerJobId: jobIdForCall,
             step: "noshow_call",
             success: false,
-            recipientPhone: CS_ALERT_NUMBER,
+            recipientPhone: callRecipient,
             errorDetail: String(err?.message ?? err),
           }).catch(() => {});
         });

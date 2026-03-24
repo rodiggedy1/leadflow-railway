@@ -2555,3 +2555,10 @@
 ## Pipeline Card Layout Bug
 
 - [x] Fix Kanban pipeline cards: price text overlapping date/source line (garbled layout)
+
+## FieldMgmt Escalation Call Bugs (Critical)
+
+- [x] Fix escalation call to call the cleaner's phone, not the office CS line
+- [x] Enforce 8 AM – 5 PM ET business hours guard on all escalation calls (no calls outside window)
+- [x] Add self-call protection: never call the Vapi phone number itself (+19347898077)
+- [x] Investigate what triggered the "Bob on main street" call (bad test job in DB?)

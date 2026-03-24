@@ -1075,8 +1075,11 @@ export const fieldMgmtRouter = router({
           jobAddress: cleanerJobs.jobAddress,
           serviceDateTime: cleanerJobs.serviceDateTime,
           cleanerProfileId: cleanerJobs.cleanerProfileId,
+          // Fetch cleaner phone so the call goes to the cleaner, not the office
+          cleanerPhone: cleanerProfiles.phone,
         })
         .from(cleanerJobs)
+        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
         .where(eq(cleanerJobs.id, input.cleanerJobId))
         .limit(1);
 
@@ -1094,6 +1097,7 @@ export const fieldMgmtRouter = router({
         scheduledTime,
         cleanerJobId: input.cleanerJobId,
         step: "manual_voice_alert",
+        cleanerPhone: job.cleanerPhone ?? undefined,
       });
 
       if (!success) {

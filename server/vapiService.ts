@@ -901,6 +901,17 @@ const MISSED_CALL_REASONS = new Set([
   "customer-ended-call-during-greeting",
 ]);
 
+// Phone numbers that must NEVER receive a missed-call SMS:
+// - The Vapi outbound number (+19347898077) is the number Vapi calls FROM when placing
+//   outbound FieldMgmtAlert / LeadAlert calls. When those calls go unanswered, Vapi fires
+//   an end-of-call-report with customer.number = the destination (e.g. CS office). We
+//   must not send a missed-call SMS to the CS office or to the Vapi number itself.
+// - The CS office line (+12028885362) is an internal number, not a real inbound caller.
+const OUTBOUND_ALERT_PHONES = new Set([
+  "+19347898077", // Vapi outbound phone number — never a real caller
+  "+12028885362", // CS office line — internal, not a real inbound caller
+]);
+
 export async function processEndOfCallReport(report: VapiEndOfCallReport): Promise<void> {
   const { call, artifact, analysis } = report.message;
   const callerPhone = call.customer?.number ?? "";
@@ -909,6 +920,22 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
 
   // ── Missed call: send auto-SMS if caller hung up before Madison could help ──
   if (MISSED_CALL_REASONS.has(endedReason) && callerPhone) {
+    // Guard: skip outbound alert calls (FieldMgmtAlert / LeadAlert) that went unanswered.
+    // These are calls WE placed to the CS team or a cleaner — the "customer" field holds
+    // the destination we dialed, not a real inbound caller. Sending a missed-call SMS to
+    // the CS office line or to the Vapi number itself would be incorrect and confusing.
+    const normalizedForGuard = callerPhone.startsWith("+") ? callerPhone : `+1${callerPhone.replace(/\D/g, "")}`;
+    if (OUTBOUND_ALERT_PHONES.has(normalizedForGuard)) {
+      console.log(`[Vapi] Skipping missed-call SMS for outbound alert number ${normalizedForGuard} (reason: ${endedReason})`);
+      return;
+    }
+    // Also skip if the call's phoneNumberId matches the outbound alert phone number ID
+    // (belt-and-suspenders check for FieldMgmtAlert / LeadAlert calls)
+    const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+    if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
+      console.log(`[Vapi] Skipping missed-call SMS for outbound alert call (phoneNumberId=${call.phoneNumberId}, reason: ${endedReason})`);
+      return;
+    }
     const normalizedMissed = callerPhone.startsWith("+")
       ? callerPhone
       : `+1${callerPhone.replace(/\D/g, "")}`;
