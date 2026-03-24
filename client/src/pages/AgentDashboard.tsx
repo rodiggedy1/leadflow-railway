@@ -10,6 +10,7 @@ import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/component
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
+import { ADMIN_PAGES } from "@shared/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1318,6 +1319,48 @@ export default function AgentDashboard() {
             </button>
           ))}
         </div>
+
+        {/* Admin pages nav — only shown when agent has page permissions */}
+        {agentMe.pagePermissions && agentMe.pagePermissions.length > 0 && (() => {
+          const PAGE_URLS: Record<string, string> = {
+            "command-center":    "/admin/command-center",
+            "leads":             "/admin/leads",
+            "pipeline":          "/admin/leads?tab=pipeline",
+            "callbacks":         "/admin/leads?tab=callbacks",
+            "calls":             "/admin/calls",
+            "agents":            "/admin/leads?tab=agents",
+            "leaderboard":       "/admin/leads?tab=leaderboard",
+            "campaigns":         "/admin/campaigns",
+            "always-on":         "/admin/always-on",
+            "campaign-approval": "/admin/campaign-approval",
+            "field-management":  "/admin/field-management",
+            "quality":           "/admin/quality",
+            "tracker-flow":      "/admin/tracker-flow",
+            "settings":          "/admin/settings",
+          };
+          const permittedPages = ADMIN_PAGES.filter(p => (agentMe.pagePermissions as string[]).includes(p.id));
+          return (
+            <div className="border-t" style={{ borderColor: "#F0D8D0" }}>
+              <div className="max-w-4xl mx-auto px-4 flex gap-1 overflow-x-auto">
+                <span className="flex items-center px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                  Admin
+                </span>
+                {permittedPages.map(page => (
+                  <a
+                    key={page.id}
+                    href={PAGE_URLS[page.id] ?? "/admin/command-center"}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+                    style={{ borderColor: "transparent", color: "#6b7280" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#E8603C"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#6b7280"; }}
+                  >
+                    {page.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-5">

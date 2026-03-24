@@ -2610,3 +2610,10 @@
 - [x] Update AdminHeader to accept pagePermissions prop and filter nav entries
 - [x] Wire AdminPageGuard + pagePermissions into all admin pages (CommandCenter, FieldManagement, SettingsPage, AllCalls, AlwaysOnCampaign, CampaignApprovalPage, CleanerDashboard, ReactivationCampaigns, SyncHealthPage, TrackerFlow, AdminDashboard)
 - [x] Write vitest tests for ADMIN_PAGES, permission serialization, and nav filtering (974/974 pass)
+
+## Agent Access to Permitted Admin Pages
+- [ ] Update AdminLoginScreen to also allow non-admin agents who have pagePermissions set
+- [ ] Update AdminDashboard auth gate: allow agents with pagePermissions to pass through
+- [ ] Update AdminPageGuard to redirect to login if agent has no session at all (not just block by page)
+- [ ] Update isLoggedIn / enabled flags in AdminDashboard to work for non-admin agents with permissions
+- [ ] Ensure all other admin pages (CommandCenter, FieldManagement, etc.) don't show login screen for agents with valid session
