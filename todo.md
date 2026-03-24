@@ -2547,3 +2547,7 @@
 - [x] Leads table: white bg-white rounded-2xl shadow-sm card wrapper for the table (via hj-table-wrap)
 - [ ] Leads table: page header with title + subtitle
 - [ ] Leads table: upgrade filter/search toolbar to match FM style
+
+## Sync Bug Fix — Future Date Status Filter
+
+- [x] Fix TomorrowSync/TodaySync: was filtering for "completed" status only — future jobs are never completed yet. Now passes includeAll=true for today/future dates so assigned/active bookings are fetched correctly.

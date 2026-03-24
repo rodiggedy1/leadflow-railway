@@ -110,7 +110,13 @@ export async function runNightlySync(targetDate?: string): Promise<{
     };
   }
 
-  const result = await getCompletedBookingsForDate(date);
+  // For future dates (today or tomorrow), we need ALL bookings (assigned, active, etc.)
+  // not just "completed" ones — jobs won't be marked completed until after they happen.
+  // For past dates (nightly sync), we only want completed jobs.
+  const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const todayET = `${etNow.getFullYear()}-${String(etNow.getMonth() + 1).padStart(2, "0")}-${String(etNow.getDate()).padStart(2, "0")}`;
+  const isFutureOrToday = date >= todayET;
+  const result = await getCompletedBookingsForDate(date, isFutureOrToday ? { includeAll: true } : undefined);
 
   if (result.error) {
     const msg = `Launch27 error: ${result.error}`;
@@ -125,7 +131,7 @@ export async function runNightlySync(targetDate?: string): Promise<{
   }
 
   if (result.bookings.length === 0) {
-    const msg = `No completed bookings found for ${date}`;
+    const msg = isFutureOrToday ? `No bookings found for ${date}` : `No completed bookings found for ${date}`;
     await recordSyncRun({ runType: "launch27-sync", status: "skipped", message: msg, targetDate: date, startedAt, durationMs: Date.now() - startedAt.getTime() });
     return {
       date,
