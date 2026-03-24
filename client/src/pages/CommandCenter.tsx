@@ -11,7 +11,7 @@
  *   7. Revenue Forecast panel
  *   8. Lead Source Intelligence table
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
@@ -567,6 +567,7 @@ export default function CommandCenter() {
   const [campaignFiring, setCampaignFiring] = useState(false);
   const [campaignFireStartedAt, setCampaignFireStartedAt] = useState<number | null>(null);
   const [campaignProgressSent, setCampaignProgressSent] = useState(0);
+  const [campaignFireJobId, setCampaignFireJobId] = useState<{ campaignId: string; totalExpected: number; startedAt: number } | null>(null);
   const [editedScript, setEditedScript] = useState<string>("");
   const [testPhone, setTestPhone] = useState<string>("");
   const [testName, setTestName] = useState<string>("Test");
@@ -614,6 +615,31 @@ export default function CommandCenter() {
     undefined,
     { staleTime: 30_000, refetchInterval: 30_000 } // refresh every 30s
   );
+  // Poll campaign progress while a blast is running
+  const campaignProgressQuery = trpc.commandCenter.getCampaignProgress.useQuery(
+    campaignFireJobId ?? { campaignId: "__none__", totalExpected: 1, startedAt: 0 } as { campaignId: string; totalExpected: number; startedAt: number },
+    {
+      enabled: !!campaignFireJobId,
+      refetchInterval: campaignFireJobId ? 4_000 : false,
+      staleTime: 0,
+    }
+  );
+  // Update progress bar and detect completion
+  useEffect(() => {
+    if (!campaignFireJobId || !campaignProgressQuery.data) return;
+    const { sent, done } = campaignProgressQuery.data;
+    setCampaignProgressSent(sent);
+    if (done) {
+      setCampaignFiring(false);
+      setCampaignFireJobId(null);
+      setCampaignFireStartedAt(null);
+      toast.success(`Campaign sent! ${sent} messages delivered`);
+      setCampaignConfirm(null);
+      setEditedScript("");
+      campaignsQuery.refetch();
+      campaignHistoryQuery.refetch();
+    }
+  }, [campaignProgressQuery.data, campaignFireJobId, campaignsQuery, campaignHistoryQuery]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const executeLeadAction = trpc.commandCenter.executeLeadAction.useMutation();
@@ -692,16 +718,12 @@ export default function CommandCenter() {
   const handleFireCampaign = useCallback(async () => {
     if (!campaignConfirm) return;
     const scriptToSend = editedScript.trim() || campaignConfirm.script;
-    const total = campaignConfirm.recipientCount;
     const startedAt = Date.now();
     setCampaignFiring(true);
     setCampaignFireStartedAt(startedAt);
     setCampaignProgressSent(0);
-    // Client-side tick: increment estimated sent count every 12s
-    const tickInterval = setInterval(() => {
-      setCampaignProgressSent(prev => Math.min(prev + 1, total));
-    }, 12_000);
     try {
+      // Server returns immediately — blast runs in background
       const result = await fireCampaignMutation.mutateAsync({
         campaignId: campaignConfirm.id,
         campaignType: campaignConfirm.id,
@@ -711,20 +733,18 @@ export default function CommandCenter() {
         targetPhones: campaignConfirm.targetPhones,
         script: scriptToSend,
       });
-      setCampaignProgressSent(result.sent);
-      toast.success(`Campaign sent! ${result.sent} messages delivered${result.failed > 0 ? `, ${result.failed} failed` : ""}`);
-      setCampaignConfirm(null);
-      setEditedScript("");
-      campaignsQuery.refetch();
-      campaignHistoryQuery.refetch();
+      // Start polling for progress using the startedAt timestamp from the server
+      setCampaignFireJobId({
+        campaignId: campaignConfirm.id,
+        totalExpected: result.total,
+        startedAt: result.startedAt,
+      });
     } catch {
       toast.error("Campaign failed — check logs");
-    } finally {
-      clearInterval(tickInterval);
       setCampaignFiring(false);
       setCampaignFireStartedAt(null);
     }
-  }, [campaignConfirm, editedScript, fireCampaignMutation, campaignsQuery]);
+  }, [campaignConfirm, editedScript, fireCampaignMutation]);
 
   const handleLeadCall = useCallback(async (sessionId: number, name: string) => {
     setCallSending(sessionId);

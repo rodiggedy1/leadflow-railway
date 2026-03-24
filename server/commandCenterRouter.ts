@@ -1875,11 +1875,16 @@ Respond in JSON with this exact schema:
         }
       }
 
+      const blastStartedAt = new Date(); // Record before first SMS so session window is accurate
+
+      // Fire the send loop in the background so the HTTP request returns immediately.
+      // This prevents tRPC timeouts for large batches (50 msgs × 12s = 10 min).
+      // The client polls getCampaignProgress to track live progress.
+      const runBlast = async () => {
       let sent = 0;
       let failed = 0;
       const errors: string[] = [];
       const sentPhones: string[] = [];
-      const blastStartedAt = new Date(); // Record before first SMS so session window is accurate
 
       for (const target of sendList) {
         const name = target.name.split(" ")[0] || "there";
@@ -1976,7 +1981,11 @@ Respond in JSON with this exact schema:
         console.error("[fireCampaign] Failed to log blast:", logErr);
       }
 
-      return { sent, failed, errors };
+      }; // end runBlast
+      // Kick off the blast in the background — do not await
+      setImmediate(() => { runBlast().catch(err => console.error("[fireCampaign] background blast error:", err)); });
+
+      return { sent: 0, failed: 0, errors: [], total: sendList.length, startedAt: blastStartedAt.getTime() };
     }),
 
   /**
@@ -2058,28 +2067,20 @@ Respond in JSON with this exact schema:
       const db = await getDb();
       if (!db) return { sent: 0, total: input.totalExpected, remaining: input.totalExpected, estimatedMinutesLeft: null, done: false };
 
-      // Count sessions created after startedAt with this campaign source
+      // Count sends logged to reactivationContacts after startedAt.
+      // fireCampaign writes one row per successful send regardless of whether a new session was created,
+      // making this the most reliable progress counter for all campaign types.
       const since = new Date(input.startedAt);
       const [row] = await db
         .select({ count: sql<number>`COUNT(*)` })
-        .from(conversationSessions)
+        .from(reactivationContacts)
         .where(
           and(
-            sql`${conversationSessions.leadSource} LIKE ${`campaign:${input.campaignId}%`}`,
-            gte(conversationSessions.createdAt, since)
+            eq(reactivationContacts.status, "SENT"),
+            gte(reactivationContacts.sentAt, since)
           )
         );
-      // Also count command-center blasts (phone-only targets use leadSource='command-center')
-      const [row2] = await db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(conversationSessions)
-        .where(
-          and(
-            eq(conversationSessions.leadSource, `campaign:${input.campaignId}`),
-            gte(conversationSessions.createdAt, since)
-          )
-        );
-      const sent = Math.min(Number(row?.count ?? 0) + Number(row2?.count ?? 0), input.totalExpected);
+      const sent = Math.min(Number(row?.count ?? 0), input.totalExpected);
       const remaining = Math.max(0, input.totalExpected - sent);
       // 12s per message → remaining * 12 / 60 minutes
       const estimatedMinutesLeft = remaining > 0 ? Math.ceil((remaining * 12) / 60) : 0;
