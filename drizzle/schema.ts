@@ -1,4 +1,4 @@
-import { bigint, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -1364,3 +1364,32 @@ export const fieldMgmtCalls = mysqlTable("field_mgmt_calls", {
 }));
 export type FieldMgmtCall = typeof fieldMgmtCalls.$inferSelect;
 export type InsertFieldMgmtCall = typeof fieldMgmtCalls.$inferInsert;
+
+// ── Custom Pay Rules ──────────────────────────────────────────────────────────
+// Admin-created bonus and deduction rules beyond the 7 fixed system rules.
+export const customPayRules = mysqlTable("custom_pay_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  label: varchar("label", { length: 128 }).notNull(),
+  type: varchar("type", { length: 16 }).notNull().default("bonus"),
+  amount: decimal("amount", { precision: 8, scale: 2 }).notNull(),
+  description: varchar("description", { length: 256 }),
+  isActive: tinyint("isActive").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CustomPayRule = typeof customPayRules.$inferSelect;
+export type InsertCustomPayRule = typeof customPayRules.$inferInsert;
+
+// ── Custom Pay Rule Applications ──────────────────────────────────────────────
+export const cleanerJobCustomRules = mysqlTable("cleaner_job_custom_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  cleanerJobId: int("cleanerJobId").notNull(),
+  customPayRuleId: int("customPayRuleId").notNull(),
+  appliedAmount: decimal("appliedAmount", { precision: 8, scale: 2 }).notNull(),
+  appliedLabel: varchar("appliedLabel", { length: 128 }).notNull(),
+  appliedType: varchar("appliedType", { length: 16 }).notNull(),
+  appliedAt: timestamp("appliedAt").defaultNow().notNull(),
+}, (table) => ({
+  idxCleanerJob: index("idx_cjcr_cleaner_job").on(table.cleanerJobId),
+}));
+export type CleanerJobCustomRule = typeof cleanerJobCustomRules.$inferSelect;

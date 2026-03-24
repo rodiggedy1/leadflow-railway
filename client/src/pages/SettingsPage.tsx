@@ -27,7 +27,13 @@ import {
   Save, Loader2, CheckCircle2, ToggleLeft, ToggleRight, Bell,
   FlaskConical, User, Sparkles, Shuffle, MessageCircle, FileText, Mail,
   PhoneCall, RefreshCw, DollarSign, TrendingUp, TrendingDown, AlertTriangle, Camera, Zap,
+  Plus, Pencil, Trash2,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 
 // ── Section config ────────────────────────────────────────────────────────────
@@ -602,6 +608,57 @@ export default function SettingsPage() {
       toast.error(e instanceof Error ? e.message : "Failed to save pay rules");
     } finally {
       setPayRulesSaving(false);
+    }
+  };
+
+  // ── Custom Pay Rules state ────────────────────────────────────────────────
+  const { data: customRules, refetch: refetchCustomRules } = trpc.settings.listCustomPayRules.useQuery();
+  const createCustomRule = trpc.settings.createCustomPayRule.useMutation();
+  const updateCustomRule = trpc.settings.updateCustomPayRule.useMutation();
+  const deleteCustomRule = trpc.settings.deleteCustomPayRule.useMutation();
+  const [showRuleDialog, setShowRuleDialog] = useState(false);
+  const [editingRule, setEditingRule] = useState<{ id?: number; label: string; type: "bonus" | "deduction"; amount: string; description: string } | null>(null);
+  const [ruleDialogSaving, setRuleDialogSaving] = useState(false);
+
+  const openNewRuleDialog = () => {
+    setEditingRule({ label: "", type: "bonus", amount: "", description: "" });
+    setShowRuleDialog(true);
+  };
+  const openEditRuleDialog = (rule: { id: number; label: string; type: string; amount: string; description: string | null }) => {
+    setEditingRule({ id: rule.id, label: rule.label, type: rule.type as "bonus" | "deduction", amount: String(parseFloat(rule.amount)), description: rule.description ?? "" });
+    setShowRuleDialog(true);
+  };
+  const handleSaveRule = async () => {
+    if (!editingRule) return;
+    if (!editingRule.label.trim()) { toast.error("Rule name is required"); return; }
+    const amount = parseFloat(editingRule.amount);
+    if (isNaN(amount) || amount <= 0) { toast.error("Amount must be a positive number"); return; }
+    setRuleDialogSaving(true);
+    try {
+      if (editingRule.id) {
+        await updateCustomRule.mutateAsync({ id: editingRule.id, label: editingRule.label.trim(), type: editingRule.type, amount, description: editingRule.description || undefined });
+        toast.success("Rule updated");
+      } else {
+        await createCustomRule.mutateAsync({ label: editingRule.label.trim(), type: editingRule.type, amount, description: editingRule.description || undefined });
+        toast.success("Rule added");
+      }
+      await refetchCustomRules();
+      setShowRuleDialog(false);
+      setEditingRule(null);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to save rule");
+    } finally {
+      setRuleDialogSaving(false);
+    }
+  };
+  const handleDeleteRule = async (id: number) => {
+    if (!window.confirm("Delete this rule? This cannot be undone.")) return;
+    try {
+      await deleteCustomRule.mutateAsync({ id });
+      await refetchCustomRules();
+      toast.success("Rule deleted");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete rule");
     }
   };
 
@@ -1272,10 +1329,144 @@ export default function SettingsPage() {
                         {payRulesSaving ? "Saving..." : "Save Pay Rules"}
                       </Button>
                     </div>
+
+                    {/* ── Custom Bonuses & Deductions ─────────────────────────── */}
+                    <Card className="border border-gray-200 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-base font-semibold text-gray-900">Custom Bonuses &amp; Deductions</CardTitle>
+                            <CardDescription className="text-xs text-gray-500 mt-0.5">
+                              Add any additional rules beyond the system defaults — e.g. Google Review bonus, no-show penalty.
+                            </CardDescription>
+                          </div>
+                          <Button size="sm" onClick={openNewRuleDialog} className="gap-1.5 bg-[#E8735A] hover:bg-[#d4614a] text-white shrink-0">
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Rule
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {!customRules || customRules.length === 0 ? (
+                          <div className="py-8 text-center">
+                            <DollarSign className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-gray-400">No custom rules yet.</p>
+                            <p className="text-xs text-gray-400 mt-0.5">Click &quot;Add Rule&quot; to create your first bonus or deduction.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {customRules.map((rule) => (
+                              <div key={rule.id} className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 bg-gray-50/50 hover:bg-gray-50">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {rule.type === "bonus" ? (
+                                    <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
+                                  ) : (
+                                    <TrendingDown className="w-4 h-4 text-red-500 shrink-0" />
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{rule.label}</p>
+                                    {rule.description && <p className="text-xs text-gray-400 truncate">{rule.description}</p>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={`text-sm font-semibold ${ rule.type === "bonus" ? "text-emerald-600" : "text-red-600" }`}>
+                                    {rule.type === "bonus" ? "+" : "-"}${parseFloat(rule.amount).toFixed(2)}
+                                  </span>
+                                  <button
+                                    onClick={() => openEditRuleDialog(rule as { id: number; label: string; type: string; amount: string; description: string | null })}
+                                    className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors"
+                                    title="Edit rule"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteRule(rule.id)}
+                                    className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                                    title="Delete rule"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </>
                 ) : null}
               </div>
             )}
+
+            {/* ── Add/Edit Custom Rule Dialog ─────────────────────────────────── */}
+            <Dialog open={showRuleDialog} onOpenChange={(open) => { if (!open) { setShowRuleDialog(false); setEditingRule(null); } }}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingRule?.id ? "Edit Rule" : "Add Custom Rule"}</DialogTitle>
+                </DialogHeader>
+                {editingRule && (
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="rule-label" className="text-sm font-medium">Rule Name</Label>
+                      <Input
+                        id="rule-label"
+                        placeholder="e.g. Google Review Bonus"
+                        value={editingRule.label}
+                        onChange={e => setEditingRule(r => r ? { ...r, label: e.target.value } : r)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-medium">Type</Label>
+                        <Select
+                          value={editingRule.type}
+                          onValueChange={(v) => setEditingRule(r => r ? { ...r, type: v as "bonus" | "deduction" } : r)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bonus">Bonus (+)</SelectItem>
+                            <SelectItem value="deduction">Deduction (-)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="rule-amount" className="text-sm font-medium">Amount ($)</Label>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-sm font-medium ${ editingRule.type === "bonus" ? "text-emerald-600" : "text-red-600" }`}>
+                            {editingRule.type === "bonus" ? "+" : "-"}$
+                          </span>
+                          <Input
+                            id="rule-amount"
+                            type="number" min="0.01" step="0.50"
+                            placeholder="0.00"
+                            value={editingRule.amount}
+                            onChange={e => setEditingRule(r => r ? { ...r, amount: e.target.value } : r)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="rule-desc" className="text-sm font-medium">Description <span className="text-gray-400 font-normal">(optional — shown to cleaners)</span></Label>
+                      <Input
+                        id="rule-desc"
+                        placeholder="e.g. Awarded when a cleaner gets a Google review"
+                        value={editingRule.description}
+                        onChange={e => setEditingRule(r => r ? { ...r, description: e.target.value } : r)}
+                      />
+                    </div>
+                  </div>
+                )}
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => { setShowRuleDialog(false); setEditingRule(null); }}>Cancel</Button>
+                  <Button onClick={handleSaveRule} disabled={ruleDialogSaving} className="bg-[#E8735A] hover:bg-[#d4614a] text-white gap-2">
+                    {ruleDialogSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {ruleDialogSaving ? "Saving..." : "Save Rule"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* ── General Tab ────────────────────────────────────────────────── */}
             {activeTab === "general" && (

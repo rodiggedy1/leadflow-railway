@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { appSettings } from "../drizzle/schema";
+import { appSettings, customPayRules } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
 // ── Default settings seeded on first access ──────────────────────────────────
@@ -451,6 +451,82 @@ export const settingsRouter = router({
           db.update(appSettings).set({ value: String(val) }).where(eq(appSettings.key, key))
         )
       );
+      return { success: true };
+    }),
+
+  /**
+   * List all custom pay rules.
+   */
+  listCustomPayRules: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DB unavailable");
+    const rows = await db.select().from(customPayRules).orderBy(customPayRules.createdAt);
+    return rows;
+  }),
+
+  /**
+   * Create a new custom pay rule.
+   */
+  createCustomPayRule: protectedProcedure
+    .input(
+      z.object({
+        label:       z.string().min(1).max(128),
+        type:        z.enum(["bonus", "deduction"]),
+        amount:      z.number().min(0.01),
+        description: z.string().max(256).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await db.insert(customPayRules).values({
+        label:       input.label,
+        type:        input.type,
+        amount:      String(input.amount),
+        description: input.description ?? null,
+        isActive:    1,
+      });
+      return { success: true };
+    }),
+
+  /**
+   * Update an existing custom pay rule.
+   */
+  updateCustomPayRule: protectedProcedure
+    .input(
+      z.object({
+        id:          z.number().int(),
+        label:       z.string().min(1).max(128).optional(),
+        type:        z.enum(["bonus", "deduction"]).optional(),
+        amount:      z.number().min(0.01).optional(),
+        description: z.string().max(256).nullable().optional(),
+        isActive:    z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const { id, ...rest } = input;
+      const patch: Record<string, unknown> = {};
+      if (rest.label       !== undefined) patch.label       = rest.label;
+      if (rest.type        !== undefined) patch.type        = rest.type;
+      if (rest.amount      !== undefined) patch.amount      = String(rest.amount);
+      if (rest.description !== undefined) patch.description = rest.description;
+      if (rest.isActive    !== undefined) patch.isActive    = rest.isActive ? 1 : 0;
+      if (Object.keys(patch).length === 0) return { success: true };
+      await db.update(customPayRules).set(patch).where(eq(customPayRules.id, id));
+      return { success: true };
+    }),
+
+  /**
+   * Delete a custom pay rule permanently.
+   */
+  deleteCustomPayRule: protectedProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await db.delete(customPayRules).where(eq(customPayRules.id, input.id));
       return { success: true };
     }),
 });
