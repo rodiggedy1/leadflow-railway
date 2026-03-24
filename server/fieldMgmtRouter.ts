@@ -20,7 +20,7 @@
 
 import { z } from "zod";
 import { eq, asc, desc, gte, inArray, notInArray, and } from "drizzle-orm";
-import { router, adminProcedure } from "./_core/trpc";
+import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls } from "../drizzle/schema";
@@ -525,7 +525,7 @@ export const fieldMgmtRouter = router({
    *   Query 1: SELECT * FROM cleaner_jobs WHERE jobDate = ? (uses idx_cleaner_jobs_job_date)
    *   Query 2: SELECT * FROM field_mgmt_log WHERE cleanerJobId IN (...)
    */
-  getJobsForDay: adminProcedure
+  getJobsForDay: agentProcedure
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -647,7 +647,7 @@ export const fieldMgmtRouter = router({
    * Kept for backward compatibility and direct deep-links.
    * The Log tab UI uses getJobsForDay (which pre-embeds timelines) instead.
    */
-  getJobTimeline: adminProcedure
+  getJobTimeline: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -704,7 +704,7 @@ export const fieldMgmtRouter = router({
    *
    * Admin only.
    */
-  fireStep: adminProcedure
+  fireStep: agentProcedure
     .input(z.object({
       cleanerJobId: z.number(),
       step: z.enum(fieldMgmtSteps as unknown as [string, ...string[]]),
@@ -795,7 +795,7 @@ export const fieldMgmtRouter = router({
    *
    * Admin only.
    */
-  retryStep: adminProcedure
+  retryStep: agentProcedure
     .input(z.object({
       logId: z.number(),
     }))
@@ -849,7 +849,7 @@ export const fieldMgmtRouter = router({
       };
     }),
 
-  simulateStatusChange: adminProcedure
+  simulateStatusChange: agentProcedure
     .input(z.object({
       cleanerJobId: z.number(),
       status: z.enum(["on_the_way", "arrived", "running_late", "completed", "issue_at_property"]),
@@ -943,7 +943,7 @@ export const fieldMgmtRouter = router({
    * Returns all SMS messages (outbound + inbound replies) for a job.
    * Used by the Messages tab in the job detail panel.
    */
-  getJobMessages: adminProcedure
+  getJobMessages: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -1016,7 +1016,7 @@ export const fieldMgmtRouter = router({
    * Returns all field mgmt calls (VAPI escalation/reminder calls) for a job.
    * Used by the Calls tab in the job detail panel.
    */
-  getJobCalls: adminProcedure
+  getJobCalls: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -1034,7 +1034,7 @@ export const fieldMgmtRouter = router({
   /**
    * Send a manual SMS from the job detail panel.
    */
-  sendJobSms: adminProcedure
+  sendJobSms: agentProcedure
     .input(z.object({
       cleanerJobId: z.number(),
       to: z.string(),
@@ -1060,7 +1060,7 @@ export const fieldMgmtRouter = router({
    * Manually trigger a VAPI check-in alert call to the cleaner for a specific job.
    * Reuses the same placeNoCheckinEscalationCall used by the automation engine.
    */
-  voiceAlertCleaner: adminProcedure
+  voiceAlertCleaner: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -1111,7 +1111,7 @@ export const fieldMgmtRouter = router({
    * Returns the latest inbound reply timestamp for each job in a given list.
    * Used by the Day Board to show unread badges on job cards.
    */
-  getJobUnreadReplies: adminProcedure
+  getJobUnreadReplies: agentProcedure
     .input(z.object({ cleanerJobIds: z.array(z.number()), since: z.number().optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -1148,7 +1148,7 @@ export const fieldMgmtRouter = router({
       }));
     }),
 
-  confirmAssignment: adminProcedure
+  confirmAssignment: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

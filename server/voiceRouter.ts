@@ -10,7 +10,7 @@
 
 import { z } from "zod";
 import { desc, eq, gte, lte, and, sql, inArray } from "drizzle-orm";
-import { router, adminAgentProcedure } from "./_core/trpc";
+import { router, agentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import { voiceCalls, callbackTasks, conversationSessions } from "../drizzle/schema";
 import { getAssistantId } from "./vapiService";
@@ -19,7 +19,7 @@ export const voiceRouter = router({
   /**
    * List all voice calls, newest first.
    */
-  listCalls: adminAgentProcedure
+  listCalls: agentProcedure
     .input(
       z.object({
         limit: z.number().min(1).max(100).default(50),
@@ -82,7 +82,7 @@ export const voiceRouter = router({
   /**
    * Get all voice calls linked to a specific conversation session.
    */
-  getCallsBySession: adminAgentProcedure
+  getCallsBySession: agentProcedure
     .input(z.object({ sessionId: z.number().int().positive() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -99,7 +99,7 @@ export const voiceRouter = router({
    * Aggregate voice stats for the summary cards.
    * Returns total calls, avg duration, booked count, and 7-day daily trend.
    */
-  stats: adminAgentProcedure
+  stats: agentProcedure
     .input(
       z.object({
         days: z.number().min(1).max(90).default(30),
@@ -172,14 +172,14 @@ export const voiceRouter = router({
   /**
    * Returns the current Vapi assistant ID (for the settings page).
    */
-  getAssistantId: adminAgentProcedure.query(() => {
+  getAssistantId: agentProcedure.query(() => {
     return { assistantId: getAssistantId() };
   }),
 
   /**
    * List callback tasks, newest first, joined with their linked voice call.
    */
-  listCallbacks: adminAgentProcedure
+  listCallbacks: agentProcedure
     .input(z.object({ includeCompleted: z.boolean().default(false) }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -217,7 +217,7 @@ export const voiceRouter = router({
   /**
    * Mark a callback task as completed.
    */
-  completeCallback: adminAgentProcedure
+  completeCallback: agentProcedure
     .input(z.object({
       id: z.number().int().positive(),
       completedByAgentName: z.string().min(1),
