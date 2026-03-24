@@ -106,6 +106,27 @@ export function registerWebhookRoutes(app: Express) {
       // Fire-and-forget: store this reply against any matching cleaner jobs
       tryStoreJobSmsReply({ fromPhone, inboundText, openPhoneMessageId: inboundMessageId }).catch(() => {});
 
+      // ── STOP / UNSUBSCRIBE detection ─────────────────────────────────────────
+      // Only exact single-word matches (case-insensitive, trimmed) to avoid
+      // false positives like "stop by the house" or "don't stop texting me".
+      const normalizedText = inboundText.trim().toLowerCase();
+      if (normalizedText === "stop" || normalizedText === "unsubscribe") {
+        const db2 = await getDb();
+        if (db2) {
+          try {
+            await db2.insert(smsOptOuts).values({ phone: fromPhone }).onDuplicateKeyUpdate({ set: { phone: fromPhone } });
+            console.log(`[Webhook] Opt-out recorded for ${fromPhone}`);
+          } catch {
+            // Ignore duplicate key errors — already opted out
+          }
+          await sendSms({
+            to: fromPhone,
+            content: "You've been unsubscribed and won't receive further messages from us. Reply START to re-subscribe.",
+          });
+        }
+        return; // Skip all AI processing
+      }
+
       const db = await getDb();
       if (!db) {
         console.error("[Webhook] No DB connection available");
