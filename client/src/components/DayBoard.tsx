@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useNewReplyNotifier } from "@/hooks/useNewReplyNotifier";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1060,6 +1061,9 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
     }
     return s;
   }, [unreadReplies, lastReadMap]);
+
+  // Chime + browser notification when new replies arrive
+  useNewReplyNotifier(unreadJobIds, jobs);
 
   // Split active vs removed jobs
   const activeJobs = useMemo(() => jobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled"), [jobs]);

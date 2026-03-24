@@ -2481,3 +2481,12 @@
 - [x] Frontend: JobBlock shows red dot badge (top-right corner) when hasUnread=true
 - [x] Frontend: DetailPanel Messages tab shows red dot badge when hasUnread=true
 - [x] Frontend: clicking Messages tab calls onMarkRead(jobId) to update localStorage and clear badge
+
+## New Reply Notification (Chime + Browser Notification) — Mar 23
+
+- [x] Generate subtle chime audio file and upload to CDN
+- [x] Build useNewReplyNotifier hook: compares previous vs current unreadJobIds, fires on new entries
+- [x] Request Notification permission on first new reply (one-time prompt)
+- [x] Show browser Notification with client name + "replied to your message"
+- [x] Play chime audio on new reply (Web Audio API, respects browser autoplay policy)
+- [x] Wire hook into DayBoard component
