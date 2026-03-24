@@ -24,11 +24,12 @@ import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
 import { warmAiInsightsCache } from "./commandCenterRouter";
 import {
+  FIELD_MGMT_ENABLED,
   runPreJobReminders,
+  runClientPreJobNotifications,
   runMidJobNudges,
   runExceptionHandling,
   runNoShowEscalation,
-  FIELD_MGMT_ENABLED,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
@@ -291,19 +292,21 @@ export function startInternalCron(): void {
   cron.schedule("0 */5 6-22 * * *", async () => {
     if (!FIELD_MGMT_ENABLED) return;
     try {
-      const [reminders, nudges, exceptions, noshow] = await Promise.all([
+      const [reminders, clientPreJob, nudges, exceptions, noshow] = await Promise.all([
         runPreJobReminders(),
+        runClientPreJobNotifications(),
         runMidJobNudges(),
         runExceptionHandling(),
         runNoShowEscalation(),
       ]);
       const summary = [
         `reminders: ${reminders.sent}/${reminders.checked}`,
+        `clientPreJob: ${clientPreJob.sent}/${clientPreJob.checked}`,
         `nudges: ${nudges.sent}/${nudges.checked}`,
         `exceptions: ${exceptions.sent}/${exceptions.checked}`,
         `noshow: ${noshow.sent}/${noshow.checked}`,
       ].join(", ");
-      const didWork = reminders.sent + nudges.sent + exceptions.sent + noshow.sent > 0;
+      const didWork = reminders.sent + clientPreJob.sent + nudges.sent + exceptions.sent + noshow.sent > 0;
       if (didWork) console.log(`[InternalCron] FieldMgmt — ${summary}`);
       await recordHeartbeat("field-mgmt", summary, didWork);
     } catch (err) {

@@ -457,11 +457,8 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Pre-job reminder sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
-      // Delay 1.5s before client pre-job SMS to avoid OpenPhone 429 rate limit
-      // (two back-to-back API calls within the same second triggers a 429)
-      sleep(1500).then(() => sendClientPreJobSms(job.id)).catch((err) =>
-        console.error(`[FieldMgmt] Client pre-job SMS error for job ${job.id}:`, err)
-      );
+      // Client pre-job SMS is handled by runClientPreJobNotifications() — its own
+      // dedicated cron pass with independent timing. No chain call here.
     } else {
       errors++;
       console.error(`[FieldMgmt] Pre-job reminder FAILED for job ${job.id}:`, result.error);
@@ -1205,6 +1202,119 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
   } else {
     console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
+}
+
+// ── Client Pre-Job Notification Cron Pass ────────────────────────────────────
+
+/**
+ * Scans all assigned jobs and sends the client pre-job SMS to any job whose
+ * computeClientPreJobSendTime falls within the current ±5 min cron window.
+ *
+ * This is a dedicated cron pass — independent of runPreJobReminders — so the
+ * client SMS fires at the correct computed time (T-2hrs, floor 7:30 AM ET)
+ * regardless of when the cleaner reminder was sent.
+ *
+ * Called every 5 minutes by the FieldMgmt cron in internalCron.ts.
+ */
+export async function runClientPreJobNotifications(): Promise<{ checked: number; sent: number; errors: number }> {
+  if (!FIELD_MGMT_ENABLED) return { checked: 0, sent: 0, errors: 0 };
+
+  const db = await getDb();
+  if (!db) return { checked: 0, sent: 0, errors: 0 };
+
+  const now = Date.now();
+  // Broad window: jobs starting between 1hr 50min and 2hr 10min from now
+  // (covers the T-2hrs case). Also include jobs starting in the next 8 hours
+  // to catch the 7:30 AM floor case (early-morning jobs).
+  const windowLookAheadMax = new Date(now + 8 * 60 * 60 * 1000);
+
+  // Fetch all assigned jobs starting in the next 8 hours that haven't had
+  // client_pre_job fired yet.
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      jobAddress: cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      trackerToken: cleanerJobs.trackerToken,
+    })
+    .from(cleanerJobs)
+    .where(
+      and(
+        eq(cleanerJobs.bookingStatus, "assigned"),
+        sql`${cleanerJobs.serviceDateTime} IS NOT NULL`
+      )
+    );
+
+  let sent = 0;
+  let errors = 0;
+  let checked = 0;
+
+  for (const job of jobs) {
+    if (!job.serviceDateTime) continue;
+
+    const serviceTime = parseServiceDateTime(job.serviceDateTime);
+    if (!serviceTime) continue;
+
+    // Only consider jobs starting within the next 8 hours
+    if (serviceTime.getTime() > windowLookAheadMax.getTime()) continue;
+    // Don't process jobs that already started
+    if (serviceTime.getTime() < now) continue;
+
+    checked++;
+
+    // Check if now is within the send window (sendAt ± 5 min)
+    const sendAt = computeClientPreJobSendTime(serviceTime);
+    const windowStart = sendAt.getTime() - 5 * 60 * 1000;
+    const windowEnd = sendAt.getTime() + 5 * 60 * 1000;
+    if (now < windowStart || now > windowEnd) continue;
+
+    // Already sent?
+    if (await stepAlreadyFired(job.id, "client_pre_job")) continue;
+
+    const clientPhone = job.customerPhone;
+    if (!clientPhone) {
+      console.warn(`[FieldMgmt] Client pre-job: no customer phone for job ${job.id}`);
+      continue;
+    }
+
+    const clientFirstName = firstName(job.customerName);
+    const timeStr = formatTimeET(serviceTime);
+    const trackingLink = await ensureTrackerToken(job.id);
+
+    const msg = [
+      `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} 😊`,
+      ``,
+      `You can follow your cleaning here: ${trackingLink}`,
+      ``,
+      `We'll update this in real time if anything changes, including arrival timing.`,
+    ].join("\n");
+
+    const result = await sendSms({ to: clientPhone, content: msg });
+
+    await recordStep({
+      cleanerJobId: job.id,
+      step: "client_pre_job",
+      success: result.success,
+      smsSent: msg,
+      recipientPhone: clientPhone,
+      errorDetail: result.success ? undefined : result.error,
+    });
+
+    if (result.success) {
+      sent++;
+      console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${job.id}`);
+    } else {
+      errors++;
+      console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${job.id}:`, result.error);
+    }
+
+    // Small delay to avoid OpenPhone 429 rate limit between consecutive sends
+    if (sent > 0) await sleep(1500);
+  }
+
+  return { checked, sent, errors };
 }
 
 // ── Running Late — Client Notification ───────────────────────────────────────

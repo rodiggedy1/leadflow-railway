@@ -2591,3 +2591,7 @@
   - Wired into AdminDashboard and AgentDashboard (both poll sessions every 30s)
   - Does not chime on initial hydration — only on subsequent reply advances
   - 957/957 tests pass
+
+## isJobAssigned Guard Bug (Critical)
+
+- [ ] Fix: isJobAssigned guard incorrectly blocking client pre-job SMS for assigned jobs (Anna Maria / JessiCleaning)

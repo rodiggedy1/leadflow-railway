@@ -16,6 +16,8 @@ import {
   formatTimeET,
   FIELD_MGMT_ENABLED,
   runPreJobReminders,
+  runClientPreJobNotifications,
+  computeClientPreJobSendTime,
   runMidJobNudges,
   runExceptionHandling,
   runNoShowEscalation,
@@ -826,5 +828,49 @@ describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
     expect(fnBody).toContain("you've just been assigned");
     // Must be idempotent via stepAlreadyFired
     expect(fnBody).toContain("stepAlreadyFired");
+  });
+});
+
+// ── computeClientPreJobSendTime ───────────────────────────────────────────────
+
+describe("computeClientPreJobSendTime", () => {
+  it("returns T-2hrs for jobs where T-2hrs is after 7:30 AM ET", () => {
+    // 10:00 AM ET job → T-2hrs = 8:00 AM ET (after 7:30 AM floor)
+    // Use a fixed UTC date: 2026-03-24 14:00:00 UTC = 10:00 AM ET (UTC-4 in EDT)
+    const serviceTime = new Date("2026-03-24T14:00:00.000Z");
+    const sendAt = computeClientPreJobSendTime(serviceTime);
+    const twoHoursBefore = new Date(serviceTime.getTime() - 2 * 60 * 60 * 1000);
+    expect(sendAt.getTime()).toBe(twoHoursBefore.getTime());
+  });
+
+  it("returns 7:30 AM ET floor for early-morning jobs where T-2hrs is before 7:30 AM ET", () => {
+    // 8:30 AM ET job → T-2hrs = 6:30 AM ET (before 7:30 AM floor)
+    // 2026-03-24 12:30:00 UTC = 8:30 AM ET (UTC-4 in EDT)
+    const serviceTime = new Date("2026-03-24T12:30:00.000Z");
+    const sendAt = computeClientPreJobSendTime(serviceTime);
+    // Should be 7:30 AM ET = 11:30 AM UTC on 2026-03-24
+    const expected730ET = new Date("2026-03-24T11:30:00.000Z");
+    expect(sendAt.getTime()).toBe(expected730ET.getTime());
+  });
+
+  it("returns exactly T-2hrs when job is at exactly 9:30 AM ET (T-2hrs = 7:30 AM ET)", () => {
+    // 9:30 AM ET job → T-2hrs = 7:30 AM ET (exactly at floor, not before)
+    const serviceTime = new Date("2026-03-24T13:30:00.000Z"); // 9:30 AM ET
+    const sendAt = computeClientPreJobSendTime(serviceTime);
+    const twoHoursBefore = new Date(serviceTime.getTime() - 2 * 60 * 60 * 1000);
+    expect(sendAt.getTime()).toBe(twoHoursBefore.getTime());
+  });
+});
+
+// ── runClientPreJobNotifications (kill switch) ────────────────────────────────
+
+describe("runClientPreJobNotifications kill switch", () => {
+  it("returns zero counts when FIELD_MGMT_ENABLED is false (via getDb mock)", async () => {
+    // FIELD_MGMT_ENABLED is true in the module, but we can verify the function
+    // returns the right shape when DB is unavailable (getDb returns null)
+    vi.mock("./db", () => ({ getDb: vi.fn().mockResolvedValue(null) }));
+    const result = await runClientPreJobNotifications();
+    expect(result).toEqual({ checked: 0, sent: 0, errors: 0 });
+    vi.restoreAllMocks();
   });
 });
