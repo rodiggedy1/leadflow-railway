@@ -312,21 +312,34 @@ describe("time window logic", () => {
     expect(thirtyMinFromNow.getTime()).toBeLessThanOrEqual(windowEnd.getTime());
   });
 
-  it("correctly identifies a job 10 minutes from now as in the no-show window", () => {
+  it("correctly identifies a job 35 minutes from now as in the no-show window (T+30–40 min)", () => {
+    // Detection window: job is 30–40 min away. After 25-min sleep, call fires ~T-35 min.
     const now = Date.now();
-    const tenMinFromNow = new Date(now + 10 * 60 * 1000);
-    const windowStart = new Date(now + 5 * 60 * 1000);
-    const windowEnd = new Date(now + 15 * 60 * 1000);
+    const thirtyFiveMinFromNow = new Date(now + 35 * 60 * 1000);
+    const windowStart = new Date(now + 30 * 60 * 1000);
+    const windowEnd = new Date(now + 40 * 60 * 1000);
 
-    expect(tenMinFromNow.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
-    expect(tenMinFromNow.getTime()).toBeLessThanOrEqual(windowEnd.getTime());
+    expect(thirtyFiveMinFromNow.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
+    expect(thirtyFiveMinFromNow.getTime()).toBeLessThanOrEqual(windowEnd.getTime());
   });
 
-  it("does NOT include a job 1 hour from now in the no-show window", () => {
+  it("does NOT include a job 10 minutes from now in the no-show window (too close)", () => {
+    const now = Date.now();
+    const tenMinFromNow = new Date(now + 10 * 60 * 1000);
+    const windowStart = new Date(now + 30 * 60 * 1000);
+    const windowEnd = new Date(now + 40 * 60 * 1000);
+
+    const inWindow =
+      tenMinFromNow.getTime() >= windowStart.getTime() &&
+      tenMinFromNow.getTime() <= windowEnd.getTime();
+    expect(inWindow).toBe(false);
+  });
+
+  it("does NOT include a job 1 hour from now in the no-show window (too far)", () => {
     const now = Date.now();
     const oneHourFromNow = new Date(now + 60 * 60 * 1000);
-    const windowStart = new Date(now + 5 * 60 * 1000);
-    const windowEnd = new Date(now + 15 * 60 * 1000);
+    const windowStart = new Date(now + 30 * 60 * 1000);
+    const windowEnd = new Date(now + 40 * 60 * 1000);
 
     const inWindow =
       oneHourFromNow.getTime() >= windowStart.getTime() &&

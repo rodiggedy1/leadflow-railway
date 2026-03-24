@@ -957,8 +957,11 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
   if (!db) return { checked: 0, sent: 0, errors: 0 };
 
   const now = Date.now();
-  const windowStart = new Date(now + 5 * 60 * 1000);
-  const windowEnd = new Date(now + 15 * 60 * 1000);
+  // Trigger window: job is 30–40 minutes away.
+  // After the SMS alert fires, a 25-min sleep means the Vapi call reaches
+  // the cleaner ~35 minutes before the job starts.
+  const windowStart = new Date(now + 30 * 60 * 1000);
+  const windowEnd = new Date(now + 40 * 60 * 1000);
 
   const jobs = await db
     .select({
@@ -1040,13 +1043,14 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
         meta: { cleanerJobId: job.id },
       }).catch(() => {});
 
-      // Auto-call the CLEANER 10 minutes after the SMS alert, then log the call.
+      // Auto-call the CLEANER 25 minutes after the SMS alert, then log the call.
+      // This means the call reaches the cleaner ~35 minutes before the job starts.
       // Falls back to CS team if no cleaner phone is available.
       const jobIdForCall = job.id;
       const cleanerNameForCall = job.cleanerName ?? "Unknown";
       const cleanerPhoneForCall = job.cleanerPhone ?? undefined;
       const callRecipient = cleanerPhoneForCall ?? CS_ALERT_NUMBER;
-      sleep(10 * 60 * 1000)
+      sleep(25 * 60 * 1000)
         .then(() =>
           placeNoCheckinEscalationCall({
             cleanerName: cleanerNameForCall,
