@@ -292,7 +292,7 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border p-4 cursor-grab active:cursor-grabbing select-none flex flex-col h-[138px] relative overflow-hidden shadow-sm ${
+      className={`group bg-white rounded-xl border p-3 cursor-grab active:cursor-grabbing select-none flex flex-col relative shadow-sm ${
         isOverdue48h ? "border-red-300" :
         isOverdue24h ? "border-amber-300" :
         "border-gray-100"
@@ -372,7 +372,7 @@ function LeadCard({
       </div>
 
       {/* Price row */}
-      <div className="flex items-center justify-between flex-1 mt-1">
+      <div className="flex items-center justify-between mt-1">
         {total > 0 ? (
           <span className="text-base font-bold" style={{ color: "#16a34a" }}>${total}</span>
         ) : lastBookingPrice ? (

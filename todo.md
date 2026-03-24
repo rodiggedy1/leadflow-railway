@@ -2551,3 +2551,7 @@
 ## Sync Bug Fix — Future Date Status Filter
 
 - [x] Fix TomorrowSync/TodaySync: was filtering for "completed" status only — future jobs are never completed yet. Now passes includeAll=true for today/future dates so assigned/active bookings are fetched correctly.
+
+## Pipeline Card Layout Bug
+
+- [x] Fix Kanban pipeline cards: price text overlapping date/source line (garbled layout)
