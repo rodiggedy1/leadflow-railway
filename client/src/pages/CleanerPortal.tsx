@@ -170,11 +170,12 @@ const JOB_STATUSES = [
   { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
-function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
+function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules }: {
   job: Job;
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
   onStatusUpdated: () => void;
+  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -356,7 +357,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
           <div className="bg-amber-900/20 border border-amber-600/40 rounded-lg px-3 py-2 flex items-center gap-2">
             <span className="text-amber-400 text-sm">⚠</span>
             <p className="text-amber-300 text-xs">
-              Upload photos to earn <span style={{color: '#34d399'}}>+$5</span> and avoid <span style={{color: '#f87171'}}>-$10</span> penalty
+              Upload photos to earn <span style={{color: '#34d399'}}>+${payRules?.photoBonus ?? 5}</span> and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span> penalty
             </p>
           </div>
         )}
@@ -436,7 +437,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                 <div className="flex justify-between items-start py-2 border-b border-slate-800">
                   <div>
                     <p className="text-slate-400 text-sm font-medium">Rating Bonus</p>
-                    <p className="text-slate-500 text-xs mt-0.5">+$10 for 5 stars · <span style={{color: '#f87171'}}>-$20</span> for 3 stars or below</p>
+                    <p className="text-slate-500 text-xs mt-0.5">+${payRules?.fiveStarBonus ?? 10} for 5 stars · <span style={{color: '#f87171'}}>-${payRules?.lowRatingDeduction ?? 20}</span> for 3 stars or below</p>
                   </div>
                   <span className="text-slate-500 text-xs italic">Pending</span>
                 </div>
@@ -480,7 +481,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
                 {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
               </p>
               <p className="text-slate-500 text-xs mt-0.5">
-                {hasPhoto ? "Completion photo uploaded" : <>Upload a photo to earn +$5 and avoid <span style={{color: '#f87171'}}>-$10</span></>}
+                {hasPhoto ? "Completion photo uploaded" : <>Upload a photo to earn +${payRules?.photoBonus ?? 5} and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span></>}
               </p>
             </div>
             {photoPending ? (
@@ -498,7 +499,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
               <p className={`text-sm font-medium ${job.recleanPenalty != null ? "text-red-300" : "text-slate-400"}`}>
                 Poor Service / Reclean
               </p>
-              <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#f87171'}}>-$30</span> if job requires a reclean</p>
+              <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#f87171'}}>-${payRules?.recleanPenalty ?? 30}</span> if job requires a reclean</p>
             </div>
             {recleanPending ? (
               <span className="text-slate-500 text-xs italic">Pending</span>
@@ -522,7 +523,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated }: {
             <div className="flex justify-between items-start py-2 border-b border-slate-800">
               <div>
                 <p className="text-slate-400 text-sm font-medium">Streak Bonus</p>
-                <p className="text-slate-500 text-xs mt-0.5">+$50 for 10 clean jobs with no issues</p>
+                <p className="text-slate-500 text-xs mt-0.5">+${payRules?.streakBonus ?? 50} for {payRules?.streakTarget ?? 10} clean jobs with no issues</p>
               </div>
               <span className="text-slate-500 text-xs italic">Not earned</span>
             </div>
@@ -1172,6 +1173,7 @@ export default function CleanerPortal() {
                 onPhotoUploaded={refetch}
                 onMarkedComplete={refetch}
                 onStatusUpdated={refetch}
+                payRules={payRules}
               />
             ))}
 

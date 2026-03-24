@@ -36,3 +36,4 @@
 - [x] Remove "Quote Form" link from conversation drawer header (waste of space)
 - [x] Add previous job info (price, frequency, last job date) back to conversation drawer
 - [x] Replace "Follow Up" button in drawer header with a "Status" dropdown to update stage directly
+- [x] Fix: updated pay rules (bonuses/deductions) not reflecting in Cleaner Portal (JobCard had hardcoded amounts)
