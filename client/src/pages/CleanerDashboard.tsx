@@ -655,7 +655,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
               toggled={streak > 0}
               pending={overrideStreak.isPending}
               dimmed={streak === 0}
-              note={streak === 0 ? "Earned every 10 consecutive jobs" : undefined}
+              note={streak === 0 ? `Earned every ${payRules?.streakTarget ?? 10} consecutive jobs` : undefined}
               onToggle={() => {
                 if (streak > 0) {
                   overrideStreak.mutate({ cleanerJobId: cleanerJobId!, amount: null });
