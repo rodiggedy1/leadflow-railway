@@ -1094,14 +1094,13 @@ function ConversationDrawer({
     },
     onError: (e) => toast.error(e.message),
   });
-
   // Suggestion templates based on lead context
   const firstName = session.leadName?.split(" ")[0] ?? "there";
   const suggestions: Record<string, string> = {
-    lockDate: `Hey ${firstName} - totally makes sense. We're already filling up soon, so I can tentatively hold a spot now and adjust if needed. Want me to grab something before it fills up?`,
-    softCheckIn: `Hey ${firstName} - just checking in! Want me to send over a couple openings that would work well for you?`,
-    urgency: `Hey ${firstName} - quick heads up: our spots are starting to fill. Want me to hold one for you before they're gone?`,
-    discount: `Hey ${firstName} - we had a schedule shift open up, so I may be able to get you a better rate if you want me to check options.`,
+    lockDate: `Hey ${firstName} — totally makes sense. We're already filling early May, so I can tentatively hold a spot now and adjust if needed. Want me to grab something before it fills up?`,
+    softCheckIn: `Hey ${firstName} — just checking in! Want me to send over a couple openings that would work well for you?`,
+    urgency: `Hey ${firstName} — quick heads up: our spots are starting to fill. Want me to hold one for you before they're gone?`,
+    discount: `Hey ${firstName} — we had a schedule shift open up, so I may be able to get you a better rate if you want me to check options.`,
   };
   const [selectedAction, setSelectedAction] = useState<"lockDate" | "softCheckIn" | "urgency" | "discount">("lockDate");
   const [drawerTab, setDrawerTab] = useState<"conversation" | "flow" | "performance">("conversation");
@@ -1110,23 +1109,20 @@ function ConversationDrawer({
     setReplyText(suggestions[key] ?? "");
     setDrawerTab("conversation");
   };
-  // Primary recommendation text
   const primaryRecommendation =
-    selectedAction === "lockDate" ? "Best next move: lock a tentative spot now before the calendar fills." :
+    selectedAction === "lockDate" ? "Create a soft commitment now so the lead doesn't disappear and your calendar gets first dibs." :
     selectedAction === "softCheckIn" ? "Best next move: keep the lead warm without pressure." :
     selectedAction === "urgency" ? "Best next move: create urgency as availability tightens." :
     "Best next move: use a schedule-fill incentive to convert.";
   const primaryMoveTitle =
-    selectedAction === "lockDate" ? `Send "Lock ${session.followUpDate ? new Date(session.followUpDate).toLocaleString("en-US", { month: "long" }) : "a"} Spot" message` :
+    selectedAction === "lockDate" ? `Send "Lock ${session.followUpDate ? new Date(session.followUpDate).toLocaleString("en-US", { month: "long" }) : "May"} Spot" message` :
     selectedAction === "softCheckIn" ? "Send soft check-in message" :
     selectedAction === "urgency" ? "Send urgency nudge" :
     "Offer discount fill";
-  // Extras array
   const extrasArray: string[] = (() => {
     if (!session.extras) return [];
     try { return JSON.parse(session.extras) as string[]; } catch { return []; }
   })();
-  // Last reply time
   const lastReplyTime = (() => {
     const last = [...localMessages].reverse().find(m => m.role === "user");
     if (!last?.ts) return null;
@@ -1136,62 +1132,57 @@ function ConversationDrawer({
     if (h < 24) return `${h}h ago`;
     return `${Math.floor(h / 24)}d ago`;
   })();
-  // Score
   const score = Math.min(100, Math.max(0, 40 + localMessages.filter(m => m.role === "user").length * 8));
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {/* ── Two-panel modal ── */}
-      <div className="flex w-full max-w-[1100px] h-[92vh] gap-4 items-start">
+      <div className="flex w-full max-w-[1080px] h-[90vh] gap-3 items-start">
 
         {/* ══════════════════════════════════════════════════════════
             LEFT PANEL — Conversation
         ══════════════════════════════════════════════════════════ */}
-        <div className="flex flex-col flex-1 bg-white rounded-2xl shadow-2xl overflow-hidden h-full min-w-0">
+        <div className="flex flex-col flex-1 bg-white rounded-2xl shadow-xl overflow-hidden h-full min-w-0">
 
           {/* ── Header ── */}
           <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-100 shrink-0">
-            {/* Orange avatar */}
-            <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-xl shrink-0">
+            <div
+              className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0"
+              style={{ backgroundColor: "#F97316" }}
+            >
               {(session.leadName ?? "?").charAt(0).toUpperCase()}
             </div>
-            {/* Name + badges + meta */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <span className="text-lg font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
+                <span className="text-[17px] font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
                 {session.followUpDate && (
-                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-orange-300 text-orange-600 bg-orange-50">
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-orange-200 text-orange-600 bg-orange-50">
                     Waiting until {new Date(session.followUpDate).toLocaleString("en-US", { month: "long" })}
                   </span>
                 )}
-                <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-300 text-purple-600 bg-purple-50">
+                <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-200 text-purple-600 bg-purple-50">
                   Warm lead
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span>{formatPhone(session.leadPhone)}</span>
                 {lastReplyTime && (
                   <span className="flex items-center gap-1">
-                    <span className="text-gray-300">&#9679;</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
                     Last reply {lastReplyTime}
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <span>&#128293;</span>
-                  Score {score}/100
-                </span>
+                <span>&#128293; Score {score}/100</span>
               </div>
             </div>
-            {/* Action buttons */}
             <div className="flex items-center gap-2 shrink-0">
               <a
                 href={`/quote?phone=${encodeURIComponent(session.leadPhone)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 Quote Form
               </a>
@@ -1212,7 +1203,7 @@ function ConversationDrawer({
           </div>
 
           {/* ── Tab bar ── */}
-          <div className="flex items-center gap-1 px-5 pt-3 pb-2 shrink-0">
+          <div className="flex items-center gap-1 px-4 pt-2.5 pb-2 shrink-0">
             {(["conversation", "flow", "performance"] as const).map(tab => (
               <button
                 key={tab}
@@ -1220,7 +1211,7 @@ function ConversationDrawer({
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
                   drawerTab === tab
                     ? "bg-gray-900 text-white"
-                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
                 }`}
               >
                 {tab === "conversation" ? "Conversation" : tab === "flow" ? "Flow View" : "Performance"}
@@ -1234,13 +1225,13 @@ function ConversationDrawer({
           {drawerTab === "conversation" && (
             <div className="flex flex-col flex-1 min-h-0">
               {/* AI recommendation banner */}
-              <div className="mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-orange-50 border border-orange-100 shrink-0">
+              <div className="mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-orange-50 shrink-0">
                 <div className="text-sm font-semibold text-orange-500 mb-0.5">&#10024; AI recommendation</div>
-                <div className="text-sm text-orange-700">{primaryRecommendation}</div>
+                <div className="text-sm text-orange-600">{primaryRecommendation}</div>
               </div>
 
-              {/* Messages scroll area */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-3">
+              {/* Messages scroll area — white bg, no gray */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-4 bg-white">
                 {localMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-32 text-gray-400 text-sm">No messages yet</div>
                 ) : (
@@ -1262,47 +1253,56 @@ function ConversationDrawer({
                         )}
                         {/* System event pill */}
                         {isSystem ? (
-                          <div className="flex justify-center my-2">
-                            <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-3 py-1">{msg.content}</span>
+                          <div className="flex justify-center my-1">
+                            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">{msg.content}</span>
                           </div>
                         ) : isOutbound ? (
-                          /* ── Outbound (AI or manual) ── */
-                          <div className="flex items-start gap-2 max-w-[78%] ml-auto flex-row-reverse">
-                            <div className="w-7 h-7 rounded-full bg-purple-500 flex items-center justify-center shrink-0 mt-0.5 text-white text-xs font-bold">
-                              {isAiMessage ? "AI" : (senderName?.charAt(0) ?? "M")}
-                            </div>
-                            <div className="flex flex-col items-end">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs text-gray-400">{timeLabel}</span>
-                                {isAiMessage && (
-                                  <span className="text-xs font-medium text-purple-500">AI Follow-Up</span>
-                                )}
-                                {senderName && (
-                                  <span className="text-xs font-medium text-orange-500">{senderName}</span>
-                                )}
+                          /* ── Outbound ── */
+                          <div className="flex items-end gap-2 justify-end">
+                            <div className="flex flex-col items-end max-w-[76%]">
+                              {/* Label row */}
+                              <div className="flex items-center gap-2 mb-1 pr-1">
+                                {isAiMessage ? (
+                                  <span className="text-xs font-semibold text-purple-500">AI Follow-Up</span>
+                                ) : senderName ? (
+                                  <span className="text-xs font-semibold" style={{ color: "#F97316" }}>{senderName}</span>
+                                ) : null}
+                                {timeLabel && <span className="text-xs text-gray-400">{timeLabel}</span>}
                               </div>
+                              {/* Bubble */}
                               <div
-                                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-white shadow-sm leading-relaxed"
-                                style={{ backgroundColor: "#F97316" }}
+                                className="rounded-2xl rounded-br-sm px-4 py-3 text-sm text-white leading-relaxed"
+                                style={{ backgroundColor: isAiMessage ? "#F97316" : "#1a1a1a" }}
                               >
                                 {msg.content}
                               </div>
                             </div>
+                            {/* Avatar */}
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 text-white text-xs font-bold"
+                              style={{ backgroundColor: isAiMessage ? "#7C3AED" : "#1a1a1a" }}
+                            >
+                              {isAiMessage ? "AI" : (senderName?.charAt(0).toUpperCase() ?? "A")}
+                            </div>
                           </div>
                         ) : (
                           /* ── Inbound ── */
-                          <div className="flex items-start gap-2 max-w-[78%]">
-                            <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-0.5">
-                              <User className="w-3.5 h-3.5 text-gray-500" />
+                          <div className="flex items-end gap-2">
+                            {/* Small gray person icon */}
+                            <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center shrink-0 mb-0.5">
+                              <User className="w-3.5 h-3.5 text-gray-400" />
                             </div>
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs font-medium text-gray-600">
-                                  {session.stage === "FOLLOW_UP_SCHEDULED" ? "Delay / Objection" : "Customer"}
+                            <div className="max-w-[76%]">
+                              {/* Label row */}
+                              <div className="flex items-center gap-2 mb-1 pl-1">
+                                <span className="text-xs font-medium text-gray-500">
+                                  {session.stage === "FOLLOW_UP_SCHEDULED" ? "Delay / Objection" :
+                                   session.stage === "COLD" ? "Reconfirmed Delay" : "Customer"}
                                 </span>
-                                <span className="text-xs text-gray-400">{timeLabel}</span>
+                                {timeLabel && <span className="text-xs text-gray-400">{timeLabel}</span>}
                               </div>
-                              <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-800 shadow-sm leading-relaxed">
+                              {/* Bubble — plain white, very soft shadow, no border */}
+                              <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-gray-800 leading-relaxed shadow-sm">
                                 {msg.content}
                               </div>
                             </div>
@@ -1316,54 +1316,32 @@ function ConversationDrawer({
               </div>
 
               {/* ── Suggestion pills ── */}
-              <div className="flex items-center gap-2 px-4 pt-2 pb-1 flex-wrap shrink-0">
-                <button
-                  onClick={() => applySuggestion("lockDate")}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                    selectedAction === "lockDate"
-                      ? "border-orange-300 text-orange-600 bg-orange-50"
-                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  Hold May spot
-                </button>
-                <button
-                  onClick={() => applySuggestion("softCheckIn")}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                    selectedAction === "softCheckIn"
-                      ? "border-orange-300 text-orange-600 bg-orange-50"
-                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  Soft check-in
-                </button>
-                <button
-                  onClick={() => applySuggestion("urgency")}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                    selectedAction === "urgency"
-                      ? "border-orange-300 text-orange-600 bg-orange-50"
-                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  Filling up
-                </button>
-                <button
-                  onClick={() => applySuggestion("discount")}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                    selectedAction === "discount"
-                      ? "border-orange-300 text-orange-600 bg-orange-50"
-                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  Discount fill
-                </button>
+              <div className="flex items-center gap-2 px-4 pt-2 pb-1.5 flex-wrap shrink-0 bg-white border-t border-gray-100">
+                {[
+                  { key: "lockDate", label: "Hold May spot" },
+                  { key: "softCheckIn", label: "Soft check-in" },
+                  { key: "urgency", label: "Filling up" },
+                  { key: "discount", label: "Discount fill" },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => applySuggestion(key)}
+                    className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-colors ${
+                      selectedAction === key
+                        ? "border-orange-300 text-orange-600 bg-orange-50"
+                        : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
                 <button
                   onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
                   disabled={setAiModeMutation.isPending}
-                  className={`ml-auto text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                  className={`ml-auto text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-colors ${
                     session.aiMode === 1
-                      ? "text-green-700 bg-green-50 border border-green-200"
-                      : "text-gray-500 bg-gray-100 border border-gray-200 hover:bg-gray-200"
+                      ? "text-green-700 bg-white border-green-200 hover:bg-green-50"
+                      : "text-gray-500 bg-white border-gray-200 hover:bg-gray-50"
                   }`}
                 >
                   {session.aiMode === 1 ? "AI assist on" : "AI assist off"}
@@ -1371,8 +1349,7 @@ function ConversationDrawer({
               </div>
 
               {/* ── Compose box ── */}
-              <div className="mx-4 mb-4 mt-1 rounded-2xl border-2 border-gray-200 bg-white overflow-hidden focus-within:border-orange-300 transition-colors shrink-0">
-                {/* Typing indicator */}
+              <div className="mx-4 mb-4 mt-2 rounded-2xl border border-gray-200 bg-white overflow-hidden shrink-0">
                 {typingData?.typingAgentName && (
                   <div className="flex items-center gap-2 px-4 pt-2">
                     <span className="inline-flex gap-0.5">
@@ -1395,16 +1372,16 @@ function ConversationDrawer({
                   }}
                   placeholder="Type a message..."
                   rows={3}
-                  className="w-full px-4 pt-3 pb-1 text-sm text-gray-800 resize-none outline-none bg-transparent placeholder-gray-400"
+                  className="w-full px-4 pt-3 pb-1 text-sm text-gray-800 resize-none outline-none bg-transparent placeholder-gray-300"
                 />
                 <div className="flex items-center justify-between px-4 pb-3">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-300">
                     &#10024; Suggested from playbook &middot; AI message
                   </span>
                   <button
                     onClick={handleSend}
                     disabled={!replyText.trim() || sendMessageMutation.isPending}
-                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40"
                     style={{ backgroundColor: "#F97316" }}
                   >
                     {sendMessageMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
@@ -1419,8 +1396,7 @@ function ConversationDrawer({
               FLOW VIEW TAB
           ══════════════════════════════════════════════════════════ */}
           {drawerTab === "flow" && (
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-              {/* Pipeline stage tracker */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-white">
               {(() => {
                 const pipelineStages = ["Lead In", "Quoted", "In Progress", "Follow-Up", "Re-engage", "Booked"];
                 const stageToIndex: Record<string, number> = {
@@ -1431,16 +1407,14 @@ function ConversationDrawer({
                 const currentIdx = stageToIndex[session.stage] ?? 0;
                 return (
                   <div className="bg-gray-50 rounded-2xl p-4">
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pipeline Stage</div>
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Pipeline Stage</div>
                     <div className="flex items-center gap-1">
                       {pipelineStages.map((stage, idx) => (
                         <div key={stage} className="flex items-center flex-1">
                           <div className={`flex-1 text-center py-2 px-1 rounded-lg text-xs font-medium ${
-                            idx === currentIdx
-                              ? "bg-gray-900 text-white shadow-sm"
-                              : idx < currentIdx
-                              ? "bg-orange-100 text-orange-700"
-                              : "bg-white text-gray-400 border border-gray-200"
+                            idx === currentIdx ? "bg-gray-900 text-white" :
+                            idx < currentIdx ? "bg-orange-100 text-orange-700" :
+                            "bg-white text-gray-400 border border-gray-200"
                           }`}>
                             {stage}
                           </div>
@@ -1453,10 +1427,9 @@ function ConversationDrawer({
                   </div>
                 );
               })()}
-              {/* Stage change (admin only) */}
               {isAdmin && (
-                <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-2">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Move Stage</div>
+                <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-2">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Move Stage</div>
                   <div className="flex items-center gap-2">
                     <Select
                       value={session.stage}
@@ -1466,18 +1439,10 @@ function ConversationDrawer({
                       }}
                       disabled={updateStageMutation.isPending}
                     >
-                      <SelectTrigger className="h-8 text-xs flex-1">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {([
-                          "WIDGET_SIZING","QUOTE_SENT","AVAILABILITY","SLOT_CHOICE","TIME_PREF",
-                          "ADDRESS","CONFIRMATION","CALL_SCHEDULED","DONE","UNHANDLED",
-                          "BOOKED","NOT_INTERESTED","FUTURE_BOOKING","FOLLOW_UP_SCHEDULED","COLD",
-                        ] as const).map(s => (
-                          <SelectItem key={s} value={s} className="text-xs">
-                            {STAGE_CONFIG[s as Stage]?.label ?? s}
-                          </SelectItem>
+                        {(["WIDGET_SIZING","QUOTE_SENT","AVAILABILITY","SLOT_CHOICE","TIME_PREF","ADDRESS","CONFIRMATION","CALL_SCHEDULED","DONE","UNHANDLED","BOOKED","NOT_INTERESTED","FUTURE_BOOKING","FOLLOW_UP_SCHEDULED","COLD"] as const).map(s => (
+                          <SelectItem key={s} value={s} className="text-xs">{STAGE_CONFIG[s as Stage]?.label ?? s}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -1485,9 +1450,8 @@ function ConversationDrawer({
                   </div>
                 </div>
               )}
-              {/* AI Playbook checklist */}
-              <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">AI Playbook</div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">AI Playbook</div>
                 <div className="space-y-2">
                   {[
                     { done: true, text: "Intro quote sent" },
@@ -1512,21 +1476,21 @@ function ConversationDrawer({
               PERFORMANCE TAB
           ══════════════════════════════════════════════════════════ */}
           {drawerTab === "performance" && (
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-white">
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: "Close probability", value: `${Math.min(95, 30 + localMessages.filter(m => m.role === "user").length * 8)}%`, color: "text-green-600" },
                   { label: "Response likelihood", value: `${Math.min(95, 50 + localMessages.length * 4)}%`, color: "text-blue-600" },
                   { label: "Template win rate", value: "67%", color: "text-purple-600" },
                 ].map(stat => (
-                  <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm text-center">
+                  <div key={stat.label} className="bg-white rounded-xl border border-gray-100 p-3 shadow-sm text-center">
                     <div className={`text-xl font-bold ${stat.color}`}>{stat.value}</div>
-                    <div className="text-xs text-gray-500 mt-0.5 leading-tight">{stat.label}</div>
+                    <div className="text-xs text-gray-400 mt-0.5 leading-tight">{stat.label}</div>
                   </div>
                 ))}
               </div>
-              <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Top Message Variants</div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Top Message Variants</div>
                 <div className="space-y-2">
                   {[
                     { text: "Hold a spot message", rate: "72%" },
@@ -1534,16 +1498,11 @@ function ConversationDrawer({
                     { text: "Urgency nudge", rate: "54%" },
                   ].map((v, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-700">{v.text}</span>
+                      <span className="text-gray-600">{v.text}</span>
                       <span className="font-semibold text-gray-900">{v.rate}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recommended Send Window</div>
-                <div className="text-base font-bold text-gray-900">Tue - Thu, 10am - 2pm</div>
-                <p className="text-xs text-gray-500 mt-1">Based on historical response patterns for this lead type.</p>
               </div>
             </div>
           )}
@@ -1552,44 +1511,44 @@ function ConversationDrawer({
         {/* ══════════════════════════════════════════════════════════
             RIGHT PANEL — Sidebar
         ══════════════════════════════════════════════════════════ */}
-        <div className="w-[320px] shrink-0 flex flex-col gap-4 overflow-y-auto h-full pb-2">
+        <div className="w-[310px] shrink-0 flex flex-col gap-3 overflow-y-auto h-full pb-2">
 
           {/* ── NEXT ACTION card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Next Action</span>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full text-orange-600 border border-orange-200 bg-orange-50">Recommended</span>
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Next Action</span>
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full text-orange-500 border border-orange-200">Recommended</span>
             </div>
             {/* Dark primary move card */}
             <div className="rounded-xl bg-gray-900 p-4 mb-4">
-              <div className="text-xs font-semibold text-gray-400 mb-1.5">&#10024; Primary move</div>
-              <div className="text-base font-bold text-white leading-snug mb-2">{primaryMoveTitle}</div>
+              <div className="text-[11px] font-semibold text-gray-400 mb-1.5">&#10024; Primary move</div>
+              <div className="text-[15px] font-bold text-white leading-snug mb-2">{primaryMoveTitle}</div>
               <p className="text-xs text-gray-400 leading-relaxed">{primaryRecommendation}</p>
             </div>
-            {/* 2x2 action buttons */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* 2×2 action buttons — larger, squarer */}
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 onClick={() => applySuggestion("lockDate")}
-                className="py-2.5 px-3 rounded-xl text-sm font-semibold text-white transition-colors"
+                className="py-3 px-3 rounded-xl text-sm font-semibold text-white transition-colors"
                 style={{ backgroundColor: "#F97316" }}
               >
                 Lock May Date
               </button>
               <button
                 onClick={() => applySuggestion("discount")}
-                className="py-2.5 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
                 Offer Discount Fill
               </button>
               <button
                 onClick={() => applySuggestion("softCheckIn")}
-                className="py-2.5 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
                 Set Soft Reminder
               </button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <button className="py-2.5 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
+                  <button className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
                     Close / Archive
                   </button>
                 </AlertDialogTrigger>
@@ -1615,10 +1574,9 @@ function ConversationDrawer({
           {/* ── LEAD SNAPSHOT card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Lead Snapshot</span>
-              <button className="text-gray-400 hover:text-gray-600 text-lg leading-none">&#8943;</button>
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Lead Snapshot</span>
+              <button className="text-gray-300 hover:text-gray-500 text-base leading-none">&#8943;</button>
             </div>
-            {/* Quote + Source row */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <div className="text-xs text-gray-400 mb-0.5">Quote</div>
@@ -1635,12 +1593,10 @@ function ConversationDrawer({
                 </div>
               </div>
             </div>
-            {/* Service */}
             <div className="mb-3">
               <div className="text-xs text-gray-400 mb-0.5">Service</div>
               <div className="text-sm font-semibold text-gray-900">{session.serviceType ?? "Standard Cleaning"}</div>
             </div>
-            {/* Extras */}
             {extrasArray.length > 0 && (
               <div>
                 <div className="text-xs text-gray-400 mb-1.5">Extras</div>
@@ -1653,7 +1609,6 @@ function ConversationDrawer({
                 </div>
               </div>
             )}
-            {/* Address / slot if present */}
             {session.address && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <div className="text-xs text-gray-400 mb-0.5">Address</div>
@@ -1665,37 +1620,35 @@ function ConversationDrawer({
           {/* ── FOLLOW-UP PLAN card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Follow-Up Plan</span>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full text-purple-600 border border-purple-200 bg-purple-50">Smart Sequence</span>
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Follow-Up Plan</span>
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full text-purple-600 border border-purple-200">Smart Sequence</span>
             </div>
-            {/* Follow-up timeline items */}
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+            <div className="space-y-2.5 mb-4">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
                 <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-base shrink-0">&#128197;</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-gray-800">Soft check-in</div>
                   <div className="text-xs text-gray-400">{session.followUpDate ?? "Apr 10"}</div>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full border border-gray-200 text-gray-500 shrink-0">queued</span>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-gray-200 text-gray-400 shrink-0">queued</span>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 border border-orange-100">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50">
                 <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-base shrink-0">&#128276;</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-gray-800">Filling up / urgency</div>
                   <div className="text-xs text-gray-400">Apr 25</div>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full border border-orange-200 text-orange-600 bg-orange-50 shrink-0">recommended</span>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-orange-200 text-orange-500 bg-orange-50 shrink-0">recommended</span>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
                 <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-base shrink-0">&#128197;</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-gray-800">Last call before move-in</div>
                   <div className="text-xs text-gray-400">May 1</div>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full border border-purple-200 text-purple-600 bg-purple-50 shrink-0">drafted</span>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-purple-200 text-purple-500 bg-purple-50 shrink-0">drafted</span>
               </div>
             </div>
-            {/* Follow-up scheduler */}
             <div className="pt-3 border-t border-gray-100 space-y-2">
               <input
                 type="date"
@@ -1717,17 +1670,17 @@ function ConversationDrawer({
 
           {/* ── QUICK CONTROLS card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Quick Controls</div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Quick Controls</div>
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 onClick={() => { if (session.leadPhone) window.open(`tel:${session.leadPhone}`, "_self"); }}
-                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors"
               >
                 <span>&#128222;</span> Call lead
               </button>
               <button
                 onClick={() => applySuggestion("softCheckIn")}
-                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors"
               >
                 <span>&#128197;</span> Reschedule
               </button>
@@ -1736,13 +1689,13 @@ function ConversationDrawer({
                   setAiModeMutation.mutate({ sessionId: session.id, aiMode: 1 });
                   toast.success("Handed back to AI");
                 }}
-                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors"
               >
                 <span>&#129302;</span> Hand back to AI
               </button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <button className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors">
+                  <button className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors">
                     <span>&#128230;</span> Archive
                   </button>
                 </AlertDialogTrigger>
@@ -1763,10 +1716,9 @@ function ConversationDrawer({
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-            {/* Agent assignment (admin only) */}
             {isAdmin && (
               <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                <div className="text-xs text-gray-500 font-medium">Assigned Agent</div>
+                <div className="text-xs text-gray-400 font-medium">Assigned Agent</div>
                 <div className="flex items-center gap-1.5">
                   <Select
                     value={session.assignedAgentId?.toString() ?? "unassigned"}
@@ -1777,9 +1729,7 @@ function ConversationDrawer({
                     }}
                     disabled={assignAgentMutation.isPending}
                   >
-                    <SelectTrigger className="h-8 text-xs flex-1">
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned" className="text-xs">— Unassigned —</SelectItem>
                       {activeAgents.map(a => (
