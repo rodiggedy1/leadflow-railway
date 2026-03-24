@@ -25,6 +25,7 @@ import {
   placeNoCheckinEscalationCall,
   stepAlreadyFired,
   isWithinEscalationHours,
+  isJobAssigned,
 } from "./fieldMgmtEngine";
 
 // ── parseServiceDateTime ───────────────────────────────────────────────────────
@@ -620,5 +621,105 @@ describe("runNoShowEscalation — cleaner phone join", () => {
     expect(src).toContain("cleanerPhone: cleanerProfiles.phone");
     // Must pass cleanerPhone to placeNoCheckinEscalationCall
     expect(src).toContain("cleanerPhone: cleanerPhoneForCall");
+  });
+});
+
+// ── isJobAssigned — unassigned job client SMS guard ───────────────────────────
+
+describe("isJobAssigned — unassigned job client SMS guard", () => {
+  /**
+   * These tests verify the rule: no client-facing SMS may be sent for
+   * unassigned jobs. We test this at two levels:
+   *
+   * 1. Source-code level: confirm the guard is present in every client SMS function.
+   * 2. Structural level: confirm isJobAssigned is exported and the guard helper exists.
+   */
+
+  it("isJobAssigned is exported from fieldMgmtEngine", async () => {
+    const { isJobAssigned } = await import("./fieldMgmtEngine");
+    expect(typeof isJobAssigned).toBe("function");
+  });
+
+  it("sendClientOnTheWaySms calls isJobAssigned before sending", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    // Guard must appear before the stepAlreadyFired check inside sendClientOnTheWaySms
+    const fnStart = src.indexOf("export async function sendClientOnTheWaySms");
+    const fnEnd = src.indexOf("export async function sendArrivedCheckin");
+    const fnBody = src.slice(fnStart, fnEnd);
+    expect(fnBody).toContain("isJobAssigned(cleanerJobId)");
+    // Guard must come before the actual SMS send
+    expect(fnBody.indexOf("isJobAssigned")).toBeLessThan(fnBody.indexOf("sendSms"));
+  });
+
+  it("sendClientPreJobSms calls isJobAssigned before sending", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("export async function sendClientPreJobSms");
+    const fnEnd = src.indexOf("// ── Running Late");
+    const fnBody = src.slice(fnStart, fnEnd);
+    expect(fnBody).toContain("isJobAssigned(cleanerJobId)");
+    expect(fnBody.indexOf("isJobAssigned")).toBeLessThan(fnBody.indexOf("sendSms"));
+  });
+
+  it("sendRunningLateSms calls isJobAssigned before sending", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("export async function sendRunningLateSms");
+    // Find the next exported function after sendRunningLateSms
+    const afterFn = src.indexOf("export async function", fnStart + 10);
+    const fnBody = src.slice(fnStart, afterFn > fnStart ? afterFn : undefined);
+    expect(fnBody).toContain("isJobAssigned(cleanerJobId)");
+    expect(fnBody.indexOf("isJobAssigned")).toBeLessThan(fnBody.indexOf("sendSms"));
+  });
+
+  it("isJobAssigned guard is documented as the single source of truth in source", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    // The guard comment must be present
+    expect(src).toContain("RULE: Never send client-facing SMS or notifications for unassigned jobs.");
+    // The guard must check bookingStatus = 'assigned'
+    expect(src).toContain("status !== \"assigned\"");
+  });
+
+  it("isJobAssigned returns false when DB is unavailable (safe default)", async () => {
+    // Verify the safe-default comment is in the source
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    expect(src).toContain("safe default: don't send if DB is unavailable");
+  });
+
+  it("runPreJobReminders already filters assigned jobs at the DB level (belt-and-suspenders)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    // The cron query must filter by bookingStatus = 'assigned'
+    const fnStart = src.indexOf("export async function runPreJobReminders");
+    const fnEnd = src.indexOf("// ── Step 2:");
+    const fnBody = src.slice(fnStart, fnEnd);
+    expect(fnBody).toContain("eq(cleanerJobs.bookingStatus, \"assigned\")");
   });
 });

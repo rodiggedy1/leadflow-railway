@@ -68,6 +68,40 @@ const CLEANER_PORTAL_URL = "https://quote.maidinblack.com/cleaner";
 const VAPI_API_BASE = "https://api.vapi.ai";
 const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
 
+// ── Unassigned job guard ──────────────────────────────────────────────────────
+/**
+ * RULE: Never send client-facing SMS or notifications for unassigned jobs.
+ *
+ * A job is considered "assigned" only when bookingStatus = 'assigned'.
+ * Any other status (unassigned, new, cancelled, completed) must never trigger
+ * a client notification — the client has not been confirmed a cleaner yet.
+ *
+ * This guard is the single source of truth for this rule. Every client-facing
+ * SMS function (sendClientPreJobSms, sendClientOnTheWaySms, sendRunningLateSms)
+ * MUST call this before sending. The cron-level WHERE clause is a first-pass
+ * filter only — it does not protect against direct function calls.
+ *
+ * Returns true if the job is assigned and client SMS is permitted.
+ * Returns false (and logs a warning) if the job is unassigned or not found.
+ */
+export async function isJobAssigned(cleanerJobId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false; // safe default: don't send if DB is unavailable
+  const rows = await db
+    .select({ bookingStatus: cleanerJobs.bookingStatus })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const status = rows[0]?.bookingStatus ?? null;
+  if (status !== "assigned") {
+    console.warn(
+      `[FieldMgmt] Client SMS blocked for job ${cleanerJobId} — bookingStatus is '${status ?? "not found"}' (must be 'assigned').`
+    );
+    return false;
+  }
+  return true;
+}
+
 async function vapiPost(path: string, body: unknown): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
@@ -445,6 +479,9 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
  */
 export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
+
+  // RULE: Never send client SMS for unassigned jobs
+  if (!await isJobAssigned(cleanerJobId)) return;
 
   if (await stepAlreadyFired(cleanerJobId, "client_on_the_way")) return;
 
@@ -1099,6 +1136,9 @@ export function computeClientPreJobSendTime(serviceTime: Date): Date {
 export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
 
+  // RULE: Never send client SMS for unassigned jobs
+  if (!await isJobAssigned(cleanerJobId)) return;
+
   if (await stepAlreadyFired(cleanerJobId, "client_pre_job")) return;
 
   const db = await getDb();
@@ -1176,6 +1216,9 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
  */
 export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
+
+  // RULE: Never send client SMS for unassigned jobs
+  if (!await isJobAssigned(cleanerJobId)) return;
 
   if (await stepAlreadyFired(cleanerJobId, "client_running_late")) return;
 

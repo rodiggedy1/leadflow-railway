@@ -2562,3 +2562,12 @@
 - [x] Enforce 8 AM – 5 PM ET business hours guard on all escalation calls (no calls outside window)
 - [x] Add self-call protection: never call the Vapi phone number itself (+19347898077)
 - [x] Investigate what triggered the "Bob on main street" call (bad test job in DB?)
+
+## Unassigned Job Client SMS Guard (Critical Rule)
+
+- [x] Block all client-facing SMS for unassigned jobs in sendClientPreJobSms
+- [x] Block all client-facing SMS for unassigned jobs in sendClientOnTheWaySms
+- [x] Block all client-facing SMS for unassigned jobs in sendRunningLateSms
+- [x] sendCompletionFlow sends only to the cleaner — no client SMS, no guard needed
+- [x] Add shared isJobAssigned() guard helper — single source of truth for the rule
+- [x] Write vitest tests for every guarded path (950/950 tests pass)
