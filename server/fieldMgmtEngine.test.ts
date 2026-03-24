@@ -809,7 +809,7 @@ describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
       path.resolve(__dirname, "fieldMgmtRouter.ts"),
       "utf8"
     );
-    const fnStart = src.indexOf("confirmAssignment: adminProcedure");
+    const fnStart = src.indexOf("confirmAssignment: agentProcedure");
     const fnEnd = src.indexOf("}),", fnStart + 10);
     const fnBody = src.slice(fnStart, fnEnd);
     expect(fnBody).toContain("maybeTriggerLateAssignmentSms");

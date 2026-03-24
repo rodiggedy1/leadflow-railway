@@ -37,4 +37,5 @@
 - [x] Add previous job info (price, frequency, last job date) back to conversation drawer
 - [x] Replace "Follow Up" button in drawer header with a "Status" dropdown to update stage directly
 - [x] Fix: updated pay rules (bonuses/deductions) not reflecting in Cleaner Portal (JobCard had hardcoded amounts)
-- [x] Audit and fix: actual pay adjustment amounts (rating, photo, reclean, streak) confirmed reading from live pay rules; fixed last hardcoded streak target note in PayBreakdownPanel
+- [x] Audit and fix: actual pay adjustment amounts (rating, photo, reclean, streak) must read from live pay rules, not hardcoded
+- [x] Pre-deployment audit: fixed failing test (confirmAssignment used agentProcedure not adminProcedure); all 974 tests pass; build clean at 4.8MB; no local media files; no hardcoded ports; all API calls non-blocking last hardcoded streak target note in PayBreakdownPanel
