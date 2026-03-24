@@ -833,14 +833,10 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
 
   return (
     <div className="min-h-screen bg-gray-50 -m-6 p-6">
-      {/* Page header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Pipeline</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Drag leads between stages or click a card to view details</p>
-          </div>
-          {/* Toolbar: Show Lost toggle + Lost Reasons analytics */}
+      {/* Toolbar row */}
+      <div className="mb-4">
+        <div className="flex justify-end gap-2">
+          {/* Show Lost toggle + Lost Reasons analytics */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowLostReasons(v => !v)}
