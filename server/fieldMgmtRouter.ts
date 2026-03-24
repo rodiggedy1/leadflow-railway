@@ -1108,6 +1108,70 @@ export const fieldMgmtRouter = router({
     }),
 
   /**
+   * Test escalation call — places a VAPI call immediately to a custom phone number
+   * (overridePhone), bypassing the 10-minute sleep delay used in production.
+   * Intended for admins to verify the cleaner phone is correct before a real no-show.
+   *
+   * The TTS script announces it is a TEST call so the recipient is not confused.
+   */
+  testEscalationCall: adminProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      overridePhone: z.string().min(10, "Phone number must be at least 10 digits"),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const rows = await db
+        .select({
+          id: cleanerJobs.id,
+          cleanerName: cleanerJobs.cleanerName,
+          teamName: cleanerJobs.teamName,
+          customerName: cleanerJobs.customerName,
+          jobAddress: cleanerJobs.jobAddress,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
+          cleanerPhone: cleanerProfiles.phone,
+        })
+        .from(cleanerJobs)
+        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+
+      const job = rows[0];
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+
+      const scheduledTime = job.serviceDateTime
+        ? new Date(job.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })
+        : "scheduled time";
+
+      // Normalize the override phone to E.164
+      const raw = input.overridePhone.replace(/\D/g, "");
+      const normalizedOverride = input.overridePhone.startsWith("+") ? input.overridePhone : `+1${raw}`;
+
+      // Place the call immediately — no sleep delay — using the override phone.
+      // The step is tagged "test_escalation_call" so it does not interfere with
+      // the production noshow_call deduplication guard.
+      const success = await placeNoCheckinEscalationCall({
+        cleanerName: job.cleanerName ?? job.teamName ?? "the cleaner",
+        customerName: job.customerName ?? "the client",
+        jobAddress: job.jobAddress ?? "the job address",
+        scheduledTime,
+        cleanerJobId: input.cleanerJobId,
+        step: "test_escalation_call",
+        cleanerPhone: normalizedOverride,
+        isTest: true,
+      });
+
+      if (!success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to place test call — check VAPI credentials or kill switch" });
+      }
+
+      return { success: true, calledPhone: normalizedOverride };
+    }),
+
+  /**
    * Returns the latest inbound reply timestamp for each job in a given list.
    * Used by the Day Board to show unread badges on job cards.
    */

@@ -108,6 +108,8 @@ export async function placeNoCheckinEscalationCall(params: {
   cleanerJobId?: number;
   step?: string;
   cleanerPhone?: string;
+  /** When true: bypass business hours guard and prefix TTS script with a TEST notice */
+  isTest?: boolean;
 }): Promise<boolean> {
   if (!FIELD_MGMT_ENABLED) return false;
   if (!ENV.vapiPrivateKey) {
@@ -116,12 +118,13 @@ export async function placeNoCheckinEscalationCall(params: {
   }
 
   // ── Business hours guard (8 AM – 5 PM ET) ────────────────────────────────
-  if (!isWithinEscalationHours()) {
+  // isTest bypasses the guard so admins can verify the phone at any time of day.
+  if (!params.isTest && !isWithinEscalationHours()) {
     console.log("[FieldMgmt] Outside escalation call hours (8am–5pm ET) — skipping call");
     return false;
   }
 
-  const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step, cleanerPhone } = params;
+  const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step, cleanerPhone, isTest } = params;
 
   // ── Determine the call target ─────────────────────────────────────────────
   // Prefer the cleaner's own phone. Fall back to CS team only if no cleaner phone is available.
@@ -136,13 +139,16 @@ export async function placeNoCheckinEscalationCall(params: {
   }
 
   const isCsTeam = normalizedTarget === CS_ALERT_NUMBER;
+  const testPrefix = isTest ? `This is a TEST call from Maids in Black. No action is required. ` : "";
   const script = isCsTeam
-    ? `Hi Maids in Black team, this is an automated field alert. ` +
+    ? testPrefix +
+      `Hi Maids in Black team, this is an automated field alert. ` +
       `Cleaner ${cleanerName} has not checked in for their job at ${jobAddress} for client ${customerName}, ` +
       `scheduled at ${scheduledTime}. ` +
       `Please call the cleaner immediately and notify the client. ` +
       `This is a time-sensitive situation.`
-    : `Hi ${cleanerName}, this is an automated reminder from Maids in Black. ` +
+    : testPrefix +
+      `Hi ${cleanerName}, this is an automated reminder from Maids in Black. ` +
       `You have a job at ${jobAddress} for ${customerName} scheduled at ${scheduledTime}. ` +
       `We have not received your check-in yet. ` +
       `Please open the Maids in Black app and mark your status, or call the office immediately. ` +

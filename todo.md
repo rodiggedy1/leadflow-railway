@@ -2562,3 +2562,9 @@
 - [x] Enforce 8 AM – 5 PM ET business hours guard on all escalation calls (no calls outside window)
 - [x] Add self-call protection: never call the Vapi phone number itself (+19347898077)
 - [x] Investigate what triggered the "Bob on main street" call (bad test job in DB?)
+
+## Test Escalation Call Feature
+
+- [x] Backend: add testEscalationCall tRPC procedure (admin only) — accepts cleanerJobId + overridePhone, calls placeNoCheckinEscalationCall immediately (no sleep)
+- [x] Frontend: add "Test Call" button on Day Board job card — opens dialog with phone input pre-filled with user's number, fires immediately on confirm
+- [x] Write vitest tests for the new procedure
