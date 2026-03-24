@@ -1224,14 +1224,14 @@ function ConversationDrawer({
           ══════════════════════════════════════════════════════════ */}
           {drawerTab === "conversation" && (
             <div className="flex flex-col flex-1 min-h-0">
-              {/* AI recommendation banner */}
-              <div className="mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-orange-50 shrink-0">
-                <div className="text-sm font-semibold text-orange-500 mb-0.5">&#10024; AI recommendation</div>
-                <div className="text-sm text-orange-600">{primaryRecommendation}</div>
-              </div>
-
-              {/* Messages scroll area — white bg, no gray */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-4 bg-white">
+               {/* Messages scroll area — white bg, no gray */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-white">
+                {/* AI recommendation banner — scrolls with messages */}
+                <div className="mb-4 px-4 py-3 rounded-xl bg-orange-50">
+                  <div className="text-sm font-semibold text-orange-500 mb-0.5">&#10024; AI recommendation</div>
+                  <div className="text-sm text-orange-600">{primaryRecommendation}</div>
+                </div>
+                <div className="space-y-4">
                 {localMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-32 text-gray-400 text-sm">No messages yet</div>
                 ) : (
@@ -1312,6 +1312,7 @@ function ConversationDrawer({
                     );
                   })
                 )}
+                </div>
                 <div ref={messagesEndRef} />
               </div>
 
