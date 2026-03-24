@@ -526,6 +526,20 @@
       "when": 1774322872243,
       "tag": "0074_nostalgic_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "5",
+      "when": 1774354841660,
+      "tag": "0075_clear_franklin_richards",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "5",
+      "when": 1774354858534,
+      "tag": "0076_youthful_layla_miller",
+      "breakpoints": true
     }
   ]
 }

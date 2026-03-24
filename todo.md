@@ -2595,3 +2595,18 @@
 ## isJobAssigned Guard Bug (Critical)
 
 - [ ] Fix: isJobAssigned guard incorrectly blocking client pre-job SMS for assigned jobs (Anna Maria / JessiCleaning)
+
+## Per-Agent Page Permissions — COMPLETED
+- [x] Add pagePermissions column (JSON text) to agents table in drizzle/schema.ts
+- [x] Run DB migration (pnpm db:push)
+- [x] Add ADMIN_PAGES constant to shared/const.ts (all permissible page ids + labels)
+- [x] Update agents.me to return pagePermissions field
+- [x] Update agents.list to return pagePermissions and isAdmin fields
+- [x] Add agents.setPagePermissions procedure (admin-only, sets JSON array or null)
+- [x] Admin UI: "Pages" column in Team tab showing access summary per agent
+- [x] Admin UI: "Pages" button opens permission editor dialog with checkbox toggles per page
+- [x] Create useAgentPermissions hook (reads agents.me, returns pagePermissions)
+- [x] Create AdminPageGuard component (redirects to first allowed page if unauthorized)
+- [x] Update AdminHeader to accept pagePermissions prop and filter nav entries
+- [x] Wire AdminPageGuard + pagePermissions into all admin pages (CommandCenter, FieldManagement, SettingsPage, AllCalls, AlwaysOnCampaign, CampaignApprovalPage, CleanerDashboard, ReactivationCampaigns, SyncHealthPage, TrackerFlow, AdminDashboard)
+- [x] Write vitest tests for ADMIN_PAGES, permission serialization, and nav filtering (974/974 pass)

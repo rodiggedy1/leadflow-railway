@@ -1532,7 +1532,12 @@ Analyze this conversation and return a JSON object with exactly these fields:
       if (!session) return null;
       const agent = await getAgentById(session.agentId);
       if (!agent || !agent.isActive) return null;
-      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive, isAdmin: agent.isAdmin === 1 };
+      // Parse pagePermissions: null = unrestricted, string = JSON array of page IDs
+      let pagePermissions: string[] | null = null;
+      if (agent.pagePermissions !== null && agent.pagePermissions !== undefined) {
+        try { pagePermissions = JSON.parse(agent.pagePermissions as string); } catch { pagePermissions = null; }
+      }
+      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive, isAdmin: agent.isAdmin === 1, pagePermissions };
     }),
 
     /**
@@ -1772,13 +1777,21 @@ Analyze this conversation and return a JSON object with exactly these fields:
     list: adminAgentProcedure.query(async () => {
       const all = await getAllAgents();
       // Never return passwordHash to the client
-      return all.map(a => ({
-        id: a.id,
-        name: a.name,
-        email: a.email,
-        isActive: a.isActive,
-        createdAt: a.createdAt,
-      }));
+      return all.map(a => {
+        let pagePermissions: string[] | null = null;
+        if (a.pagePermissions !== null && a.pagePermissions !== undefined) {
+          try { pagePermissions = JSON.parse(a.pagePermissions as string); } catch { pagePermissions = null; }
+        }
+        return {
+          id: a.id,
+          name: a.name,
+          email: a.email,
+          isActive: a.isActive,
+          isAdmin: a.isAdmin,
+          pagePermissions,
+          createdAt: a.createdAt,
+        };
+      });
     }),
 
     /**
@@ -1802,6 +1815,26 @@ Analyze this conversation and return a JSON object with exactly these fields:
         const { agents: agentsTable } = await import("../drizzle/schema");
         const passwordHash = await bcrypt.hash(input.newPassword, 12);
         await db.update(agentsTable).set({ passwordHash }).where(eq(agentsTable.id, input.agentId));
+        return { success: true };
+      }),
+
+    /**
+     * agents.setPagePermissions — admin sets which admin pages an agent can access.
+     * Pass pagePermissions: null to remove all restrictions (agent sees everything).
+     * Pass pagePermissions: [] to block all pages.
+     * Pass pagePermissions: ["leads", "pipeline"] to allow specific pages.
+     */
+    setPagePermissions: adminAgentProcedure
+      .input(z.object({
+        agentId: z.number().int().positive(),
+        pagePermissions: z.array(z.string()).nullable(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const { agents: agentsTable } = await import("../drizzle/schema");
+        const permValue = input.pagePermissions === null ? null : JSON.stringify(input.pagePermissions);
+        await db.update(agentsTable).set({ pagePermissions: permValue }).where(eq(agentsTable.id, input.agentId));
         return { success: true };
       }),
 

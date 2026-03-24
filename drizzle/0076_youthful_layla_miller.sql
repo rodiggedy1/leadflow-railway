@@ -1,0 +1,1 @@
+ALTER TABLE `agents` MODIFY COLUMN `pagePermissions` text;

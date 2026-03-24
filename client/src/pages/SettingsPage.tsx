@@ -15,6 +15,8 @@
 import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -556,6 +558,7 @@ function SmsTemplateCard({
 type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general";
 
 export default function SettingsPage() {
+  const { pagePermissions } = useAgentPermissions();
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
   const updateSetting = trpc.settings.update.useMutation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("form");
@@ -603,8 +606,9 @@ export default function SettingsPage() {
   ];
 
   return (
+    <AdminPageGuard pageId="settings">
     <div className="min-h-screen bg-[#faf9f7]">
-      <AdminHeader activeTab="settings" />
+      <AdminHeader activeTab="settings" pagePermissions={pagePermissions} />
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Page header */}
@@ -1089,5 +1093,6 @@ export default function SettingsPage() {
         )}
       </div>
     </div>
+    </AdminPageGuard>
   );
 }

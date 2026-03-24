@@ -372,9 +372,11 @@ function VoicePendingBadge() {
 function NavDropdown({
   entry,
   activeTab,
+  allowedPageIds,
 }: {
   entry: NavEntry;
   activeTab: AdminTab;
+  allowedPageIds: string[] | null;
 }) {
   const [open, setOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
@@ -423,7 +425,7 @@ function NavDropdown({
           className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[9999] min-w-[180px] py-1"
           style={{ top: dropdownPos.top, left: dropdownPos.left }}
         >
-          {entry.children!.map((child) => {
+          {entry.children!.filter(child => allowedPageIds === null || allowedPageIds.includes(child.id)).map((child) => {
             const childActive = child.id === activeTab;
             return (
               <a
@@ -453,9 +455,13 @@ interface AdminHeaderProps {
   activeTab: AdminTab;
   rightExtra?: React.ReactNode;
   onSessionOpen?: (sessionId: number) => void;
+  /** null = unrestricted (admin or legacy agent). string[] = allowed page IDs. */
+  pagePermissions?: string[] | null;
 }
-
-export default function AdminHeader({ activeTab, rightExtra, onSessionOpen }: AdminHeaderProps) {
+export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions }: AdminHeaderProps) {
+  // Determine which page IDs this agent is allowed to see.
+  // null means unrestricted (admin or no restrictions set).
+  const allowedPageIds: string[] | null = pagePermissions ?? null;
   const headerRef = (el: HTMLElement | null) => {
     if (el) {
       // Keep CSS variable in sync so detail panels can align below this header
@@ -501,10 +507,18 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen }: Ad
       >
         {NAV_ENTRIES.map((entry) => {
           if (entry.children) {
+            // Filter dropdown children by page permissions
+            const visibleChildren = allowedPageIds === null
+              ? entry.children
+              : entry.children.filter(c => allowedPageIds.includes(c.id));
+            if (visibleChildren.length === 0) return null;
+            const filteredEntry = { ...entry, children: visibleChildren };
             return (
-              <NavDropdown key={entry.id} entry={entry} activeTab={activeTab} />
+              <NavDropdown key={entry.id} entry={filteredEntry} activeTab={activeTab} allowedPageIds={allowedPageIds} />
             );
           }
+          // Standalone entry: check if allowed
+          if (allowedPageIds !== null && entry.tabId && !allowedPageIds.includes(entry.tabId)) return null;
           const isActive = entry.tabId === activeTab;
           return (
             <a

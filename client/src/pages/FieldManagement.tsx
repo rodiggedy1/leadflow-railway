@@ -14,6 +14,8 @@
  */
 import { useState, useCallback, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import DayBoard from "@/components/DayBoard";
 import ControlTowerTab from "@/components/ControlTowerTab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1210,6 +1212,7 @@ function FieldManagementLoginScreen({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function FieldManagement() {
+  const { pagePermissions } = useAgentPermissions();
   const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower">("board");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, throwOnError: false });
@@ -1230,8 +1233,9 @@ export default function FieldManagement() {
   }
 
   return (
+    <AdminPageGuard pageId="field-management">
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader activeTab="field-management" />
+      <AdminHeader activeTab="field-management" pagePermissions={pagePermissions} />
 
       <div className={`mx-auto px-4 sm:px-6 py-8 ${
         activeTab === "board" || activeTab === "tower" ? "max-w-7xl" : "max-w-3xl"
@@ -1307,5 +1311,6 @@ export default function FieldManagement() {
         {activeTab === "log" && <LogTab />}
       </div>
     </div>
+    </AdminPageGuard>
   );
 }

@@ -48,6 +48,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -407,6 +409,7 @@ function RejectDialog({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CampaignApprovalPage() {
+  const { pagePermissions } = useAgentPermissions();
   const [rejectDialog, setRejectDialog] = useState<{ batchId: number; batchName: string } | null>(null);
   const [approvingId, setApprovingId] = useState<number | null>(null);
 
@@ -483,8 +486,9 @@ export default function CampaignApprovalPage() {
   const hasPending = (pendingBatches?.length ?? 0) > 0;
 
   return (
+    <AdminPageGuard pageId="campaign-approval">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
-      <AdminHeader activeTab="campaign-approval" />
+      <AdminHeader activeTab="campaign-approval" pagePermissions={pagePermissions} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Page title */}
@@ -636,5 +640,6 @@ export default function CampaignApprovalPage() {
         isPending={rejectMutation.isPending}
       />
     </div>
+    </AdminPageGuard>
   );
 }

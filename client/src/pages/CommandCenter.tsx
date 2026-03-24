@@ -15,6 +15,8 @@ import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -536,6 +538,7 @@ function HotLeadCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CommandCenter() {
+  const { pagePermissions } = useAgentPermissions();
   const [range, setRange] = useState<Range>("30d");
   const [executingAction, setExecutingAction] = useState<string | null>(null);
   const [smsSending, setSmsSending] = useState<number | null>(null);
@@ -751,8 +754,9 @@ export default function CommandCenter() {
   const rangeLabel = { today: "Today", "7d": "7 Days", "30d": "30 Days" };
 
   return (
+    <AdminPageGuard pageId="command-center">
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader activeTab="command-center" />
+      <AdminHeader activeTab="command-center" pagePermissions={pagePermissions} />
 
       {/* ── AI Pulse Hero (light) ──────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100">
@@ -1684,5 +1688,6 @@ export default function CommandCenter() {
 
       </div>
     </div>
+    </AdminPageGuard>
   );
 }

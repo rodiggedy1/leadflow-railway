@@ -40,6 +40,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -451,6 +453,7 @@ function RunRow({ run }: { run: SyncRun }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SyncHealthPage() {
+  const { pagePermissions } = useAgentPermissions();
   const [triggerDate, setTriggerDate] = useState("");
   const [historyFilter, setHistoryFilter] = useState<"all" | "launch27-sync" | "always-on-send">("all");
 
@@ -492,8 +495,9 @@ export default function SyncHealthPage() {
   const isLoading = summaryLoading || runsLoading || heartbeatsLoading;
 
   return (
+    <AdminPageGuard pageId="always-on">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
-      <AdminHeader activeTab="always-on" />
+      <AdminHeader activeTab="always-on" pagePermissions={pagePermissions} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Page title */}
@@ -675,5 +679,6 @@ export default function SyncHealthPage() {
         </div>
       </main>
     </div>
+    </AdminPageGuard>
   );
 }

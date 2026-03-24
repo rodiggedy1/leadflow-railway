@@ -316,6 +316,13 @@ export const agents = mysqlTable("agents", {
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   isActive: int("isActive").default(1).notNull(), // 1 = active, 0 = deactivated
   isAdmin: int("isAdmin").default(0).notNull(), // 1 = admin, 0 = regular agent
+  /**
+   * JSON array of page IDs this agent is allowed to access.
+   * null = no restrictions (legacy / admin agents see everything).
+   * [] = no pages allowed.
+   * Example: '["leads","pipeline","field-management"]'
+   */
+  pagePermissions: text("pagePermissions"), // JSON string | null — null = no restrictions
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

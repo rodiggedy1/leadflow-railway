@@ -18,6 +18,8 @@ import {
   Filter,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 
 const OUTCOME_COLORS: Record<string, string> = {
   booked: "bg-emerald-100 text-emerald-700",
@@ -212,6 +214,7 @@ function CallCard({ call }: { call: VoiceCall }) {
 const PAGE_SIZE = 20;
 
 export default function AllCalls() {
+  const { pagePermissions } = useAgentPermissions();
   const [page, setPage] = useState(0);
   const [preset, setPreset] = useState<DatePreset>("30d");
   const [outcomeFilter, setOutcomeFilter] = useState("");
@@ -240,9 +243,11 @@ export default function AllCalls() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
+    <AdminPageGuard pageId="calls">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader
         activeTab="calls"
+        pagePermissions={pagePermissions}
         rightExtra={
           <button
             onClick={() => refetch()}
@@ -356,5 +361,6 @@ export default function AllCalls() {
         )}
       </div>
     </div>
+    </AdminPageGuard>
   );
 }

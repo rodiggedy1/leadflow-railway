@@ -71,6 +71,7 @@ import {
   Star,
   ClipboardCheck,
   Settings,
+  LayoutGrid,
 } from "lucide-react";
 import {
   Dialog,
@@ -94,6 +95,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { calculateExtrasTotal } from "@shared/extras";
+import { ADMIN_PAGES } from "@shared/const";
 import SmsSimulator from "@/components/SmsSimulator";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
@@ -1923,6 +1925,8 @@ function AgentManagement() {
   const [newPassword, setNewPassword] = useState("");
   const [newPassword2, setNewPassword2] = useState("");
   const [resetPw, setResetPw] = useState("");
+  const [permissionsTarget, setPermissionsTarget] = useState<{ id: number; name: string; pagePermissions: string[] | null } | null>(null);
+  const [editingPerms, setEditingPerms] = useState<string[]>([]);
 
   const createMutation = trpc.agents.create.useMutation({
     onSuccess: () => {
@@ -1945,6 +1949,15 @@ function AgentManagement() {
       toast.success("Password reset!");
       setResetTarget(null);
       setResetPw("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const setPagePermissionsMutation = trpc.agents.setPagePermissions.useMutation({
+    onSuccess: () => {
+      utils.agents.list.invalidate();
+      toast.success("Page permissions updated!");
+      setPermissionsTarget(null);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -2071,6 +2084,7 @@ function AgentManagement() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Email</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Pages</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Created</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -2091,11 +2105,41 @@ function AgentManagement() {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    {agent.isAdmin ? (
+                      <span className="text-xs text-gray-400 italic">All pages</span>
+                    ) : agent.pagePermissions === null ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                        <LayoutGrid className="w-3 h-3" /> Unrestricted
+                      </span>
+                    ) : agent.pagePermissions.length === 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600">
+                        No pages
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-600">
+                        {agent.pagePermissions.length} page{agent.pagePermissions.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">
                     {new Date(agent.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      {!agent.isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs gap-1 text-indigo-600 hover:bg-indigo-50"
+                          onClick={() => {
+                            setPermissionsTarget({ id: agent.id, name: agent.name, pagePermissions: agent.pagePermissions });
+                            setEditingPerms(agent.pagePermissions ?? ADMIN_PAGES.map(p => p.id));
+                          }}
+                        >
+                          <LayoutGrid className="w-3 h-3" /> Pages
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -2196,6 +2240,85 @@ function AgentManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Page Permissions Dialog */}
+      <Dialog open={!!permissionsTarget} onOpenChange={(open) => { if (!open) setPermissionsTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4 text-indigo-600" />
+              Page Access — {permissionsTarget?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-xs text-gray-500 mb-4">
+              Choose which admin pages this agent can access. Uncheck all to block access entirely.
+              Admins always see everything regardless of this setting.
+            </p>
+            {/* Group pages by category */}
+            {Array.from(new Set(ADMIN_PAGES.map(p => p.group))).map(group => (
+              <div key={group} className="mb-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group}</p>
+                <div className="space-y-1">
+                  {ADMIN_PAGES.filter(p => p.group === group).map(page => {
+                    const checked = editingPerms.includes(page.id);
+                    return (
+                      <label
+                        key={page.id}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setEditingPerms(prev =>
+                              checked ? prev.filter(id => id !== page.id) : [...prev, page.id]
+                            );
+                          }}
+                          className="w-4 h-4 rounded accent-indigo-600"
+                        />
+                        <span className="text-sm text-gray-700">{page.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-2 border-t">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => setEditingPerms(ADMIN_PAGES.map(p => p.id))}
+              >
+                Select All
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-red-600 hover:bg-red-50"
+                onClick={() => setEditingPerms([])}
+              >
+                Clear All
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermissionsTarget(null)}>Cancel</Button>
+            <Button
+              onClick={() => permissionsTarget && setPagePermissionsMutation.mutate({
+                agentId: permissionsTarget.id,
+                pagePermissions: editingPerms,
+              })}
+              disabled={setPagePermissionsMutation.isPending}
+              style={{ backgroundColor: "#4f46e5", color: "white" }}
+            >
+              {setPagePermissionsMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              Save Permissions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2207,6 +2330,7 @@ export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const meQuery = trpc.agents.me.useQuery(undefined, { retry: false });
   const isAdmin = meQuery.data?.isAdmin === true;
+  const agentPagePermissions = meQuery.data?.pagePermissions ?? null;
   const authChecked = !meQuery.isLoading;
   const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
 
@@ -2400,6 +2524,7 @@ export default function AdminDashboard() {
       {/* Top bar — unified AdminHeader (includes AI Center + all nav) */}
       <AdminHeader
         activeTab={activeTab === "callbacks" ? "callbacks" : activeTab === "agents" ? "agents" : activeTab === "leaderboard" ? "leaderboard" : activeTab === "pipeline" ? "pipeline" : "leads"}
+        pagePermissions={agentPagePermissions}
         onSessionOpen={handleSessionOpen}
         rightExtra={
           <>

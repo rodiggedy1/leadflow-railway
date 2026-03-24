@@ -14,6 +14,8 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1148,6 +1150,7 @@ function CleanerProfilesSection() {
 type ViewMode = "by-time" | "by-cleaner";
 
 export default function CleanerDashboard() {
+  const { pagePermissions } = useAgentPermissions();
   const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>("by-time");
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
@@ -1254,9 +1257,10 @@ export default function CleanerDashboard() {
   const totalJobs = jobs?.length ?? 0;
 
   return (
+    <AdminPageGuard pageId="quality">
     <>
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader activeTab="quality" />
+      <AdminHeader activeTab="quality" pagePermissions={pagePermissions} />
 
       {/* Date navigation + controls */}
       <div className="border-b bg-white shadow-sm">
@@ -1654,5 +1658,6 @@ export default function CleanerDashboard() {
       </DialogContent>
     </Dialog>
     </>
+    </AdminPageGuard>
   );
 }

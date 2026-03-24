@@ -40,6 +40,8 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { Zap,
   Users,
   Send,
@@ -737,6 +739,7 @@ function GroupCard({ group, onUpdated }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AlwaysOnCampaign() {
+  const { pagePermissions } = useAgentPermissions();
   const utils = trpc.useUtils();
 
   const { data: groups, isLoading, refetch } = trpc.alwaysOn.listGroups.useQuery();
@@ -755,9 +758,11 @@ export default function AlwaysOnCampaign() {
   const activeGroups = groups?.filter(g => g.isActive).length ?? 0;
 
   return (
+    <AdminPageGuard pageId="always-on">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader
         activeTab="always-on"
+        pagePermissions={pagePermissions}
         rightExtra={
           <Button
             onClick={() => manualEnroll.mutate()}
@@ -846,5 +851,6 @@ export default function AlwaysOnCampaign() {
         )}
       </main>
     </div>
+    </AdminPageGuard>
   );
 }

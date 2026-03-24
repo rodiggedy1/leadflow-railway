@@ -11,6 +11,8 @@
 
 import { useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import { trpc } from "@/lib/trpc";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { Button } from "@/components/ui/button";
@@ -122,6 +124,7 @@ const STATUS_BADGE: Record<CampaignStatus, { label: string; variant: "default" |
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ReactivationCampaigns() {
+  const { pagePermissions } = useAgentPermissions();
   // View state
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
@@ -880,8 +883,9 @@ export default function ReactivationCampaigns() {
   // ── Main render ───────────────────────────────────────────────────────────
 
   return (
+    <AdminPageGuard pageId="campaigns">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: '#F7F7F7' }}>
-      <AdminHeader activeTab="campaigns" />
+      <AdminHeader activeTab="campaigns" pagePermissions={pagePermissions} />
       <div className="max-w-5xl mx-auto px-4 py-8">
       {view === "list" && renderCampaignList()}
       {view === "new" && renderNewCampaign()}
@@ -1006,5 +1010,6 @@ export default function ReactivationCampaigns() {
       </Dialog>
     </div>
     </div>
+    </AdminPageGuard>
   );
 }
