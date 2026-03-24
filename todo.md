@@ -2559,3 +2559,18 @@
 - [x] Upgrade Customer History section: clean card with subtle indigo accent
 - [x] Upgrade Follow-Up section: clean card with violet gradient header
 - [x] Upgrade Call History / Voice Calls: better card design matching FM style
+
+## SMS Drawer World-Class Redesign (ChatGPT Design) — Mar 23
+
+- [x] Build tab bar: Conversation / Flow View / Performance
+- [x] Build AI recommendation banner (orange callout card at top of conversation)
+- [x] Build suggestion pill buttons (Lock Date, Soft Check-In, Filling Up, Discount Fill) — pre-fill compose box
+- [x] Build AI assist / Manual mode toggle pill
+- [x] Build Flow View tab — pipeline stage tracker wired to real session.stage
+- [x] Build Performance tab — Close probability, Response likelihood, Template win rate + Top Message Variants + Send window
+- [x] Build right panel: Next Action card (dark bg + 4 action buttons)
+- [x] Build right panel: Lead Snapshot (quote/source/service/extras from real session data)
+- [x] Build right panel: Follow-Up Plan (real scheduled follow-ups from DB)
+- [x] Build right panel: Quick Controls grid (Call, Reschedule, Hand to AI, Archive)
+- [x] Preserve all existing tRPC calls and polling/chime logic
+- [x] TypeScript 0 errors, Vite HMR clean
