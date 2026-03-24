@@ -424,6 +424,46 @@ export async function handleRatingReply(
           .set({ customerRating: rating })
           .where(eq(cleanerJobs.id, cleanerJobId));
         console.log(`[Quality] Updated customerRating=${rating} on cleanerJob ${cleanerJobId}`);
+        // Recalculate pay now that we have the rating (photo bonus/penalty + rating adj + streak)
+        try {
+          const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, cleanerJobId)).limit(1);
+          const cj = cjRow[0];
+          if (cj && cj.cleanerProfileId) {
+            const profileRow = await db.select().from(cleanerProfiles).where(eq(cleanerProfiles.id, cj.cleanerProfileId)).limit(1);
+            const profile = profileRow[0];
+            if (profile) {
+              const payPct = parseFloat(profile.payPercent ?? "0");
+              const revenue = parseFloat(cj.jobRevenue ?? "0");
+              if (payPct > 0 && revenue > 0) {
+                const isGoodJob = rating >= 4;
+                const newStreak = await updateCleanerStreak(cj.cleanerProfileId, isGoodJob);
+                const rules = await getPayRules();
+                const adj = calculatePayAdjustments({
+                  jobRevenue: revenue,
+                  payPercent: payPct,
+                  customerRating: rating,
+                  missedSomething: cj.missedSomething === 1,
+                  currentStreakAfterJob: newStreak,
+                  photoSubmitted: cj.photoSubmitted === 1,
+                  rules,
+                });
+                await db
+                  .update(cleanerJobs)
+                  .set({
+                    ratingAdjustment: String(adj.ratingAdjustment),
+                    photoAdjustment: String(adj.photoAdjustment),
+                    streakBonus: String(adj.streakBonus),
+                    basePay: String(adj.basePay),
+                    finalPay: String(adj.finalPay),
+                  })
+                  .where(eq(cleanerJobs.id, cleanerJobId));
+                console.log(`[Quality] Pay recalculated for cleanerJob ${cleanerJobId}: finalPay=${adj.finalPay}, photoAdj=${adj.photoAdjustment}, ratingAdj=${adj.ratingAdjustment}`);
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`[Quality] Pay recalculation failed for cleanerJob ${cleanerJobId}:`, err);
+        }
       } else {
         console.warn(`[Quality] Could not find cleanerJob for phone ${fromPhone} (pendingId=${pending.id})`);
       }
@@ -980,6 +1020,59 @@ export const qualityRouter = router({
         .update(cleanerJobs)
         .set({ photoSubmitted: 1 })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      // Immediately recalculate pay with photo bonus applied
+      // Photo bonus is independent of rating — it fires the moment photos are uploaded
+      try {
+        const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+        const cj = cjRow[0];
+        if (cj && cj.cleanerProfileId) {
+          const profileRow = await db.select().from(cleanerProfiles).where(eq(cleanerProfiles.id, cj.cleanerProfileId)).limit(1);
+          const profile = profileRow[0];
+          if (profile) {
+            const payPct = parseFloat(profile.payPercent ?? "0");
+            const revenue = parseFloat(cj.jobRevenue ?? "0");
+            if (payPct > 0 && revenue > 0) {
+              // Get current streak (don't update it — streak only updates when rated)
+              const streakRow = await db.select().from(cleanerStreaks).where(eq(cleanerStreaks.cleanerProfileId, cj.cleanerProfileId)).limit(1);
+              const currentStreak = streakRow[0]?.currentStreak ?? 0;
+              const rules = await getPayRules();
+              const adj = calculatePayAdjustments({
+                jobRevenue: revenue,
+                payPercent: payPct,
+                customerRating: cj.customerRating,   // may still be null — that's fine
+                missedSomething: cj.missedSomething === 1,
+                currentStreakAfterJob: currentStreak, // don't advance streak yet
+                photoSubmitted: true,                 // just uploaded
+                rules,
+              });
+              await db
+                .update(cleanerJobs)
+                .set({
+                  photoAdjustment: String(adj.photoAdjustment),
+                  // Only update ratingAdjustment/streak/finalPay if we already have a rating
+                  ...(cj.customerRating !== null ? {
+                    ratingAdjustment: String(adj.ratingAdjustment),
+                    streakBonus: String(adj.streakBonus),
+                    finalPay: String(adj.finalPay),
+                  } : {
+                    // No rating yet — update finalPay with photo adj only
+                    finalPay: String(Math.round((
+                      parseFloat(cj.basePay ?? "0") +
+                      adj.photoAdjustment +
+                      parseFloat(cj.ratingAdjustment ?? "0") +
+                      parseFloat(cj.streakBonus ?? "0")
+                    ) * 100) / 100),
+                  }),
+                })
+                .where(eq(cleanerJobs.id, input.cleanerJobId));
+              console.log(`[Quality] Photo uploaded — photoAdjustment=${adj.photoAdjustment} saved for cleanerJob ${input.cleanerJobId}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[Quality] Photo pay recalculation failed for cleanerJob ${input.cleanerJobId}:`, err);
+      }
 
       return { ok: true, photoUrl: url, thumbnailUrl };
     }),

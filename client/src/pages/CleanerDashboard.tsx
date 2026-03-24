@@ -440,6 +440,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
     { cleanerJobId: cleanerJobId! },
     { enabled: open && !!cleanerJobId }
   );
+  const payRulesQuery = trpc.settings.getPayRules.useQuery(undefined, { enabled: open });
 
   const applyRule = trpc.quality.applyCustomRule.useMutation({
     onSuccess: () => { rulesQuery.refetch(); onRefetch(); },
@@ -468,7 +469,10 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
   // Compute net pay from all line items
   const base = parseFloat(ca.basePay ?? "0");
   const ratingAdj = parseFloat(ca.ratingAdjustment ?? "0");
-  const photoAdj = parseFloat(ca.photoAdjustment ?? "0");
+  // Photo adj is now always in DB (applied on upload). Fall back to computed value for safety.
+  const photoAdj = ca.photoAdjustment != null
+    ? parseFloat(ca.photoAdjustment)
+    : (ca.photoSubmitted ? 5 : -10);
   const streak = parseFloat(ca.streakBonus ?? "0");
   const manual = parseFloat(ca.manualAdjustment ?? "0");
   const reclean = hasReclean ? parseFloat(ca.recleanPenalty ?? "0") : 0;
@@ -599,15 +603,15 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
               note={ratingAdj === 0 ? "Pending customer rating" : undefined}
             />
 
-            {/* Photo adjustment — always shown; auto-applied once job completed */}
+            {/* Photo adjustment — always shown; shows preview amount until locked by rating */}
             <PayRow
               label={photoAdj >= 0 ? "Completion photo bonus" : "No photo penalty"}
               amount={photoAdj}
               color={photoAdj > 0 ? "text-emerald-600" : photoAdj < 0 ? "text-red-500" : "text-gray-400"}
               locked
               pending={false}
-              dimmed={photoAdj === 0}
-              note={photoAdj === 0 ? "Applied after photo upload" : undefined}
+              dimmed={false}
+              note={ca.photoAdjustment == null ? (ca.photoSubmitted ? "Preview — finalised when rated" : "No photo uploaded yet") : undefined}
             />
 
             {/* Streak bonus — always shown */}
