@@ -1199,14 +1199,33 @@ function ConversationDrawer({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-
-              <button
-                onClick={() => applySuggestion("lockDate")}
-                className="text-sm font-semibold px-4 py-1.5 rounded-full text-white transition-colors"
-                style={{ backgroundColor: "#7C3AED" }}
+              {/* Status dropdown — quick stage update from header */}
+              <Select
+                value={session.stage}
+                onValueChange={(val) => {
+                  if (val === session.stage) return;
+                  updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
+                }}
+                disabled={updateStageMutation.isPending}
               >
-                Follow Up
-              </button>
+                <SelectTrigger
+                  className="h-8 text-xs font-semibold rounded-full border-0 px-3 gap-1.5 focus:ring-0"
+                  style={{
+                    backgroundColor: STAGE_CONFIG[session.stage as Stage]?.bgColor ?? "#f3f4f6",
+                    color: STAGE_CONFIG[session.stage as Stage]?.textColor ?? "#374151",
+                  }}
+                >
+                  <SelectValue />
+                  {updateStageMutation.isPending && <Loader2 className="w-3 h-3 animate-spin ml-1 shrink-0" />}
+                </SelectTrigger>
+                <SelectContent>
+                  {ALL_STAGES.map(s => (
+                    <SelectItem key={s} value={s} className="text-xs">
+                      {STAGE_CONFIG[s]?.label ?? s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <button
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"

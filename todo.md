@@ -35,3 +35,4 @@
 - [x] Add STOP/UNSUBSCRIBE single-word detection in inbound SMS webhook — record opt-out, skip AI
 - [x] Remove "Quote Form" link from conversation drawer header (waste of space)
 - [x] Add previous job info (price, frequency, last job date) back to conversation drawer
+- [x] Replace "Follow Up" button in drawer header with a "Status" dropdown to update stage directly
