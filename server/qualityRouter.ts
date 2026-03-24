@@ -648,7 +648,7 @@ export const qualityRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       await db
         .update(ratingSmsPending)
-        .set({ status: "approved", approvedAt: new Date(), approvedBy: ctx.user.name ?? "admin" })
+        .set({ status: "approved", approvedAt: new Date(), approvedBy: ctx.agent.agentName ?? "admin" })
         .where(eq(ratingSmsPending.id, input.id));
       return { ok: true };
     }),
@@ -660,7 +660,7 @@ export const qualityRouter = router({
     const today = getTodayET();
     await db
       .update(ratingSmsPending)
-      .set({ status: "approved", approvedAt: new Date(), approvedBy: ctx.user.name ?? "admin" })
+      .set({ status: "approved", approvedAt: new Date(), approvedBy: ctx.agent.agentName ?? "admin" })
       .where(
         and(
           eq(ratingSmsPending.status, "pending"),
