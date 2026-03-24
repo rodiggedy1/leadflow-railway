@@ -2528,3 +2528,14 @@
 - [x] Find lead conversation polling location
 - [x] Diff inbound message count to detect new lead replies
 - [x] Call triggerTestChime() when new lead inbound message detected
+
+## Pipeline (KanbanBoard) Design Upgrade — Mar 23
+
+- [x] Match bg-gray-50 page background (same as Field Mgmt / Today)
+- [x] Add page header with title + subtitle
+- [x] Upgrade column headers: white bg, shadow-sm, rounded-2xl, colored accent top stripe
+- [x] Upgrade lead cards: white bg, shadow-sm, rounded-xl, border-gray-100
+- [x] Consistent typography: gray-900 headings, gray-500 subtitles, gray-600 body
+- [x] Upgrade toolbar buttons to rounded-lg style matching FM
+- [x] Upgrade StatsBar and LostReasonsPanel to white bg, shadow-sm, rounded-2xl
+- [x] Replace lime #AAFF00 accents with indigo/amber/violet/emerald palette

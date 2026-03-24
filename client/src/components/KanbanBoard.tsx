@@ -91,45 +91,45 @@ type KanbanColumn = {
 const KANBAN_COLUMNS: KanbanColumn[] = [
   {
     id: "new_leads",
-    label: "NEW LEADS",
+    label: "New Leads",
     stages: ["WIDGET_SIZING", "TIME_PREF", "QUOTE_SENT", "CONFIRMATION", "ADDRESS", "SLOT_CHOICE", "REACTIVATION"],
     targetStage: "QUOTE_SENT",
-    accentColor: "#AAFF00",
-    badgeBg: "bg-[#AAFF00] text-black",
-    emptyIcon: <Sparkles className="w-6 h-6 text-lime-300" />,
+    accentColor: "#6366f1",
+    badgeBg: "bg-indigo-100 text-indigo-700",
+    emptyIcon: <Sparkles className="w-6 h-6 text-indigo-300" />,
     emptyTitle: "No new leads yet",
     emptySubtitle: "New form submissions will appear here",
   },
   {
     id: "quoted",
-    label: "QUOTED",
+    label: "Quoted",
     stages: ["AVAILABILITY"],
     targetStage: "AVAILABILITY",
-    accentColor: "#d1d5db",
-    badgeBg: "bg-gray-200 text-gray-700",
-    emptyIcon: <Clock className="w-6 h-6 text-gray-300" />,
+    accentColor: "#f59e0b",
+    badgeBg: "bg-amber-100 text-amber-700",
+    emptyIcon: <Clock className="w-6 h-6 text-amber-300" />,
     emptyTitle: "No quoted leads",
     emptySubtitle: "Leads waiting on availability show here",
   },
   {
     id: "follow_up",
-    label: "FOLLOW UP",
+    label: "Follow Up",
     stages: ["CALL_SCHEDULED", "DONE", "UNHANDLED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"],
     targetStage: "FOLLOW_UP_SCHEDULED",
-    accentColor: "#AAFF00",
-    badgeBg: "bg-[#AAFF00] text-black",
-    emptyIcon: <CalendarCheck className="w-6 h-6 text-lime-300" />,
+    accentColor: "#8b5cf6",
+    badgeBg: "bg-violet-100 text-violet-700",
+    emptyIcon: <CalendarCheck className="w-6 h-6 text-violet-300" />,
     emptyTitle: "Nothing to follow up",
     emptySubtitle: "Great — no leads are waiting on you",
   },
   {
     id: "booked",
-    label: "BOOKED",
+    label: "Booked",
     stages: ["BOOKED"],
     targetStage: "BOOKED",
-    accentColor: "#AAFF00",
-    badgeBg: "bg-[#AAFF00] text-black",
-    emptyIcon: <UserCheck className="w-6 h-6 text-lime-300" />,
+    accentColor: "#10b981",
+    badgeBg: "bg-emerald-100 text-emerald-700",
+    emptyIcon: <UserCheck className="w-6 h-6 text-emerald-300" />,
     emptyTitle: "No bookings yet",
     emptySubtitle: "Drag a lead here or use the Book button",
   },
@@ -292,12 +292,12 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border p-3.5 cursor-grab active:cursor-grabbing select-none flex flex-col h-[130px] relative overflow-hidden ${
+      className={`group bg-white rounded-xl border p-4 cursor-grab active:cursor-grabbing select-none flex flex-col h-[138px] relative overflow-hidden shadow-sm ${
         isOverdue48h ? "border-red-300" :
         isOverdue24h ? "border-amber-300" :
-        "border-gray-200"
+        "border-gray-100"
       } ${
-        isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md"
+        isDragging ? "opacity-40 shadow-lg" : "hover:shadow-md hover:border-gray-300"
       }`}
       onClick={(e) => {
         if (isCurrentlyDragging) return;
@@ -465,69 +465,69 @@ function KanbanColumnView({
   const columnTotal = leads.reduce((sum, l) => sum + computeTotal(l.quotedPrice, l.extras, l.reactivationLastPrice), 0);
 
   return (
-    <div className="flex flex-col flex-1 min-w-[220px] max-w-[300px]">
-      {/* Column header */}
-      <div className="mb-3">
-        {/* Separator line above */}
-        <div className="h-px mb-3" style={{ backgroundColor: column.accentColor }} />
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold tracking-widest text-gray-500 uppercase">{column.label}</span>
-          <div className="flex items-center gap-1.5">
-            {/* Total value badge */}
-            {columnTotal > 0 && (
-              <span className="text-[11px] font-semibold text-gray-400">
-                ${columnTotal.toLocaleString()}
+    <div className="flex flex-col flex-1 min-w-[240px] max-w-[300px]">
+      {/* Column panel */}
+      <div
+        className="flex flex-col flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden"
+        style={{ borderTop: `3px solid ${column.accentColor}` }}
+      >
+        {/* Column header */}
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-gray-800">{column.label}</span>
+            <div className="flex items-center gap-2">
+              {columnTotal > 0 && (
+                <span className="text-xs font-semibold text-gray-400">
+                  ${columnTotal.toLocaleString()}
+                </span>
+              )}
+              <span className={`text-xs font-bold min-w-[22px] h-[22px] px-1.5 rounded-full flex items-center justify-center ${column.badgeBg}`}>
+                {leads.length}
               </span>
-            )}
-            {/* Count badge */}
-            <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${column.badgeBg}`}>
-              {leads.length}
-            </span>
+            </div>
           </div>
         </div>
-        {/* Colored underline */}
-        <div className="h-0.5 rounded-full" style={{ backgroundColor: column.accentColor }} />
-      </div>
 
-      {/* Drop zone */}
-      <div
-        ref={setNodeRef}
-        className="flex-1 flex flex-col gap-2.5 min-h-[200px] rounded-xl transition-colors duration-150 p-1"
-        style={{
-          backgroundColor: isOver ? "#f0fdf4" : "transparent",
-        }}
-      >
-        {leads.length === 0 ? (
-          <div
-            className="flex flex-col items-center justify-start rounded-xl border-2 border-dashed min-h-[120px] gap-2 px-4 pt-6 pb-6"
-            style={{ borderColor: isOver ? "#86efac" : "#e5e7eb" }}
-          >
-            {isOver ? (
-              <p className="text-xs text-emerald-500 font-semibold">Drop here</p>
-            ) : (
-              <>
-                {column.emptyIcon}
-                <p className="text-xs font-semibold text-gray-400 text-center leading-snug">{column.emptyTitle}</p>
-                <p className="text-[11px] text-gray-300 text-center leading-snug">{column.emptySubtitle}</p>
-              </>
-            )}
-          </div>
-        ) : (
-          leads.map((lead, idx) => (
-            <LeadCard
-              key={lead.id}
-              lead={lead}
-              animationDelay={idx * 50}
-              onClick={() => {
-                if (justDraggedRef.current) return;
-                onCardClick(lead);
-              }}
-              onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
-              onMarkAsLost={onMarkAsLost ? () => onMarkAsLost(lead) : undefined}
-              onRestoreFromLost={onRestoreFromLost ? () => onRestoreFromLost(lead) : undefined}
-            />
-          ))
-        )}
+        {/* Drop zone */}
+        <div
+          ref={setNodeRef}
+          className="flex-1 flex flex-col gap-2 min-h-[200px] transition-colors duration-150 p-3"
+          style={{
+            backgroundColor: isOver ? "#f0fdf4" : "transparent",
+          }}
+        >
+          {leads.length === 0 ? (
+            <div
+              className="flex flex-col items-center justify-start rounded-xl border-2 border-dashed min-h-[120px] gap-2 px-4 pt-6 pb-6"
+              style={{ borderColor: isOver ? "#86efac" : "#e5e7eb" }}
+            >
+              {isOver ? (
+                <p className="text-xs text-emerald-500 font-semibold">Drop here</p>
+              ) : (
+                <>
+                  {column.emptyIcon}
+                  <p className="text-xs font-semibold text-gray-400 text-center leading-snug">{column.emptyTitle}</p>
+                  <p className="text-[11px] text-gray-300 text-center leading-snug">{column.emptySubtitle}</p>
+                </>
+              )}
+            </div>
+          ) : (
+            leads.map((lead, idx) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                animationDelay={idx * 50}
+                onClick={() => {
+                  if (justDraggedRef.current) return;
+                  onCardClick(lead);
+                }}
+                onMoveToBooked={onMoveToBooked ? () => onMoveToBooked(lead) : undefined}
+                onMarkAsLost={onMarkAsLost ? () => onMarkAsLost(lead) : undefined}
+                onRestoreFromLost={onRestoreFromLost ? () => onRestoreFromLost(lead) : undefined}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
@@ -550,16 +550,16 @@ function StatsBar({ leads }: { leads: LeadRow[] }) {
   ];
 
   return (
-    <div className="mt-6 border-t border-gray-100 pt-5 grid grid-cols-3 divide-x divide-gray-100">
+    <div className="mt-5 bg-white rounded-2xl shadow-sm border border-gray-200 grid grid-cols-3 divide-x divide-gray-100 overflow-hidden">
       {stats.map(s => (
-        <div key={s.label} className="flex flex-col items-center py-3 px-4">
+        <div key={s.label} className="flex flex-col items-center py-4 px-4">
           <span
-            className="text-3xl font-black tabular-nums"
-            style={{ color: s.accent ? "#16a34a" : "#111827", letterSpacing: "-0.03em" }}
+            className="text-2xl font-black tabular-nums"
+            style={{ color: s.accent ? "#059669" : "#111827", letterSpacing: "-0.03em" }}
           >
             {s.value}
           </span>
-          <span className="text-[10px] font-bold tracking-widest text-gray-400 mt-1 uppercase">{s.label}</span>
+          <span className="text-[10px] font-semibold tracking-wide text-gray-400 mt-1 uppercase">{s.label}</span>
         </div>
       ))}
     </div>
@@ -598,7 +598,7 @@ function LostReasonsPanel({ leads }: { leads: LeadRow[] }) {
 
   if (total === 0) {
     return (
-      <div className="mb-4 rounded-xl border border-gray-100 bg-amber-50/50 p-4 flex items-center gap-3">
+      <div className="mb-4 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 flex items-center gap-3">
         <TrendingDown className="w-5 h-5 text-amber-400 shrink-0" />
         <p className="text-sm text-amber-700 font-medium">No lost leads yet — reasons will appear here once you mark leads as lost.</p>
       </div>
@@ -606,7 +606,7 @@ function LostReasonsPanel({ leads }: { leads: LeadRow[] }) {
   }
 
   return (
-    <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50/40 p-4">
+    <div className="mb-4 bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
       <div className="flex items-center gap-2 mb-3">
         <TrendingDown className="w-4 h-4 text-amber-600" />
         <span className="text-xs font-bold tracking-widest text-amber-700 uppercase">Lost Reasons — {total} lead{total !== 1 ? "s" : ""}</span>
@@ -832,31 +832,40 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
   }
 
   return (
-    <div>
-      {/* Header row: Show Lost toggle + Lost Reasons analytics */}
-      <div className="flex justify-end gap-2 mb-3">
-        <button
-          onClick={() => setShowLostReasons(v => !v)}
-          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-            showLostReasons
-              ? "bg-amber-50 border-amber-200 text-amber-700"
-              : "bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
-          }`}
-        >
-          <BarChart2 className="w-3.5 h-3.5" />
-          Lost Reasons
-        </button>
-        <button
-          onClick={() => setShowLost(v => !v)}
-          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-            showLost
-              ? "bg-red-50 border-red-200 text-red-600"
-              : "bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
-          }`}
-        >
-          <XCircle className="w-3.5 h-3.5" />
-          {showLost ? "Hide Lost" : `Show Lost${lostCount > 0 ? ` (${lostCount})` : ""}`}
-        </button>
+    <div className="min-h-screen bg-gray-50 -m-6 p-6">
+      {/* Page header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Pipeline</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Drag leads between stages or click a card to view details</p>
+          </div>
+          {/* Toolbar: Show Lost toggle + Lost Reasons analytics */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLostReasons(v => !v)}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                showLostReasons
+                  ? "bg-amber-50 border-amber-200 text-amber-700"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              Lost Reasons
+            </button>
+            <button
+              onClick={() => setShowLost(v => !v)}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                showLost
+                  ? "bg-red-50 border-red-200 text-red-600"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+              }`}
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              {showLost ? "Hide Lost" : `Show Lost${lostCount > 0 ? ` (${lostCount})` : ""}`}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Lost Reasons analytics panel */}
@@ -921,7 +930,7 @@ export default function KanbanBoard({ leads, onCardClick, onStageChange, dateFil
 
       <StatsBar leads={effectiveLeads} />
 
-      {/* Lost Reason Picker Modal */}
+      {/* Lost Reason Picker Modal — rendered outside the bg-gray-50 wrapper so it overlays correctly */}
       {lostPickerLead && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
