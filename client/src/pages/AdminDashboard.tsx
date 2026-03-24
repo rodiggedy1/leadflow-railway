@@ -2327,19 +2327,15 @@ function AgentManagement() {
 
 export default function AdminDashboard() {
   // ── Auth state (must come before all other hooks) ────────────────────────────────────
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const meQuery = trpc.agents.me.useQuery(undefined, { retry: false });
   const isAdmin = meQuery.data?.isAdmin === true;
   const agentPagePermissions = meQuery.data?.pagePermissions ?? null;
   const authChecked = !meQuery.isLoading;
-  const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
-
+  // hasSession: any agent with a valid session cookie — the single source of truth
+  const hasSession = authChecked && !!meQuery.data;
   // ── Daily recap modal ────────────────────────────────────────────────────────
   const [showRecap, setShowRecap] = useState(false);
-  // Show recap once per day — fires when user logs in via form OR when already-authed page loads
-  // An agent with pagePermissions is also considered logged in — no second login needed
-  const hasAgentPermissions = !meQuery.isLoading && !!meQuery.data && (meQuery.data.pagePermissions?.length ?? 0) > 0;
-  const isLoggedIn = isAuthenticated || (!!meQuery.data?.isAdmin && !meQuery.isLoading) || hasAgentPermissions;
+  const isLoggedIn = hasSession;;
   useEffect(() => {
     if (isLoggedIn && !hasShownToday()) {
       // Small delay so the dashboard renders first
@@ -2347,6 +2343,7 @@ export default function AdminDashboard() {
       return () => clearTimeout(t);
     }
   }, [isLoggedIn]);
+  const handleLoginSuccess = useCallback(() => {}, []);
   const handleCloseRecap = useCallback(() => {
     markShownToday();
     setShowRecap(false);
@@ -2402,7 +2399,7 @@ export default function AdminDashboard() {
     isLoading: sessionsLoading,
     refetch,
     isFetching,
-  } = trpc.leads.list.useQuery({}, { refetchInterval: 30000, enabled: isAdmin || isAuthenticated });
+  } = trpc.leads.list.useQuery({}, { refetchInterval: 30000, enabled: hasSession });
 
   // Global new-reply chime — fires for ANY session that gets a new customer reply,
   // regardless of whether a conversation drawer is open.
@@ -2410,27 +2407,27 @@ export default function AdminDashboard() {
 
   const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,
-    enabled: isAdmin || isAuthenticated,
+    enabled: hasSession,
   });
 
   const { data: visitorStats } = trpc.leads.visitorStats.useQuery(dateRange, {
     refetchInterval: 60000,
-    enabled: isAdmin || isAuthenticated,
+    enabled: hasSession,
   });
 
   const { data: voiceStats } = trpc.voice.stats.useQuery({ days: 30 }, {
     refetchInterval: 300_000,
-    enabled: isAdmin || isAuthenticated,
+    enabled: hasSession,
   });
 
   const { data: dailyTrend = [] } = trpc.leads.dailyTrend.useQuery(undefined, {
     refetchInterval: 300_000, // refresh every 5 minutes
-    enabled: isAdmin || isAuthenticated,
+    enabled: hasSession,
   });
 
   const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
     refetchInterval: 60000,
-    enabled: isAdmin || isAuthenticated,
+    enabled: hasSession,
   });
 
   // Agent list for assignment dropdown in the drawer (admin only)
@@ -2505,8 +2502,8 @@ export default function AdminDashboard() {
     );
   }
 
-  // Allow through: admins, form-authenticated users, OR agents with explicit page permissions
-  if (!isAdmin && !isAuthenticated && !hasAgentPermissions) {
+  // Allow through: any agent with a valid session (AdminPageGuard handles page-level permissions)
+  if (!hasSession) {
     return <AdminLoginScreen onSuccess={handleLoginSuccess} />;
   }
 

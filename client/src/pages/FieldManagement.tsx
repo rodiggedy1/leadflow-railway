@@ -1212,25 +1212,8 @@ function FieldManagementLoginScreen({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function FieldManagement() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower">("board");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, throwOnError: false });
-  const isAdmin = meQuery.data?.isAdmin === true;
-  const authChecked = !meQuery.isLoading;
-  const handleLoginSuccess = useCallback(() => setIsAuthenticated(true), []);
-
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  if (!isAdmin && !isAuthenticated) {
-    return <FieldManagementLoginScreen onSuccess={handleLoginSuccess} />;
-  }
 
   return (
     <AdminPageGuard pageId="field-management">
