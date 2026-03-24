@@ -292,7 +292,7 @@ function LeadCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-white rounded-xl border p-3 cursor-grab active:cursor-grabbing select-none flex flex-col relative shadow-sm ${
+      className={`group bg-white rounded-xl border cursor-grab active:cursor-grabbing select-none relative shadow-sm ${
         isOverdue48h ? "border-red-300" :
         isOverdue24h ? "border-amber-300" :
         "border-gray-100"
@@ -308,130 +308,119 @@ function LeadCard({
       {/* Urgency left-border accent bar */}
       {showUrgency && (
         <div
-          className={`absolute left-0 top-0 bottom-0 w-[3px] ${
+          className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl ${
             isOverdue48h ? "bg-red-400" : "bg-amber-400"
           }`}
         />
       )}
 
-      {/* Top row: avatar + name + menu */}
-      <div className="flex items-start justify-between gap-2 flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          {/* Initials avatar */}
-          <div
-            className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white leading-none"
-            style={{ backgroundColor: avatarColor }}
-          >
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
-            {lead.serviceType && (
-              <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.serviceType}</p>
-            )}
-          </div>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 transition-colors"
-              onClick={e => e.stopPropagation()}
-              title="Options"
+      <div className="p-3 flex flex-col gap-2">
+        {/* Row 1: avatar + name/service + menu */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white leading-none"
+              style={{ backgroundColor: avatarColor }}
             >
-              <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              onClick={e => { e.stopPropagation(); onClick?.(); }}
-              className="gap-2 cursor-pointer"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              View Details
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {lead.stage === "LOST" ? (
-              <DropdownMenuItem
-                onClick={e => { e.stopPropagation(); onRestoreFromLost?.(); }}
-                className="gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50"
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{displayName}</p>
+              <p className="text-xs text-gray-400 leading-tight truncate">{lead.serviceType ?? "—"}</p>
+            </div>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex-shrink-0 p-1 rounded hover:bg-gray-100 transition-colors"
+                onClick={e => e.stopPropagation()}
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Restore Lead
+                <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={e => { e.stopPropagation(); onClick?.(); }}
+                className="gap-2 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                View Details
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {lead.stage === "LOST" ? (
+                <DropdownMenuItem
+                  onClick={e => { e.stopPropagation(); onRestoreFromLost?.(); }}
+                  className="gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Restore Lead
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={e => { e.stopPropagation(); onMarkAsLost?.(); }}
+                  className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Mark as Lost
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Row 2: price + optional follow-up date pill + optional Book button */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            {total > 0 ? (
+              <span className="text-base font-bold leading-none" style={{ color: "#16a34a" }}>${total}</span>
+            ) : lastBookingPrice ? (
+              <span className="text-base font-bold leading-none text-purple-600">${lastBookingPrice}</span>
             ) : (
-              <DropdownMenuItem
-                onClick={e => { e.stopPropagation(); onMarkAsLost?.(); }}
-                className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                Mark as Lost
-              </DropdownMenuItem>
+              <span className="text-sm text-gray-300 font-medium leading-none">—</span>
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Price row */}
-      <div className="flex items-center justify-between mt-1">
-        {total > 0 ? (
-          <span className="text-base font-bold" style={{ color: "#16a34a" }}>${total}</span>
-        ) : lastBookingPrice ? (
-          <div className="flex items-center gap-1">
-            <span className="text-base font-bold text-purple-600">${lastBookingPrice}</span>
-            <span className="text-[10px] text-gray-400 font-medium">last booking</span>
+            {lead.stage === "FOLLOW_UP_SCHEDULED" && lead.followUpDate && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                <Calendar className="w-2.5 h-2.5" />
+                {new Date(lead.followUpDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </span>
+            )}
           </div>
-        ) : (
-          <span className="text-sm text-gray-300 font-medium">—</span>
-        )}
-        {/* Quick Book button for Quoted leads */}
-        {isQuoted && onMoveToBooked && (
-          <button
-            onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
-            title="Mark as Booked"
-          >
-            <CheckCircle2 className="w-2.5 h-2.5" />
-            Book
-          </button>
-        )}
-      </div>
-
-      {/* Follow-up date badge — shown for FOLLOW_UP_SCHEDULED cards */}
-      {lead.stage === "FOLLOW_UP_SCHEDULED" && lead.followUpDate && (
-        <div className="flex items-center gap-1 mb-1">
-          <Calendar className="w-3 h-3 text-violet-500 flex-shrink-0" />
-          <span className="text-[11px] font-semibold text-violet-600">
-            {new Date(lead.followUpDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-        </div>
-      )}
-
-      {/* Footer: source + time */}
-      <div className="flex items-center justify-between flex-shrink-0">
-        <span
-          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
-            isCampaign
-              ? "bg-purple-100 text-purple-600"
-              : "text-gray-400 font-medium"
-          }`}
-        >
-          {srcIcon}
-          {srcLabel}
-        </span>
-        <div className="flex items-center gap-2">
-          {lead.leadPhone && (
-            <a
-              href={`tel:${lead.leadPhone}`}
-              onClick={e => e.stopPropagation()}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
-              title={`Call ${lead.leadPhone}`}
+          {isQuoted && onMoveToBooked && (
+            <button
+              onClick={e => { e.stopPropagation(); onMoveToBooked(); }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 flex-shrink-0"
             >
-              <Phone className="w-3 h-3 text-gray-400 hover:text-gray-700" />
-            </a>
+              <CheckCircle2 className="w-2.5 h-2.5" />
+              Book
+            </button>
           )}
-          {lead.lastActivityAt && (
-            <span className="text-[11px] text-gray-400">{timeAgo(lead.lastActivityAt)}</span>
-          )}
+        </div>
+
+        {/* Row 3: source badge + time ago + call icon */}
+        <div className="flex items-center justify-between">
+          <span
+            className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full ${
+              isCampaign
+                ? "bg-purple-100 text-purple-600 font-semibold"
+                : "text-gray-400"
+            }`}
+          >
+            {srcIcon}
+            {srcLabel}
+          </span>
+          <div className="flex items-center gap-2">
+            {lead.leadPhone && (
+              <a
+                href={`tel:${lead.leadPhone}`}
+                onClick={e => e.stopPropagation()}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                title={`Call ${lead.leadPhone}`}
+              >
+                <Phone className="w-3 h-3 text-gray-400 hover:text-gray-700" />
+              </a>
+            )}
+            <span className="text-[11px] text-gray-400">{timeAgo(lead.lastActivityAt ?? lead.createdAt)}</span>
+          </div>
         </div>
       </div>
     </div>
