@@ -363,6 +363,7 @@ function AdminDashboardNav({
 function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const utils = trpc.useUtils();
   const loginMutation = trpc.agents.login.useMutation({
     onSuccess: (data) => {
       if (!data.agent.isAdmin) {
@@ -370,7 +371,7 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
         return;
       }
       toast.success(`Welcome back, ${data.agent.name}!`);
-      onSuccess();
+      utils.agents.me.invalidate().then(() => onSuccess());
     },
     onError: (err) => toast.error(err.message || "Login failed"),
   });
@@ -2327,7 +2328,7 @@ function AgentManagement() {
 
 export default function AdminDashboard() {
   // ── Auth state (must come before all other hooks) ────────────────────────────────────
-  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false });
+  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 0 });
   const isAdmin = meQuery.data?.isAdmin === true;
   const agentPagePermissions = meQuery.data?.pagePermissions ?? null;
   const authChecked = !meQuery.isLoading;
@@ -2343,7 +2344,7 @@ export default function AdminDashboard() {
       return () => clearTimeout(t);
     }
   }, [isLoggedIn]);
-  const handleLoginSuccess = useCallback(() => {}, []);
+  const handleLoginSuccess = useCallback(() => { meQuery.refetch(); }, [meQuery]);
   const handleCloseRecap = useCallback(() => {
     markShownToday();
     setShowRecap(false);
