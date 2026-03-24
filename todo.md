@@ -30,3 +30,4 @@
 - [x] Fix auto-nudge using "Form" as name for email leads (should use "there")
 - [x] Fix bedroom/bathroom parsing from Google Ads Form email body (not an issue — parsing correct)
 - [x] Fix campaign fire timeout: make async with background job + progress polling
+- [x] Pull full names (first + last) for all lead sources — keep first-name-only for SMS

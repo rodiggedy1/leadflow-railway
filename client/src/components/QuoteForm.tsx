@@ -870,10 +870,10 @@ export default function QuoteForm() {
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="Name"
+                        placeholder="Full Name"
                         value={form.name}
                         onChange={(e) => handleChange("name", e.target.value)}
-                        autoComplete="given-name"
+                        autoComplete="name"
                         className="quote-input"
                         style={{
                           paddingRight: "36px",

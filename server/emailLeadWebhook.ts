@@ -93,6 +93,9 @@ const CLEANING_TYPE_MAP: Record<string, CleaningTypeMapping> = {
 export interface EmailLeadParsed {
   phone: string | null;
   email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
   bedrooms: string | null;
   bathrooms: string | null;
   serviceType: string;
@@ -339,6 +342,23 @@ export function parseEmailLeadBody(body: string): EmailLeadParsed {
     fields["bath"] ??
     null;
 
+  // Extract name fields
+  const rawFirstName =
+    fields["first name"] ??
+    fields["firstname"] ??
+    fields["first"] ??
+    null;
+  const rawLastName =
+    fields["last name"] ??
+    fields["lastname"] ??
+    fields["last"] ??
+    null;
+  const rawFullName =
+    fields["name"] ??
+    fields["full name"] ??
+    fields["fullname"] ??
+    null;
+
   const { serviceType, frequency } = rawCleaningType
     ? parseCleaningType(rawCleaningType)
     : { serviceType: "Standard Cleaning", frequency: null };
@@ -346,6 +366,9 @@ export function parseEmailLeadBody(body: string): EmailLeadParsed {
   return {
     phone: rawPhone,
     email: rawEmail,
+    firstName: rawFirstName ?? null,
+    lastName: rawLastName ?? null,
+    fullName: rawFullName ?? null,
     bedrooms: rawBedrooms ? parseBedroomCount(rawBedrooms) : null,
     bathrooms: rawBathrooms ? parseBathroomCount(rawBathrooms) : null,
     serviceType,
@@ -449,8 +472,15 @@ export async function handleFormSubmissionEmail(
   const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
   const serviceType = parsed.serviceType;
   const frequency = parsed.frequency;
-  const firstName = "there";
-  const displayName = parsed.email ? `Form Lead (${parsed.email})` : "Form Lead";
+
+  // Build full name for display, first name for SMS greeting
+  const parsedFirstName = parsed.firstName ?? parsed.fullName?.split(" ")[0] ?? null;
+  const parsedLastName = parsed.lastName ?? (parsed.fullName?.includes(" ") ? parsed.fullName.split(" ").slice(1).join(" ") : null) ?? null;
+  const fullName = parsedFirstName && parsedLastName
+    ? `${parsedFirstName} ${parsedLastName}`
+    : parsedFirstName ?? parsedLastName ?? null;
+  const firstName = parsedFirstName ?? "there"; // used only in SMS greeting
+  const displayName = fullName ?? (parsed.email ? `Form Lead (${parsed.email})` : "Form Lead");
 
   const price = estimatePrice({ bedrooms, bathrooms, serviceType });
 
