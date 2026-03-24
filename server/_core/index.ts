@@ -109,7 +109,7 @@ async function startServer() {
     startInternalCron();
     // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
     // Always use the production domain so Vapi tool calls reach the live server.
-    // VAPI_WEBHOOK_URL env var can override for local dev/testing.
+    // VAPI_WEBHOOK_URL env var sets the webhook destination; defaults to production domain.
     const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
     const VAPI_STARTUP_DELAY_MS = 30_000;
     console.log(`[Vapi] Bootstrap scheduled in ${VAPI_STARTUP_DELAY_MS / 1000}s...`);
