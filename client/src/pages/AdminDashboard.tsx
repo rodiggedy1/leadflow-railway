@@ -2243,14 +2243,14 @@ function AgentManagement() {
 
       {/* Page Permissions Dialog */}
       <Dialog open={!!permissionsTarget} onOpenChange={(open) => { if (!open) setPermissionsTarget(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md flex flex-col" style={{ maxHeight: "85vh" }}>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <LayoutGrid className="w-4 h-4 text-indigo-600" />
               Page Access — {permissionsTarget?.name}
             </DialogTitle>
           </DialogHeader>
-          <div className="py-2">
+          <div className="overflow-y-auto flex-1 py-2 pr-1">
             <p className="text-xs text-gray-500 mb-4">
               Choose which admin pages this agent can access. Uncheck all to block access entirely.
               Admins always see everything regardless of this setting.
@@ -2303,7 +2303,7 @@ function AgentManagement() {
               </Button>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t pt-4 mt-2">
             <Button variant="outline" onClick={() => setPermissionsTarget(null)}>Cancel</Button>
             <Button
               onClick={() => permissionsTarget && setPagePermissionsMutation.mutate({
