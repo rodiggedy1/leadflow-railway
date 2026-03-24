@@ -7,6 +7,7 @@
  */
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import NotificationBell from "@/components/NotificationBell";
+import { triggerTestChime } from "@/hooks/useNewReplyNotifier";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -976,11 +977,19 @@ function ConversationDrawer({
     select: (sessions) => sessions.find(s => s.id === session.id),
   });
 
-  // Sync local messages when fresh data arrives
+  // Track previous inbound (user) message count to detect new lead replies
+  const prevInboundCountRef = useRef<number | null>(null);
+
+  // Sync local messages when fresh data arrives + chime on new inbound
   useEffect(() => {
     if (freshSession?.messageHistory) {
       try {
-        const fresh = JSON.parse(freshSession.messageHistory);
+        const fresh: { role: string; content: string; ts?: number }[] = JSON.parse(freshSession.messageHistory);
+        const inboundCount = fresh.filter(m => m.role === "user").length;
+        if (prevInboundCountRef.current !== null && inboundCount > prevInboundCountRef.current) {
+          void triggerTestChime();
+        }
+        prevInboundCountRef.current = inboundCount;
         setLocalMessages(withFallbackTs(fresh, session.createdAt, freshSession.updatedAt ?? session.updatedAt));
       } catch { /* ignore */ }
     }

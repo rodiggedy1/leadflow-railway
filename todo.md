@@ -2522,3 +2522,9 @@
 - [x] Add 15s refetchInterval when Messages tab is open
 - [x] Diff previous vs current inbound message count to detect new replies
 - [x] Call triggerTestChime() when new inbound message detected
+
+## Chime for Lead SMS Replies — Mar 23
+
+- [x] Find lead conversation polling location
+- [x] Diff inbound message count to detect new lead replies
+- [x] Call triggerTestChime() when new lead inbound message detected
