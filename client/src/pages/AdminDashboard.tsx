@@ -773,8 +773,11 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "widget") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>;
   }
+  if (leadSource === "email") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">Google Ads Form</span>;
+  }
   if (leadSource === "voice") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-violet-100 text-violet-700">Voice Call</span>;
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-violet-100 text-violet-700">Google Ads Call</span>;
   }
   if (leadSource === "reactivation") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
@@ -1635,7 +1638,9 @@ function ConversationDrawer({
               <div>
                 <div className="text-xs text-gray-400 mb-0.5">Source</div>
                 <div className="text-2xl font-bold text-gray-900">
-                  {session.leadSource
+                  {session.leadSource === "email" ? "Google Ads Form" :
+                   session.leadSource === "voice" ? "Google Ads Call" :
+                   session.leadSource
                     ? session.leadSource.replace("campaign:", "").replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())
                     : "Direct"}
                 </div>
@@ -1661,6 +1666,16 @@ function ConversationDrawer({
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <div className="text-xs text-gray-400 mb-0.5">Address</div>
                 <div className="text-xs text-gray-700">{session.address}</div>
+              </div>
+            )}
+            {session.barkQA && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="text-xs text-gray-400 mb-1">
+                  {session.leadSource === "email" ? "Form Details" :
+                   session.leadSource === "voice" ? "Call Details" :
+                   session.leadSource === "bark" ? "Bark Q&A" : "Lead Details"}
+                </div>
+                <div className="text-xs text-gray-700 whitespace-pre-line">{session.barkQA}</div>
               </div>
             )}
           </div>
@@ -2479,6 +2494,7 @@ export default function AdminDashboard() {
         (sourceFilter === "voice" && s.leadSource === "voice") ||
         (sourceFilter === "always-on" && (s.leadSource?.startsWith("always-on:") ?? false)) ||
         (sourceFilter === "bark" && s.leadSource === "bark") ||
+        (sourceFilter === "email" && s.leadSource === "email") ||
         (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
       const q = search.toLowerCase();
       const matchesSearch =
@@ -3025,7 +3041,8 @@ export default function AdminDashboard() {
               <SelectItem value="all">All sources</SelectItem>
               <SelectItem value="form">Quote Form</SelectItem>
               <SelectItem value="widget">Widget</SelectItem>
-              <SelectItem value="voice">Voice Call</SelectItem>
+              <SelectItem value="email">Google Ads Form</SelectItem>
+              <SelectItem value="voice">Google Ads Call</SelectItem>
               <SelectItem value="reactivation">Campaign</SelectItem>
               <SelectItem value="always-on">Always-On</SelectItem>
               <SelectItem value="bark">Bark</SelectItem>

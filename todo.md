@@ -20,3 +20,7 @@
 - [ ] Add note field when toggling a custom rule on (audit trail)
 - [ ] Add "Recalculate Pay" button for existing jobs after rule changes
 - [ ] Fix pre-existing TS error: runClientPreJobNotifications not exported from fieldMgmtEngine
+- [x] Fix leads page: add "Google Ads Form" badge for leadSource="email"
+- [x] Fix leads page: add "Google Ads Call" badge for leadSource="voice"
+- [x] Fix leads page: show barkQA details (cleaning type, email, call time) in lead card detail panel
+- [x] Fix leads page: add "Google Ads Form" and "Google Ads Call" to source filter dropdown
