@@ -558,11 +558,26 @@ function DetailPanel({
   const [replyTo, setReplyTo] = useState<"client" | "cleaner">("client");
   const [transcriptOpen, setTranscriptOpen] = useState<Record<number, boolean>>({});
 
-  // Fetch messages and calls only when those tabs are active
+  // Fetch messages — poll every 15s when the Messages tab is open so new replies appear live
   const { data: messages, isLoading: messagesLoading, refetch: refetchMessages } = trpc.fieldMgmt.getJobMessages.useQuery(
     { cleanerJobId: job.id },
-    { enabled: activeTab === "messages" }
+    {
+      enabled: activeTab === "messages",
+      refetchInterval: activeTab === "messages" ? 15_000 : false,
+      staleTime: 10_000,
+    }
   );
+
+  // Chime when a new inbound message arrives (compare previous message count)
+  const prevMsgCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!messages) return;
+    const inboundCount = messages.filter((m) => m.direction === "inbound").length;
+    if (prevMsgCountRef.current !== null && inboundCount > prevMsgCountRef.current) {
+      void triggerTestChime();
+    }
+    prevMsgCountRef.current = inboundCount;
+  }, [messages]);
   const { data: calls, isLoading: callsLoading } = trpc.fieldMgmt.getJobCalls.useQuery(
     { cleanerJobId: job.id },
     { enabled: activeTab === "calls" }

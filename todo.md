@@ -2515,3 +2515,10 @@
 
 - [x] Expose playChime() from useNewReplyNotifier hook
 - [x] Add "Test Sound" button to Day Board header that calls playChime()
+
+## Chime for All Incoming Messages — Mar 23
+
+- [x] Find messages polling location (DetailPanel MessagesTab)
+- [x] Add 15s refetchInterval when Messages tab is open
+- [x] Diff previous vs current inbound message count to detect new replies
+- [x] Call triggerTestChime() when new inbound message detected
