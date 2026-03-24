@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules } from "../drizzle/schema";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
@@ -535,8 +535,25 @@ export const cleanerRouter = router({
   }),
 
   /**
-   * cleaner.listProfiles — admin gets all cleaner profiles (for management UI).
+   * cleaner.getActiveCustomRules — returns all active custom pay rules for display in the cleaner portal.
    */
+  getActiveCustomRules: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rules = await db
+      .select()
+      .from(customPayRules)
+      .where(eq(customPayRules.isActive, 1))
+      .orderBy(customPayRules.type, customPayRules.label);
+    return rules.map(r => ({
+      id: r.id,
+      label: r.label,
+      type: r.type,
+      amount: r.amount,
+      description: r.description ?? null,
+    }));
+  }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

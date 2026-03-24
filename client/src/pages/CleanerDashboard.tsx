@@ -416,9 +416,114 @@ type JobRow = {
     customerNotes: string | null;
     staffNotes: string | null;
     checklistItems: Array<{ text: string; checked: boolean }> | null;
+    appliedCustomRules: Array<{ id: number; customPayRuleId: number; appliedLabel: string; appliedAmount: string; appliedType: string }>;
   };
   photos: Array<{ id: number; photoUrl: string; thumbnailUrl: string | null; filename: string | null }>;
 };
+
+// ── Custom Rules Button ───────────────────────────────────────────────────────
+function CustomRulesButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+  const [open, setOpen] = useState(false);
+  const cleanerJobId = job.cleanerAssignment?.id;
+
+  const rulesQuery = trpc.quality.getJobCustomRules.useQuery(
+    { cleanerJobId: cleanerJobId! },
+    { enabled: open && !!cleanerJobId }
+  );
+
+  const applyRule = trpc.quality.applyCustomRule.useMutation({
+    onSuccess: () => { rulesQuery.refetch(); onRefetch(); },
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
+  const removeRule = trpc.quality.removeCustomRule.useMutation({
+    onSuccess: () => { rulesQuery.refetch(); onRefetch(); },
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
+
+  if (!job.cleanerAssignment) return null;
+
+  const appliedIds = new Set((rulesQuery.data?.applied ?? []).map((r) => r.customPayRuleId));
+  const allActive = rulesQuery.data?.allActive ?? [];
+  const hasApplied = (job.cleanerAssignment.appliedCustomRules?.length ?? 0) > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={`gap-1.5 text-xs h-7 px-2 ${
+            hasApplied
+              ? "border-purple-500/50 text-purple-600 hover:bg-purple-50"
+              : "border-gray-300 text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          <DollarSign className="w-3 h-3" />
+          {hasApplied ? `Rules (${job.cleanerAssignment.appliedCustomRules.length})` : "Custom Rules"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Custom Pay Rules</DialogTitle>
+          <p className="text-xs text-gray-500 mt-0.5">Select rules to apply to this job. Changes update pay immediately.</p>
+        </DialogHeader>
+        {rulesQuery.isLoading ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+        ) : allActive.length === 0 ? (
+          <div className="text-center py-6">
+            <p className="text-sm text-gray-400">No active custom rules.</p>
+            <p className="text-xs text-gray-400 mt-1">Create rules in Settings → Pay Rules.</p>
+          </div>
+        ) : (
+          <div className="space-y-2 py-1">
+            {allActive.map((rule) => {
+              const isApplied = appliedIds.has(rule.id);
+              const isPending = applyRule.isPending || removeRule.isPending;
+              return (
+                <button
+                  key={rule.id}
+                  disabled={isPending}
+                  onClick={() => {
+                    if (isApplied) {
+                      removeRule.mutate({ cleanerJobId: cleanerJobId!, customPayRuleId: rule.id });
+                    } else {
+                      applyRule.mutate({ cleanerJobId: cleanerJobId!, customPayRuleId: rule.id });
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors ${
+                    isApplied
+                      ? "border-purple-300 bg-purple-50 hover:bg-purple-100"
+                      : "border-gray-200 bg-white hover:bg-gray-50"
+                  } disabled:opacity-50`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                      isApplied ? "border-purple-500 bg-purple-500" : "border-gray-300"
+                    }`}>
+                      {isApplied && <span className="text-white text-[10px] font-bold leading-none">✓</span>}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{rule.label}</p>
+                      {rule.description && <p className="text-xs text-gray-400 truncate">{rule.description}</p>}
+                    </div>
+                  </div>
+                  <span className={`text-sm font-semibold shrink-0 ${
+                    rule.type === "bonus" ? "text-emerald-600" : "text-red-600"
+                  }`}>
+                    {rule.type === "bonus" ? "+" : "-"}${parseFloat(rule.amount).toFixed(2)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const [open, setOpen] = useState(false);
@@ -865,6 +970,13 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
                         )}
                       </p>
                     )}
+                    {/* Applied custom rules */}
+                    {job.cleanerAssignment.appliedCustomRules?.map((r) => (
+                      <p key={r.id} className={r.appliedType === "bonus" ? "text-purple-600" : "text-red-500"}>
+                        {r.appliedType === "bonus" ? "+" : "-"}${parseFloat(r.appliedAmount).toFixed(2)}
+                        <span className="text-gray-400"> ({r.appliedLabel})</span>
+                      </p>
+                    ))}
                   </div>
                 </>
               ) : (
@@ -890,6 +1002,7 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
             <div className="flex items-center gap-2 flex-wrap sm:justify-end">
               {job.cleanerAssignment && <ManualAdjustButton job={job} onRefetch={onRefetch} />}
               {job.cleanerAssignment && <RecleanPenaltyButton job={job} onRefetch={onRefetch} />}
+              {job.cleanerAssignment && <CustomRulesButton job={job} onRefetch={onRefetch} />}
               <UncompleteButton job={job} onRefetch={onRefetch} />
               <SendTrackerLinkButton job={job} />
             </div>

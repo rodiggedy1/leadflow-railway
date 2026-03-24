@@ -2627,3 +2627,11 @@
 - [x] Add "Pay Rules" tab to SettingsPage with editable fields for all 7 rules
 - [x] Update CleanerPortal to fetch and display live pay rule amounts
 - [x] Add a "How Your Pay Works" summary card in CleanerPortal showing all current rules
+
+## Custom Pay Rules — Job Integration
+- [ ] Add active/inactive toggle to custom rules in Settings Pay Rules tab
+- [ ] Add backend procedures: getJobCustomRules, applyCustomRule, removeCustomRule
+- [ ] Build job-level custom rules popup in Field Management job detail panel
+- [ ] Update job pay total when custom rules are applied/removed
+- [ ] Show all active custom rules in Cleaner Portal How Your Pay Works card
+- [ ] Show applied custom rules as line items in cleaner job pay breakdown

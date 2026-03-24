@@ -32,6 +32,8 @@ import {
   cleanerStreaks,
   completedJobs,
   conversationSessions,
+  cleanerJobCustomRules,
+  customPayRules,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { storagePut, generateThumbnail } from "./storage";
@@ -778,15 +780,16 @@ export const qualityRouter = router({
         .where(eq(cleanerJobs.jobDate, date))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
 
-      // Get photos for these cleaner job rows
+      // Get photos and applied custom rules for these cleaner job rows
       const cjIds = cjRows.map((r) => r.id);
-      const photos =
+      const [photos, appliedRules] = await Promise.all([
         cjIds.length > 0
-          ? await db
-              .select()
-              .from(jobPhotos)
-              .where(sql`${jobPhotos.cleanerJobId} IN (${sql.join(cjIds.map((id) => sql`${id}`), sql`, `)})`)
-          : [];
+          ? db.select().from(jobPhotos).where(sql`${jobPhotos.cleanerJobId} IN (${sql.join(cjIds.map((id) => sql`${id}`), sql`, `)})`)
+          : Promise.resolve([]),
+        cjIds.length > 0
+          ? db.select().from(cleanerJobCustomRules).where(sql`${cleanerJobCustomRules.cleanerJobId} IN (${sql.join(cjIds.map((id) => sql`${id}`), sql`, `)})`)
+          : Promise.resolve([]),
+      ]);
 
       // Shape each cleanerJob row into the format the UI expects:
       // { id, name, address, serviceType, lastBookingPrice, cleanerAssignment, photos }
@@ -831,6 +834,15 @@ export const qualityRouter = router({
           checklistItems: cj.checklistItems
             ? (JSON.parse(cj.checklistItems) as Array<{ text: string; checked: boolean }>)
             : null,
+          appliedCustomRules: appliedRules
+            .filter((r) => r.cleanerJobId === cj.id)
+            .map((r) => ({
+              id: r.id,
+              customPayRuleId: r.customPayRuleId,
+              appliedLabel: r.appliedLabel,
+              appliedAmount: r.appliedAmount,
+              appliedType: r.appliedType,
+            })),
         },
         photos: photos
           .filter((p) => p.cleanerJobId === cj.id)
@@ -1414,5 +1426,71 @@ export const qualityRouter = router({
         .set({ recleanPenalty: penaltyValue })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
       return { ok: true, penaltyAmount: penaltyValue };
+    }),
+
+  /**
+   * Get all active custom pay rules (for the popup selector) plus which ones
+   * are already applied to a specific cleaner job.
+   */
+  getJobCustomRules: agentProcedure
+    .input(z.object({ cleanerJobId: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [allActive, applied] = await Promise.all([
+        db.select().from(customPayRules).where(eq(customPayRules.isActive, 1)),
+        db.select().from(cleanerJobCustomRules).where(eq(cleanerJobCustomRules.cleanerJobId, input.cleanerJobId)),
+      ]);
+      return { allActive, applied };
+    }),
+
+  /**
+   * Apply a custom pay rule to a cleaner job (idempotent — no duplicate).
+   * Snapshots the rule label/amount/type at time of application.
+   */
+  applyCustomRule: agentProcedure
+    .input(z.object({ cleanerJobId: z.number().int(), customPayRuleId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Check not already applied
+      const existing = await db
+        .select({ id: cleanerJobCustomRules.id })
+        .from(cleanerJobCustomRules)
+        .where(and(
+          eq(cleanerJobCustomRules.cleanerJobId, input.cleanerJobId),
+          eq(cleanerJobCustomRules.customPayRuleId, input.customPayRuleId),
+        ))
+        .limit(1);
+      if (existing.length > 0) return { ok: true, alreadyApplied: true };
+      // Fetch the rule to snapshot
+      const rules = await db.select().from(customPayRules).where(eq(customPayRules.id, input.customPayRuleId)).limit(1);
+      if (rules.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Rule not found" });
+      const rule = rules[0]!;
+      await db.insert(cleanerJobCustomRules).values({
+        cleanerJobId: input.cleanerJobId,
+        customPayRuleId: input.customPayRuleId,
+        appliedAmount: rule.amount,
+        appliedLabel: rule.label,
+        appliedType: rule.type,
+      });
+      return { ok: true, alreadyApplied: false };
+    }),
+
+  /**
+   * Remove a custom pay rule application from a cleaner job.
+   */
+  removeCustomRule: agentProcedure
+    .input(z.object({ cleanerJobId: z.number().int(), customPayRuleId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db
+        .delete(cleanerJobCustomRules)
+        .where(and(
+          eq(cleanerJobCustomRules.cleanerJobId, input.cleanerJobId),
+          eq(cleanerJobCustomRules.customPayRuleId, input.customPayRuleId),
+        ));
+      return { ok: true };
     }),
 });

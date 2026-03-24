@@ -1356,22 +1356,36 @@ export default function SettingsPage() {
                         ) : (
                           <div className="space-y-2">
                             {customRules.map((rule) => (
-                              <div key={rule.id} className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 bg-gray-50/50 hover:bg-gray-50">
+                              <div key={rule.id} className={`flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border transition-colors ${ rule.isActive ? "border-gray-100 bg-gray-50/50 hover:bg-gray-50" : "border-gray-100 bg-gray-50/20 opacity-60" }`}>
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   {rule.type === "bonus" ? (
-                                    <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
+                                    <TrendingUp className={`w-4 h-4 shrink-0 ${ rule.isActive ? "text-emerald-500" : "text-gray-400" }`} />
                                   ) : (
-                                    <TrendingDown className="w-4 h-4 text-red-500 shrink-0" />
+                                    <TrendingDown className={`w-4 h-4 shrink-0 ${ rule.isActive ? "text-red-500" : "text-gray-400" }`} />
                                   )}
                                   <div className="min-w-0">
-                                    <p className="text-sm font-medium text-gray-800 truncate">{rule.label}</p>
+                                    <p className={`text-sm font-medium truncate ${ rule.isActive ? "text-gray-800" : "text-gray-400 line-through" }`}>{rule.label}</p>
                                     {rule.description && <p className="text-xs text-gray-400 truncate">{rule.description}</p>}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <span className={`text-sm font-semibold ${ rule.type === "bonus" ? "text-emerald-600" : "text-red-600" }`}>
+                                  <span className={`text-sm font-semibold ${ rule.isActive ? (rule.type === "bonus" ? "text-emerald-600" : "text-red-600") : "text-gray-400" }`}>
                                     {rule.type === "bonus" ? "+" : "-"}${parseFloat(rule.amount).toFixed(2)}
                                   </span>
+                                  {/* Active/Inactive toggle */}
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await updateCustomRule.mutateAsync({ id: rule.id, isActive: !rule.isActive });
+                                        await refetchCustomRules();
+                                        toast.success(rule.isActive ? "Rule deactivated" : "Rule activated");
+                                      } catch { toast.error("Failed to update rule"); }
+                                    }}
+                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${ rule.isActive ? "bg-emerald-500" : "bg-gray-300" }`}
+                                    title={rule.isActive ? "Click to deactivate" : "Click to activate"}
+                                  >
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${ rule.isActive ? "translate-x-4.5" : "translate-x-0.5" }`} />
+                                  </button>
                                   <button
                                     onClick={() => openEditRuleDialog(rule as { id: number; label: string; type: string; amount: string; description: string | null })}
                                     className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors"

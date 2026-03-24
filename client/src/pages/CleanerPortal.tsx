@@ -872,6 +872,8 @@ export default function CleanerPortal() {
 
   const payRulesQuery = trpc.cleaner.getPayRules.useQuery();
   const payRules = payRulesQuery.data;
+  const activeCustomRulesQuery = trpc.cleaner.getActiveCustomRules.useQuery();
+  const activeCustomRules = activeCustomRulesQuery.data ?? [];
 
   const logoutMutation = trpc.cleaner.logout.useMutation({
     onSuccess: () => utils.cleaner.me.invalidate(),
@@ -1040,6 +1042,20 @@ export default function CleanerPortal() {
                     </div>
                   ))}
                 </div>
+                {/* Active custom rules */}
+                {activeCustomRules.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-700/50 my-2" />
+                    {activeCustomRules.map(r => (
+                      <div key={r.id} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-400">{r.label}</span>
+                        <span className={`font-semibold ${r.type === "bonus" ? "text-purple-400" : "text-red-400"}`}>
+                          {r.type === "bonus" ? "+" : "-"}${parseFloat(r.amount).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
                 <p className="text-slate-600 text-xs mt-3">Bonuses and deductions are applied automatically when your job is rated.</p>
               </div>
             )}
