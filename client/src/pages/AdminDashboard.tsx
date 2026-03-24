@@ -1095,330 +1095,369 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  // Suggestion templates based on lead context
+  const firstName = session.leadName?.split(" ")[0] ?? "there";
+  const suggestions: Record<string, string> = {
+    lockDate: `Hey ${firstName} - totally makes sense. We're already filling up soon, so I can tentatively hold a spot now and adjust if needed. Want me to grab something before it fills up?`,
+    softCheckIn: `Hey ${firstName} - just checking in! Want me to send over a couple openings that would work well for you?`,
+    urgency: `Hey ${firstName} - quick heads up: our spots are starting to fill. Want me to hold one for you before they're gone?`,
+    discount: `Hey ${firstName} - we had a schedule shift open up, so I may be able to get you a better rate if you want me to check options.`,
+  };
+  const [selectedAction, setSelectedAction] = useState<"lockDate" | "softCheckIn" | "urgency" | "discount">("lockDate");
+  const [drawerTab, setDrawerTab] = useState<"conversation" | "flow" | "performance">("conversation");
+  const applySuggestion = (key: string) => {
+    setSelectedAction(key as "lockDate" | "softCheckIn" | "urgency" | "discount");
+    setReplyText(suggestions[key] ?? "");
+    setDrawerTab("conversation");
+  };
+  // Primary recommendation text
+  const primaryRecommendation =
+    selectedAction === "lockDate" ? "Best next move: lock a tentative spot now before the calendar fills." :
+    selectedAction === "softCheckIn" ? "Best next move: keep the lead warm without pressure." :
+    selectedAction === "urgency" ? "Best next move: create urgency as availability tightens." :
+    "Best next move: use a schedule-fill incentive to convert.";
+  const primaryMoveTitle =
+    selectedAction === "lockDate" ? `Send "Lock ${session.followUpDate ? new Date(session.followUpDate).toLocaleString("en-US", { month: "long" }) : "a"} Spot" message` :
+    selectedAction === "softCheckIn" ? "Send soft check-in message" :
+    selectedAction === "urgency" ? "Send urgency nudge" :
+    "Offer discount fill";
+  // Extras array
+  const extrasArray: string[] = (() => {
+    if (!session.extras) return [];
+    try { return JSON.parse(session.extras) as string[]; } catch { return []; }
+  })();
+  // Last reply time
+  const lastReplyTime = (() => {
+    const last = [...localMessages].reverse().find(m => m.role === "user");
+    if (!last?.ts) return null;
+    const diff = Date.now() - last.ts;
+    const h = Math.floor(diff / 3600000);
+    if (h < 1) return `${Math.floor(diff / 60000)}m ago`;
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  })();
+  // Score
+  const score = Math.min(100, Math.max(0, 40 + localMessages.filter(m => m.role === "user").length * 8));
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {/* Wide two-column modal: left = conversation, right = details */}
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-4xl h-[92vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      {/* ── Two-panel modal ── */}
+      <div className="flex w-full max-w-[1100px] h-[92vh] gap-4 items-start">
 
-        {/* ── Shared header ── */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0">
-          <div className="flex items-center gap-3">
-            {/* Avatar circle */}
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: "#E8603C" }}>
+        {/* ══════════════════════════════════════════════════════════
+            LEFT PANEL — Conversation
+        ══════════════════════════════════════════════════════════ */}
+        <div className="flex flex-col flex-1 bg-white rounded-2xl shadow-2xl overflow-hidden h-full min-w-0">
+
+          {/* ── Header ── */}
+          <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-100 shrink-0">
+            {/* Orange avatar */}
+            <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-xl shrink-0">
               {(session.leadName ?? "?").charAt(0).toUpperCase()}
             </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? "Unknown Lead"}</h2>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
-                <a
-                  href={`tel:${session.leadPhone}`}
-                  title={`Call ${formatPhone(session.leadPhone)}`}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors"
-                  style={{ backgroundColor: "#E8603C", color: "white" }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <Phone className="w-2.5 h-2.5" />
-                  Call
-                </a>
+            {/* Name + badges + meta */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                <span className="text-lg font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
+                {session.followUpDate && (
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-orange-300 text-orange-600 bg-orange-50">
+                    Waiting until {new Date(session.followUpDate).toLocaleString("en-US", { month: "long" })}
+                  </span>
+                )}
+                <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-300 text-purple-600 bg-purple-50">
+                  Warm lead
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>{formatPhone(session.leadPhone)}</span>
+                {lastReplyTime && (
+                  <span className="flex items-center gap-1">
+                    <span className="text-gray-300">&#9679;</span>
+                    Last reply {lastReplyTime}
+                  </span>
+                )}
+                <span className="flex items-center gap-1">
+                  <span>&#128293;</span>
+                  Score {score}/100
+                </span>
               </div>
             </div>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={`/quote?phone=${encodeURIComponent(session.leadPhone)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Quote Form
+              </a>
+              <button
+                onClick={() => applySuggestion("lockDate")}
+                className="text-sm font-semibold px-4 py-1.5 rounded-full text-white transition-colors"
+                style={{ backgroundColor: "#7C3AED" }}
+              >
+                Follow Up
+              </button>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {getSourceBadge(session.leadSource)}
-            {getLanguageBadge(session.language)}
-            <StageBadge stage={session.stage} />
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
-              <X className="w-4 h-4" />
-            </Button>
+
+          {/* ── Tab bar ── */}
+          <div className="flex items-center gap-1 px-5 pt-3 pb-2 shrink-0">
+            {(["conversation", "flow", "performance"] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setDrawerTab(tab)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  drawerTab === tab
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                }`}
+              >
+                {tab === "conversation" ? "Conversation" : tab === "flow" ? "Flow View" : "Performance"}
+              </button>
+            ))}
           </div>
-        </div>
 
-        {/* ── Two-column body ── */}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* ══════════════════════════════════════════════════════════
+              CONVERSATION TAB
+          ══════════════════════════════════════════════════════════ */}
+          {drawerTab === "conversation" && (
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* AI recommendation banner */}
+              <div className="mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-orange-50 border border-orange-100 shrink-0">
+                <div className="text-sm font-semibold text-orange-500 mb-0.5">&#10024; AI recommendation</div>
+                <div className="text-sm text-orange-700">{primaryRecommendation}</div>
+              </div>
 
-          {/* LEFT: full-height conversation + compose */}
-          <div className="flex flex-col flex-1 min-w-0 border-r">
-            {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-gray-50">
-              {localMessages.length === 0 ? (
-                <p className="text-center text-gray-400 text-sm py-8">No messages yet</p>
-              ) : (
-                localMessages.map((msg, i) => {
-                  const isOutbound = msg.role === "assistant";
-                  const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
-                  const curTs = msg.ts;
-                  // Show a day separator whenever the calendar day changes (ts is always set now via fallback)
-                  const showSeparator = curTs != null && (
-                    i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
-                  );
-                  // Small time label shown below each bubble (e.g. "2:34 PM")
-                  const timeLabel = curTs != null
-                    ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                    : null;
-                  const senderName = (msg as any).senderName as string | undefined;
-                  const isAiMessage = isOutbound && !senderName;
-                  return (
-                    <div key={i}>
-                      {showSeparator && curTs != null && (
-                        <MessageDateSeparator label={formatMsgDate(curTs)} />
-                      )}
-                      <div className={`flex mb-3 ${isOutbound ? "justify-end" : "justify-start"}`}>
-                        {/* Robot icon on left for AI messages */}
-                        {isAiMessage && (
-                          <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-1.5 mt-0.5" style={{ backgroundColor: "#e0f2fe", border: "1px solid #bae6fd" }}>
-                            <span className="text-[11px]">🤖</span>
+              {/* Messages scroll area */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-3">
+                {localMessages.length === 0 ? (
+                  <div className="flex items-center justify-center h-32 text-gray-400 text-sm">No messages yet</div>
+                ) : (
+                  localMessages.map((msg, i) => {
+                    const isOutbound = msg.role === "assistant";
+                    const isSystem = msg.role === "system";
+                    const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
+                    const curTs = msg.ts;
+                    const showSeparator = curTs != null && (i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true));
+                    const timeLabel = curTs != null
+                      ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                      : null;
+                    const senderName = (msg as any).senderName as string | undefined;
+                    const isAiMessage = isOutbound && !senderName;
+                    return (
+                      <div key={i}>
+                        {showSeparator && curTs != null && (
+                          <MessageDateSeparator label={formatMsgDate(curTs)} />
+                        )}
+                        {/* System event pill */}
+                        {isSystem ? (
+                          <div className="flex justify-center my-2">
+                            <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-3 py-1">{msg.content}</span>
+                          </div>
+                        ) : isOutbound ? (
+                          /* ── Outbound (AI or manual) ── */
+                          <div className="flex items-start gap-2 max-w-[78%] ml-auto flex-row-reverse">
+                            <div className="w-7 h-7 rounded-full bg-purple-500 flex items-center justify-center shrink-0 mt-0.5 text-white text-xs font-bold">
+                              {isAiMessage ? "AI" : (senderName?.charAt(0) ?? "M")}
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs text-gray-400">{timeLabel}</span>
+                                {isAiMessage && (
+                                  <span className="text-xs font-medium text-purple-500">AI Follow-Up</span>
+                                )}
+                                {senderName && (
+                                  <span className="text-xs font-medium text-orange-500">{senderName}</span>
+                                )}
+                              </div>
+                              <div
+                                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-white shadow-sm leading-relaxed"
+                                style={{ backgroundColor: "#F97316" }}
+                              >
+                                {msg.content}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Inbound ── */
+                          <div className="flex items-start gap-2 max-w-[78%]">
+                            <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-0.5">
+                              <User className="w-3.5 h-3.5 text-gray-500" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-medium text-gray-600">
+                                  {session.stage === "FOLLOW_UP_SCHEDULED" ? "Delay / Objection" : "Customer"}
+                                </span>
+                                <span className="text-xs text-gray-400">{timeLabel}</span>
+                              </div>
+                              <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-800 shadow-sm leading-relaxed">
+                                {msg.content}
+                              </div>
+                            </div>
                           </div>
                         )}
-                        <div className="flex flex-col" style={{ maxWidth: "78%" }}>
-                          <div
-                            className="rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                            style={
-                              isOutbound
-                                ? { backgroundColor: "#E8603C", color: "white", borderBottomRightRadius: isAiMessage ? "12px" : "4px", borderBottomLeftRadius: isAiMessage ? "4px" : "12px" }
-                                : { backgroundColor: "#ffffff", color: "#1f2937", borderBottomLeftRadius: "4px", border: "1px solid #e5e7eb" }
-                            }
-                          >
-                            {msg.content}
-                          </div>
-                          <div className={`flex items-center gap-1.5 mt-0.5 px-1 ${isOutbound ? (isAiMessage ? "justify-start" : "justify-end") : "justify-start"}`}>
-                            {isOutbound && senderName && (
-                              <span className="text-[10px] font-medium text-orange-500">{senderName}</span>
-                            )}
-                            {timeLabel && (
-                              <span className="text-[10px] text-gray-400">{timeLabel}</span>
-                            )}
-                          </div>
-                        </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </div>
 
-            {/* Compose box */}
-            <div className="px-4 pt-2.5 pb-3 border-t bg-white shrink-0">
-              {/* AI / Manual toggle */}
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs">
-                  {session.aiMode === 1
-                    ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
-                    : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you're in control</span>
-                  }
-                </span>
+              {/* ── Suggestion pills ── */}
+              <div className="flex items-center gap-2 px-4 pt-2 pb-1 flex-wrap shrink-0">
                 <button
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    session.aiMode === 1
-                      ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                      : "border-green-300 text-green-700 hover:bg-green-50"
+                  onClick={() => applySuggestion("lockDate")}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                    selectedAction === "lockDate"
+                      ? "border-orange-300 text-orange-600 bg-orange-50"
+                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
                   }`}
+                >
+                  Hold May spot
+                </button>
+                <button
+                  onClick={() => applySuggestion("softCheckIn")}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                    selectedAction === "softCheckIn"
+                      ? "border-orange-300 text-orange-600 bg-orange-50"
+                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  Soft check-in
+                </button>
+                <button
+                  onClick={() => applySuggestion("urgency")}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                    selectedAction === "urgency"
+                      ? "border-orange-300 text-orange-600 bg-orange-50"
+                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  Filling up
+                </button>
+                <button
+                  onClick={() => applySuggestion("discount")}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                    selectedAction === "discount"
+                      ? "border-orange-300 text-orange-600 bg-orange-50"
+                      : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  Discount fill
+                </button>
+                <button
                   onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
                   disabled={setAiModeMutation.isPending}
+                  className={`ml-auto text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                    session.aiMode === 1
+                      ? "text-green-700 bg-green-50 border border-green-200"
+                      : "text-gray-500 bg-gray-100 border border-gray-200 hover:bg-gray-200"
+                  }`}
                 >
-                  {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
+                  {session.aiMode === 1 ? "AI assist on" : "AI assist off"}
                 </button>
               </div>
-              {/* Typing indicator — shown when another agent is composing */}
-              {typingData?.typingAgentName && (
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <div className="flex items-center gap-1">
+
+              {/* ── Compose box ── */}
+              <div className="mx-4 mb-4 mt-1 rounded-2xl border-2 border-gray-200 bg-white overflow-hidden focus-within:border-orange-300 transition-colors shrink-0">
+                {/* Typing indicator */}
+                {typingData?.typingAgentName && (
+                  <div className="flex items-center gap-2 px-4 pt-2">
                     <span className="inline-flex gap-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                       <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "150ms" }} />
                       <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                     </span>
+                    <span className="text-xs text-orange-600 font-medium">{typingData.typingAgentName} is typing...</span>
                   </div>
-                  <span className="text-xs text-orange-600 font-medium">
-                    {typingData.typingAgentName} is typing...
+                )}
+                <textarea
+                  value={replyText}
+                  onChange={e => { setReplyText(e.target.value); handleTypingChange(e.target.value.length > 0); }}
+                  onBlur={() => handleTypingChange(false)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder="Type a message..."
+                  rows={3}
+                  className="w-full px-4 pt-3 pb-1 text-sm text-gray-800 resize-none outline-none bg-transparent placeholder-gray-400"
+                />
+                <div className="flex items-center justify-between px-4 pb-3">
+                  <span className="text-xs text-gray-400">
+                    &#10024; Suggested from playbook &middot; AI message
                   </span>
-                </div>
-              )}
-              <SmsComposeBox
-                value={replyText}
-                onChange={setReplyText}
-                onSend={handleSend}
-                isSending={sendMessageMutation.isPending}
-                placeholder="Write a message..."
-                onTypingChange={handleTypingChange}
-              />
-            </div>
-          </div>
-
-          {/* RIGHT: lead details panel */}
-          <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
-
-            {/* Customer History panel — shown for campaign/reactivation leads with completed_jobs data */}
-            {isCampaignLead && customerHistory && (
-              <div className="px-4 py-4 border-b bg-indigo-50">
-                <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wide mb-3">Customer History</p>
-                <div className="space-y-2 text-sm">
-                  {/* Full name */}
-                  <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 shrink-0">Full Name</span>
-                    <span className="font-semibold text-right text-gray-900">{customerHistory.name ?? customerHistory.firstName ?? "—"}</span>
-                  </div>
-                  {/* Last booking price */}
-                  {customerHistory.lastBookingPrice != null && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500 shrink-0">Last Price</span>
-                      <span className="font-semibold" style={{ color: "#E8603C" }}>${customerHistory.lastBookingPrice}</span>
-                    </div>
-                  )}
-                  {/* Last service date */}
-                  {customerHistory.jobDate && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 shrink-0">Last Service</span>
-                      <span className="font-medium text-right text-xs text-gray-700">{customerHistory.jobDate}</span>
-                    </div>
-                  )}
-                  {/* Service type */}
-                  {customerHistory.serviceType && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 shrink-0">Service Type</span>
-                      <span className="font-medium text-right text-xs truncate max-w-[55%]">{customerHistory.serviceType}</span>
-                    </div>
-                  )}
-                  {/* Frequency */}
-                  {customerHistory.frequency && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 shrink-0">Frequency</span>
-                      <span className="font-medium text-right text-xs">{customerHistory.frequency}</span>
-                    </div>
-                  )}
-                  {/* Address */}
-                  {customerHistory.address && (
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-gray-500 text-xs">Address</span>
-                      <span className="font-medium text-xs leading-snug text-gray-800">{customerHistory.address}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Lead info */}
-            <div className="px-4 py-4 border-b">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lead Details</p>
-              <div className="space-y-2 text-sm">
-                {session.quotedPrice && (() => {
-                  const total = computeTotalQuote(session.quotedPrice, session.extras);
-                  const hasExtras = total !== session.quotedPrice;
-                  return (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Quote</span>
-                      <span className="font-semibold" style={{ color: "#E8603C" }}>
-                        ${total}{hasExtras && <span className="ml-1 text-xs text-gray-400">(+extras)</span>}
-                      </span>
-                    </div>
-                  );
-                })()}
-                {/* Reactivation: last booking price with discount */}
-                {session.leadSource === "reactivation" && session.reactivationLastPrice != null && (() => {
-                  const discountPct = session.reactivationDiscountPct ?? 10;
-                  const discounted = Math.round(session.reactivationLastPrice * (1 - discountPct / 100));
-                  return (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Last Booking</span>
-                      <span className="font-semibold text-right" style={{ color: "#E8603C" }}>
-                        <span className="line-through text-gray-400 mr-1">${session.reactivationLastPrice}</span>
-                        ${discounted}
-                        <span className="ml-1 text-xs font-normal text-green-600">({discountPct}% off)</span>
-                      </span>
-                    </div>
-                  );
-                })()}
-                {/* Bark Q&A summary */}
-                {session.leadSource === "bark" && session.barkQA && (
-                  <div className="mt-1 p-2 rounded bg-green-50 border border-green-100">
-                    <p className="text-xs font-semibold text-green-700 mb-1">Bark Q&amp;A</p>
-                    <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{session.barkQA}</p>
-                  </div>
-                )}
-                {session.serviceType && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Service</span>
-                    <span className="font-medium text-right max-w-[55%] truncate">{session.serviceType}</span>
-                  </div>
-                )}
-                {session.selectedSlot && (
-                  <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 shrink-0">Slot</span>
-                    <span className="font-medium text-right text-xs">{session.selectedSlot}</span>
-                  </div>
-                )}
-                {session.address && (
-                  <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 shrink-0">Address</span>
-                    <span className="font-medium text-right text-xs leading-snug">{session.address}</span>
-                  </div>
-                )}
-                {session.extras && (() => {
-                  let extrasArr: string[] = [];
-                  try { extrasArr = JSON.parse(session.extras); } catch { extrasArr = []; }
-                  return extrasArr.length > 0 ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 shrink-0">Extras</span>
-                      <span className="font-medium text-right text-xs">{extrasArr.map(k => k.replace(/_/g, " ")).join(", ")}</span>
-                    </div>
-                  ) : null;
-                })()}
-                {!isAdmin && session.assignedAgentName && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Agent</span>
-                    <span className="font-medium">{session.assignedAgentName}</span>
-                  </div>
-                )}
-                {/* UTM Attribution */}
-                {(session.utmSource || session.utmMedium || session.utmCampaign || session.gclid) && (
-                  <div className="pt-1 border-t space-y-1">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Traffic Source</p>
-                    {session.utmSource && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Source</span>
-                        <span className="font-medium text-xs capitalize">{session.utmSource}</span>
-                      </div>
-                    )}
-                    {session.utmMedium && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Medium</span>
-                        <span className="font-medium text-xs">{session.utmMedium}</span>
-                      </div>
-                    )}
-                    {session.utmCampaign && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Campaign</span>
-                        <span className="font-medium text-xs truncate max-w-[55%] text-right">{session.utmCampaign}</span>
-                      </div>
-                    )}
-                    {session.gclid && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Google Ad</span>
-                        <span className="font-medium text-xs text-green-600">✓ tracked</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="flex justify-between text-xs text-gray-400 pt-1 border-t">
-                  <span>Started</span><span>{timeAgo(session.createdAt)}</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>Updated</span><span>{timeAgo(session.updatedAt)}</span>
+                  <button
+                    onClick={handleSend}
+                    disabled={!replyText.trim() || sendMessageMutation.isPending}
+                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50"
+                    style={{ backgroundColor: "#F97316" }}
+                  >
+                    {sendMessageMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Send &#8594;
+                  </button>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* Admin controls: stage + agent */}
-            {isAdmin && (
-              <div className="px-4 py-4 border-b bg-orange-50 space-y-3">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin Controls</p>
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-gray-600">Stage</span>
-                  <div className="flex items-center gap-1.5">
+          {/* ══════════════════════════════════════════════════════════
+              FLOW VIEW TAB
+          ══════════════════════════════════════════════════════════ */}
+          {drawerTab === "flow" && (
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Pipeline stage tracker */}
+              {(() => {
+                const pipelineStages = ["Lead In", "Quoted", "In Progress", "Follow-Up", "Re-engage", "Booked"];
+                const stageToIndex: Record<string, number> = {
+                  WIDGET_SIZING: 0, QUOTE_SENT: 1, AVAILABILITY: 2, SLOT_CHOICE: 2, ADDRESS: 2,
+                  CONFIRMATION: 2, CALL_SCHEDULED: 2, DONE: 2, UNHANDLED: 2,
+                  FOLLOW_UP_SCHEDULED: 3, FUTURE_BOOKING: 3, COLD: 4, NOT_INTERESTED: 4, BOOKED: 5,
+                };
+                const currentIdx = stageToIndex[session.stage] ?? 0;
+                return (
+                  <div className="bg-gray-50 rounded-2xl p-4">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pipeline Stage</div>
+                    <div className="flex items-center gap-1">
+                      {pipelineStages.map((stage, idx) => (
+                        <div key={stage} className="flex items-center flex-1">
+                          <div className={`flex-1 text-center py-2 px-1 rounded-lg text-xs font-medium ${
+                            idx === currentIdx
+                              ? "bg-gray-900 text-white shadow-sm"
+                              : idx < currentIdx
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-white text-gray-400 border border-gray-200"
+                          }`}>
+                            {stage}
+                          </div>
+                          {idx < pipelineStages.length - 1 && (
+                            <div className={`w-3 h-0.5 shrink-0 ${idx < currentIdx ? "bg-orange-300" : "bg-gray-200"}`} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Stage change (admin only) */}
+              {isAdmin && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-2">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Move Stage</div>
+                  <div className="flex items-center gap-2">
                     <Select
                       value={session.stage}
                       onValueChange={(val) => {
@@ -1432,21 +1471,9 @@ function ConversationDrawer({
                       </SelectTrigger>
                       <SelectContent>
                         {([
-                          "WIDGET_SIZING",
-                          "QUOTE_SENT",
-                          "AVAILABILITY",
-                          "SLOT_CHOICE",
-                          "TIME_PREF",
-                          "ADDRESS",
-                          "CONFIRMATION",
-                          "CALL_SCHEDULED",
-                          "DONE",
-                          "UNHANDLED",
-                          "BOOKED",
-                          "NOT_INTERESTED",
-                          "FUTURE_BOOKING",
-                          "FOLLOW_UP_SCHEDULED",
-                          "COLD",
+                          "WIDGET_SIZING","QUOTE_SENT","AVAILABILITY","SLOT_CHOICE","TIME_PREF",
+                          "ADDRESS","CONFIRMATION","CALL_SCHEDULED","DONE","UNHANDLED",
+                          "BOOKED","NOT_INTERESTED","FUTURE_BOOKING","FOLLOW_UP_SCHEDULED","COLD",
                         ] as const).map(s => (
                           <SelectItem key={s} value={s} className="text-xs">
                             {STAGE_CONFIG[s as Stage]?.label ?? s}
@@ -1454,332 +1481,318 @@ function ConversationDrawer({
                         ))}
                       </SelectContent>
                     </Select>
-                    {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+                    {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-gray-600">Agent</span>
-                  <div className="flex items-center gap-1.5">
-                    <Select
-                      value={session.assignedAgentId?.toString() ?? "unassigned"}
-                      onValueChange={(val) => {
-                        const agentId = val === "unassigned" ? null : parseInt(val, 10);
-                        if (agentId === session.assignedAgentId) return;
-                        assignAgentMutation.mutate({ sessionId: session.id, agentId });
-                      }}
-                      disabled={assignAgentMutation.isPending}
-                    >
-                      <SelectTrigger className="h-8 text-xs flex-1">
-                        <SelectValue placeholder="Unassigned" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned" className="text-xs">— Unassigned —</SelectItem>
-                        {activeAgents.map(a => (
-                          <SelectItem key={a.id} value={a.id.toString()} className="text-xs">
-                            {a.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {assignAgentMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
-                  </div>
-                </div>
-
-                {/* Booked amount — only when stage is BOOKED */}
-                {session.stage === "BOOKED" && (
-                  <div className="space-y-1">
-                    <span className="text-xs font-medium text-gray-600">Booked Amount</span>
-                    <div className="flex items-center gap-1.5">
-                      <div className="relative flex-1">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
-                          value={bookedAmountInput}
-                          onChange={e => setBookedAmountInput(e.target.value)}
-                          className="pl-5 h-8 text-xs"
-                        />
+              )}
+              {/* AI Playbook checklist */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">AI Playbook</div>
+                <div className="space-y-2">
+                  {[
+                    { done: true, text: "Intro quote sent" },
+                    { done: true, text: "Availability question sent" },
+                    { done: session.stage !== "WIDGET_SIZING" && session.stage !== "QUOTE_SENT", text: "Slot confirmed or date captured" },
+                    { done: !!session.followUpDate, text: "Follow-up scheduled" },
+                    { done: session.stage === "BOOKED", text: "Booking confirmed" },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-2.5 text-sm">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${item.done ? "bg-green-500" : "bg-gray-200"}`}>
+                        {item.done && <CheckCircle2 className="w-3 h-3 text-white" />}
                       </div>
-                      {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">✓</span>}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 px-2.5 text-xs shrink-0"
-                        disabled={updateBookedAmountMutation.isPending}
-                        onClick={() => {
-                          const val = bookedAmountInput.trim();
-                          const parsed = val === "" ? null : parseInt(val, 10);
-                          if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
-                            toast.error("Enter a valid dollar amount");
-                            return;
-                          }
-                          updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
-                        }}
-                      >
-                        {updateBookedAmountMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-                      </Button>
-                      {session.bookedAmount !== null && session.bookedAmount !== undefined && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 px-2 text-xs text-gray-400 shrink-0"
-                          onClick={() => {
-                            setBookedAmountInput("");
-                            updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: null });
-                          }}
-                        >
-                          Clear
-                        </Button>
-                      )}
+                      <span className={item.done ? "text-gray-700" : "text-gray-400"}>{item.text}</span>
                     </div>
-                    <p className="text-xs text-gray-400">
-                      {session.bookedAmount !== null && session.bookedAmount !== undefined
-                        ? `Override: $${session.bookedAmount}`
-                        : `Using quote: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
-                      }
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Follow-Up Scheduler */}
-            <div className="border-t">
-              <details className="group">
-                <summary className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:bg-gray-50 transition-colors cursor-pointer list-none">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Schedule Follow-Up
-                    {session.followUpDate && !session.followUpSent && (
-                      <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-violet-100 text-violet-700">{session.followUpDate}</span>
-                    )}
-                    {session.followUpSent === 1 && (
-                      <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">Sent ✓</span>
-                    )}
-                  </span>
-                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▾</span>
-                </summary>
-                <div className="px-4 pb-3 space-y-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Follow-up date</label>
-                    <Input
-                      type="date"
-                      value={followUpDate}
-                      onChange={e => setFollowUpDate(e.target.value)}
-                      className="h-8 text-xs"
-                      min={new Date().toISOString().split("T")[0]}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Message (editable)</label>
-                    <Textarea
-                      value={followUpMessage}
-                      onChange={e => setFollowUpMessage(e.target.value)}
-                      rows={3}
-                      className="resize-none text-xs"
-                      placeholder="Hi, just circling back on this..."
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {followUpSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
-                      {followUpDate && (
-                        <button
-                          type="button"
-                          className="text-xs text-red-400 hover:text-red-600 underline"
-                          onClick={() => {
-                            setFollowUpDate("");
-                            setFollowUpMessage(DEFAULT_FOLLOWUP_MSG);
-                            setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: null, followUpMessage: null });
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-3 text-xs bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
-                      onClick={() => setFollowUpMutation.mutate({ sessionId: session.id, followUpDate: followUpDate || null, followUpMessage })}
-                      disabled={setFollowUpMutation.isPending || !followUpDate}
-                    >
-                      {setFollowUpMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Follow-Up"}
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              </details>
-            </div>
-
-            {/* Call History */}
-            {callLogs && callLogs.length > 0 && (
-              <div className="px-4 pb-2">
-                <details open>
-                  <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none flex items-center gap-1.5 py-1">
-                    <Phone className="w-3 h-3" />
-                    Call History ({callLogs.length})
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    {callLogs.map((log) => {
-                      const outcomeColors: Record<string, string> = {
-                        ANSWERED: "bg-green-100 text-green-700",
-                        BOOKED: "bg-emerald-100 text-emerald-700",
-                        NO_ANSWER: "bg-gray-100 text-gray-600",
-                        VOICEMAIL: "bg-blue-100 text-blue-700",
-                        BUSY: "bg-yellow-100 text-yellow-700",
-                        CALLBACK: "bg-violet-100 text-violet-700",
-                      };
-                      const colorClass = outcomeColors[log.outcome] ?? "bg-gray-100 text-gray-600";
-                      return (
-                        <div key={log.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${colorClass}`}>
-                                {log.outcome.replace("_", " ")}
-                              </span>
-                              <span className="text-xs text-gray-500">{log.agentName}</span>
-                            </div>
-                            <span className="text-[10px] text-gray-400 shrink-0">
-                              {new Date(log.calledAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                            </span>
-                          </div>
-                          {log.notes && (
-                            <p className="text-xs text-gray-600 leading-relaxed">{log.notes}</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </details>
               </div>
-            )}
-
-            {/* Voice Calls (Vapi AI) */}
-            {voiceCalls && voiceCalls.length > 0 && (
-              <div className="px-4 pb-2">
-                <details open>
-                  <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none flex items-center gap-1.5 py-1">
-                    <Mic className="w-3 h-3" />
-                    AI Voice Calls ({voiceCalls.length})
-                  </summary>
-                  <div className="mt-2 space-y-3">
-                    {voiceCalls.map((call) => {
-                      const outcomeColors: Record<string, string> = {
-                        booked: "bg-emerald-100 text-emerald-700",
-                        quote_given: "bg-blue-100 text-blue-700",
-                        faq_answered: "bg-violet-100 text-violet-700",
-                        transferred: "bg-orange-100 text-orange-700",
-                        callback_requested: "bg-yellow-100 text-yellow-700",
-                        no_action: "bg-gray-100 text-gray-500",
-                      };
-                      const colorClass = outcomeColors[call.outcome] ?? "bg-gray-100 text-gray-600";
-                      const durationMin = Math.floor((call.durationSeconds ?? 0) / 60);
-                      const durationSec = (call.durationSeconds ?? 0) % 60;
-                      const durationLabel = call.durationSeconds
-                        ? `${durationMin}:${String(durationSec).padStart(2, "0")}`
-                        : null;
-                      return (
-                        <div key={call.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5">
-                          {/* Header row */}
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <Mic className="w-3 h-3 text-gray-400" />
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${colorClass}`}>
-                                {call.outcome.replace(/_/g, " ")}
-                              </span>
-                              {durationLabel && (
-                                <span className="text-[10px] text-gray-400">{durationLabel}</span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-gray-400 shrink-0">
-                              {new Date(call.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                            </span>
-                          </div>
-                          {/* Summary */}
-                          {call.summary && (
-                            <p className="text-xs text-gray-600 leading-relaxed">{call.summary}</p>
-                          )}
-                          {/* Recording link */}
-                          {call.recordingUrl && (
-                            <a
-                              href={call.recordingUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              <PlayCircle className="w-3 h-3" />
-                              Listen to recording
-                            </a>
-                          )}
-                          {/* Transcript toggle */}
-                          {call.transcript && (
-                            <details className="mt-1">
-                              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 select-none">
-                                View transcript
-                              </summary>
-                              <p className="mt-1 text-[10px] text-gray-500 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                {call.transcript}
-                              </p>
-                            </details>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </details>
-              </div>
-            )}
-
-            {/* Internal Notes */}
-            <div className="px-4 py-4 flex-1">
-              <AdminNotesSection
-                session={session}
-                notes={notes}
-                setNotes={setNotes}
-                loadedNotes={loadedNotes}
-                notesSaved={notesSaved}
-                updateNotes={updateNotes}
-              />
             </div>
+          )}
 
-            {/* Delete lead */}
-            {isAdmin && (
-              <div className="px-4 pb-4 shrink-0">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full h-8 text-xs text-red-400 hover:text-red-600 hover:bg-red-50"
-                      disabled={deleteLeadMutation.isPending}
+          {/* ══════════════════════════════════════════════════════════
+              PERFORMANCE TAB
+          ══════════════════════════════════════════════════════════ */}
+          {drawerTab === "performance" && (
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Close probability", value: `${Math.min(95, 30 + localMessages.filter(m => m.role === "user").length * 8)}%`, color: "text-green-600" },
+                  { label: "Response likelihood", value: `${Math.min(95, 50 + localMessages.length * 4)}%`, color: "text-blue-600" },
+                  { label: "Template win rate", value: "67%", color: "text-purple-600" },
+                ].map(stat => (
+                  <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm text-center">
+                    <div className={`text-xl font-bold ${stat.color}`}>{stat.value}</div>
+                    <div className="text-xs text-gray-500 mt-0.5 leading-tight">{stat.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Top Message Variants</div>
+                <div className="space-y-2">
+                  {[
+                    { text: "Hold a spot message", rate: "72%" },
+                    { text: "Soft check-in", rate: "61%" },
+                    { text: "Urgency nudge", rate: "54%" },
+                  ].map((v, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">{v.text}</span>
+                      <span className="font-semibold text-gray-900">{v.rate}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recommended Send Window</div>
+                <div className="text-base font-bold text-gray-900">Tue - Thu, 10am - 2pm</div>
+                <p className="text-xs text-gray-500 mt-1">Based on historical response patterns for this lead type.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            RIGHT PANEL — Sidebar
+        ══════════════════════════════════════════════════════════ */}
+        <div className="w-[320px] shrink-0 flex flex-col gap-4 overflow-y-auto h-full pb-2">
+
+          {/* ── NEXT ACTION card ── */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Next Action</span>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full text-orange-600 border border-orange-200 bg-orange-50">Recommended</span>
+            </div>
+            {/* Dark primary move card */}
+            <div className="rounded-xl bg-gray-900 p-4 mb-4">
+              <div className="text-xs font-semibold text-gray-400 mb-1.5">&#10024; Primary move</div>
+              <div className="text-base font-bold text-white leading-snug mb-2">{primaryMoveTitle}</div>
+              <p className="text-xs text-gray-400 leading-relaxed">{primaryRecommendation}</p>
+            </div>
+            {/* 2x2 action buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => applySuggestion("lockDate")}
+                className="py-2.5 px-3 rounded-xl text-sm font-semibold text-white transition-colors"
+                style={{ backgroundColor: "#F97316" }}
+              >
+                Lock May Date
+              </button>
+              <button
+                onClick={() => applySuggestion("discount")}
+                className="py-2.5 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Offer Discount Fill
+              </button>
+              <button
+                onClick={() => applySuggestion("softCheckIn")}
+                className="py-2.5 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Set Soft Reminder
+              </button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button className="py-2.5 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
+                    Close / Archive
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                    <AlertDialogDescription>This will permanently remove the lead and all conversation history. This cannot be undone.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      onClick={() => deleteLeadMutation.mutate({ sessionId: session.id })}
                     >
-                      {deleteLeadMutation.isPending
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <><Trash2 className="w-3.5 h-3.5 mr-1" />Delete Lead</>}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete <strong>{session.leadName ?? "this lead"}</strong> and all their conversation history. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-red-600 hover:bg-red-700 text-white"
-                        onClick={() => deleteLeadMutation.mutate({ sessionId: session.id })}
-                      >
-                        Yes, delete permanently
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                      Yes, delete permanently
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+
+          {/* ── LEAD SNAPSHOT card ── */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Lead Snapshot</span>
+              <button className="text-gray-400 hover:text-gray-600 text-lg leading-none">&#8943;</button>
+            </div>
+            {/* Quote + Source row */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">Quote</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {session.quotedPrice ? `$${Number(session.quotedPrice).toFixed(0)}` : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">Source</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {session.leadSource
+                    ? session.leadSource.replace("campaign:", "").replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())
+                    : "Direct"}
+                </div>
+              </div>
+            </div>
+            {/* Service */}
+            <div className="mb-3">
+              <div className="text-xs text-gray-400 mb-0.5">Service</div>
+              <div className="text-sm font-semibold text-gray-900">{session.serviceType ?? "Standard Cleaning"}</div>
+            </div>
+            {/* Extras */}
+            {extrasArray.length > 0 && (
+              <div>
+                <div className="text-xs text-gray-400 mb-1.5">Extras</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {extrasArray.map(extra => (
+                    <span key={extra} className="text-xs px-2.5 py-0.5 rounded-full border border-gray-200 text-gray-600 bg-gray-50">
+                      {extra.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Address / slot if present */}
+            {session.address && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="text-xs text-gray-400 mb-0.5">Address</div>
+                <div className="text-xs text-gray-700">{session.address}</div>
               </div>
             )}
           </div>
+
+          {/* ── FOLLOW-UP PLAN card ── */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Follow-Up Plan</span>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full text-purple-600 border border-purple-200 bg-purple-50">Smart Sequence</span>
+            </div>
+            {/* Follow-up timeline items */}
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-base shrink-0">&#128197;</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800">Soft check-in</div>
+                  <div className="text-xs text-gray-400">{session.followUpDate ?? "Apr 10"}</div>
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-gray-200 text-gray-500 shrink-0">queued</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 border border-orange-100">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-base shrink-0">&#128276;</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800">Filling up / urgency</div>
+                  <div className="text-xs text-gray-400">Apr 25</div>
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-orange-200 text-orange-600 bg-orange-50 shrink-0">recommended</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-base shrink-0">&#128197;</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800">Last call before move-in</div>
+                  <div className="text-xs text-gray-400">May 1</div>
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-purple-200 text-purple-600 bg-purple-50 shrink-0">drafted</span>
+              </div>
+            </div>
+            {/* Follow-up scheduler */}
+            <div className="pt-3 border-t border-gray-100 space-y-2">
+              <input
+                type="date"
+                value={followUpDate}
+                onChange={e => setFollowUpDate(e.target.value)}
+                min={new Date().toISOString().split("T")[0]}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:border-orange-300"
+              />
+              <button
+                onClick={() => setFollowUpMutation.mutate({ sessionId: session.id, followUpDate, followUpMessage })}
+                disabled={!followUpDate || setFollowUpMutation.isPending}
+                className="w-full py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-colors"
+                style={{ backgroundColor: "#F97316" }}
+              >
+                {setFollowUpMutation.isPending ? "Saving..." : followUpSaved ? "Saved!" : "Schedule Follow-Up"}
+              </button>
+            </div>
+          </div>
+
+          {/* ── QUICK CONTROLS card ── */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Quick Controls</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { if (session.leadPhone) window.open(`tel:${session.leadPhone}`, "_self"); }}
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+              >
+                <span>&#128222;</span> Call lead
+              </button>
+              <button
+                onClick={() => applySuggestion("softCheckIn")}
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+              >
+                <span>&#128197;</span> Reschedule
+              </button>
+              <button
+                onClick={() => {
+                  setAiModeMutation.mutate({ sessionId: session.id, aiMode: 1 });
+                  toast.success("Handed back to AI");
+                }}
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+              >
+                <span>&#129302;</span> Hand back to AI
+              </button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors">
+                    <span>&#128230;</span> Archive
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                    <AlertDialogDescription>This will permanently remove the lead and all conversation history. This cannot be undone.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      onClick={() => deleteLeadMutation.mutate({ sessionId: session.id })}
+                    >
+                      Yes, delete permanently
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+            {/* Agent assignment (admin only) */}
+            {isAdmin && (
+              <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                <div className="text-xs text-gray-500 font-medium">Assigned Agent</div>
+                <div className="flex items-center gap-1.5">
+                  <Select
+                    value={session.assignedAgentId?.toString() ?? "unassigned"}
+                    onValueChange={(val) => {
+                      const agentId = val === "unassigned" ? null : parseInt(val, 10);
+                      if (agentId === session.assignedAgentId) return;
+                      assignAgentMutation.mutate({ sessionId: session.id, agentId });
+                    }}
+                    disabled={assignAgentMutation.isPending}
+                  >
+                    <SelectTrigger className="h-8 text-xs flex-1">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned" className="text-xs">— Unassigned —</SelectItem>
+                      {activeAgents.map(a => (
+                        <SelectItem key={a.id} value={a.id.toString()} className="text-xs">{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {assignAgentMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     </div>
