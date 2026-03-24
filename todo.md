@@ -33,3 +33,5 @@
 - [x] Pull full names (first + last) for all lead sources — keep first-name-only for SMS
 - [x] Fix campaign blast leads showing only first name — store and use full name from reactivationContacts
 - [x] Add STOP/UNSUBSCRIBE single-word detection in inbound SMS webhook — record opt-out, skip AI
+- [x] Remove "Quote Form" link from conversation drawer header (waste of space)
+- [x] Add previous job info (price, frequency, last job date) back to conversation drawer

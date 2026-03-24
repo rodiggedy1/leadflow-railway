@@ -1199,14 +1199,7 @@ function ConversationDrawer({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={`/quote?phone=${encodeURIComponent(session.leadPhone)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Quote Form
-              </a>
+
               <button
                 onClick={() => applySuggestion("lockDate")}
                 className="text-sm font-semibold px-4 py-1.5 rounded-full text-white transition-colors"
@@ -1676,6 +1669,33 @@ function ConversationDrawer({
                    session.leadSource === "bark" ? "Bark Q&A" : "Lead Details"}
                 </div>
                 <div className="text-xs text-gray-700 whitespace-pre-line">{session.barkQA}</div>
+              </div>
+            )}
+            {customerHistory && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="text-xs text-gray-400 mb-2">Previous Job</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {customerHistory.lastBookingPrice != null && (
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-0.5">Last Price</div>
+                      <div className="text-sm font-bold text-gray-900">${customerHistory.lastBookingPrice}</div>
+                    </div>
+                  )}
+                  {customerHistory.frequency && (
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-0.5">Frequency</div>
+                      <div className="text-sm font-semibold text-gray-900">{customerHistory.frequency}</div>
+                    </div>
+                  )}
+                  {customerHistory.jobDate && (
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-0.5">Last Job</div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {new Date(customerHistory.jobDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

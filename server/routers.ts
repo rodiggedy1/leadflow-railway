@@ -244,13 +244,15 @@ export const appRouter = router({
           mapped.filter(s => isCampaignLead(s) && s.leadPhone).map(s => s.leadPhone!)
         ));
 
-        // Map phone -> most recent completed_job frequency
-        const jobFreqMap = new Map<string, string>();
+        // Map phone -> most recent completed_job info (frequency, price, date)
+        const jobInfoMap = new Map<string, { frequency: string | null; lastBookingPrice: string | null; lastJobDate: string | null }>();
         if (campaignPhones.length > 0) {
           const jobRows = await db
             .select({
               phone: completedJobs.phone,
               frequency: completedJobs.frequency,
+              lastBookingPrice: completedJobs.lastBookingPrice,
+              jobDate: completedJobs.jobDate,
             })
             .from(completedJobs)
             .where(inArray(completedJobs.phone, campaignPhones))
@@ -258,20 +260,27 @@ export const appRouter = router({
 
           // Keep only the most recent row per phone
           for (const row of jobRows) {
-            if (!jobFreqMap.has(row.phone) && row.frequency) {
-              jobFreqMap.set(row.phone, row.frequency);
+            if (!jobInfoMap.has(row.phone)) {
+              jobInfoMap.set(row.phone, {
+                frequency: row.frequency ?? null,
+                lastBookingPrice: row.lastBookingPrice != null ? String(row.lastBookingPrice) : null,
+                lastJobDate: row.jobDate ?? null,
+              });
             }
           }
         }
 
         const enriched = mapped.map(s => {
           if (!isCampaignLead(s) || !s.leadPhone) return s;
-          const freq = jobFreqMap.get(s.leadPhone);
-          if (!freq) return s;
+          const info = jobInfoMap.get(s.leadPhone);
+          if (!info) return s;
           return {
             ...s,
             // Show frequency as serviceType for campaign leads that have no serviceType
-            serviceType: s.serviceType ?? freq,
+            serviceType: s.serviceType ?? info.frequency ?? s.serviceType,
+            lastJobPrice: info.lastBookingPrice,
+            lastJobDate: info.lastJobDate,
+            jobFrequency: info.frequency,
           };
         });
 
