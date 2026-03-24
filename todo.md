@@ -31,3 +31,4 @@
 - [x] Fix bedroom/bathroom parsing from Google Ads Form email body (not an issue — parsing correct)
 - [x] Fix campaign fire timeout: make async with background job + progress polling
 - [x] Pull full names (first + last) for all lead sources — keep first-name-only for SMS
+- [x] Fix campaign blast leads showing only first name — store and use full name from reactivationContacts

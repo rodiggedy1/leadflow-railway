@@ -1473,7 +1473,7 @@ Respond in JSON with this exact schema:
       // Note: lastCampaignSmsDate is populated below after normalizePhone is declared.
       const coldLeads = lapsedCustomers.map(c => ({
         id: 0 as number, // no session id for past customers
-        name: c.firstName ?? "Customer",
+        name: c.fullName ?? c.firstName ?? "Customer", // full name for session display; SMS greeting extracts first name
         fullName: c.fullName ?? c.firstName ?? "Customer",
         phone: c.phone,
         serviceType: c.serviceType,
@@ -1864,14 +1864,16 @@ Respond in JSON with this exact schema:
           .select({
             phone: completedJobs.phone,
             firstName: completedJobs.firstName,
+            fullName: completedJobs.name,
           })
           .from(completedJobs)
           .where(
             sql`${completedJobs.phone} IN (${sql.join(input.targetPhones.map(p => sql`${p}`), sql`, `)})`
           )
-          .groupBy(completedJobs.phone, completedJobs.firstName);
+          .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.name);
         for (const c of pastCustomers) {
-          sendList.push({ phone: c.phone, name: c.firstName ?? "", isPhoneOnly: true });
+          // Use full name for session display; SMS greeting extracts first name separately
+          sendList.push({ phone: c.phone, name: c.fullName ?? c.firstName ?? "", isPhoneOnly: true });
         }
       }
 
