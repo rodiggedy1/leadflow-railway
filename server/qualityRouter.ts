@@ -817,6 +817,7 @@ export const qualityRouter = router({
           payPercent: cj.payPercent ?? null,
           finalPay: cj.finalPay ?? null,
           ratingAdjustment: cj.ratingAdjustment ?? null,
+          photoAdjustment: cj.photoAdjustment ?? null,
           streakBonus: cj.streakBonus ?? null,
           customerRating: cj.customerRating ?? null,
           missedSomething: cj.missedSomething ?? null,

@@ -401,6 +401,7 @@ type JobRow = {
     payPercent: string | null;
     finalPay: string | null;
     ratingAdjustment: string | null;
+    photoAdjustment: string | null;
     streakBonus: string | null;
     customerRating: number | null;
     missedSomething: number | null;
@@ -421,10 +422,19 @@ type JobRow = {
   photos: Array<{ id: number; photoUrl: string; thumbnailUrl: string | null; filename: string | null }>;
 };
 
-// ── Custom Rules Button ───────────────────────────────────────────────────────
-function CustomRulesButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
+// ── Unified Pay Breakdown Panel ─────────────────────────────────────────────
+/**
+ * PayBreakdownPanel — shows every pay line item for a job and lets the admin
+ * toggle / edit each one inline. Replaces ManualAdjustButton, RecleanPenaltyButton,
+ * and CustomRulesButton with a single cohesive UI.
+ */
+function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
   const [open, setOpen] = useState(false);
   const cleanerJobId = job.cleanerAssignment?.id;
+  // Manual adjustment inline edit state
+  const [editingManual, setEditingManual] = useState(false);
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualNote, setManualNote] = useState("");
 
   const rulesQuery = trpc.quality.getJobCustomRules.useQuery(
     { cleanerJobId: cleanerJobId! },
@@ -439,181 +449,259 @@ function CustomRulesButton({ job, onRefetch }: { job: JobRow; onRefetch: () => v
     onSuccess: () => { rulesQuery.refetch(); onRefetch(); },
     onError: (err) => toast.error("Failed", { description: err.message }),
   });
-
-  if (!job.cleanerAssignment) return null;
-
-  const appliedIds = new Set((rulesQuery.data?.applied ?? []).map((r) => r.customPayRuleId));
-  const allActive = rulesQuery.data?.allActive ?? [];
-  const hasApplied = (job.cleanerAssignment.appliedCustomRules?.length ?? 0) > 0;
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={`gap-1.5 text-xs h-7 px-2 ${
-            hasApplied
-              ? "border-purple-500/50 text-purple-600 hover:bg-purple-50"
-              : "border-gray-300 text-gray-500 hover:bg-gray-50"
-          }`}
-        >
-          <DollarSign className="w-3 h-3" />
-          {hasApplied ? `Rules (${job.cleanerAssignment.appliedCustomRules.length})` : "Custom Rules"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-base">Custom Pay Rules</DialogTitle>
-          <p className="text-xs text-gray-500 mt-0.5">Select rules to apply to this job. Changes update pay immediately.</p>
-        </DialogHeader>
-        {rulesQuery.isLoading ? (
-          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-        ) : allActive.length === 0 ? (
-          <div className="text-center py-6">
-            <p className="text-sm text-gray-400">No active custom rules.</p>
-            <p className="text-xs text-gray-400 mt-1">Create rules in Settings → Pay Rules.</p>
-          </div>
-        ) : (
-          <div className="space-y-2 py-1">
-            {allActive.map((rule) => {
-              const isApplied = appliedIds.has(rule.id);
-              const isPending = applyRule.isPending || removeRule.isPending;
-              return (
-                <button
-                  key={rule.id}
-                  disabled={isPending}
-                  onClick={() => {
-                    if (isApplied) {
-                      removeRule.mutate({ cleanerJobId: cleanerJobId!, customPayRuleId: rule.id });
-                    } else {
-                      applyRule.mutate({ cleanerJobId: cleanerJobId!, customPayRuleId: rule.id });
-                    }
-                  }}
-                  className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors ${
-                    isApplied
-                      ? "border-purple-300 bg-purple-50 hover:bg-purple-100"
-                      : "border-gray-200 bg-white hover:bg-gray-50"
-                  } disabled:opacity-50`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
-                      isApplied ? "border-purple-500 bg-purple-500" : "border-gray-300"
-                    }`}>
-                      {isApplied && <span className="text-white text-[10px] font-bold leading-none">✓</span>}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{rule.label}</p>
-                      {rule.description && <p className="text-xs text-gray-400 truncate">{rule.description}</p>}
-                    </div>
-                  </div>
-                  <span className={`text-sm font-semibold shrink-0 ${
-                    rule.type === "bonus" ? "text-emerald-600" : "text-red-600"
-                  }`}>
-                    {rule.type === "bonus" ? "+" : "-"}${parseFloat(rule.amount).toFixed(2)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Done</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ManualAdjustButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-
+  const setReclean = trpc.quality.setRecleanPenalty.useMutation({
+    onSuccess: () => onRefetch(),
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
   const setAdj = trpc.quality.setManualAdjustment.useMutation({
-    onSuccess: () => {
-      toast.success("Manual adjustment saved");
-      setOpen(false);
-      onRefetch();
-    },
+    onSuccess: () => { setEditingManual(false); onRefetch(); },
     onError: (err) => toast.error("Failed", { description: err.message }),
   });
 
-  const existing = job.cleanerAssignment?.manualAdjustment;
-  const existingNote = job.cleanerAssignment?.manualAdjustmentNote;
+  if (!job.cleanerAssignment) return null;
+  const ca = job.cleanerAssignment;
 
-  const handleOpen = () => {
-    setAmount(existing ?? "");
-    setNote(existingNote ?? "");
+  const appliedIds = new Set((rulesQuery.data?.applied ?? []).map((r) => r.customPayRuleId));
+  const allActive = rulesQuery.data?.allActive ?? [];
+  const hasReclean = ca.recleanPenalty != null;
+
+  // Compute net pay from all line items
+  const base = parseFloat(ca.basePay ?? "0");
+  const ratingAdj = parseFloat(ca.ratingAdjustment ?? "0");
+  const photoAdj = parseFloat(ca.photoAdjustment ?? "0");
+  const streak = parseFloat(ca.streakBonus ?? "0");
+  const manual = parseFloat(ca.manualAdjustment ?? "0");
+  const reclean = hasReclean ? parseFloat(ca.recleanPenalty ?? "0") : 0;
+  const customTotal = (ca.appliedCustomRules ?? []).reduce(
+    (s, r) => s + (r.appliedType === "bonus" ? 1 : -1) * parseFloat(r.appliedAmount),
+    0
+  );
+  const netPay = base + ratingAdj + photoAdj + streak + manual + reclean + customTotal;
+
+  const hasAnyAdjustment = ratingAdj !== 0 || photoAdj !== 0 || streak !== 0 || manual !== 0 || hasReclean || (ca.appliedCustomRules?.length ?? 0) > 0;
+
+  // Helper: a single toggleable/editable row in the breakdown
+  function PayRow({
+    label, amount, color, locked, onToggle, toggled, pending,
+  }: {
+    label: string;
+    amount: number;
+    color: string;
+    locked?: boolean;
+    onToggle?: () => void;
+    toggled?: boolean;
+    pending?: boolean;
+  }) {
+    const sign = amount >= 0 ? "+" : "";
+    return (
+      <div className={`flex items-center justify-between gap-2 py-1.5 px-2 rounded-md ${
+        locked ? "" : "hover:bg-gray-50 cursor-pointer"
+      } ${pending ? "opacity-50" : ""}`}
+        onClick={locked ? undefined : onToggle}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {!locked && (
+            <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+              toggled ? "border-gray-600 bg-gray-600" : "border-gray-300"
+            }`}>
+              {toggled && <span className="text-white text-[9px] font-bold leading-none">✓</span>}
+            </div>
+          )}
+          {locked && <div className="w-3.5 h-3.5 shrink-0" />}
+          <span className="text-sm text-gray-700 truncate">{label}</span>
+        </div>
+        <span className={`text-sm font-semibold shrink-0 ${color}`}>
+          {sign}${Math.abs(amount).toFixed(2)}
+        </span>
+      </div>
+    );
+  }
+
+  const handleOpenPanel = () => {
+    setEditingManual(false);
+    setManualAmount(ca.manualAdjustment ?? "");
+    setManualNote(ca.manualAdjustmentNote ?? "");
     setOpen(true);
   };
 
-  const handleSave = () => {
-    if (!job.cleanerAssignment) return;
-    const parsed = parseFloat(amount);
-    if (amount && isNaN(parsed)) {
+  const handleSaveManual = () => {
+    const parsed = parseFloat(manualAmount);
+    if (manualAmount && isNaN(parsed)) {
       toast.error("Invalid amount — enter a number like 10 or -15");
       return;
     }
     setAdj.mutate({
-      cleanerJobId: job.cleanerAssignment.id,
-      amount: amount ? parsed.toFixed(2) : null,
-      note: note.trim() || null,
+      cleanerJobId: cleanerJobId!,
+      amount: manualAmount ? parsed.toFixed(2) : null,
+      note: manualNote.trim() || null,
     });
   };
 
   return (
     <>
+      {/* Trigger button on the card */}
       <Button
         variant="outline"
         size="sm"
-        className="gap-1.5 text-xs h-7 px-2"
-        onClick={handleOpen}
+        className={`gap-1.5 text-xs h-7 px-2 ${
+          hasAnyAdjustment
+            ? "border-blue-400/60 text-blue-600 hover:bg-blue-50"
+            : "border-gray-300 text-gray-500 hover:bg-gray-50"
+        }`}
+        onClick={handleOpenPanel}
       >
-        <Pencil className="w-3 h-3" />
-        {existing ? `Adj: ${parseFloat(existing) >= 0 ? "+" : ""}$${parseFloat(existing).toFixed(2)}` : "+ Adj"}
+        <DollarSign className="w-3 h-3" />
+        Pay Breakdown
       </Button>
+
+      {/* Panel dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Manual Pay Adjustment</DialogTitle>
+            <DialogTitle className="text-base">Pay Breakdown</DialogTitle>
+            <p className="text-xs text-gray-500">{ca.cleanerName} — {job.name ?? job.address}</p>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-xs text-muted-foreground">
-              {job.name} — {job.address}
-            </p>
-            <div className="space-y-1">
-              <label className="text-sm font-medium block">Amount ($)</label>
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="e.g. 10 or -15"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">Positive = bonus, negative = deduction. Leave blank to clear.</p>
+
+          <div className="space-y-0.5 py-1">
+            {/* Base pay — always shown, locked */}
+            <div className="flex items-center justify-between gap-2 py-1.5 px-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-sm font-medium text-gray-800">Base pay</span>
+                {ca.payPercent && (
+                  <span className="text-xs text-gray-400">({parseFloat(ca.payPercent)}%)</span>
+                )}
+              </div>
+              <span className="text-sm font-semibold text-gray-800">${base.toFixed(2)}</span>
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium block">Reason (shown to cleaner)</label>
-              <Input
-                placeholder="e.g. Extra deep clean, supply reimbursement"
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSave()}
+
+            {/* Divider */}
+            <div className="border-t border-dashed border-gray-200 my-1" />
+
+            {/* Rating adjustment — auto, locked (set by customer rating) */}
+            {ratingAdj !== 0 && (
+              <PayRow
+                label={ratingAdj > 0 ? "5-star bonus" : ca.missedSomething ? "Complaint deduction" : "Low rating deduction"}
+                amount={ratingAdj}
+                color={ratingAdj > 0 ? "text-emerald-600" : "text-red-500"}
+                locked
               />
-            </div>
+            )}
+
+            {/* Photo adjustment — auto, locked */}
+            {photoAdj !== 0 && (
+              <PayRow
+                label={photoAdj > 0 ? "Completion photo bonus" : "No photo penalty"}
+                amount={photoAdj}
+                color={photoAdj > 0 ? "text-emerald-600" : "text-red-500"}
+                locked
+              />
+            )}
+
+            {/* Streak bonus — auto, locked */}
+            {streak !== 0 && (
+              <PayRow label="Streak bonus" amount={streak} color="text-emerald-600" locked />
+            )}
+
+            {/* Reclean penalty — toggleable */}
+            {(hasReclean || true) && (
+              <PayRow
+                label="Reclean penalty"
+                amount={hasReclean ? reclean : -(parseFloat(ca.recleanPenalty ?? "30"))}
+                color="text-red-500"
+                toggled={hasReclean}
+                pending={setReclean.isPending}
+                onToggle={() => setReclean.mutate({ cleanerJobId: cleanerJobId!, apply: !hasReclean })}
+              />
+            )}
+
+            {/* Custom rules — each toggleable */}
+            {rulesQuery.isLoading && open && (
+              <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
+            )}
+            {allActive.map((rule) => {
+              const isApplied = appliedIds.has(rule.id);
+              const isPending = applyRule.isPending || removeRule.isPending;
+              return (
+                <PayRow
+                  key={rule.id}
+                  label={rule.label}
+                  amount={(rule.type === "bonus" ? 1 : -1) * parseFloat(rule.amount)}
+                  color={rule.type === "bonus" ? "text-purple-600" : "text-red-500"}
+                  toggled={isApplied}
+                  pending={isPending}
+                  onToggle={() => {
+                    if (isApplied) removeRule.mutate({ cleanerJobId: cleanerJobId!, customPayRuleId: rule.id });
+                    else applyRule.mutate({ cleanerJobId: cleanerJobId!, customPayRuleId: rule.id });
+                  }}
+                />
+              );
+            })}
+
+            {/* Manual adjustment — editable inline */}
+            <div className="border-t border-dashed border-gray-200 my-1" />
+            {!editingManual ? (
+              <div
+                className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                onClick={() => { setEditingManual(true); setManualAmount(ca.manualAdjustment ?? ""); setManualNote(ca.manualAdjustmentNote ?? ""); }}
+              >
+                <div className="flex items-center gap-2">
+                  <Pencil className="w-3 h-3 text-gray-400" />
+                  <span className="text-sm text-gray-600">
+                    {ca.manualAdjustment ? (
+                      <>
+                        Manual adj
+                        {ca.manualAdjustmentNote && <span className="text-gray-400"> ({ca.manualAdjustmentNote})</span>}
+                      </>
+                    ) : (
+                      <span className="text-gray-400 italic">Add manual adjustment…</span>
+                    )}
+                  </span>
+                </div>
+                {ca.manualAdjustment && (
+                  <span className={`text-sm font-semibold ${
+                    parseFloat(ca.manualAdjustment) >= 0 ? "text-emerald-600" : "text-red-500"
+                  }`}>
+                    {parseFloat(ca.manualAdjustment) >= 0 ? "+" : ""}${parseFloat(ca.manualAdjustment).toFixed(2)}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="px-2 py-2 space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Amount (e.g. 10 or -15)"
+                    value={manualAmount}
+                    onChange={e => setManualAmount(e.target.value)}
+                    className="h-7 text-xs"
+                    autoFocus
+                  />
+                  <Button size="sm" className="h-7 text-xs px-2" onClick={handleSaveManual} disabled={setAdj.isPending}>
+                    {setAdj.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setEditingManual(false)}>✕</Button>
+                </div>
+                <Input
+                  placeholder="Reason (shown to cleaner)"
+                  value={manualNote}
+                  onChange={e => setManualNote(e.target.value)}
+                  className="h-7 text-xs"
+                  onKeyDown={e => e.key === "Enter" && handleSaveManual()}
+                />
+              </div>
+            )}
           </div>
+
+          {/* Net pay total */}
+          <div className="border-t border-gray-200 pt-3 flex items-center justify-between px-2">
+            <span className="text-sm font-semibold text-gray-800">Net pay</span>
+            <span className="text-lg font-bold text-gray-900">${netPay.toFixed(2)}</span>
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleSave}
-              disabled={setAdj.isPending}
-              style={{ backgroundColor: "#E8603C", color: "white" }}
-            >
-              {setAdj.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-              Save
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -645,47 +733,6 @@ function UncompleteButton({ job, onRefetch }: { job: JobRow; onRefetch: () => vo
         <Loader2 className="w-3 h-3 animate-spin" />
       ) : (
         <>↩ Reopen for Photos</>
-      )}
-    </Button>
-  );
-}
-
-function RecleanPenaltyButton({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
-  const hasReclean = job.cleanerAssignment?.recleanPenalty != null;
-
-  const setReclean = trpc.quality.setRecleanPenalty.useMutation({
-    onSuccess: () => {
-      toast.success(hasReclean ? "Reclean penalty removed" : "Reclean penalty applied (-$30)");
-      onRefetch();
-    },
-    onError: (err: { message: string }) => toast.error("Failed", { description: err.message }),
-  });
-
-  if (!job.cleanerAssignment) return null;
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className={`gap-1.5 text-xs h-7 px-2 ${
-        hasReclean
-          ? "border-red-500/50 text-red-400 hover:bg-red-950/30"
-          : "border-orange-500/30 text-orange-400 hover:bg-orange-950/20"
-      }`}
-      onClick={() =>
-        setReclean.mutate({
-          cleanerJobId: job.cleanerAssignment!.id,
-          apply: !hasReclean,
-        })
-      }
-      disabled={setReclean.isPending}
-    >
-      {setReclean.isPending ? (
-        <Loader2 className="w-3 h-3 animate-spin" />
-      ) : hasReclean ? (
-        <>✖ Reclean -$30</>
-      ) : (
-        <>Reclean Penalty</>
       )}
     </Button>
   );
@@ -1000,9 +1047,7 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
 
             {/* Action buttons row — grouped at bottom */}
             <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-              {job.cleanerAssignment && <ManualAdjustButton job={job} onRefetch={onRefetch} />}
-              {job.cleanerAssignment && <RecleanPenaltyButton job={job} onRefetch={onRefetch} />}
-              {job.cleanerAssignment && <CustomRulesButton job={job} onRefetch={onRefetch} />}
+              {job.cleanerAssignment && <PayBreakdownPanel job={job} onRefetch={onRefetch} />}
               <UncompleteButton job={job} onRefetch={onRefetch} />
               <SendTrackerLinkButton job={job} />
             </div>
