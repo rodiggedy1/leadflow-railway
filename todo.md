@@ -2539,3 +2539,11 @@
 - [x] Upgrade toolbar buttons to rounded-lg style matching FM
 - [x] Upgrade StatsBar and LostReasonsPanel to white bg, shadow-sm, rounded-2xl
 - [x] Replace lime #AAFF00 accents with indigo/amber/violet/emerald palette
+
+## Kanban Column Independent Scroll + Leads Table Design — Mar 23
+
+- [x] Make each kanban column independently scrollable (overflow-y-auto, fixed height)
+- [x] Leads table: bg-gray-50 page background
+- [x] Leads table: white bg-white rounded-2xl shadow-sm card wrapper for the table (via hj-table-wrap)
+- [ ] Leads table: page header with title + subtitle
+- [ ] Leads table: upgrade filter/search toolbar to match FM style

@@ -2663,6 +2663,7 @@ export default function AdminDashboard() {
           </div>
         )}
         {activeTab === "leads" && <>
+        <div className="-mx-4 sm:-mx-6 mt-2 px-4 sm:px-6 pt-6 pb-6" style={{ backgroundColor: '#F7F7F7', minHeight: 'calc(100vh - 200px)' }}>
         {/* Summary + date filter row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
           <div className="flex items-center gap-3">
@@ -3092,6 +3093,7 @@ export default function AdminDashboard() {
         <p className="text-xs mt-4 text-center" style={{ color: '#555555' }}>
           Auto-refreshes every 30 seconds · Click any row or stage card to filter · Click a stage card again to clear
         </p>
+        </div>
         </>}
       </main>
 

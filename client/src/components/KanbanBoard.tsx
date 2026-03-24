@@ -488,11 +488,13 @@ function KanbanColumnView({
           </div>
         </div>
 
-        {/* Drop zone */}
+        {/* Drop zone — independently scrollable */}
         <div
           ref={setNodeRef}
-          className="flex-1 flex flex-col gap-2 min-h-[200px] transition-colors duration-150 p-3"
+          className="flex flex-col gap-2 overflow-y-auto transition-colors duration-150 p-3"
           style={{
+            minHeight: 200,
+            maxHeight: "calc(100vh - 280px)",
             backgroundColor: isOver ? "#f0fdf4" : "transparent",
           }}
         >
