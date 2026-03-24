@@ -1587,4 +1587,89 @@ export const qualityRouter = router({
         ));
       return { ok: true };
     }),
+
+  /**
+   * Override (or clear) the rating adjustment for a job.
+   * Pass null to remove it (zero it out), or a number to set it.
+   */
+  overrideRatingAdj: agentProcedure
+    .input(z.object({
+      cleanerJobId: z.number().int(),
+      amount: z.number().nullable(), // null = remove
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      const cj = cjRow[0];
+      if (!cj) throw new TRPCError({ code: "NOT_FOUND" });
+      const newRatingAdj = input.amount ?? 0;
+      const base = parseFloat(cj.basePay ?? "0");
+      const photoAdj = parseFloat(cj.photoAdjustment ?? "0");
+      const streak = parseFloat(cj.streakBonus ?? "0");
+      const manual = parseFloat(cj.manualAdjustment ?? "0");
+      const reclean = cj.recleanPenalty != null ? parseFloat(cj.recleanPenalty) : 0;
+      const newFinalPay = Math.round((base + newRatingAdj + photoAdj + streak + manual + reclean) * 100) / 100;
+      await db.update(cleanerJobs).set({
+        ratingAdjustment: input.amount !== null ? String(newRatingAdj) : null,
+        finalPay: String(newFinalPay),
+      }).where(eq(cleanerJobs.id, input.cleanerJobId));
+      return { ok: true };
+    }),
+
+  /**
+   * Override (or clear) the photo adjustment for a job.
+   */
+  overridePhotoAdj: agentProcedure
+    .input(z.object({
+      cleanerJobId: z.number().int(),
+      amount: z.number().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      const cj = cjRow[0];
+      if (!cj) throw new TRPCError({ code: "NOT_FOUND" });
+      const newPhotoAdj = input.amount ?? 0;
+      const base = parseFloat(cj.basePay ?? "0");
+      const ratingAdj = parseFloat(cj.ratingAdjustment ?? "0");
+      const streak = parseFloat(cj.streakBonus ?? "0");
+      const manual = parseFloat(cj.manualAdjustment ?? "0");
+      const reclean = cj.recleanPenalty != null ? parseFloat(cj.recleanPenalty) : 0;
+      const newFinalPay = Math.round((base + ratingAdj + newPhotoAdj + streak + manual + reclean) * 100) / 100;
+      await db.update(cleanerJobs).set({
+        photoAdjustment: input.amount !== null ? String(newPhotoAdj) : null,
+        finalPay: String(newFinalPay),
+      }).where(eq(cleanerJobs.id, input.cleanerJobId));
+      return { ok: true };
+    }),
+
+  /**
+   * Override (or clear) the streak bonus for a job.
+   */
+  overrideStreakBonus: agentProcedure
+    .input(z.object({
+      cleanerJobId: z.number().int(),
+      amount: z.number().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      const cj = cjRow[0];
+      if (!cj) throw new TRPCError({ code: "NOT_FOUND" });
+      const newStreak = input.amount ?? 0;
+      const base = parseFloat(cj.basePay ?? "0");
+      const ratingAdj = parseFloat(cj.ratingAdjustment ?? "0");
+      const photoAdj = parseFloat(cj.photoAdjustment ?? "0");
+      const manual = parseFloat(cj.manualAdjustment ?? "0");
+      const reclean = cj.recleanPenalty != null ? parseFloat(cj.recleanPenalty) : 0;
+      const newFinalPay = Math.round((base + ratingAdj + photoAdj + newStreak + manual + reclean) * 100) / 100;
+      await db.update(cleanerJobs).set({
+        streakBonus: input.amount !== null ? String(newStreak) : null,
+        finalPay: String(newFinalPay),
+      }).where(eq(cleanerJobs.id, input.cleanerJobId));
+      return { ok: true };
+    }),
 });

@@ -458,6 +458,18 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
     onSuccess: () => { setEditingManual(false); onRefetch(); },
     onError: (err) => toast.error("Failed", { description: err.message }),
   });
+  const overrideRating = trpc.quality.overrideRatingAdj.useMutation({
+    onSuccess: () => onRefetch(),
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
+  const overridePhoto = trpc.quality.overridePhotoAdj.useMutation({
+    onSuccess: () => onRefetch(),
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
+  const overrideStreak = trpc.quality.overrideStreakBonus.useMutation({
+    onSuccess: () => onRefetch(),
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
 
   if (!job.cleanerAssignment) return null;
   const ca = job.cleanerAssignment;
@@ -520,7 +532,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
           </div>
         </div>
         <span className={`text-sm font-semibold shrink-0 ${color}`}>
-          {dimmed && amount === 0 ? "—" : `${sign}$${Math.abs(amount).toFixed(2)}`}
+          {dimmed && amount === 0 ? "—" : amount < 0 ? `-$${Math.abs(amount).toFixed(2)}` : `+$${amount.toFixed(2)}`}
         </span>
       </div>
     );
@@ -587,7 +599,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
             {/* Divider */}
             <div className="border-t border-dashed border-gray-200 my-1" />
 
-            {/* Rating adjustment — always shown; auto-applied once rated, locked */}
+            {/* Rating adjustment — toggleable */}
             <PayRow
               label={
                 ratingAdj > 0 ? "5-star bonus"
@@ -597,32 +609,55 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
               }
               amount={ratingAdj}
               color={ratingAdj > 0 ? "text-emerald-600" : ratingAdj < 0 ? "text-red-500" : "text-gray-400"}
-              locked
-              pending={false}
+              toggled={ratingAdj !== 0}
+              pending={overrideRating.isPending}
               dimmed={ratingAdj === 0}
               note={ratingAdj === 0 ? "Pending customer rating" : undefined}
+              onToggle={() => {
+                if (ratingAdj !== 0) {
+                  // Remove it (zero out)
+                  overrideRating.mutate({ cleanerJobId: cleanerJobId!, amount: null });
+                } else {
+                  toast.info("Rating adjustment is set automatically when a rating arrives.");
+                }
+              }}
             />
 
-            {/* Photo adjustment — always shown; shows preview amount until locked by rating */}
+            {/* Photo adjustment — toggleable */}
             <PayRow
               label={photoAdj >= 0 ? "Completion photo bonus" : "No photo penalty"}
               amount={photoAdj}
               color={photoAdj > 0 ? "text-emerald-600" : photoAdj < 0 ? "text-red-500" : "text-gray-400"}
-              locked
-              pending={false}
+              toggled={photoAdj !== 0}
+              pending={overridePhoto.isPending}
               dimmed={false}
-              note={ca.photoAdjustment == null ? (ca.photoSubmitted ? "Preview — finalised when rated" : "No photo uploaded yet") : undefined}
+              onToggle={() => {
+                // Toggle: if currently applied (non-zero), remove it; otherwise restore the auto-calculated value
+                if (photoAdj !== 0) {
+                  overridePhoto.mutate({ cleanerJobId: cleanerJobId!, amount: null });
+                } else {
+                  // Re-apply based on whether photos were submitted
+                  overridePhoto.mutate({ cleanerJobId: cleanerJobId!, amount: ca.photoSubmitted ? 5 : -10 });
+                }
+              }}
             />
 
-            {/* Streak bonus — always shown */}
+            {/* Streak bonus — toggleable */}
             <PayRow
               label="Streak bonus"
               amount={streak}
               color={streak > 0 ? "text-emerald-600" : "text-gray-400"}
-              locked
-              pending={false}
+              toggled={streak > 0}
+              pending={overrideStreak.isPending}
               dimmed={streak === 0}
               note={streak === 0 ? "Earned every 10 consecutive jobs" : undefined}
+              onToggle={() => {
+                if (streak > 0) {
+                  overrideStreak.mutate({ cleanerJobId: cleanerJobId!, amount: null });
+                } else {
+                  toast.info("Streak bonus is set automatically when streak milestone is reached.");
+                }
+              }}
             />
 
             {/* Reclean penalty — always shown, toggleable */}
