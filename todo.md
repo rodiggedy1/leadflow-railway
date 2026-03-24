@@ -2571,3 +2571,10 @@
 - [x] sendCompletionFlow sends only to the cleaner — no client SMS, no guard needed
 - [x] Add shared isJobAssigned() guard helper — single source of truth for the rule
 - [x] Write vitest tests for every guarded path (950/950 tests pass)
+
+## Late-Assignment SMS Trigger
+
+- [x] Add maybeTriggerLateAssignmentSms() — fires client pre-job SMS + cleaner reminder immediately when a job is assigned within 2 hours of start
+- [x] Wire into Launch27 sync (bookingStatus transitions to 'assigned')
+- [x] Wire into fieldMgmtRouter.confirmAssignment (manual assignment from Day Board)
+- [x] Write vitest tests for the new trigger (957/957 tests pass)

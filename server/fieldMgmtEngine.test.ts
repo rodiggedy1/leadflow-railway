@@ -26,6 +26,7 @@ import {
   stepAlreadyFired,
   isWithinEscalationHours,
   isJobAssigned,
+  maybeTriggerLateAssignmentSms,
 } from "./fieldMgmtEngine";
 
 // ── parseServiceDateTime ───────────────────────────────────────────────────────
@@ -721,5 +722,109 @@ describe("isJobAssigned — unassigned job client SMS guard", () => {
     const fnEnd = src.indexOf("// ── Step 2:");
     const fnBody = src.slice(fnStart, fnEnd);
     expect(fnBody).toContain("eq(cleanerJobs.bookingStatus, \"assigned\")");
+  });
+});
+
+// ── maybeTriggerLateAssignmentSms — late-assignment trigger ───────────────────
+
+describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
+  /**
+   * These tests verify the logic of maybeTriggerLateAssignmentSms at the
+   * source-code level (structural tests) and via import (function existence).
+   * Full integration tests require a DB mock and are covered by the structural checks.
+   */
+
+  it("maybeTriggerLateAssignmentSms is exported from fieldMgmtEngine", async () => {
+    const { maybeTriggerLateAssignmentSms } = await import("./fieldMgmtEngine");
+    expect(typeof maybeTriggerLateAssignmentSms).toBe("function");
+  });
+
+  it("function returns early when FIELD_MGMT_ENABLED is false (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("export async function maybeTriggerLateAssignmentSms");
+    const fnEnd = src.indexOf("export async function sendCleanerPreJobSmsForJob");
+    const fnBody = src.slice(fnStart, fnEnd);
+    // Must check FIELD_MGMT_ENABLED
+    expect(fnBody).toContain("FIELD_MGMT_ENABLED");
+    // Must return early if disabled
+    expect(fnBody).toContain("FIELD_MGMT_ENABLED is false");
+  });
+
+  it("only fires if job starts within 2 hours (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("export async function maybeTriggerLateAssignmentSms");
+    const fnEnd = src.indexOf("export async function sendCleanerPreJobSmsForJob");
+    const fnBody = src.slice(fnStart, fnEnd);
+    // Must check 2-hour window
+    expect(fnBody).toContain("twoHoursMs");
+    expect(fnBody).toContain("msUntilJob > twoHoursMs");
+    // Must skip past-start jobs
+    expect(fnBody).toContain("msUntilJob < 0");
+  });
+
+  it("fires both client pre-job SMS and cleaner pre-job reminder (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("export async function maybeTriggerLateAssignmentSms");
+    const fnEnd = src.indexOf("export async function sendCleanerPreJobSmsForJob");
+    const fnBody = src.slice(fnStart, fnEnd);
+    // Must call both client and cleaner SMS functions
+    expect(fnBody).toContain("sendClientPreJobSms(cleanerJobId)");
+    expect(fnBody).toContain("sendCleanerPreJobSmsForJob(cleanerJobId)");
+  });
+
+  it("is wired into confirmAssignment in fieldMgmtRouter (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtRouter.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("confirmAssignment: adminProcedure");
+    const fnEnd = src.indexOf("}),", fnStart + 10);
+    const fnBody = src.slice(fnStart, fnEnd);
+    expect(fnBody).toContain("maybeTriggerLateAssignmentSms");
+    expect(fnBody).toContain("lateSmsFired");
+  });
+
+  it("is wired into syncTodayJobs in qualityRouter (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    expect(src).toContain("maybeTriggerLateAssignmentSms");
+    // Must check that previousStatus was not already assigned
+    expect(src).toContain("previousStatus !== \"assigned\"");
+  });
+
+  it("sendCleanerPreJobSmsForJob uses a late-assignment-specific message (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "fieldMgmtEngine.ts"),
+      "utf8"
+    );
+    const fnStart = src.indexOf("async function sendCleanerPreJobSmsForJob");
+    const fnBody = src.slice(fnStart, fnStart + 2000);
+    // Message must mention the late assignment context
+    expect(fnBody).toContain("you've just been assigned");
+    // Must be idempotent via stepAlreadyFired
+    expect(fnBody).toContain("stepAlreadyFired");
   });
 });

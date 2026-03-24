@@ -1275,3 +1275,189 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
     console.error(`[FieldMgmt] Running late SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
+
+// ── Late-Assignment SMS Trigger ───────────────────────────────────────────────
+
+/**
+ * RULE: When a job transitions from unassigned → assigned within 2 hours of its
+ * scheduled start time, the normal T-2hr cron window has already passed.
+ * This function fires the client pre-job SMS and cleaner pre-job reminder
+ * immediately so neither is missed.
+ *
+ * Call this immediately after any code that sets bookingStatus to 'assigned'
+ * on a job that was previously unassigned (or 'new').
+ *
+ * Guards:
+ * - Only fires if the job starts within the next 2 hours (cron window already passed).
+ * - Idempotent: uses stepAlreadyFired so double-calls are safe.
+ * - Skips silently if FIELD_MGMT_ENABLED is false.
+ * - Skips if the job has no serviceDateTime.
+ *
+ * @param cleanerJobId  The ID of the job that was just assigned.
+ * @param previousStatus  The bookingStatus before the transition (used for logging).
+ */
+export async function maybeTriggerLateAssignmentSms(
+  cleanerJobId: number,
+  previousStatus: string | null
+): Promise<{ triggered: boolean; reason: string }> {
+  if (!FIELD_MGMT_ENABLED) {
+    return { triggered: false, reason: "FIELD_MGMT_ENABLED is false" };
+  }
+
+  const db = await getDb();
+  if (!db) return { triggered: false, reason: "DB unavailable" };
+
+  // Fetch the job
+  const rows = await db
+    .select({
+      id: cleanerJobs.id,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      bookingStatus: cleanerJobs.bookingStatus,
+      cleanerName: cleanerJobs.cleanerName,
+      customerName: cleanerJobs.customerName,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+
+  const job = rows[0];
+  if (!job) return { triggered: false, reason: "Job not found" };
+
+  // Only fire for jobs that just became assigned (guard against re-runs)
+  if (job.bookingStatus !== "assigned") {
+    return { triggered: false, reason: `bookingStatus is '${job.bookingStatus}', not 'assigned'` };
+  }
+
+  if (!job.serviceDateTime) {
+    return { triggered: false, reason: "No serviceDateTime on job" };
+  }
+
+  const serviceTime = parseServiceDateTime(job.serviceDateTime);
+  if (!serviceTime) {
+    return { triggered: false, reason: "Could not parse serviceDateTime" };
+  }
+
+  const now = Date.now();
+  const msUntilJob = serviceTime.getTime() - now;
+  const twoHoursMs = 2 * 60 * 60 * 1000;
+
+  // Only trigger if the job starts within 2 hours (the cron window has passed)
+  if (msUntilJob > twoHoursMs) {
+    return {
+      triggered: false,
+      reason: `Job starts in ${Math.round(msUntilJob / 60_000)} min — cron will handle it`,
+    };
+  }
+
+  // Job is in the past — nothing to do
+  if (msUntilJob < 0) {
+    return { triggered: false, reason: "Job start time has already passed" };
+  }
+
+  console.log(
+    `[FieldMgmt] Late assignment detected for job ${cleanerJobId} (${job.cleanerName}) — ` +
+    `was '${previousStatus ?? "unknown"}', now 'assigned', starts in ${Math.round(msUntilJob / 60_000)} min. ` +
+    `Firing immediate pre-job SMS.`
+  );
+
+  // Fire cleaner pre-job reminder immediately (non-blocking)
+  // sendClientPreJobSms already has its own isJobAssigned + stepAlreadyFired guards
+  sendClientPreJobSms(cleanerJobId).catch((err) =>
+    console.error(`[FieldMgmt] Late-assignment client pre-job SMS error for job ${cleanerJobId}:`, err)
+  );
+
+  // Small delay to avoid OpenPhone 429 rate limit (same pattern as runPreJobReminders)
+  sleep(1500).then(() =>
+    // Fire cleaner pre-job reminder (non-blocking)
+    // runPreJobReminders won't catch this job because it already passed the cron window,
+    // so we call sendCleanerPreJobSmsForJob directly.
+    sendCleanerPreJobSmsForJob(cleanerJobId).catch((err) =>
+      console.error(`[FieldMgmt] Late-assignment cleaner pre-job SMS error for job ${cleanerJobId}:`, err)
+    )
+  );
+
+  return {
+    triggered: true,
+    reason: `Job starts in ${Math.round(msUntilJob / 60_000)} min — fired client + cleaner pre-job SMS immediately`,
+  };
+}
+
+/**
+ * Sends the pre-job reminder SMS directly to the cleaner for a specific job.
+ * Used by maybeTriggerLateAssignmentSms when the cron window has already passed.
+ * Idempotent via stepAlreadyFired.
+ */
+async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
+  if (!FIELD_MGMT_ENABLED) return;
+
+  if (await stepAlreadyFired(cleanerJobId, "pre_job_reminder")) return;
+
+  const db = await getDb();
+  if (!db) return;
+
+  const jobRows = await db
+    .select({
+      id: cleanerJobs.id,
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName: cleanerJobs.cleanerName,
+      customerName: cleanerJobs.customerName,
+      jobAddress: cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      serviceType: cleanerJobs.serviceType,
+      customerNotes: cleanerJobs.customerNotes,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+
+  const job = jobRows[0];
+  if (!job) return;
+
+  if (!job.serviceDateTime) return;
+  const serviceTime = parseServiceDateTime(job.serviceDateTime);
+  if (!serviceTime) return;
+
+  const profileRows = await db
+    .select({ phone: cleanerProfiles.phone, email: cleanerProfiles.email })
+    .from(cleanerProfiles)
+    .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+    .limit(1);
+
+  const profile = profileRows[0];
+  if (!profile?.phone) {
+    console.warn(`[FieldMgmt] Late-assignment pre-job reminder: no phone for cleaner profile ${job.cleanerProfileId}`);
+    return;
+  }
+
+  const cleanerFirstName = firstName(job.cleanerName);
+  const timeStr = formatTimeET(serviceTime);
+  const loginEmail = profile.email ?? "your login email";
+
+  const msg = [
+    `Hey ${cleanerFirstName} — you've just been assigned a cleaning at ${timeStr} today.`,
+    ``,
+    `Before you arrive:`,
+    `• Review notes: ${CLEANER_PORTAL_URL}`,
+    `  (Login: ${loginEmail})`,
+    `• Bring full supplies`,
+    `• Be ready to check in + upload photos`,
+    ``,
+    `Set your status to "On the Way" in the app.`,
+  ].join("\n");
+
+  await recordStep({
+    cleanerJobId: job.id,
+    step: "pre_job_reminder",
+    success: true,
+    smsSent: msg,
+    recipientPhone: profile.phone,
+  });
+
+  const result = await sendSms({ to: profile.phone, content: msg });
+
+  if (result.success) {
+    console.log(`[FieldMgmt] Late-assignment pre-job reminder sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+  } else {
+    console.error(`[FieldMgmt] Late-assignment pre-job reminder FAILED for job ${job.id}:`, result.error);
+  }
+}

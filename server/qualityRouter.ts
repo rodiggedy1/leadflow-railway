@@ -1182,7 +1182,7 @@ export const qualityRouter = router({
 
             // Check if a cleanerJob already exists for this booking + team
             const [existing] = await db
-              .select({ id: cleanerJobs.id })
+              .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus })
               .from(cleanerJobs)
               .where(
                 and(
@@ -1222,12 +1222,35 @@ export const qualityRouter = router({
             };
 
             if (existing) {
+              const previousStatus = existing.bookingStatus;
               // Update existing record with latest data from Launch27
               await db
                 .update(cleanerJobs)
                 .set(jobData)
                 .where(eq(cleanerJobs.id, existing.id));
               updated++;
+
+              // If this sync just transitioned the job from unassigned → assigned,
+              // fire the late-assignment SMS immediately (the cron window may have passed)
+              if (
+                booking.bookingStatus === "assigned" &&
+                previousStatus !== "assigned" &&
+                previousStatus !== "completed" &&
+                previousStatus !== "rescheduled" &&
+                previousStatus !== "cancelled"
+              ) {
+                const { maybeTriggerLateAssignmentSms } = await import("./fieldMgmtEngine");
+                maybeTriggerLateAssignmentSms(existing.id, previousStatus).then((r) => {
+                  if (r.triggered) {
+                    console.log(
+                      `[Sync] Late-assignment SMS triggered for job ${existing.id} ` +
+                      `(was '${previousStatus}' → 'assigned'): ${r.reason}`
+                    );
+                  }
+                }).catch((err) =>
+                  console.error(`[Sync] Late-assignment SMS error for job ${existing.id}:`, err)
+                );
+              }
             } else {
               // Create new cleanerJob
               await db.insert(cleanerJobs).values({

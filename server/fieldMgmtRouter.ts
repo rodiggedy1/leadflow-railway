@@ -1163,8 +1163,10 @@ export const fieldMgmtRouter = router({
       const job = rows[0];
       if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       if (job.bookingStatus === "assigned") {
-        return { success: true, alreadyAssigned: true, cleanerName: job.cleanerName };
+        return { success: true, alreadyAssigned: true, cleanerName: job.cleanerName, lateSmsFired: false };
       }
+
+      const previousStatus = job.bookingStatus;
 
       await db
         .update(cleanerJobs)
@@ -1172,6 +1174,15 @@ export const fieldMgmtRouter = router({
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
       console.log(`[FieldMgmt] Manually confirmed assignment for job ${input.cleanerJobId} (${job.cleanerName})`);
-      return { success: true, alreadyAssigned: false, cleanerName: job.cleanerName };
+
+      // Fire late-assignment SMS immediately if the job starts within 2 hours
+      // (the normal T-2hr cron window will have already passed)
+      const { maybeTriggerLateAssignmentSms } = await import("./fieldMgmtEngine");
+      const lateResult = await maybeTriggerLateAssignmentSms(input.cleanerJobId, previousStatus);
+      if (lateResult.triggered) {
+        console.log(`[FieldMgmt] Late-assignment SMS triggered for job ${input.cleanerJobId}: ${lateResult.reason}`);
+      }
+
+      return { success: true, alreadyAssigned: false, cleanerName: job.cleanerName, lateSmsFired: lateResult.triggered };
     }),
 });
