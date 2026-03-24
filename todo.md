@@ -27,3 +27,5 @@
 - [x] Fix voice lead session not being created (invalid stage "NEW" → "UNHANDLED")
 - [x] Disable AI auto-responses for Google Ads Call leads (leadSource=voice)
 - [x] Switch Google Ads Form leads (leadSource=email) from Madison to Jade AI flow
+- [x] Fix auto-nudge using "Form" as name for email leads (should use "there")
+- [x] Fix bedroom/bathroom parsing from Google Ads Form email body (not an issue — parsing correct)

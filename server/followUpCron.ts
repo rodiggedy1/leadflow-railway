@@ -138,7 +138,10 @@ export async function runSilenceFollowUp(): Promise<{
         continue;
       }
 
-      const firstName = session.leadName?.split(" ")[0] ?? session.leadName ?? "there";
+      const rawLeadName = session.leadName ?? "";
+      // Use "there" for generic placeholder names like "Form Lead (email@...)" or "Anonymous (Google Ads Call)"
+      const isGenericName = rawLeadName.startsWith("Form Lead") || rawLeadName.startsWith("Anonymous") || rawLeadName === "Voice Lead";
+      const firstName = isGenericName ? "there" : (rawLeadName.split(" ")[0] || "there");
 
       // Generate a contextual nudge using the AI
       let nudgeMessage: string;
