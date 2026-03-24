@@ -598,7 +598,7 @@ export async function handleCallNotificationEmail(
     await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
       leadName: displayName,
-      stage: "NEW" as any,
+      stage: "UNHANDLED",
       messageHistory: initialHistory,
       leadSource: "voice",
       barkQA: callTime ? `Missed call at: ${callTime}` : "Missed call (time unknown)",

@@ -24,3 +24,4 @@
 - [x] Fix leads page: add "Google Ads Call" badge for leadSource="voice"
 - [x] Fix leads page: show barkQA details (cleaning type, email, call time) in lead card detail panel
 - [x] Fix leads page: add "Google Ads Form" and "Google Ads Call" to source filter dropdown
+- [x] Fix voice lead session not being created (invalid stage "NEW" → "UNHANDLED")
