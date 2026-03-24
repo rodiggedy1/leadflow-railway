@@ -2528,6 +2528,7 @@ export default function AdminDashboard() {
       <AdminHeader
         activeTab={activeTab === "callbacks" ? "callbacks" : activeTab === "agents" ? "agents" : activeTab === "leaderboard" ? "leaderboard" : activeTab === "pipeline" ? "pipeline" : "leads"}
         pagePermissions={agentPagePermissions}
+        isAdmin={isAdmin}
         onSessionOpen={handleSessionOpen}
         rightExtra={
           <>
@@ -3239,7 +3240,7 @@ export default function AdminDashboard() {
 
       {/* ── Sticky footer bar: Quality, Recap, AI Simulator ── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 py-2 px-4 bg-white/80 backdrop-blur border-t border-gray-100">
-        <QualityWidget />
+        {isAdmin && <QualityWidget enabled={isAdmin} />}
         {/* Daily Recap preview trigger */}
         <button
           onClick={() => { localStorage.removeItem(`recap_shown_${new Date().toISOString().slice(0,10)}`); setShowRecap(true); }}

@@ -1235,7 +1235,7 @@ export default function FieldManagement() {
   return (
     <AdminPageGuard pageId="field-management">
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader activeTab="field-management" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="field-management" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <div className={`mx-auto px-4 sm:px-6 py-8 ${
         activeTab === "board" || activeTab === "tower" ? "max-w-7xl" : "max-w-3xl"

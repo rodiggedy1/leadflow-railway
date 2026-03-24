@@ -739,7 +739,7 @@ function GroupCard({ group, onUpdated }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AlwaysOnCampaign() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const utils = trpc.useUtils();
 
   const { data: groups, isLoading, refetch } = trpc.alwaysOn.listGroups.useQuery();
@@ -762,7 +762,7 @@ export default function AlwaysOnCampaign() {
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader
         activeTab="always-on"
-        pagePermissions={pagePermissions}
+        pagePermissions={pagePermissions} isAdmin={isAdmin}
         rightExtra={
           <Button
             onClick={() => manualEnroll.mutate()}

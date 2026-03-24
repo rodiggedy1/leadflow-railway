@@ -214,7 +214,7 @@ function CallCard({ call }: { call: VoiceCall }) {
 const PAGE_SIZE = 20;
 
 export default function AllCalls() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [page, setPage] = useState(0);
   const [preset, setPreset] = useState<DatePreset>("30d");
   const [outcomeFilter, setOutcomeFilter] = useState("");
@@ -247,7 +247,7 @@ export default function AllCalls() {
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
       <AdminHeader
         activeTab="calls"
-        pagePermissions={pagePermissions}
+        pagePermissions={pagePermissions} isAdmin={isAdmin}
         rightExtra={
           <button
             onClick={() => refetch()}

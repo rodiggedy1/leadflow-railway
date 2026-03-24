@@ -453,7 +453,7 @@ function RunRow({ run }: { run: SyncRun }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SyncHealthPage() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [triggerDate, setTriggerDate] = useState("");
   const [historyFilter, setHistoryFilter] = useState<"all" | "launch27-sync" | "always-on-send">("all");
 
@@ -497,7 +497,7 @@ export default function SyncHealthPage() {
   return (
     <AdminPageGuard pageId="always-on">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
-      <AdminHeader activeTab="always-on" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="always-on" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Page title */}

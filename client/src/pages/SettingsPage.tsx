@@ -558,7 +558,7 @@ function SmsTemplateCard({
 type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general";
 
 export default function SettingsPage() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
   const updateSetting = trpc.settings.update.useMutation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("form");
@@ -608,7 +608,7 @@ export default function SettingsPage() {
   return (
     <AdminPageGuard pageId="settings">
     <div className="min-h-screen bg-[#faf9f7]">
-      <AdminHeader activeTab="settings" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="settings" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Page header */}

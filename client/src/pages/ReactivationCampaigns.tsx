@@ -124,7 +124,7 @@ const STATUS_BADGE: Record<CampaignStatus, { label: string; variant: "default" |
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ReactivationCampaigns() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   // View state
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
@@ -885,7 +885,7 @@ export default function ReactivationCampaigns() {
   return (
     <AdminPageGuard pageId="campaigns">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: '#F7F7F7' }}>
-      <AdminHeader activeTab="campaigns" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="campaigns" pagePermissions={pagePermissions} isAdmin={isAdmin} />
       <div className="max-w-5xl mx-auto px-4 py-8">
       {view === "list" && renderCampaignList()}
       {view === "new" && renderNewCampaign()}

@@ -41,12 +41,13 @@ import {
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
-export function WidgetHealthBadge() {
+export function WidgetHealthBadge({ enabled = false }: { enabled?: boolean }) {
   const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
     retry: false,
     throwOnError: false,
+    enabled,
   });
   if (!data && isFetching) {
     return (
@@ -84,12 +85,13 @@ export function WidgetHealthBadge() {
 }
 
 // ── OpenPhone Webhook health badge ───────────────────────────────────────
-export function WebhookHealthBadge() {
+export function WebhookHealthBadge({ enabled = false }: { enabled?: boolean }) {
   const { data, isFetching, refetch } = trpc.system.webhookHealth.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
     retry: false,
     throwOnError: false,
+    enabled,
   });
   if (!data && isFetching) {
     return (
@@ -127,12 +129,13 @@ export function WebhookHealthBadge() {
 }
 
 // ── Sync Health badge ────────────────────────────────────────────────────────
-export function SyncHealthBadge() {
+export function SyncHealthBadge({ enabled = false }: { enabled?: boolean }) {
   const { data, isFetching, refetch } = trpc.syncHealth.getSummary.useQuery(undefined, {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 4 * 60 * 1000,
     retry: false,
     throwOnError: false,
+    enabled,
   });
 
   if (!data && isFetching) {
@@ -177,12 +180,13 @@ export function SyncHealthBadge() {
 }
 
 // ── Quality Widget (exported for footer use) ────────────────────────────────
-export function QualityWidget() {
+export function QualityWidget({ enabled = false }: { enabled?: boolean }) {
   const { data } = trpc.quality.ratingSmsQueueSummary.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 55_000,
     retry: false,
     throwOnError: false,
+    enabled,
   });
 
   const hasPending = data && data.pending > 0;
@@ -457,8 +461,10 @@ interface AdminHeaderProps {
   onSessionOpen?: (sessionId: number) => void;
   /** null = unrestricted (admin or legacy agent). string[] = allowed page IDs. */
   pagePermissions?: string[] | null;
+  /** true = full admin (Manus OAuth). false/undefined = agent session only. */
+  isAdmin?: boolean;
 }
-export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions }: AdminHeaderProps) {
+export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false }: AdminHeaderProps) {
   // Determine which page IDs this agent is allowed to see.
   // null means unrestricted (admin or no restrictions set).
   const allowedPageIds: string[] | null = pagePermissions ?? null;
@@ -491,11 +497,11 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
           </div>
         </a>
         <div className="flex items-center gap-3">
-          <WidgetHealthBadge />
-          <WebhookHealthBadge />
-          <SyncHealthBadge />
+          {isAdmin && <WidgetHealthBadge enabled={isAdmin} />}
+          {isAdmin && <WebhookHealthBadge enabled={isAdmin} />}
+          {isAdmin && <SyncHealthBadge enabled={isAdmin} />}
           {rightExtra}
-          <NotificationBell onSessionOpen={onSessionOpen} />
+          <NotificationBell onSessionOpen={onSessionOpen} enabled={isAdmin} />
           <PreviewAgentButton />
         </div>
       </div>

@@ -538,7 +538,7 @@ function HotLeadCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CommandCenter() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [range, setRange] = useState<Range>("30d");
   const [executingAction, setExecutingAction] = useState<string | null>(null);
   const [smsSending, setSmsSending] = useState<number | null>(null);
@@ -756,7 +756,7 @@ export default function CommandCenter() {
   return (
     <AdminPageGuard pageId="command-center">
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader activeTab="command-center" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="command-center" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       {/* ── AI Pulse Hero (light) ──────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100">

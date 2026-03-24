@@ -1150,7 +1150,7 @@ function CleanerProfilesSection() {
 type ViewMode = "by-time" | "by-cleaner";
 
 export default function CleanerDashboard() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>("by-time");
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
@@ -1260,7 +1260,7 @@ export default function CleanerDashboard() {
     <AdminPageGuard pageId="quality">
     <>
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader activeTab="quality" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="quality" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       {/* Date navigation + controls */}
       <div className="border-b bg-white shadow-sm">

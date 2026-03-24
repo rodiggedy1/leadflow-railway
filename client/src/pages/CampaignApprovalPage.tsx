@@ -409,7 +409,7 @@ function RejectDialog({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CampaignApprovalPage() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [rejectDialog, setRejectDialog] = useState<{ batchId: number; batchName: string } | null>(null);
   const [approvingId, setApprovingId] = useState<number | null>(null);
 
@@ -488,7 +488,7 @@ export default function CampaignApprovalPage() {
   return (
     <AdminPageGuard pageId="campaign-approval">
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
-      <AdminHeader activeTab="campaign-approval" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="campaign-approval" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Page title */}

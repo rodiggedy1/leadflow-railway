@@ -324,7 +324,7 @@ function SmsCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TrackerFlow() {
-  const { pagePermissions } = useAgentPermissions();
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const settingsQuery = trpc.settings.getAll.useQuery();
   const updateMutation = trpc.settings.update.useMutation({
     onSuccess: () => {
@@ -456,7 +456,7 @@ export default function TrackerFlow() {
   return (
     <AdminPageGuard pageId="tracker-flow">
     <div className="hj-theme min-h-screen bg-gray-50">
-      <AdminHeader activeTab="tracker-flow" pagePermissions={pagePermissions} />
+      <AdminHeader activeTab="tracker-flow" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Page header */}

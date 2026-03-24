@@ -31,16 +31,18 @@ function timeAgo(date: Date | string): string {
 
 interface NotificationBellProps {
   onSessionOpen?: (sessionId: number) => void;
+  /** Only fetch notifications when true (requires Manus OAuth session). */
+  enabled?: boolean;
 }
 
-export default function NotificationBell({ onSessionOpen }: NotificationBellProps = {}) {
+export default function NotificationBell({ onSessionOpen, enabled = false }: NotificationBellProps = {}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Poll every 30 seconds for new activity
+  // Poll every 30 seconds for new activity — only when admin is logged in
   const { data, refetch } = trpc.activity.getFeed.useQuery(
     { limit: 50 },
-    { refetchInterval: 30_000, refetchIntervalInBackground: false, retry: false, throwOnError: false }
+    { refetchInterval: 30_000, refetchIntervalInBackground: false, retry: false, throwOnError: false, enabled }
   );
 
   const markAllRead = trpc.activity.markAllRead.useMutation({

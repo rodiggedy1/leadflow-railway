@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 
 // ─── Status badge helpers ─────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<
@@ -1299,10 +1300,11 @@ type ReviewTab = "analytics" | "conversations" | "batches";
 
 export default function CompletedJobs() {
   const [activeTab, setActiveTab] = useState<ReviewTab>("analytics");
+  const { isAdmin } = useAgentPermissions();
 
   return (
     <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
-      <AdminHeader activeTab="completed-jobs" />
+      <AdminHeader activeTab="completed-jobs" isAdmin={isAdmin} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Page header */}
         <div className="mb-6">
