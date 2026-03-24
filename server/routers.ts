@@ -1304,10 +1304,25 @@ export const appRouter = router({
           .limit(1);
         const session = rows[0];
         if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
-
         // Parse conversation history
         let messages: Array<{ role: string; content: string; ts?: number }> = [];
         try { messages = JSON.parse(session.messageHistory ?? "[]"); } catch { messages = []; }
+        const currentMsgLen = (session.messageHistory ?? "").length;
+        // ── Cache hit check ──────────────────────────────────────────────────
+        // Return cached recommendation if message history hasn't changed since last analysis
+        if (
+          session.aiClosingRecCache &&
+          session.aiClosingRecMsgLen === currentMsgLen
+        ) {
+          try {
+            const cached = JSON.parse(session.aiClosingRecCache) as {
+              objectionType: string; objectionSummary: string; primaryMove: string;
+              primaryMoveRationale: string; suggestedMessage: string;
+              alternativeMoves: string[]; urgencyLevel: string; confidence: number;
+            };
+            return { success: true as const, ...cached };
+          } catch { /* cache corrupted — fall through to LLM */ }
+        }
 
         // Build a compact conversation transcript for the LLM (last 20 messages)
         const transcript = messages
@@ -1395,6 +1410,17 @@ Analyze this conversation and return a JSON object with exactly these fields:
             urgencyLevel: string;
             confidence: number;
           };
+          // ── Write to cache ────────────────────────────────────────────────
+          try {
+            await db
+              .update(conversationSessions)
+              .set({
+                aiClosingRecCache: JSON.stringify(rec),
+                aiClosingRecCachedAt: new Date(),
+                aiClosingRecMsgLen: currentMsgLen,
+              })
+              .where(eq(conversationSessions.id, input.sessionId));
+          } catch { /* cache write failure is non-fatal */ }
           return { success: true as const, ...rec };
         } catch {
           // Graceful fallback — never crash the drawer

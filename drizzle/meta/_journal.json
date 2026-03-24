@@ -519,6 +519,13 @@
       "when": 1774305960576,
       "tag": "0073_nifty_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "5",
+      "when": 1774322872243,
+      "tag": "0074_nostalgic_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

@@ -247,8 +247,17 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * Used as an idempotency key to prevent duplicate processing when OpenPhone
    * delivers the same webhook event more than once (at-least-once delivery).
    */
-  lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
-
+   lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
+  /**
+   * Cached JSON payload from the last AI closing recommendation.
+   * Stored so the drawer loads instantly on re-open without re-calling the LLM.
+   * Invalidated when new messages arrive (messageHistory length changes).
+   */
+  aiClosingRecCache: text("aiClosingRecCache"),
+  /** UTC timestamp when aiClosingRecCache was last generated */
+  aiClosingRecCachedAt: timestamp("aiClosingRecCachedAt"),
+  /** messageHistory length at time of cache — used to detect staleness */
+  aiClosingRecMsgLen: int("aiClosingRecMsgLen"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

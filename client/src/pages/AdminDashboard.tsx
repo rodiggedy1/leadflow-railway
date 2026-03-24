@@ -1239,7 +1239,7 @@ function ConversationDrawer({
           {drawerTab === "conversation" && (
             <div className="flex flex-col flex-1 min-h-0">
                {/* Messages scroll area — white bg, no gray */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-white">
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {/* AI recommendation banner — scrolls with messages */}
                 <div className="mb-4 px-4 py-3 rounded-xl bg-orange-50">
                   <div className="flex items-center justify-between mb-0.5">
