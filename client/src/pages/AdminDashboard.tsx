@@ -1545,7 +1545,7 @@ function ConversationDrawer({
         {/* ══════════════════════════════════════════════════════════
             RIGHT PANEL — Sidebar
         ══════════════════════════════════════════════════════════ */}
-        <div className="w-[310px] shrink-0 flex flex-col gap-3 overflow-y-auto h-full pb-2">
+        <div className="w-[310px] shrink-0 flex flex-col gap-3 overflow-y-auto h-full pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
           {/* ── NEXT ACTION card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
