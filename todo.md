@@ -2578,3 +2578,16 @@
 - [x] Wire into Launch27 sync (bookingStatus transitions to 'assigned')
 - [x] Wire into fieldMgmtRouter.confirmAssignment (manual assignment from Day Board)
 - [x] Write vitest tests for the new trigger (957/957 tests pass)
+
+## SMS Drawer Notification Sound Bug
+
+- [ ] Fix: conversations in SMS drawer not triggering notification sound on new messages
+
+## SMS Drawer Notification Sound Bug Fix
+
+- [x] Fix: conversations in SMS drawer not triggering notification sound on new messages
+  - Root cause: chime only fired when the specific conversation drawer was already open
+  - Fix: added useLeadReplyNotifier hook that watches ALL sessions globally via lastCustomerReplyAt
+  - Wired into AdminDashboard and AgentDashboard (both poll sessions every 30s)
+  - Does not chime on initial hydration — only on subsequent reply advances
+  - 957/957 tests pass

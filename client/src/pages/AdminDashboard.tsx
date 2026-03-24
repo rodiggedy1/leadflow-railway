@@ -8,6 +8,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import NotificationBell from "@/components/NotificationBell";
 import { triggerTestChime } from "@/hooks/useNewReplyNotifier";
+import { useLeadReplyNotifier } from "@/hooks/useLeadReplyNotifier";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2276,6 +2277,10 @@ export default function AdminDashboard() {
     refetch,
     isFetching,
   } = trpc.leads.list.useQuery({}, { refetchInterval: 30000, enabled: isAdmin || isAuthenticated });
+
+  // Global new-reply chime — fires for ANY session that gets a new customer reply,
+  // regardless of whether a conversation drawer is open.
+  useLeadReplyNotifier(sessions);
 
   const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,

@@ -3,6 +3,7 @@
  * Uses email + password auth — no Manus account required.
  */
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useLeadReplyNotifier } from "@/hooks/useLeadReplyNotifier";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import AgentNotificationBell from "@/components/AgentNotificationBell";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
@@ -1214,6 +1215,10 @@ export default function AgentDashboard() {
       refetchInterval: 30_000,
     }
   );
+
+  // Global new-reply chime — fires for ANY session that gets a new customer reply,
+  // regardless of whether a conversation drawer is open.
+  useLeadReplyNotifier(allSessions);
 
   const filtered = useMemo(() => {
     return (allSessions as Session[]).filter(s => {
