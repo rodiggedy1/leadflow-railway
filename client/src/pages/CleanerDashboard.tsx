@@ -482,7 +482,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
 
   // Helper: a single toggleable/editable row in the breakdown
   function PayRow({
-    label, amount, color, locked, onToggle, toggled, pending,
+    label, amount, color, locked, onToggle, toggled, pending, dimmed, note,
   }: {
     label: string;
     amount: number;
@@ -491,12 +491,14 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
     onToggle?: () => void;
     toggled?: boolean;
     pending?: boolean;
+    dimmed?: boolean;
+    note?: string;
   }) {
     const sign = amount >= 0 ? "+" : "";
     return (
       <div className={`flex items-center justify-between gap-2 py-1.5 px-2 rounded-md ${
         locked ? "" : "hover:bg-gray-50 cursor-pointer"
-      } ${pending ? "opacity-50" : ""}`}
+      } ${pending ? "opacity-50" : ""} ${dimmed ? "opacity-50" : ""}`}
         onClick={locked ? undefined : onToggle}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -508,10 +510,13 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
             </div>
           )}
           {locked && <div className="w-3.5 h-3.5 shrink-0" />}
-          <span className="text-sm text-gray-700 truncate">{label}</span>
+          <div className="min-w-0">
+            <span className="text-sm text-gray-700 truncate block">{label}</span>
+            {note && <span className="text-xs text-gray-400">{note}</span>}
+          </div>
         </div>
         <span className={`text-sm font-semibold shrink-0 ${color}`}>
-          {sign}${Math.abs(amount).toFixed(2)}
+          {dimmed && amount === 0 ? "—" : `${sign}$${Math.abs(amount).toFixed(2)}`}
         </span>
       </div>
     );
@@ -578,42 +583,54 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
             {/* Divider */}
             <div className="border-t border-dashed border-gray-200 my-1" />
 
-            {/* Rating adjustment — auto, locked (set by customer rating) */}
-            {ratingAdj !== 0 && (
-              <PayRow
-                label={ratingAdj > 0 ? "5-star bonus" : ca.missedSomething ? "Complaint deduction" : "Low rating deduction"}
-                amount={ratingAdj}
-                color={ratingAdj > 0 ? "text-emerald-600" : "text-red-500"}
-                locked
-              />
-            )}
+            {/* Rating adjustment — always shown; auto-applied once rated, locked */}
+            <PayRow
+              label={
+                ratingAdj > 0 ? "5-star bonus"
+                : ratingAdj < 0
+                  ? (ca.missedSomething ? "Complaint deduction" : "Low rating deduction")
+                  : "Rating bonus / deduction"
+              }
+              amount={ratingAdj}
+              color={ratingAdj > 0 ? "text-emerald-600" : ratingAdj < 0 ? "text-red-500" : "text-gray-400"}
+              locked
+              pending={false}
+              dimmed={ratingAdj === 0}
+              note={ratingAdj === 0 ? "Pending customer rating" : undefined}
+            />
 
-            {/* Photo adjustment — auto, locked */}
-            {photoAdj !== 0 && (
-              <PayRow
-                label={photoAdj > 0 ? "Completion photo bonus" : "No photo penalty"}
-                amount={photoAdj}
-                color={photoAdj > 0 ? "text-emerald-600" : "text-red-500"}
-                locked
-              />
-            )}
+            {/* Photo adjustment — always shown; auto-applied once job completed */}
+            <PayRow
+              label={photoAdj >= 0 ? "Completion photo bonus" : "No photo penalty"}
+              amount={photoAdj}
+              color={photoAdj > 0 ? "text-emerald-600" : photoAdj < 0 ? "text-red-500" : "text-gray-400"}
+              locked
+              pending={false}
+              dimmed={photoAdj === 0}
+              note={photoAdj === 0 ? "Applied after photo upload" : undefined}
+            />
 
-            {/* Streak bonus — auto, locked */}
-            {streak !== 0 && (
-              <PayRow label="Streak bonus" amount={streak} color="text-emerald-600" locked />
-            )}
+            {/* Streak bonus — always shown */}
+            <PayRow
+              label="Streak bonus"
+              amount={streak}
+              color={streak > 0 ? "text-emerald-600" : "text-gray-400"}
+              locked
+              pending={false}
+              dimmed={streak === 0}
+              note={streak === 0 ? "Earned every 10 consecutive jobs" : undefined}
+            />
 
-            {/* Reclean penalty — toggleable */}
-            {(hasReclean || true) && (
-              <PayRow
-                label="Reclean penalty"
-                amount={hasReclean ? reclean : -(parseFloat(ca.recleanPenalty ?? "30"))}
-                color="text-red-500"
-                toggled={hasReclean}
-                pending={setReclean.isPending}
-                onToggle={() => setReclean.mutate({ cleanerJobId: cleanerJobId!, apply: !hasReclean })}
-              />
-            )}
+            {/* Reclean penalty — always shown, toggleable */}
+            <PayRow
+              label="Reclean penalty"
+              amount={hasReclean ? reclean : -30}
+              color={hasReclean ? "text-red-500" : "text-gray-400"}
+              toggled={hasReclean}
+              pending={setReclean.isPending}
+              dimmed={!hasReclean}
+              onToggle={() => setReclean.mutate({ cleanerJobId: cleanerJobId!, apply: !hasReclean })}
+            />
 
             {/* Custom rules — each toggleable */}
             {rulesQuery.isLoading && open && (
