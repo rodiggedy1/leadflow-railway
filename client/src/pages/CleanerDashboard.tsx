@@ -481,10 +481,15 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
   // Compute net pay from all line items
   const base = parseFloat(ca.basePay ?? "0");
   const ratingAdj = parseFloat(ca.ratingAdjustment ?? "0");
+  // Pay rules from Settings (fall back to defaults if not loaded yet)
+  const payRules = payRulesQuery.data;
+  const photoBonusAmt = payRules?.photoBonus ?? 5;
+  const noPhotoPenaltyAmt = payRules?.noPhotoPenalty ?? 10;
+  const recleanPenaltyAmt = payRules?.recleanPenalty ?? 30;
   // Photo adj is now always in DB (applied on upload). Fall back to computed value for safety.
   const photoAdj = ca.photoAdjustment != null
     ? parseFloat(ca.photoAdjustment)
-    : (ca.photoSubmitted ? 5 : -10);
+    : (ca.photoSubmitted ? photoBonusAmt : -noPhotoPenaltyAmt);
   const streak = parseFloat(ca.streakBonus ?? "0");
   const manual = parseFloat(ca.manualAdjustment ?? "0");
   const reclean = hasReclean ? parseFloat(ca.recleanPenalty ?? "0") : 0;
@@ -637,7 +642,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
                   overridePhoto.mutate({ cleanerJobId: cleanerJobId!, amount: null });
                 } else {
                   // Re-apply based on whether photos were submitted
-                  overridePhoto.mutate({ cleanerJobId: cleanerJobId!, amount: ca.photoSubmitted ? 5 : -10 });
+                  overridePhoto.mutate({ cleanerJobId: cleanerJobId!, amount: ca.photoSubmitted ? photoBonusAmt : -noPhotoPenaltyAmt });
                 }
               }}
             />
@@ -663,7 +668,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
             {/* Reclean penalty — always shown, toggleable */}
             <PayRow
               label="Reclean penalty"
-              amount={hasReclean ? reclean : -30}
+              amount={hasReclean ? reclean : -recleanPenaltyAmt}
               color={hasReclean ? "text-red-500" : "text-gray-400"}
               toggled={hasReclean}
               pending={setReclean.isPending}
