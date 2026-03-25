@@ -72,6 +72,7 @@ import {
   ClipboardCheck,
   Settings,
   LayoutGrid,
+  ChevronDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -1216,19 +1217,27 @@ function ConversationDrawer({
                 disabled={updateStageMutation.isPending}
               >
                 <SelectTrigger
-                  className="h-8 text-xs font-semibold rounded-full border-0 px-3 gap-1.5 focus:ring-0"
+                  className="h-8 text-xs font-semibold rounded-full border px-3 pr-2.5 gap-1.5 focus:ring-0 min-w-[120px]"
                   style={{
                     backgroundColor: STAGE_CONFIG[session.stage as Stage]?.bgColor ?? "#f3f4f6",
                     color: STAGE_CONFIG[session.stage as Stage]?.textColor ?? "#374151",
+                    borderColor: STAGE_CONFIG[session.stage as Stage]?.borderColor ?? "#d1d5db",
                   }}
                 >
-                  <SelectValue />
-                  {updateStageMutation.isPending && <Loader2 className="w-3 h-3 animate-spin ml-1 shrink-0" />}
+                  <span className="truncate">{STAGE_CONFIG[session.stage as Stage]?.label ?? session.stage}</span>
+                  {updateStageMutation.isPending
+                    ? <Loader2 className="w-3 h-3 animate-spin ml-1 shrink-0" />
+                    : <ChevronDown className="w-3 h-3 ml-1 shrink-0 opacity-60" />}
                 </SelectTrigger>
                 <SelectContent>
                   {ALL_STAGES.map(s => (
                     <SelectItem key={s} value={s} className="text-xs">
-                      {STAGE_CONFIG[s]?.label ?? s}
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: STAGE_CONFIG[s]?.bgColor, color: STAGE_CONFIG[s]?.textColor }}
+                      >
+                        {STAGE_CONFIG[s]?.label ?? s}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
