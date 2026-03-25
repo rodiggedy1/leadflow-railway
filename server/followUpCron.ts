@@ -83,7 +83,9 @@ export async function runSilenceFollowUp(): Promise<{
         // No auto follow-up sent yet
         eq(conversationSessions.autoFollowUpSent, 0),
         // AI mode is on
-        eq(conversationSessions.aiMode, 1)
+        eq(conversationSessions.aiMode, 1),
+        // Never nudge already-booked leads
+        eq(conversationSessions.isBooked, 0)
       )
     )
     .limit(50); // Safety cap — process at most 50 per run
@@ -254,7 +256,9 @@ export async function runScheduledFollowUp(): Promise<{
       and(
         eq(conversationSessions.followUpDate, todayET),
         eq(conversationSessions.followUpSent, 0),
-        eq(conversationSessions.aiMode, 1)
+        eq(conversationSessions.aiMode, 1),
+        // Never circle-back to already-booked leads
+        eq(conversationSessions.isBooked, 0)
       )
     )
     .limit(100);

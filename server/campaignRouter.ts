@@ -783,6 +783,26 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
 
   for (const contact of pending) {
     try {
+      // Skip contacts who already have a booked session — never re-engage a booked lead.
+      const bookedCheck = await db
+        .select({ id: conversationSessions.id })
+        .from(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.leadPhone, contact.phone),
+            eq(conversationSessions.isBooked, 1)
+          )
+        )
+        .limit(1);
+      if (bookedCheck.length > 0) {
+        console.log(`[Campaign] Skipping ${contact.phone} — already has a BOOKED session. Marking contact BOOKED.`);
+        await db
+          .update(reactivationContacts)
+          .set({ status: "BOOKED" })
+          .where(eq(reactivationContacts.id, contact.id));
+        continue;
+      }
+
       // Fetch the live template from DB (falls back to default if not yet seeded)
       const firstName = contact.firstName ?? "";
       const name = contact.name ?? "";

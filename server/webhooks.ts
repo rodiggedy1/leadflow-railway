@@ -303,6 +303,17 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
+      // If the lead is already booked, store the inbound message but do NOT send an AI reply.
+      // Booked leads should only be contacted by a human agent — the AI must not re-engage them.
+      if (session.isBooked === 1) {
+        console.log(`[Webhook] Lead ${fromPhone} (session ${session.id}) is already BOOKED — storing inbound, skipping AI reply.`);
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, session.id));
+        return;
+      }
+
       // Compute dynamic slots for SLOT_CHOICE stage context
       // These are the next 2 available days from today — matching what was offered
       const dynamicSlots = getNextAvailableSlots(2);
