@@ -88,8 +88,8 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Hey {{name}} — reminder for your cleaning at {{time}}.\n\nBefore you arrive:\n• Review notes: {{platform login link}}\n  (Login: {{cleaner_login_email}})\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.",
-        note: "{{name}}, {{time}}, {{platform login link}}, and {{cleaner_login_email}} are filled in automatically from the job record.",
+          "Hey {{name}} — reminder for your cleaning at {{time}}.\n\nBefore you arrive:\n• Review notes\n• Bring full supplies\n• Be ready to check in + upload photos\n\nSet your status to \"On the Way\" in the app.\n{{magic_link}}",
+        note: "{{name}}, {{time}}, and {{magic_link}} are filled in automatically. {{magic_link}} is a personal one-tap login link valid for 30 days.",
       },
     ],
     notes: ["Sent 2 hours before job start."],
@@ -167,8 +167,8 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "auto-response",
         content:
-          "You're checked in ✅\n\nBefore starting:\nTake photos of anything broken or pre-existing damage — this protects you from being blamed.",
-        note: "Instant auto-reply the moment the status is received.",
+          "You're checked in ✅\n\nBefore starting:\nTake photos of anything broken or pre-existing damage — this protects you from being blamed.\n{{magic_link}}",
+        note: "Instant auto-reply the moment the status is received. {{magic_link}} is the cleaner's personal one-tap login link.",
       },
     ],
     notes: ["If the cleaner uses the app check-in instead of texting, the same auto-response fires."],
@@ -184,7 +184,7 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Quick check — everything going smoothly?\n\nRemember:\n• Kitchens + bathrooms = highest priority\n• Don't miss floors + surfaces\n\nLog in and double check your notes + checklist: {{login link}}\n(Login: {{cleaner_login_email}})\n\nReply if any issues.",
+          "Quick check — everything going smoothly?\n\nRemember:\n• Kitchens + bathrooms = highest priority\n• Don't miss floors + surfaces\n\nLog in and double check your notes + checklist.\n{{magic_link}}\n\nReply if any issues.",
       },
     ],
     notes: [
@@ -203,8 +203,8 @@ const WORKFLOW: WorkflowStep[] = [
       {
         role: "outbound",
         content:
-          "Before leaving:\n\n1. Upload photos + double check notes + checklist: {{login link}}\n   (Login: {{cleaner_login_email}})\n2. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.",
-        note: "{{login link}} links directly to the photo upload screen for this job. {{cleaner_login_email}} is the cleaner's platform login.",
+          "Before leaving:\n\n1. Upload photos + double check notes + checklist\n2. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.\n{{magic_link}}",
+        note: "{{magic_link}} is the cleaner's personal one-tap login link — tapping it opens their portal directly with no password needed.",
       },
     ],
     notes: [
@@ -224,8 +224,8 @@ const WORKFLOW: WorkflowStep[] = [
     messages: [
       {
         role: "outbound",
-        content: "Hey — we haven't received your check-in. Is everything okay?",
-        note: "Step 1: SMS to the cleaner fires first.",
+        content: "Hey — we haven't received your check-in. Is everything okay?\n{{magic_link}}",
+        note: "Step 1: SMS to the cleaner fires first. {{magic_link}} is their personal one-tap login link.",
       },
       {
         role: "call",

@@ -19,7 +19,7 @@
  */
 
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { getDb } from "./db";
+import { getDb, getOrCreateCleanerMagicLink } from "./db";
 import {
   cleanerJobs,
   cleanerProfiles,
@@ -429,18 +429,18 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
 
     const cleanerFirstName = firstName(job.cleanerName);
     const timeStr = formatTimeET(serviceTime);
-    const loginEmail = profile.email ?? "your login email";
+    const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
 
     const msg = [
       `Hey ${cleanerFirstName} — reminder for your cleaning at ${timeStr}.`,
       ``,
       `Before you arrive:`,
-      `• Review notes: ${CLEANER_PORTAL_URL}`,
-      `  (Login: ${loginEmail})`,
+      `• Review notes`,
       `• Bring full supplies`,
       `• Be ready to check in + upload photos`,
       ``,
       `Set your status to "On the Way" in the app.`,
+      magicLink,
     ].join("\n");
 
     // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
@@ -578,11 +578,14 @@ export async function sendArrivedCheckin(cleanerJobId: number): Promise<void> {
   const profile = profileRows[0];
   if (!profile?.phone) return;
 
+  const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
+
   const msg = [
     `You're checked in ✅`,
     ``,
     `Before starting:`,
     `Take photos of anything broken that you cannot be blamed for.`,
+    magicLink,
   ].join("\n");
 
   const result = await sendSms({ to: profile.phone, content: msg });
@@ -744,7 +747,7 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       continue;
     }
 
-    const loginEmail = profile.email ?? "your login email";
+    const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
 
     const msg = [
       `Quick check — everything going smoothly?`,
@@ -753,8 +756,8 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       `• Kitchens + bathrooms = highest priority`,
       `• Don't miss floors + surfaces`,
       ``,
-      `Log in and double check your notes + checklist: ${CLEANER_PORTAL_URL}`,
-      `(Login: ${loginEmail})`,
+      `Log in and double check your notes + checklist.`,
+      magicLink,
       ``,
       `Reply if any issues.`,
     ].join("\n");
@@ -816,13 +819,12 @@ export async function sendCompletionFlow(cleanerJobId: number): Promise<void> {
   const profile = profileRows[0];
   if (!profile?.phone) return;
 
-  const loginEmail = profile.email ?? "your login email";
+  const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
 
   const msg = [
     `Before leaving:`,
     ``,
-    `1. Upload photos + double check notes + checklist: ${CLEANER_PORTAL_URL}`,
-    `   (Login: ${loginEmail})`,
+    `1. Upload photos + double check notes + checklist`,
     `2. Confirm:`,
     `   • All rooms completed`,
     `   • Trash removed`,
@@ -830,6 +832,7 @@ export async function sendCompletionFlow(cleanerJobId: number): Promise<void> {
     `   • Walk the client around and ask for a review`,
     ``,
     `Reply DONE when finished.`,
+    magicLink,
   ].join("\n");
 
   const result = await sendSms({ to: profile.phone, content: msg });
@@ -917,7 +920,8 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
     const profile = profileRows[0];
     if (!profile?.phone) continue;
 
-    const msg = `Hey — we haven't received your check-in. Is everything okay?`;
+    const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
+    const msg = `Hey — we haven't received your check-in. Is everything okay?\n${magicLink}`;
 
     // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
     await recordStep({
@@ -1545,18 +1549,18 @@ async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
 
   const cleanerFirstName = firstName(job.cleanerName);
   const timeStr = formatTimeET(serviceTime);
-  const loginEmail = profile.email ?? "your login email";
+  const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
 
   const msg = [
     `Hey ${cleanerFirstName} — you've just been assigned a cleaning at ${timeStr} today.`,
     ``,
     `Before you arrive:`,
-    `• Review notes: ${CLEANER_PORTAL_URL}`,
-    `  (Login: ${loginEmail})`,
+    `• Review notes`,
     `• Bring full supplies`,
     `• Be ready to check in + upload photos`,
     ``,
     `Set your status to "On the Way" in the app.`,
+    magicLink,
   ].join("\n");
 
   await recordStep({

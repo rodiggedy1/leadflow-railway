@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, agents, type Agent } from "../drizzle/schema";
+import { InsertUser, users, agents, type Agent, cleanerMagicLinkTokens } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { randomBytes } from "crypto";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -153,4 +154,54 @@ export async function setAgentActive(id: number, isActive: 0 | 1): Promise<void>
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.update(agents).set({ isActive }).where(eq(agents.id, id));
+}
+
+// ── Magic Link helpers ────────────────────────────────────────────────────────
+
+const BASE_URL = "https://quote.maidinblack.com";
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Returns the magic login URL for a cleaner.
+ * Reuses the existing valid 30-day token if one exists; otherwise creates a new one.
+ * Safe to call from any server-side code (fieldMgmtEngine, cleanerRouter, etc.).
+ */
+export async function getOrCreateCleanerMagicLink(cleanerProfileId: number): Promise<string> {
+  const db = await getDb();
+  if (!db) {
+    // Fallback: return the plain portal URL if DB is unavailable
+    return `${BASE_URL}/cleaner`;
+  }
+
+  const now = new Date();
+
+  // Look for an existing valid (non-expired) token for this cleaner
+  const existing = await db
+    .select({ token: cleanerMagicLinkTokens.token })
+    .from(cleanerMagicLinkTokens)
+    .where(
+      and(
+        eq(cleanerMagicLinkTokens.cleanerProfileId, cleanerProfileId),
+        gt(cleanerMagicLinkTokens.expiresAt, now)
+      )
+    )
+    .orderBy(cleanerMagicLinkTokens.createdAt)
+    .limit(1);
+
+  if (existing[0]) {
+    return `${BASE_URL}/auth/cleaner-callback?token=${existing[0].token}`;
+  }
+
+  // No valid token — create a new one
+  const rawToken = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + THIRTY_DAYS_MS);
+
+  await db.insert(cleanerMagicLinkTokens).values({
+    cleanerProfileId,
+    token: rawToken,
+    expiresAt,
+  });
+
+  console.log(`[MagicLink] Created new token for cleanerProfileId=${cleanerProfileId}, expires ${expiresAt.toISOString()}`);
+  return `${BASE_URL}/auth/cleaner-callback?token=${rawToken}`;
 }

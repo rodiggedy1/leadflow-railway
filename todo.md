@@ -81,3 +81,7 @@
 - [x] Extend magic link token expiry from 15 minutes to 30 days
 - [x] Debug magic link: clicking link still shows login page — run end-to-end test to find exact failure
 - [x] Build dedicated /auth/cleaner-callback route for magic link token exchange (separate from CleanerPortal)
+- [x] Fix 404 on /auth/cleaner-callback — Express server not serving SPA for this path (was stale build; fixed by publishing)
+- [x] Add magic login link to all 6 cleaner SMS messages (Pre-Job, Late-Assignment, Arrived, Mid-Job, Completion, Exception)
+- [x] Remove static portal URL and email login hint from cleaner SMS
+- [x] Update SMS preview text in job log UI to match new format
