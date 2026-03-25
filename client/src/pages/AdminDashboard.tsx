@@ -1461,20 +1461,23 @@ function ConversationDrawer({
                     { index: 0, label: closingRec?.alternativeMoves?.[0] ?? "Alternative 1" },
                     { index: 1, label: closingRec?.alternativeMoves?.[1] ?? "Alternative 2" },
                     { index: 2, label: closingRec?.alternativeMoves?.[2] ?? "Alternative 3" },
-                  ].map(({ index, label }, i) => (
-                    <button
-                      key={index}
-                      onClick={() => applySuggestion(index)}
-                      title={label}
-                      className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-all whitespace-nowrap ${
-                        i === 0
-                          ? "border-orange-200 text-orange-600 bg-orange-50 hover:bg-orange-100"
-                          : "border-gray-200 text-gray-500 bg-white hover:bg-gray-50"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  ].map(({ index, label }, i) => {
+                    const short = label.split(" ").slice(0, 3).join(" ");
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => applySuggestion(index)}
+                        title={label}
+                        className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-all whitespace-nowrap ${
+                          i === 0
+                            ? "border-orange-200 text-orange-600 bg-orange-50 hover:bg-orange-100"
+                            : "border-gray-200 text-gray-500 bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        {short}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
