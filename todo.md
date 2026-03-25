@@ -54,3 +54,6 @@
 - [x] Build Reactivation Engine UI page: header stats, AI Priority Queue, Lead Pipeline, Leads list, Sequences, AI Recommendation panel, Deliverability panel
 - [x] Wire Reactivation Engine route and add to admin navigation
 - [x] Add world-class daily bookings + revenue visualization to Reactivation Engine
+- [x] Add depth-on-click lead drawer: smooth expand with full SMS thread, touch timeline, AI reasoning
+- [x] Upgrade AI Recommendation panel to live AI state: "AI is acting", "Next action in 2h", "Waiting on reply", "Recycling in 14 days"
+- [x] Add additional world-class UI elements to Reactivation Engine (AI Activity Feed, score rings, segment sparklines)
