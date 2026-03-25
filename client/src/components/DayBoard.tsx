@@ -412,12 +412,9 @@ function SwimLane({
         {/* Now line — rendered here so it's scoped to the timeline area, not the label column */}
         {nowPos != null && (
           <div
-            className="absolute top-0 bottom-0 z-20 pointer-events-none"
+            className="absolute top-0 bottom-0 z-20 pointer-events-none w-px bg-rose-500 opacity-80"
             style={{ left: `${nowPos}%` }}
-          >
-            <div className="absolute top-0 w-px h-full bg-rose-500 opacity-80" />
-            <div className="absolute -top-1 -translate-x-1/2 w-2 h-2 rounded-full bg-rose-500 shadow-sm" />
-          </div>
+          />
         )}
 
         {jobs.map((job) => (
@@ -1175,17 +1172,16 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
                   <div className="w-28 shrink-0 border-r border-slate-100 px-3 py-2">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cleaner</span>
                   </div>
-                  <div className="flex-1 relative">
-                    <div className="flex">
-                      {HOUR_LABELS.map((label, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 text-[10px] text-slate-400 font-medium py-2 text-center first:text-left first:pl-1 last:text-right last:pr-1"
-                        >
-                          {label}
-                        </div>
-                      ))}
-                    </div>
+                  <div className="flex-1 relative" style={{ height: "28px" }}>
+                    {HOUR_LABELS.map((label, i) => (
+                      <span
+                        key={i}
+                        className="absolute text-[10px] text-slate-400 font-medium -translate-x-1/2 top-1/2 -translate-y-1/2"
+                        style={{ left: `${(i / (HOUR_LABELS.length - 1)) * 100}%` }}
+                      >
+                        {label}
+                      </span>
+                    ))}
                   </div>
                 </div>
 
