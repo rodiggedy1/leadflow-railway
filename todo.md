@@ -66,3 +66,4 @@
 - [x] Redesign lead drawer status selector — now shows colored stage label with border and chevron icon
 - [x] Replace stale "Waiting until March" tag — now shows exact follow-up date (Overdue in red if past), and lead source instead of hardcoded "Warm lead"
 - [x] Replace header tags with AI-generated conversation context phrase showing where the conversation left off
+- [x] Redesign Lead Snapshot card — returning customer hero block at top, source demoted to small footer pill

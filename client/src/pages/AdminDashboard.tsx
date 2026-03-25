@@ -1653,27 +1653,48 @@ function ConversationDrawer({
               <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Lead Snapshot</span>
               <button className="text-gray-300 hover:text-gray-500 text-base leading-none">&#8943;</button>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+
+            {/* ── Previous job hero — shown first if available ── */}
+            {customerHistory && (
+              <div className="mb-4 p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">Returning Customer</div>
+                <div className="grid grid-cols-3 gap-3">
+                  {customerHistory.lastBookingPrice != null && (
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-0.5">Last Price</div>
+                      <div className="text-lg font-bold text-gray-900">${customerHistory.lastBookingPrice}</div>
+                    </div>
+                  )}
+                  {customerHistory.frequency && (
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-0.5">Frequency</div>
+                      <div className="text-sm font-semibold text-gray-900">{customerHistory.frequency}</div>
+                    </div>
+                  )}
+                  {customerHistory.jobDate && (
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-0.5">Last Job</div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {new Date(customerHistory.jobDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Quote + Service ── */}
+            <div className="grid grid-cols-2 gap-4 mb-3">
               <div>
                 <div className="text-xs text-gray-400 mb-0.5">Quote</div>
                 <div className="text-2xl font-bold text-gray-900">
-                  {session.quotedPrice ? `$${Number(session.quotedPrice).toFixed(0)}` : "—"}
+                  {session.quotedPrice && Number(session.quotedPrice) > 0 ? `$${Number(session.quotedPrice).toFixed(0)}` : "\u2014"}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-gray-400 mb-0.5">Source</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {session.leadSource === "email" ? "Google Ads Form" :
-                   session.leadSource === "voice" ? "Google Ads Call" :
-                   session.leadSource
-                    ? session.leadSource.replace("campaign:", "").replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())
-                    : "Direct"}
-                </div>
+                <div className="text-xs text-gray-400 mb-0.5">Service</div>
+                <div className="text-sm font-semibold text-gray-900 mt-1">{session.serviceType ?? "Standard Cleaning"}</div>
               </div>
-            </div>
-            <div className="mb-3">
-              <div className="text-xs text-gray-400 mb-0.5">Service</div>
-              <div className="text-sm font-semibold text-gray-900">{session.serviceType ?? "Standard Cleaning"}</div>
             </div>
             {extrasArray.length > 0 && (
               <div>
@@ -1703,31 +1724,15 @@ function ConversationDrawer({
                 <div className="text-xs text-gray-700 whitespace-pre-line">{session.barkQA}</div>
               </div>
             )}
-            {customerHistory && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <div className="text-xs text-gray-400 mb-2">Previous Job</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {customerHistory.lastBookingPrice != null && (
-                    <div>
-                      <div className="text-[10px] text-gray-400 mb-0.5">Last Price</div>
-                      <div className="text-sm font-bold text-gray-900">${customerHistory.lastBookingPrice}</div>
-                    </div>
-                  )}
-                  {customerHistory.frequency && (
-                    <div>
-                      <div className="text-[10px] text-gray-400 mb-0.5">Frequency</div>
-                      <div className="text-sm font-semibold text-gray-900">{customerHistory.frequency}</div>
-                    </div>
-                  )}
-                  {customerHistory.jobDate && (
-                    <div>
-                      <div className="text-[10px] text-gray-400 mb-0.5">Last Job</div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {new Date(customerHistory.jobDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
-                      </div>
-                    </div>
-                  )}
-                </div>
+            {/* ── Source — small footer pill ── */}
+            {session.leadSource && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400">Source</span>
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                  {session.leadSource === "email" ? "Google Ads Form" :
+                   session.leadSource === "voice" ? "Google Ads Call" :
+                   session.leadSource.replace("campaign:", "").replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())}
+                </span>
               </div>
             )}
           </div>
