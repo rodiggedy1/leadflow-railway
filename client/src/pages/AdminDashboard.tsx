@@ -1125,9 +1125,16 @@ function ConversationDrawer({
       setReplyText(closingRec.suggestedMessage);
     }
   }, [closingRec?.suggestedMessage]);
-  const applySuggestion = (key: string) => {
-    setSelectedAction(key as "lockDate" | "softCheckIn" | "urgency" | "discount");
-    setReplyText(suggestions[key] ?? "");
+  // Apply an AI-generated alternative message by index (0, 1, 2) or the primary message (-1)
+  const applySuggestion = (index: number) => {
+    if (index === -1) {
+      // Primary move — use the AI's suggestedMessage
+      setReplyText(closingRec?.suggestedMessage ?? "");
+    } else {
+      // Alternative move — use the matching alternativeMessages entry
+      const msg = closingRec?.alternativeMessages?.[index];
+      setReplyText(msg ?? "");
+    }
     setDrawerTab("conversation");
   };
   const primaryRecommendation =
@@ -1368,22 +1375,18 @@ function ConversationDrawer({
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* ── Suggestion pills ── */}
+              {/* ── Suggestion pills — use AI-generated labels and messages ── */}
               <div className="flex items-center gap-2 px-4 pt-2 pb-1.5 flex-wrap shrink-0 bg-white border-t border-gray-100">
                 {[
-                  { key: "lockDate", label: "Hold May spot" },
-                  { key: "softCheckIn", label: "Soft check-in" },
-                  { key: "urgency", label: "Filling up" },
-                  { key: "discount", label: "Discount fill" },
-                ].map(({ key, label }) => (
+                  { index: -1, label: closingRec?.primaryMove ?? "Primary" },
+                  { index: 0, label: closingRec?.alternativeMoves?.[0] ?? "Alt 1" },
+                  { index: 1, label: closingRec?.alternativeMoves?.[1] ?? "Alt 2" },
+                  { index: 2, label: closingRec?.alternativeMoves?.[2] ?? "Alt 3" },
+                ].map(({ index, label }) => (
                   <button
-                    key={key}
-                    onClick={() => applySuggestion(key)}
-                    className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-colors ${
-                      selectedAction === key
-                        ? "border-orange-300 text-orange-600 bg-orange-50"
-                        : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
-                    }`}
+                    key={index}
+                    onClick={() => applySuggestion(index)}
+                    className="text-xs font-medium px-3.5 py-1.5 rounded-full border transition-colors border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
                   >
                     {label}
                   </button>
@@ -1591,23 +1594,23 @@ function ConversationDrawer({
             {/* 2×2 action buttons — larger, squarer */}
             <div className="grid grid-cols-2 gap-2.5">
               <button
-                onClick={() => applySuggestion("lockDate")}
+                onClick={() => applySuggestion(-1)}
                 className="py-3 px-3 rounded-xl text-sm font-semibold text-white transition-colors"
                 style={{ backgroundColor: "#F97316" }}
               >
-                {closingRec?.alternativeMoves?.[0] ?? "Lock May Date"}
+                {closingRec?.primaryMove ?? "Send recommended message"}
               </button>
               <button
-                onClick={() => applySuggestion("discount")}
+                onClick={() => applySuggestion(0)}
                 className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
-                {closingRec?.alternativeMoves?.[1] ?? "Offer Discount Fill"}
+                {closingRec?.alternativeMoves?.[0] ?? "Alternative 1"}
               </button>
               <button
-                onClick={() => applySuggestion("softCheckIn")}
+                onClick={() => applySuggestion(1)}
                 className="py-3 px-3 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
-                {closingRec?.alternativeMoves?.[2] ?? "Set Soft Reminder"}
+                {closingRec?.alternativeMoves?.[1] ?? "Alternative 2"}
               </button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -1781,7 +1784,7 @@ function ConversationDrawer({
                 <span>&#128222;</span> Call lead
               </button>
               <button
-                onClick={() => applySuggestion("softCheckIn")}
+                onClick={() => applySuggestion(-1)}
                 className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors"
               >
                 <span>&#128197;</span> Reschedule

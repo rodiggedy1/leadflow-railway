@@ -1374,6 +1374,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
 - primaryMoveRationale: why this specific move works for this objection (1-2 sentences, name the framework)
 - suggestedMessage: the exact SMS to send — personalized to the lead's first name, conversational, no emojis, under 160 chars, sounds like a real person not a script
 - alternativeMoves: array of exactly 3 alternative action labels (4-6 words each)
+- alternativeMessages: array of exactly 3 SMS messages — one for each alternativeMove, same rules as suggestedMessage (personalized, conversational, no emojis, under 160 chars, sounds like a real person)
 - urgencyLevel: one of ["low", "medium", "high"] based on how close this lead is to going cold forever
 - confidence: integer 0-100 representing confidence in this recommendation`;
 
@@ -1397,10 +1398,11 @@ Analyze this conversation and return a JSON object with exactly these fields:
                     primaryMoveRationale: { type: "string" },
                     suggestedMessage: { type: "string" },
                     alternativeMoves: { type: "array", items: { type: "string" } },
+                    alternativeMessages: { type: "array", items: { type: "string" } },
                     urgencyLevel: { type: "string" },
                     confidence: { type: "number" },
                   },
-                  required: ["objectionType", "objectionSummary", "primaryMove", "primaryMoveRationale", "suggestedMessage", "alternativeMoves", "urgencyLevel", "confidence"],
+                  required: ["objectionType", "objectionSummary", "primaryMove", "primaryMoveRationale", "suggestedMessage", "alternativeMoves", "alternativeMessages", "urgencyLevel", "confidence"],
                   additionalProperties: false,
                 },
               },
@@ -1416,6 +1418,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
             primaryMoveRationale: string;
             suggestedMessage: string;
             alternativeMoves: string[];
+            alternativeMessages: string[];
             urgencyLevel: string;
             confidence: number;
           };
@@ -1441,6 +1444,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
             primaryMoveRationale: "Keep the conversation warm.",
             suggestedMessage: "",
             alternativeMoves: ["Soft check-in", "Offer discount", "Set reminder"],
+            alternativeMessages: ["", "", ""],
             urgencyLevel: "medium",
             confidence: 0,
           };
