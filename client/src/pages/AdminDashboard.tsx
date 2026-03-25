@@ -1492,7 +1492,7 @@ function ConversationDrawer({
                     const senderName = (msg as any).senderName as string | undefined;
                     const isAiMessage = isOutbound && !senderName;
                     return (
-                      <div key={i}>
+                      <div key={idx}>
                         {showSeparator && curTs != null && (
                           <MessageDateSeparator label={formatMsgDate(curTs)} />
                         )}
