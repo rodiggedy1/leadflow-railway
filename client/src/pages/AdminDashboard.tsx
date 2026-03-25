@@ -77,6 +77,9 @@ import {
   Check,
   StickyNote,
   Bell,
+  Sparkles,
+  BarChart2,
+  ChevronRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -1091,9 +1094,27 @@ function ConversationDrawer({
   // Call logs (agent-logged)
   const { data: callLogs } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
   // OpenPhone call recordings
-  const { data: callRecordings } = trpc.leads.getCallRecordings.useQuery({ sessionId: session.id });
+  const { data: callRecordings, refetch: refetchCallRecordings } = trpc.leads.getCallRecordings.useQuery({ sessionId: session.id });
   // Voice calls (Vapi AI calls))
   const { data: voiceCalls } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
+  // AI call scoring
+  const [scoringRecId, setScoringRecId] = useState<number | null>(null);
+  const [scorePanel, setScorePanel] = useState<{ recId: number; data: {
+    overallScore: number;
+    categories: Array<{ name: string; score: number; maxScore: number; feedback: string }>;
+    strengths: string[];
+    improvements: string[];
+    coachingTips: string[];
+    summary: string;
+  } } | null>(null);
+  const scoreCallMutation = trpc.leads.scoreCall.useMutation({
+    onSuccess: (data, vars) => {
+      setScoringRecId(null);
+      setScorePanel({ recId: vars.recordingId, data });
+      refetchCallRecordings();
+    },
+    onError: (e) => { setScoringRecId(null); toast.error(e.message); },
+  });
 
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
@@ -1427,6 +1448,14 @@ function ConversationDrawer({
                         // Internal user ID = staff
                         return "Staff";
                       };
+                      // Parse existing score data if available
+                      let existingScore: { overallScore: number; categories: Array<{ name: string; score: number; maxScore: number; feedback: string }>; strengths: string[]; improvements: string[]; coachingTips: string[]; summary: string } | null = null;
+                      if (rec.scoreData) {
+                        try { existingScore = JSON.parse(rec.scoreData); } catch { existingScore = null; }
+                      }
+                      const isScoring = scoringRecId === rec.id;
+                      const activePanelData = scorePanel?.recId === rec.id ? scorePanel.data : existingScore;
+                      const scoreColor = (s: number) => s >= 80 ? "#16a34a" : s >= 60 ? "#d97706" : "#dc2626";
                       return (
                         <div key={`rec-${rec.id ?? idx}`}>
                           {showSep && recTs != null && <MessageDateSeparator label={formatMsgDate(recTs)} />}
@@ -1438,9 +1467,15 @@ function ConversationDrawer({
                                   <PhoneIncoming className="w-3.5 h-3.5 text-blue-500" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-xs font-semibold text-gray-700">
+                                  <div className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
                                     {rec.direction === "outgoing" ? "Outbound call" : "Inbound call"}
-                                    {durLabel && <span className="font-normal text-gray-400 ml-1">· {durLabel}</span>}
+                                    {durLabel && <span className="font-normal text-gray-400">· {durLabel}</span>}
+                                    {rec.callScore != null && (
+                                      <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                                        style={{ background: scoreColor(rec.callScore) + "22", color: scoreColor(rec.callScore) }}>
+                                        {rec.callScore}/100
+                                      </span>
+                                    )}
                                   </div>
                                   {timeLabel && <div className="text-[11px] text-gray-400">{timeLabel}</div>}
                                 </div>
@@ -1458,7 +1493,7 @@ function ConversationDrawer({
                               {dialogue.length > 0 && (
                                 <details className="mt-1">
                                   <summary className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600 transition-colors">
-                                    Transcript · {dialogue.length} turns
+                                    Transcript · {dialogue.length} {dialogue.length === 1 ? "block" : "turns"}
                                   </summary>
                                   <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
                                     {dialogue.map((turn, ti) => (
@@ -1472,6 +1507,88 @@ function ConversationDrawer({
                                     ))}
                                   </div>
                                 </details>
+                              )}
+                              {/* AI Score button — only show if transcript exists */}
+                              {rec.transcript && (
+                                <div className="mt-2 pt-2 border-t border-gray-100">
+                                  <button
+                                    onClick={() => {
+                                      setScoringRecId(rec.id!);
+                                      scoreCallMutation.mutate({ recordingId: rec.id! });
+                                    }}
+                                    disabled={isScoring}
+                                    className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 transition-colors"
+                                  >
+                                    {isScoring ? (
+                                      <><RotateCcw className="w-3 h-3 animate-spin" /> Scoring call...</>
+                                    ) : rec.callScore != null ? (
+                                      <><BarChart2 className="w-3 h-3" /> Re-score call</>
+                                    ) : (
+                                      <><Sparkles className="w-3 h-3" /> AI Score this call</>
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+                              {/* Score breakdown panel */}
+                              {activePanelData && (
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                  {/* Overall score ring */}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-sm"
+                                      style={{ background: scoreColor(activePanelData.overallScore) + "18", color: scoreColor(activePanelData.overallScore), border: `2px solid ${scoreColor(activePanelData.overallScore)}` }}>
+                                      {activePanelData.overallScore}
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold text-gray-700">Sales Score</div>
+                                      <div className="text-[11px] text-gray-500">{activePanelData.summary}</div>
+                                    </div>
+                                  </div>
+                                  {/* Category bars */}
+                                  <div className="space-y-2 mb-3">
+                                    {activePanelData.categories.map((cat, ci) => (
+                                      <div key={ci}>
+                                        <div className="flex justify-between items-center mb-0.5">
+                                          <span className="text-[10px] font-semibold text-gray-600">{cat.name}</span>
+                                          <span className="text-[10px] font-bold" style={{ color: scoreColor(Math.round(cat.score / cat.maxScore * 100)) }}>
+                                            {cat.score}/{cat.maxScore}
+                                          </span>
+                                        </div>
+                                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                          <div className="h-full rounded-full transition-all"
+                                            style={{ width: `${Math.round(cat.score / cat.maxScore * 100)}%`, background: scoreColor(Math.round(cat.score / cat.maxScore * 100)) }} />
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{cat.feedback}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {/* Strengths */}
+                                  {activePanelData.strengths.length > 0 && (
+                                    <div className="mb-2">
+                                      <div className="text-[10px] font-bold text-green-700 uppercase tracking-wide mb-1">✓ Strengths</div>
+                                      {activePanelData.strengths.map((s, si) => (
+                                        <div key={si} className="text-[10px] text-gray-600 flex gap-1"><span className="text-green-500">•</span>{s}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {/* Improvements */}
+                                  {activePanelData.improvements.length > 0 && (
+                                    <div className="mb-2">
+                                      <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-1">↑ Improvements</div>
+                                      {activePanelData.improvements.map((s, si) => (
+                                        <div key={si} className="text-[10px] text-gray-600 flex gap-1"><span className="text-amber-500">•</span>{s}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {/* Coaching tips */}
+                                  {activePanelData.coachingTips.length > 0 && (
+                                    <div>
+                                      <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wide mb-1">💡 Coaching Tips</div>
+                                      {activePanelData.coachingTips.map((s, si) => (
+                                        <div key={si} className="text-[10px] text-gray-600 flex gap-1"><span className="text-purple-500">•</span>{s}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -2722,6 +2839,12 @@ export default function AdminDashboard() {
   // regardless of whether a conversation drawer is open.
   useLeadReplyNotifier(sessions);
 
+  // Call recording indicators — lightweight map of sessionId → { hasRecording, hasTranscript, callScore }
+  const { data: recordingMap = {} } = trpc.leads.getSessionsWithRecordings.useQuery(undefined, {
+    refetchInterval: 60_000,
+    enabled: hasSession,
+  });
+
   const { data: stats } = trpc.leads.stats.useQuery(dateRange, {
     refetchInterval: 30000,
     enabled: hasSession,
@@ -3408,6 +3531,7 @@ export default function AdminDashboard() {
                     const isBooked = Number(session.isBooked) === 1;
                     const rowBg = isBooked ? 'rgba(191,255,0,0.06)' : '';
                     const accentColor = isBooked ? '#AAFF00' : 'transparent';
+                    const recInfo = (recordingMap as Record<number, { hasRecording: boolean; hasTranscript: boolean; callScore: number | null }>)[session.id];
                     return (
                     <TableRow
                       key={session.id}
@@ -3427,6 +3551,28 @@ export default function AdminDashboard() {
                             <span className="text-xs tabular-nums" style={{ color: '#777' }}>
                               {formatPhone(session.leadPhone)}
                             </span>
+                            {/* Call recording / transcript / score badges */}
+                            {recInfo?.hasRecording && (
+                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                                  <PhoneIncoming className="w-2.5 h-2.5" /> Call
+                                </span>
+                                {recInfo.hasTranscript && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                    📝 Transcript
+                                  </span>
+                                )}
+                                {recInfo.callScore != null && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                    style={{
+                                      background: (recInfo.callScore >= 80 ? '#16a34a' : recInfo.callScore >= 60 ? '#d97706' : '#dc2626') + '18',
+                                      color: recInfo.callScore >= 80 ? '#16a34a' : recInfo.callScore >= 60 ? '#d97706' : '#dc2626',
+                                    }}>
+                                    <BarChart2 className="w-2.5 h-2.5" /> {recInfo.callScore}/100
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {/* Click-to-call — only visible on row hover */}
                           <a

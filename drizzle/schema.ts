@@ -1447,6 +1447,16 @@ export const openphoneCallRecordings = mysqlTable("openphone_call_recordings", {
    * Populated by the call.transcript.completed webhook.
    */
   transcript: text("transcript"),
+  /**
+   * AI-generated overall score (0–100) based on home services sales rubric.
+   * Null until scoreCall procedure is run.
+   */
+  callScore: int("callScore"),
+  /**
+   * Full AI scoring breakdown as JSON.
+   * Shape: { categories: [{name, score, maxScore, feedback}], strengths: string[], improvements: string[], coachingTips: string[], summary: string }
+   */
+  scoreData: text("scoreData"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxSession: index("idx_ocr_session").on(table.sessionId),

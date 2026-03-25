@@ -1377,6 +1377,168 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.getSessionsWithRecordings — returns a map of sessionId → { hasRecording, hasTranscript, callScore }
+     * Used to show call/transcript indicator badges on lead list rows without a heavy JOIN.
+     */
+    getSessionsWithRecordings: adminAgentProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) return {};
+        const rows = await db
+          .select({
+            sessionId: openphoneCallRecordings.sessionId,
+            transcript: openphoneCallRecordings.transcript,
+            callScore: openphoneCallRecordings.callScore,
+          })
+          .from(openphoneCallRecordings);
+        // Aggregate per session: any recording = hasRecording, any non-null transcript = hasTranscript
+        const map: Record<number, { hasRecording: boolean; hasTranscript: boolean; callScore: number | null }> = {};
+        for (const row of rows) {
+          const existing = map[row.sessionId];
+          if (!existing) {
+            map[row.sessionId] = {
+              hasRecording: true,
+              hasTranscript: !!row.transcript,
+              callScore: row.callScore ?? null,
+            };
+          } else {
+            existing.hasTranscript = existing.hasTranscript || !!row.transcript;
+            if (row.callScore != null && (existing.callScore == null || row.callScore > existing.callScore)) {
+              existing.callScore = row.callScore;
+            }
+          }
+        }
+        return map;
+      }),
+
+    /**
+     * leads.scoreCall — AI-powered call scoring against a home services sales rubric.
+     *
+     * Evaluates the transcript against best-in-class home services sales strategies,
+     * returns a score out of 100 with category breakdowns and coaching tips.
+     * Caches result in callScore + scoreData columns.
+     */
+    scoreCall: adminAgentProcedure
+      .input(z.object({ recordingId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        const rows = await db
+          .select()
+          .from(openphoneCallRecordings)
+          .where(eq(openphoneCallRecordings.id, input.recordingId))
+          .limit(1);
+        const recording = rows[0];
+        if (!recording) throw new TRPCError({ code: "NOT_FOUND", message: "Recording not found" });
+        if (!recording.transcript) throw new TRPCError({ code: "BAD_REQUEST", message: "No transcript available for this call" });
+
+        // Parse transcript — supports both dialogue array and raw text
+        let transcriptText = "";
+        try {
+          const parsed = JSON.parse(recording.transcript) as Array<{ identifier?: string; content?: string; speaker?: string; text?: string }>;
+          if (Array.isArray(parsed)) {
+            transcriptText = parsed.map(t => {
+              const speaker = t.identifier || t.speaker || "Speaker";
+              const text = t.content || t.text || "";
+              return `${speaker}: ${text}`;
+            }).join("\n");
+          } else {
+            transcriptText = recording.transcript;
+          }
+        } catch {
+          transcriptText = recording.transcript;
+        }
+
+        const scoringPrompt = `You are a world-class sales coach specializing in home services (cleaning, HVAC, plumbing, landscaping). You have studied thousands of the highest-converting home services sales calls.
+
+Score the following phone call transcript against the best home services sales professionals. Use this rubric:
+
+1. **Opening & Pattern Interrupt** (0-15 pts)
+   - Did the rep create immediate rapport and curiosity?
+   - Did they avoid a generic opener?
+   - Did they establish credibility quickly?
+
+2. **Needs Discovery & Pain Amplification** (0-20 pts)
+   - Did they ask open-ended questions to uncover the real need?
+   - Did they dig into urgency, timeline, and emotional drivers?
+   - Did they let the customer talk and actively listen?
+
+3. **Value Anchoring Before Price** (0-15 pts)
+   - Did they build value BEFORE mentioning price?
+   - Did they tie the service to the customer's specific situation?
+   - Did they use social proof or specific outcomes?
+
+4. **Objection Handling** (0-20 pts)
+   - Did they handle objections with empathy and confidence?
+   - Did they use the Feel/Felt/Found or similar framework?
+   - Did they turn objections into reasons to buy?
+
+5. **Assumptive Closing & Urgency** (0-15 pts)
+   - Did they use assumptive language ("When we come out..." vs "If you decide...")
+   - Did they create real urgency without being pushy?
+   - Did they ask for the booking confidently?
+
+6. **Follow-Through & Next Steps** (0-15 pts)
+   - Did they secure a clear next action (booking, callback, etc.)?
+   - Did they leave the door open professionally if not closed?
+   - Did they end on a positive, memorable note?
+
+TRANSCRIPT:
+${transcriptText}
+
+Respond with ONLY valid JSON in this exact format:
+{
+  "overallScore": <number 0-100>,
+  "categories": [
+    { "name": "Opening & Pattern Interrupt", "score": <0-15>, "maxScore": 15, "feedback": "<specific feedback referencing the call>" },
+    { "name": "Needs Discovery & Pain Amplification", "score": <0-20>, "maxScore": 20, "feedback": "<specific feedback>" },
+    { "name": "Value Anchoring Before Price", "score": <0-15>, "maxScore": 15, "feedback": "<specific feedback>" },
+    { "name": "Objection Handling", "score": <0-20>, "maxScore": 20, "feedback": "<specific feedback>" },
+    { "name": "Assumptive Closing & Urgency", "score": <0-15>, "maxScore": 15, "feedback": "<specific feedback>" },
+    { "name": "Follow-Through & Next Steps", "score": <0-15>, "maxScore": 15, "feedback": "<specific feedback>" }
+  ],
+  "strengths": ["<specific strength from this call>", "<another strength>"],
+  "improvements": ["<specific improvement with example of what to say instead>", "<another improvement>"],
+  "coachingTips": ["<actionable tip for next call>", "<another tip>", "<third tip>"],
+  "summary": "<2-3 sentence overall assessment of this call>"
+}`;
+
+        const llmResult = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are a world-class home services sales coach. Always respond with valid JSON only, no markdown, no explanation." },
+            { role: "user", content: scoringPrompt },
+          ],
+          response_format: { type: "json_object" },
+        });
+
+        const rawContent = llmResult?.choices?.[0]?.message?.content ?? "{}";
+        let scoreResult: {
+          overallScore: number;
+          categories: Array<{ name: string; score: number; maxScore: number; feedback: string }>;
+          strengths: string[];
+          improvements: string[];
+          coachingTips: string[];
+          summary: string;
+        };
+        try {
+          scoreResult = JSON.parse(rawContent);
+        } catch {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned invalid JSON" });
+        }
+
+        // Store in DB
+        await db
+          .update(openphoneCallRecordings)
+          .set({
+            callScore: scoreResult.overallScore,
+            scoreData: JSON.stringify(scoreResult),
+          })
+          .where(eq(openphoneCallRecordings.id, input.recordingId));
+
+        return scoreResult;
+      }),
+
+    /**
      * leads.getClosingRecommendation — AI-powered closing recommendation.
      *
      * Analyzes the full conversation history, detects the objection type,

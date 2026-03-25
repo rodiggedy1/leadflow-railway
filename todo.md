@@ -97,3 +97,8 @@
 - [x] Add call.transcript.completed webhook handler (uses OpenPhone's native transcript, no Whisper needed)
 - [x] Show transcript inline in call card (AdminDashboard + AgentDashboard)
 - [x] Keep audio player + transcript together in call card
+- [x] Transcribe Leah Butterfield's call via Whisper and store in DB
+- [x] Add callScore + scoreData columns to openphone_call_recordings schema
+- [x] Add scoreCall tRPC procedure with home services AI sales rubric
+- [x] Add AI Score button + score breakdown UI to call card in AdminDashboard
+- [x] Add call/transcript indicator badges to lead list rows
