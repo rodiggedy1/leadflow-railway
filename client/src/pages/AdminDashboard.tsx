@@ -1255,7 +1255,12 @@ function ConversationDrawer({
                     Last reply {lastReplyTime}
                   </span>
                 )}
-                <span>&#128293; Score {score}/100</span>
+                <span className="flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full inline-block ${
+                    score >= 70 ? "bg-green-400" : score >= 40 ? "bg-amber-400" : "bg-red-400"
+                  }`} />
+                  Score {score}/100
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -1304,15 +1309,15 @@ function ConversationDrawer({
           </div>
 
           {/* ── Tab bar ── */}
-          <div className="flex items-center gap-1 px-4 pt-2.5 pb-2 shrink-0">
+          <div className="flex items-center gap-0 px-4 shrink-0 border-b border-gray-100">
             {(["conversation", "flow", "performance"] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDrawerTab(tab)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                className={`px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px ${
                   drawerTab === tab
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                    ? "border-orange-400 text-gray-900"
+                    : "border-transparent text-gray-400 hover:text-gray-600"
                 }`}
               >
                 {tab === "conversation" ? "Conversation" : tab === "flow" ? "Flow View" : "Performance"}
@@ -1320,17 +1325,14 @@ function ConversationDrawer({
             ))}
           </div>
 
-             {/* ── Persistent note display ── */}
+          {/* ── Persistent note display ── */}
           {(loadedNotes || notes) && !showNoteInput && (
-            <div className="mx-4 mb-1 flex flex-col gap-1 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100">
-              <div className="flex items-center gap-1.5">
-                <StickyNote className="w-3 h-3 text-amber-500 shrink-0" />
-                <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">Staff note</span>
-              </div>
-              <p className="flex-1 text-xs text-amber-800 leading-relaxed whitespace-pre-wrap">{notes || loadedNotes}</p>
+            <div className="mx-4 mt-2 mb-0 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50/60 border border-amber-100">
+              <StickyNote className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+              <p className="flex-1 text-xs text-amber-800/80 leading-relaxed whitespace-pre-wrap">{notes || loadedNotes}</p>
               <button
                 onClick={() => setShowNoteInput(true)}
-                className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
+                className="shrink-0 text-amber-300 hover:text-amber-500 transition-colors mt-0.5"
                 title="Edit note"
               >
                 <Pencil className="w-3 h-3" />
@@ -1343,29 +1345,25 @@ function ConversationDrawer({
             <div className="flex flex-col flex-1 min-h-0">
                {/* Messages scroll area — white bg, no gray */}
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-3 bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {/* AI recommendation banner — scrolls with messages */}
-                <div className="mb-4 px-4 py-3 rounded-xl bg-orange-50">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="text-sm font-semibold text-orange-500">&#10024; AI recommendation</div>
-                    <button
-                      onClick={() => refetchRec()}
-                      className="text-[11px] text-orange-400 hover:text-orange-600 transition-colors flex items-center gap-1"
-                      title="Refresh recommendation"
-                    >
-                      {isLoadingRec ? (
-                        <span className="animate-spin inline-block">&#8635;</span>
-                      ) : (
-                        <span>&#8635; refresh</span>
-                      )}
-                    </button>
-                  </div>
-                  {isLoadingRec ? (
-                    <div className="text-sm text-orange-400 animate-pulse">Analyzing conversation...</div>
-                  ) : closingRec ? (
-                    <div className="text-sm text-orange-600">{closingRec.objectionSummary}</div>
-                  ) : (
-                    <div className="text-sm text-orange-600">{primaryRecommendation}</div>
-                  )}
+                {/* AI recommendation — slim pinned strip */}
+                <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50/70 border border-orange-100">
+                  <span className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide shrink-0">AI</span>
+                  <span className="flex-1 text-xs text-orange-700/80 leading-snug">
+                    {isLoadingRec ? (
+                      <span className="animate-pulse text-orange-300">Analyzing...</span>
+                    ) : closingRec ? (
+                      closingRec.objectionSummary
+                    ) : (
+                      primaryRecommendation
+                    )}
+                  </span>
+                  <button
+                    onClick={() => refetchRec()}
+                    className="shrink-0 text-orange-300 hover:text-orange-500 transition-colors"
+                    title="Refresh recommendation"
+                  >
+                    {isLoadingRec ? <Loader2 className="w-3 h-3 animate-spin" /> : <span className="text-[11px]">&#8635;</span>}
+                  </button>
                 </div>
                 <div className="space-y-4">
                 {localMessages.length === 0 ? (
@@ -1399,7 +1397,7 @@ function ConversationDrawer({
                               {/* Label row */}
                               <div className="flex items-center gap-2 mb-1 pr-1">
                                 {isAiMessage ? (
-                                  <span className="text-xs font-semibold text-purple-500">AI Follow-Up</span>
+                                  <span className="text-xs font-semibold text-orange-400">AI</span>
                                 ) : senderName ? (
                                   <span className="text-xs font-semibold" style={{ color: "#F97316" }}>{senderName}</span>
                                 ) : null}
@@ -1407,16 +1405,22 @@ function ConversationDrawer({
                               </div>
                               {/* Bubble */}
                               <div
-                                className="rounded-2xl rounded-br-sm px-4 py-3 text-sm text-white leading-relaxed"
-                                style={{ backgroundColor: isAiMessage ? "#F97316" : "#1a1a1a" }}
+                                className="rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed"
+                                style={isAiMessage
+                                  ? { backgroundColor: "#FFF3E8", color: "#92400e" }
+                                  : { backgroundColor: "#1a1a1a", color: "#ffffff" }
+                                }
                               >
                                 {msg.content}
                               </div>
                             </div>
                             {/* Avatar */}
                             <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 text-white text-xs font-bold"
-                              style={{ backgroundColor: isAiMessage ? "#7C3AED" : "#1a1a1a" }}
+                              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 text-xs font-semibold"
+                              style={isAiMessage
+                                ? { backgroundColor: "#FFF3E8", color: "#92400e", border: "1px solid #fed7aa" }
+                                : { backgroundColor: "#1a1a1a", color: "#ffffff" }
+                              }
                             >
                               {isAiMessage ? "AI" : (senderName?.charAt(0).toUpperCase() ?? "A")}
                             </div>
@@ -1437,8 +1441,8 @@ function ConversationDrawer({
                                 </span>
                                 {timeLabel && <span className="text-xs text-gray-400">{timeLabel}</span>}
                               </div>
-                              {/* Bubble — plain white, very soft shadow, no border */}
-                              <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-gray-800 leading-relaxed shadow-sm">
+                              {/* Bubble — very soft gray, no border */}
+                              <div className="bg-gray-50 rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-gray-700 leading-relaxed">
                                 {msg.content}
                               </div>
                             </div>
@@ -1482,7 +1486,7 @@ function ConversationDrawer({
               </div>
 
               {/* ── Compose box ── */}
-              <div className="mx-4 mb-4 mt-2 rounded-2xl border border-gray-200 bg-white overflow-hidden shrink-0">
+              <div className="mx-4 mb-4 mt-2 rounded-2xl border border-gray-150 bg-white overflow-hidden shrink-0 shadow-sm">
                 {typingData?.typingAgentName && (
                   <div className="flex items-center gap-2 px-4 pt-2">
                     <span className="inline-flex gap-0.5">
