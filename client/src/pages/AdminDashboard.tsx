@@ -2566,14 +2566,6 @@ export default function AdminDashboard() {
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
 
-  // Lock body scroll when drawer is open to prevent bleed-through
-  useEffect(() => {
-    if (selectedSession) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
-    }
-  }, [selectedSession]);
   const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("month");
 
   // Compute the active date range to send to the backend
