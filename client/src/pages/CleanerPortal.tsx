@@ -1192,15 +1192,22 @@ function WeekJobRow({
 export default function CleanerPortal() {
   const [date, setDate] = useState(getTodayET);
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
-  // Check for magic link token in URL query string
+  // Check for magic link token in URL query string — read once on mount
   const [magicToken] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("magic") ?? null;
   });
+  // magicDone: true once the magic link attempt has completed (success or failure)
+  const [magicDone, setMagicDone] = useState(false);
   const [magicFailed, setMagicFailed] = useState(false);
   const utils = trpc.useUtils();
 
-  const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false });
+  // Delay the me query until magic link is resolved — prevents existing session
+  // from winning over the magic link (e.g. GoGreen was logged in, MaidsPlus link tapped)
+  const meQuery = trpc.cleaner.me.useQuery(undefined, {
+    retry: false,
+    enabled: !magicToken || magicDone,
+  });
   const jobsQuery = trpc.cleaner.myJobs.useQuery(
     { date },
     { enabled: !!meQuery.data }
@@ -1249,6 +1256,25 @@ export default function CleanerPortal() {
     return days;
   }, [weekJobs0, weekStart]);
 
+  // If there's a magic token and we haven't tried it yet, show the handler immediately
+  // (before meQuery even runs, so an existing session can't intercept)
+  if (magicToken && !magicDone) {
+    return (
+      <MagicLinkHandler
+        token={magicToken}
+        onLogin={() => {
+          // Invalidate the me cache so it re-fetches as the new cleaner
+          utils.cleaner.me.invalidate();
+          setMagicDone(true);
+        }}
+        onFallback={() => {
+          setMagicFailed(true);
+          setMagicDone(true);
+        }}
+      />
+    );
+  }
+
   // Not yet loaded
   if (meQuery.isLoading) {
     return (
@@ -1258,18 +1284,8 @@ export default function CleanerPortal() {
     );
   }
 
-  // Not logged in — check for magic link first
+  // Not logged in
   if (!meQuery.data) {
-    // If there's a magic token in the URL and it hasn't failed yet, try to verify it
-    if (magicToken && !magicFailed) {
-      return (
-        <MagicLinkHandler
-          token={magicToken}
-          onLogin={() => utils.cleaner.me.invalidate()}
-          onFallback={() => setMagicFailed(true)}
-        />
-      );
-    }
     return <LoginForm onLogin={() => utils.cleaner.me.invalidate()} />;
   }
 

@@ -584,9 +584,9 @@ export const cleanerRouter = router({
   }),
 
   /**
-   * cleaner.sendMagicLink — admin sends a one-time SMS login link to a cleaner.
+   * cleaner.sendMagicLink — admin sends an SMS login link to a cleaner.
    * Generates a secure random token, stores it in the DB, and sends an SMS.
-   * Token expires in 15 minutes and is single-use.
+   * Token expires in 30 days and can be used multiple times within that window.
    */
   sendMagicLink: agentProcedure
     .input(z.object({
@@ -620,7 +620,7 @@ export const cleanerRouter = router({
 
       // Generate a cryptographically secure token
       const rawToken = randomBytes(32).toString("hex"); // 64-char hex string
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
       await db.insert(cleanerMagicLinkTokens).values({
         cleanerProfileId: cleaner.id,
@@ -634,7 +634,7 @@ export const cleanerRouter = router({
 
       // Send the SMS — BEFORE any further DB work (per leadflow-sms skill)
       const firstName = cleaner.name.split(" ")[0];
-      const smsText = `Hi ${firstName}! Tap to log into your Maids in Black portal \u2014 no password needed:\n${magicUrl}\n\nLink expires in 15 minutes.`;
+      const smsText = `Hi ${firstName}! Tap to log into your Maids in Black portal — no password needed:\n${magicUrl}`;
       const smsResult = await sendSms({ to: cleaner.phone, content: smsText });
 
       if (!smsResult.success) {
@@ -649,7 +649,7 @@ export const cleanerRouter = router({
   /**
    * cleaner.verifyMagicLink — exchange a magic link token for a session cookie.
    * Called by the frontend when the cleaner taps the link.
-   * Returns the cleaner info on success; throws on invalid/expired/used token.
+   * Tokens are valid for 30 days and can be used multiple times.
    */
   verifyMagicLink: publicProcedure
     .input(z.object({ token: z.string().min(1) }))
@@ -665,14 +665,8 @@ export const cleanerRouter = router({
         .limit(1);
 
       if (!row) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid login link" });
-      if (row.used) throw new TRPCError({ code: "UNAUTHORIZED", message: "This link has already been used" });
-      if (new Date() > row.expiresAt) throw new TRPCError({ code: "UNAUTHORIZED", message: "This link has expired \u2014 please request a new one" });
-
-      // Mark the token as used immediately (single-use)
-      await db
-        .update(cleanerMagicLinkTokens)
-        .set({ used: 1 })
-        .where(eq(cleanerMagicLinkTokens.id, row.id));
+      if (new Date() > row.expiresAt) throw new TRPCError({ code: "UNAUTHORIZED", message: "This link has expired — please ask your manager to send a new one" });
+      // Note: tokens are NOT single-use — cleaners can tap the same link multiple times within 30 days
 
       // Fetch the cleaner profile
       const [cleaner] = await db
