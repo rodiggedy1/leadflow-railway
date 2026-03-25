@@ -102,3 +102,4 @@
 - [x] Add scoreCall tRPC procedure with home services AI sales rubric
 - [x] Add AI Score button + score breakdown UI to call card in AdminDashboard
 - [x] Add call/transcript indicator badges to lead list rows
+- [ ] Move AI call score breakdown from inline call card to a full popup modal\n

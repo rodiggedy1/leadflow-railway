@@ -1099,6 +1099,7 @@ function ConversationDrawer({
   const { data: voiceCalls } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
   // AI call scoring
   const [scoringRecId, setScoringRecId] = useState<number | null>(null);
+  const [showScoreModal, setShowScoreModal] = useState(false);
   const [scorePanel, setScorePanel] = useState<{ recId: number; data: {
     overallScore: number;
     categories: Array<{ name: string; score: number; maxScore: number; feedback: string }>;
@@ -1111,6 +1112,7 @@ function ConversationDrawer({
     onSuccess: (data, vars) => {
       setScoringRecId(null);
       setScorePanel({ recId: vars.recordingId, data });
+      setShowScoreModal(true);
       refetchCallRecordings();
     },
     onError: (e) => { setScoringRecId(null); toast.error(e.message); },
@@ -1213,6 +1215,7 @@ function ConversationDrawer({
   const score = Math.min(100, Math.max(0, 40 + localMessages.filter(m => m.role === "user").length * 8));
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -1508,9 +1511,9 @@ function ConversationDrawer({
                                   </div>
                                 </details>
                               )}
-                              {/* AI Score button — only show if transcript exists */}
+                              {/* AI Score button + View Analysis — only show if transcript exists */}
                               {rec.transcript && (
-                                <div className="mt-2 pt-2 border-t border-gray-100">
+                                <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-2 flex-wrap">
                                   <button
                                     onClick={() => {
                                       setScoringRecId(rec.id!);
@@ -1520,73 +1523,20 @@ function ConversationDrawer({
                                     className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 transition-colors"
                                   >
                                     {isScoring ? (
-                                      <><RotateCcw className="w-3 h-3 animate-spin" /> Scoring call...</>
+                                      <><RotateCcw className="w-3 h-3 animate-spin" /> Scoring...</>
                                     ) : rec.callScore != null ? (
-                                      <><BarChart2 className="w-3 h-3" /> Re-score call</>
+                                      <><RotateCcw className="w-3 h-3" /> Re-score</>
                                     ) : (
-                                      <><Sparkles className="w-3 h-3" /> AI Score this call</>
+                                      <><Sparkles className="w-3 h-3" /> AI Score</>
                                     )}
                                   </button>
-                                </div>
-                              )}
-                              {/* Score breakdown panel */}
-                              {activePanelData && (
-                                <div className="mt-3 pt-3 border-t border-gray-100">
-                                  {/* Overall score ring */}
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-sm"
-                                      style={{ background: scoreColor(activePanelData.overallScore) + "18", color: scoreColor(activePanelData.overallScore), border: `2px solid ${scoreColor(activePanelData.overallScore)}` }}>
-                                      {activePanelData.overallScore}
-                                    </div>
-                                    <div>
-                                      <div className="text-xs font-bold text-gray-700">Sales Score</div>
-                                      <div className="text-[11px] text-gray-500">{activePanelData.summary}</div>
-                                    </div>
-                                  </div>
-                                  {/* Category bars */}
-                                  <div className="space-y-2 mb-3">
-                                    {activePanelData.categories.map((cat, ci) => (
-                                      <div key={ci}>
-                                        <div className="flex justify-between items-center mb-0.5">
-                                          <span className="text-[10px] font-semibold text-gray-600">{cat.name}</span>
-                                          <span className="text-[10px] font-bold" style={{ color: scoreColor(Math.round(cat.score / cat.maxScore * 100)) }}>
-                                            {cat.score}/{cat.maxScore}
-                                          </span>
-                                        </div>
-                                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                          <div className="h-full rounded-full transition-all"
-                                            style={{ width: `${Math.round(cat.score / cat.maxScore * 100)}%`, background: scoreColor(Math.round(cat.score / cat.maxScore * 100)) }} />
-                                        </div>
-                                        <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{cat.feedback}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  {/* Strengths */}
-                                  {activePanelData.strengths.length > 0 && (
-                                    <div className="mb-2">
-                                      <div className="text-[10px] font-bold text-green-700 uppercase tracking-wide mb-1">✓ Strengths</div>
-                                      {activePanelData.strengths.map((s, si) => (
-                                        <div key={si} className="text-[10px] text-gray-600 flex gap-1"><span className="text-green-500">•</span>{s}</div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {/* Improvements */}
-                                  {activePanelData.improvements.length > 0 && (
-                                    <div className="mb-2">
-                                      <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-1">↑ Improvements</div>
-                                      {activePanelData.improvements.map((s, si) => (
-                                        <div key={si} className="text-[10px] text-gray-600 flex gap-1"><span className="text-amber-500">•</span>{s}</div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {/* Coaching tips */}
-                                  {activePanelData.coachingTips.length > 0 && (
-                                    <div>
-                                      <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wide mb-1">💡 Coaching Tips</div>
-                                      {activePanelData.coachingTips.map((s, si) => (
-                                        <div key={si} className="text-[10px] text-gray-600 flex gap-1"><span className="text-purple-500">•</span>{s}</div>
-                                      ))}
-                                    </div>
+                                  {activePanelData && (
+                                    <button
+                                      onClick={() => { setScorePanel({ recId: rec.id!, data: activePanelData }); setShowScoreModal(true); }}
+                                      className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                                    >
+                                      <BarChart2 className="w-3 h-3" /> View Analysis
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -2219,6 +2169,106 @@ function ConversationDrawer({
         </div>
       </div>
     </div>
+
+    {/* ══ AI Call Score Modal ══ */}
+    {scorePanel && (
+      <Dialog open={showScoreModal} onOpenChange={setShowScoreModal}>
+        <DialogContent className="max-w-xl w-full max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="w-4 h-4 text-purple-500" />
+              AI Sales Analysis
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Overall score */}
+          <div className="flex items-center gap-4 py-3 border-b border-gray-100">
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center shrink-0 font-bold text-xl"
+              style={{
+                background: scoreColor(scorePanel.data.overallScore) + '18',
+                color: scoreColor(scorePanel.data.overallScore),
+                border: `3px solid ${scoreColor(scorePanel.data.overallScore)}`,
+              }}
+            >
+              {scorePanel.data.overallScore}
+            </div>
+            <div>
+              <div className="text-sm font-bold text-gray-800">Overall Sales Score</div>
+              <div className="text-xs text-gray-500 mt-0.5 leading-snug max-w-xs">{scorePanel.data.summary}</div>
+            </div>
+          </div>
+
+          {/* Category breakdown */}
+          <div className="space-y-4 py-3 border-b border-gray-100">
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">Category Breakdown</div>
+            {scorePanel.data.categories.map((cat, ci) => (
+              <div key={ci}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm font-semibold text-gray-700">{cat.name}</span>
+                  <span className="text-sm font-bold" style={{ color: scoreColor(Math.round(cat.score / cat.maxScore * 100)) }}>
+                    {cat.score}/{cat.maxScore}
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.round(cat.score / cat.maxScore * 100)}%`,
+                      background: scoreColor(Math.round(cat.score / cat.maxScore * 100)),
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">{cat.feedback}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Strengths */}
+          {scorePanel.data.strengths.length > 0 && (
+            <div className="py-3 border-b border-gray-100">
+              <div className="text-xs font-bold text-green-700 uppercase tracking-wide mb-2">✓ Strengths</div>
+              <ul className="space-y-1">
+                {scorePanel.data.strengths.map((s, si) => (
+                  <li key={si} className="flex gap-2 text-sm text-gray-600">
+                    <span className="text-green-500 shrink-0">•</span>{s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Improvements */}
+          {scorePanel.data.improvements.length > 0 && (
+            <div className="py-3 border-b border-gray-100">
+              <div className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-2">↑ Areas to Improve</div>
+              <ul className="space-y-1">
+                {scorePanel.data.improvements.map((s, si) => (
+                  <li key={si} className="flex gap-2 text-sm text-gray-600">
+                    <span className="text-amber-500 shrink-0">•</span>{s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Coaching tips */}
+          {scorePanel.data.coachingTips.length > 0 && (
+            <div className="py-3">
+              <div className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-2">💡 Coaching Tips</div>
+              <ul className="space-y-2">
+                {scorePanel.data.coachingTips.map((s, si) => (
+                  <li key={si} className="flex gap-2 text-sm text-gray-600 bg-purple-50 rounded-lg px-3 py-2">
+                    <span className="text-purple-500 shrink-0 font-bold">{si + 1}.</span>{s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }
 
