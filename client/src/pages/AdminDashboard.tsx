@@ -1472,16 +1472,17 @@ function ConversationDrawer({
                     </button>
                   ))}
                 </div>
-                {/* Row 2: Add Note + AI assist toggle */}
+                {/* Row 2: Add Note (only when no note exists) + AI assist toggle */}
                 <div className="flex items-center gap-2 px-3 pb-2">
-                  <button
-                    onClick={() => setShowNoteInput(v => !v)}
-                    className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
-                  >
-                    <StickyNote className="w-3 h-3" />
-                    {(notes || loadedNotes) ? "Edit Note" : "Add Note"}
-                    {(notes || loadedNotes) && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />}
-                  </button>
+                  {!(notes || loadedNotes) && (
+                    <button
+                      onClick={() => setShowNoteInput(v => !v)}
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
+                    >
+                      <StickyNote className="w-3 h-3" />
+                      Add Note
+                    </button>
+                  )}
                   <button
                     onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
                     disabled={setAiModeMutation.isPending}
