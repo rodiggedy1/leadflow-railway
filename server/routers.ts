@@ -1369,7 +1369,7 @@ ${transcript || "(no messages yet — lead just submitted the form)"}
 
 Analyze this conversation and return a JSON object with exactly these fields:
 - objectionType: one of ["timing", "price", "not_ready", "trust", "competitor", "no_response", "needs_info", "none"]
-- objectionSummary: 1 sentence describing the specific objection or situation (be specific, e.g. "Lead said they won't need service until May")
+- objectionSummary: 4-5 word phrase capturing where the conversation left off (e.g. "Said okay for now", "Waiting until May", "Needs price confirmation", "Booked, service confirmed")
 - primaryMove: the single best closing action right now (8 words max, action-oriented, e.g. "Soft-lock a May date now")
 - primaryMoveRationale: why this specific move works for this objection (1-2 sentences, name the framework)
 - suggestedMessage: the exact SMS to send — personalized to the lead's first name, conversational, no emojis, under 160 chars, sounds like a real person not a script

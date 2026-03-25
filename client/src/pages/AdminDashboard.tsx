@@ -1189,13 +1189,13 @@ function ConversationDrawer({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
                 <span className="text-[17px] font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
+                {/* AI context pill — where the conversation left off */}
+                {closingRec?.objectionSummary && (
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 whitespace-nowrap">
+                    &#10024; {closingRec.objectionSummary}
+                  </span>
+                )}
               </div>
-              {/* AI context phrase — where the conversation left off */}
-              {closingRec?.objectionSummary && (
-                <div className="text-xs text-gray-500 mt-0.5 leading-snug">
-                  &#10024; {closingRec.objectionSummary}
-                </div>
-              )}
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span>{formatPhone(session.leadPhone)}</span>
                 {lastReplyTime && (
