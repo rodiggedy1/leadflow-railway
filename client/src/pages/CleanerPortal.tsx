@@ -302,12 +302,10 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   // ── 4-tile summary calculations ──────────────────────────────────────────
   // BASE PAY tile: just the base
   const summaryBasePay = basePay;
-  // LIKELY PAY: base + photo bonus (if uploaded or +5 expected) + rating bonus if earned, else add photo bonus
+  // LIKELY PAY: basePay + photoBonus + fiveStarBonus (best-case standard bonuses, no streak/manual/reclean)
   const photoBonus = payRules?.photoBonus ?? 5;
   const fiveStarBonus = payRules?.fiveStarBonus ?? 10;
-  const likelyPhotoAdj = hasPhoto ? photoAdj : photoBonus; // assume photo uploaded
-  const likelyRatingAdj = ratingAdj !== 0 ? ratingAdj : fiveStarBonus; // assume 5-star if not yet rated
-  const summaryLikelyPay = basePay + likelyPhotoAdj + likelyRatingAdj + streakBonus + manualAdj + recleanAdj;
+  const summaryLikelyPay = basePay + photoBonus + fiveStarBonus;
   // POTENTIAL EARNINGS: likely pay + all active custom bonus rules
   const customBonusTotal = shownCustomRules
     .filter(r => r.type === "bonus")
