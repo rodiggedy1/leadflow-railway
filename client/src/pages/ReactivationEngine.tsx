@@ -35,6 +35,205 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell,
+} from "recharts";
+
+// ── Chart Data ───────────────────────────────────────────────────────────────
+
+const DAILY_DATA = [
+  { day: "Mar 15", bookings: 2, revenue: 340, messages: 18, replies: 7 },
+  { day: "Mar 16", bookings: 1, revenue: 160, messages: 12, replies: 4 },
+  { day: "Mar 17", bookings: 3, revenue: 520, messages: 22, replies: 10 },
+  { day: "Mar 18", bookings: 0, revenue: 0,   messages: 8,  replies: 2 },
+  { day: "Mar 19", bookings: 4, revenue: 680, messages: 30, replies: 14 },
+  { day: "Mar 20", bookings: 2, revenue: 310, messages: 20, replies: 8 },
+  { day: "Mar 21", bookings: 5, revenue: 890, messages: 35, replies: 16 },
+  { day: "Mar 22", bookings: 3, revenue: 420, messages: 25, replies: 11 },
+  { day: "Mar 23", bookings: 6, revenue: 1020, messages: 40, replies: 19 },
+  { day: "Mar 24", bookings: 4, revenue: 760, messages: 32, replies: 15 },
+  { day: "Mar 25", bookings: 2, revenue: 340, messages: 22, replies: 9, today: true },
+];
+
+type ChartMetric = "revenue" | "bookings";
+
+function RevenueChart() {
+  const [metric, setMetric] = useState<ChartMetric>("revenue");
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+
+  const totalRevenue = DAILY_DATA.reduce((s, d) => s + d.revenue, 0);
+  const totalBookings = DAILY_DATA.reduce((s, d) => s + d.bookings, 0);
+  const avgRevenue = Math.round(totalRevenue / DAILY_DATA.length);
+  const bestDay = DAILY_DATA.reduce((best, d) => d.revenue > best.revenue ? d : best, DAILY_DATA[0]);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const d = DAILY_DATA.find(x => x.day === label);
+    if (!d) return null;
+    return (
+      <div className="bg-gray-900 text-white rounded-xl px-3.5 py-3 shadow-xl text-xs min-w-[140px]">
+        <p className="font-semibold text-gray-300 mb-2">{label}{d.today ? " · Today" : ""}</p>
+        <div className="space-y-1.5">
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-400">Revenue</span>
+            <span className="font-bold text-emerald-400">${d.revenue.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-400">Bookings</span>
+            <span className="font-bold text-white">{d.bookings}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-400">Reply rate</span>
+            <span className="font-bold text-violet-300">{d.messages > 0 ? Math.round((d.replies / d.messages) * 100) : 0}%</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <h2 className="text-lg font-bold text-gray-900">Performance</h2>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">Last 11 days</span>
+          </div>
+          <p className="text-xs text-gray-400">Bookings and revenue attributed to this campaign</p>
+        </div>
+        {/* Metric toggle */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {(["revenue", "bookings"] as ChartMetric[]).map(m => (
+            <button
+              key={m}
+              onClick={() => setMetric(m)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                metric === m ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Total Bookings", value: String(totalBookings), color: "text-gray-900", bg: "bg-gray-50" },
+          { label: "Avg / Day", value: `$${avgRevenue.toLocaleString()}`, color: "text-violet-600", bg: "bg-violet-50" },
+          { label: "Best Day", value: bestDay.day.replace("Mar ", "Mar "), color: "text-amber-600", bg: "bg-amber-50" },
+        ].map(kpi => (
+          <div key={kpi.label} className={`${kpi.bg} rounded-xl px-3.5 py-2.5`}>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{kpi.label}</p>
+            <p className={`text-lg font-bold mt-0.5 ${kpi.color}`}>{kpi.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="relative">
+        {metric === "revenue" ? (
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={DAILY_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+              onMouseLeave={() => setHoveredDay(null)}>
+              <defs>
+                <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false}
+                tickFormatter={v => v.replace("Mar ", "")} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false}
+                tickFormatter={v => `$${v}`} />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e2e8f0", strokeWidth: 1 }} />
+              <ReferenceLine
+                x={"Mar 25"}
+                stroke="#6366f1"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{ value: "Today", position: "top", fontSize: 9, fill: "#6366f1", fontWeight: 600 }}
+              />
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke="#10b981"
+                strokeWidth={2.5}
+                fill="url(#revenueGrad)"
+                dot={(props: any) => {
+                  const { cx, cy, payload } = props;
+                  if (payload.today) return <circle key={payload.day} cx={cx} cy={cy} r={5} fill="#6366f1" stroke="white" strokeWidth={2} />;
+                  if (payload.revenue === bestDay.revenue) return <circle key={payload.day} cx={cx} cy={cy} r={4} fill="#10b981" stroke="white" strokeWidth={2} />;
+                  return <circle key={payload.day} cx={cx} cy={cy} r={0} fill="transparent" />;
+                }}
+                activeDot={{ r: 5, fill: "#10b981", stroke: "white", strokeWidth: 2 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={DAILY_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+              onMouseLeave={() => setHoveredDay(null)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false}
+                tickFormatter={v => v.replace("Mar ", "")} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f8fafc" }} />
+              <ReferenceLine
+                x={"Mar 25"}
+                stroke="#6366f1"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+              />
+              <Bar dataKey="bookings" radius={[6, 6, 0, 0]} maxBarSize={32}>
+                {DAILY_DATA.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={entry.today ? "#6366f1" : entry.bookings >= 5 ? "#1e293b" : entry.bookings >= 3 ? "#475569" : "#cbd5e1"}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Legend strip */}
+      <div className="flex items-center gap-5 mt-3 pt-3 border-t border-gray-50">
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 rounded-full bg-emerald-500 inline-block" />
+          <span className="text-[10px] text-gray-400">Revenue</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#1e293b] inline-block" />
+          <span className="text-[10px] text-gray-400">High bookings</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#6366f1] inline-block" />
+          <span className="text-[10px] text-gray-400">Today</span>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Activity className="w-3 h-3 text-gray-300" />
+          <span className="text-[10px] text-gray-400">Hover bars for full breakdown</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -527,6 +726,9 @@ export default function ReactivationEngine() {
             sub="Score out of 100"
           />
         </div>
+
+        {/* ── Performance Chart ── */}
+        <RevenueChart />
 
         {/* ── Main Grid ── */}
         <div className="grid grid-cols-[1fr_360px] gap-5">
