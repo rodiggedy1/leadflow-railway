@@ -1315,6 +1315,34 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.getTodayFollowUps — returns leads whose followUpDate is today (YYYY-MM-DD)
+     * and followUpSent = 0. Used to drive the follow-up reminder toast in the dashboard.
+     */
+    getTodayFollowUps: adminAgentProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
+        const rows = await db
+          .select({
+            id: conversationSessions.id,
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            followUpDate: conversationSessions.followUpDate,
+            followUpMessage: conversationSessions.followUpMessage,
+            stage: conversationSessions.stage,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              eq(conversationSessions.followUpDate, today),
+              eq(conversationSessions.followUpSent, 0)
+            )
+          );
+        return rows;
+      }),
+
+    /**
      * leads.getClosingRecommendation — AI-powered closing recommendation.
      *
      * Analyzes the full conversation history, detects the objection type,

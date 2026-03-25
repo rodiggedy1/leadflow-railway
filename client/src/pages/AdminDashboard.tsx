@@ -76,6 +76,7 @@ import {
   Pencil,
   Check,
   StickyNote,
+  Bell,
 } from "lucide-react";
 import {
   Dialog,
@@ -107,6 +108,93 @@ import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
 import DailyRecapModal, { hasShownToday, markShownToday } from "@/components/DailyRecapModal";
 import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
+
+// ── Follow-up Reminder Toast ───────────────────────────────────────────────────────────────────────────
+/**
+ * Slide-in toast stack that appears from the bottom-right when leads have
+ * a follow-up scheduled for today. Each card is clickable and opens the
+ * conversation drawer for that lead.
+ */
+type FollowUpLead = {
+  id: number;
+  leadName: string | null;
+  leadPhone: string;
+  followUpDate: string | null;
+  followUpMessage: string | null;
+  stage: string;
+};
+
+function FollowUpReminderToast({
+  leads,
+  onOpen,
+}: {
+  leads: FollowUpLead[];
+  onOpen: (sessionId: number) => void;
+}) {
+  const [dismissed, setDismissed] = useState<Set<number>>(() => new Set());
+  const visible = leads.filter(l => !dismissed.has(l.id));
+
+  if (visible.length === 0) return null;
+
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 items-end"
+      style={{ maxWidth: 340 }}
+    >
+      {visible.map((lead, i) => (
+        <div
+          key={lead.id}
+          className="w-full bg-white rounded-2xl shadow-xl border border-orange-100 overflow-hidden"
+          style={{
+            animation: `slideInRight 0.35s cubic-bezier(0.34,1.56,0.64,1) ${i * 80}ms both`,
+          }}
+        >
+          {/* Accent bar */}
+          <div className="h-1 w-full" style={{ backgroundColor: "#F97316" }} />
+          <div className="px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  style={{ backgroundColor: "#F97316" }}
+                >
+                  {(lead.leadName ?? lead.leadPhone).charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Follow-up today</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-tight">
+                    {lead.leadName ?? lead.leadPhone}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDismissed(prev => new Set(prev).add(lead.id))}
+                className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {lead.followUpMessage && (
+              <p className="mt-2 text-xs text-gray-500 leading-relaxed line-clamp-2 pl-9">
+                {lead.followUpMessage}
+              </p>
+            )}
+            <button
+              onClick={() => {
+                onOpen(lead.id);
+                setDismissed(prev => new Set(prev).add(lead.id));
+              }}
+              className="mt-3 w-full text-xs font-semibold text-white py-2 rounded-xl transition-all hover:opacity-90 active:scale-95"
+              style={{ backgroundColor: "#F97316" }}
+            >
+              Open conversation
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
 /**
@@ -2547,6 +2635,13 @@ export default function AdminDashboard() {
     setShowRecap(false);
   }, []);
 
+  // ── Follow-up reminder toasts ──────────────────────────────────────────────────────
+  const { data: todayFollowUps = [] } = trpc.leads.getTodayFollowUps.useQuery(undefined, {
+    enabled: hasSession,
+    refetchInterval: 5 * 60 * 1000, // re-check every 5 minutes
+    staleTime: 60 * 1000,
+  });
+
   // ── Dashboard state (all hooks declared unconditionally) ─────────────────────────
   const [activeTab, setActiveTab] = useState<"leads" | "pipeline" | "agents" | "leaderboard" | "callbacks">(() => {
     if (typeof window !== "undefined") {
@@ -2720,6 +2815,12 @@ export default function AdminDashboard() {
     <div className="min-h-screen hj-theme">
       {/* Daily recap modal — shows once per day after login */}
       {showRecap && <DailyRecapModal onClose={handleCloseRecap} />}
+
+      {/* Follow-up reminder toasts — slide in from bottom-right for today's due follow-ups */}
+      <FollowUpReminderToast
+        leads={todayFollowUps}
+        onOpen={handleSessionOpen}
+      />
 
       {/* Top bar — unified AdminHeader (includes AI Center + all nav) */}
       <AdminHeader
