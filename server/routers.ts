@@ -1343,6 +1343,23 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.dismissFollowUp — marks a follow-up as seen (followUpSent = 1).
+     * Called when an agent dismisses or opens a follow-up reminder toast.
+     * The server will no longer return this lead in getTodayFollowUps.
+     */
+    dismissFollowUp: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { ok: false };
+        await db
+          .update(conversationSessions)
+          .set({ followUpSent: 1 })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { ok: true };
+      }),
+
+    /**
      * leads.getClosingRecommendation — AI-powered closing recommendation.
      *
      * Analyzes the full conversation history, detects the objection type,

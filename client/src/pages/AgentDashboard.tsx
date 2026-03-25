@@ -1273,7 +1273,7 @@ export default function AgentDashboard() {
   useLeadReplyNotifier(allSessions);
 
   // ── Follow-up reminder toasts ───────────────────────────────────────────────────────────────────────────
-  const todayFollowUps = useTodayFollowUps(!!agentMe);
+  const { data: todayFollowUps, refetch: refetchFollowUps } = useTodayFollowUps(!!agentMe);
   // When a toast card is clicked, we need to open the LeadCard's drawer.
   // We do this by scrolling to the card and programmatically triggering a click.
   // We store the pending session ID and resolve it once allSessions is populated.
@@ -1337,6 +1337,7 @@ export default function AgentDashboard() {
       <FollowUpReminderToast
         leads={todayFollowUps}
         onOpen={(id) => setPendingOpenId(id)}
+        onDismiss={() => refetchFollowUps()}
       />
 
       {/* Header */}
@@ -1565,3 +1566,4 @@ export default function AgentDashboard() {
   );
 }
 
+ 

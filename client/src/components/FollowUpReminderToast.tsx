@@ -1,22 +1,12 @@
 /**
  * FollowUpReminderToast
  *
- * Slide-in toast stack that appears from the bottom-right when leads have
- * a follow-up scheduled for today. Each card is clickable and opens the
- * conversation drawer for that lead.
- *
- * Used in both AdminDashboard and AgentDashboard.
- *
- * Dismissal strategy:
- *   - A module-level singleton Set stores dismissed IDs. Because it lives
- *     outside React's lifecycle, it is NEVER reset when the component
- *     unmounts and remounts during page navigation.
- *   - On first load the Set is seeded from sessionStorage so dismissals
- *     also survive a full page refresh within the same browser session.
- *   - sessionStorage (not localStorage) is used so the slate is wiped
- *     when the tab is closed, giving agents fresh reminders next session.
+ * Slide-in toast stack from the bottom-right for leads with a follow-up
+ * scheduled today. Dismissal writes followUpSent=1 to the database — the
+ * server stops returning that lead permanently. No sessionStorage, no
+ * client-side singletons. Simple and correct.
  */
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -29,54 +19,37 @@ export type FollowUpLead = {
   stage: string;
 };
 
-// ── Module-level singleton ────────────────────────────────────────────────────
-// Seeded once from sessionStorage; never reset by React remounts.
-const SESSION_KEY = "followup_dismissed_ids";
-
-function seedFromStorage(): Set<number> {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return new Set();
-    return new Set(JSON.parse(raw) as number[]);
-  } catch {
-    return new Set();
-  }
-}
-
-// The singleton — shared across all instances and page navigations.
-const _dismissed: Set<number> = seedFromStorage();
-
-function persistDismissed() {
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify([..._dismissed]));
-  } catch {
-    // sessionStorage unavailable — degrade silently
-  }
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export function FollowUpReminderToast({
   leads,
   onOpen,
+  onDismiss,
 }: {
   leads: FollowUpLead[];
   onOpen: (sessionId: number) => void;
+  /** Called after a successful server-side dismiss so the parent can refetch */
+  onDismiss?: () => void;
 }) {
-  // A simple counter used to force a re-render after mutating the singleton.
-  const [, forceUpdate] = useState(0);
-  const rerender = useCallback(() => forceUpdate((n) => n + 1), []);
+  // Optimistic local hide — so the card vanishes instantly without waiting for
+  // the server round-trip. The server write ensures it stays gone on reload.
+  const [localDismissed, setLocalDismissed] = useState<Set<number>>(() => new Set());
 
-  const dismiss = useCallback(
-    (id: number) => {
-      _dismissed.add(id);
-      persistDismissed();
-      rerender();
+  const dismiss = trpc.leads.dismissFollowUp.useMutation({
+    onSuccess: () => {
+      onDismiss?.();
     },
-    [rerender]
-  );
+  });
 
-  const visible = leads.filter((l) => !_dismissed.has(l.id));
+  function handleDismiss(id: number) {
+    setLocalDismissed((prev) => new Set(prev).add(id));
+    dismiss.mutate({ sessionId: id });
+  }
+
+  function handleOpen(id: number) {
+    onOpen(id);
+    handleDismiss(id);
+  }
+
+  const visible = leads.filter((l) => !localDismissed.has(l.id));
   if (visible.length === 0) return null;
 
   return (
@@ -113,7 +86,7 @@ export function FollowUpReminderToast({
                 </div>
               </div>
               <button
-                onClick={() => dismiss(lead.id)}
+                onClick={() => handleDismiss(lead.id)}
                 className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5"
               >
                 <X className="w-3.5 h-3.5" />
@@ -125,10 +98,7 @@ export function FollowUpReminderToast({
               </p>
             )}
             <button
-              onClick={() => {
-                onOpen(lead.id);
-                dismiss(lead.id);
-              }}
+              onClick={() => handleOpen(lead.id)}
               className="mt-3 w-full text-xs font-semibold text-white py-2 rounded-xl transition-all hover:opacity-90 active:scale-95"
               style={{ backgroundColor: "#F97316" }}
             >
@@ -142,15 +112,15 @@ export function FollowUpReminderToast({
 }
 
 /**
- * Hook that fetches today's due follow-ups and returns them.
+ * Hook that fetches today's due follow-ups and returns them + a refetch fn.
  * Re-polls every 5 minutes.
  */
 export function useTodayFollowUps(enabled: boolean) {
-  const { data = [] } = trpc.leads.getTodayFollowUps.useQuery(undefined, {
+  const { data = [], refetch } = trpc.leads.getTodayFollowUps.useQuery(undefined, {
     enabled,
     refetchInterval: 5 * 60 * 1000,
     staleTime: 60 * 1000,
   });
-  return data;
+  return { data, refetch };
 }
  
