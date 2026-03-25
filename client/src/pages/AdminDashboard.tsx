@@ -1319,9 +1319,22 @@ function ConversationDrawer({
             ))}
           </div>
 
-          {/* ══════════════════════════════════════════════════════════
-              CONVERSATION TAB
-          ══════════════════════════════════════════════════════════ */}
+             {/* ── Persistent note display ── */}
+          {(loadedNotes || notes) && !showNoteInput && (
+            <div className="mx-4 mb-1 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100">
+              <StickyNote className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+              <p className="flex-1 text-xs text-amber-800 leading-relaxed whitespace-pre-wrap">{notes || loadedNotes}</p>
+              <button
+                onClick={() => setShowNoteInput(true)}
+                className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
+                title="Edit note"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* --- CONVERSATION TAB --- */}
           {drawerTab === "conversation" && (
             <div className="flex flex-col flex-1 min-h-0">
                {/* Messages scroll area — white bg, no gray */}

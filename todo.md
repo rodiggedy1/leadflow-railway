@@ -89,3 +89,4 @@
 - [x] Add ability to set/edit lead name from the drawer for leads with no name
 - [x] Redesign drawer bottom action bar: clean layout for AI recommendation buttons, no wrapping
 - [x] Add "Add Note" button to lead drawer (saves a timestamped internal note on the lead)
+- [x] Show saved note visibly in drawer without clicking — amber block below header, edit pencil to modify
