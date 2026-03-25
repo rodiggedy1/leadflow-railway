@@ -258,15 +258,15 @@ export async function runNightlySync(targetDate?: string): Promise<{
     durationMs: Date.now() - startedAt.getTime(),
   });
 
-  // Log nightly sync activity event
-  logActivity({
-    eventType: "nightly_sync",
-    title: inserted > 0
-      ? `✅ Nightly sync: ${inserted} jobs imported (${date})`
-      : `⚠️ Nightly sync: no new jobs (${date})`,
-    body: message,
-    meta: { date, inserted, skipped: skipped + invalidCount, alwaysOnEnrolled, status: syncStatus },
-  }).catch(() => {});
+  // Log nightly sync activity event — only when jobs were actually inserted to avoid feed spam
+  if (inserted > 0) {
+    logActivity({
+      eventType: "nightly_sync",
+      title: `✅ Nightly sync: ${inserted} jobs imported (${date})`,
+      body: message,
+      meta: { date, inserted, skipped: skipped + invalidCount, alwaysOnEnrolled, status: syncStatus },
+    }).catch(() => {});
+  }
 
   // Notify owner on success if any new jobs were inserted
   if (inserted > 0) {
