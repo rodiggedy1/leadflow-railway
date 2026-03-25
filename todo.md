@@ -69,3 +69,4 @@
 - [x] Redesign Lead Snapshot card — returning customer hero block at top, source demoted to small footer pill
 - [x] Shorten AI context phrase in drawer header to 4-5 word pill
 - [x] Add SMS preview/confirm dialog to Hot Leads Queue SMS button — shows AI-drafted message, editable, confirm before send
+- [x] Fix reassigned job creating duplicate card on DayBoard — added team-reassignment cleanup in syncTodayJobs to delete stale team rows; manually removed existing duplicate for Sarah Schultz (booking 443884)

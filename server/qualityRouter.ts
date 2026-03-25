@@ -1376,6 +1376,45 @@ export const qualityRouter = router({
         }
       }
 
+      // ── Team-reassignment cleanup: remove old team rows when a booking switches teams ──
+      // For each booking, collect the profile IDs that are currently assigned.
+      // Delete any DB rows for that booking whose profile is no longer in the current team list.
+      let teamReassignRemoved = 0;
+      for (const booking of bookings) {
+        try {
+          const currentTeams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
+          // Resolve profile IDs for current teams
+          const currentProfileIds: number[] = [];
+          for (const team of currentTeams) {
+            const [profile] = await db
+              .select({ id: cleanerProfiles.id })
+              .from(cleanerProfiles)
+              .where(eq(cleanerProfiles.name, team.title))
+              .limit(1);
+            if (profile) currentProfileIds.push(profile.id);
+          }
+          if (currentProfileIds.length > 0) {
+            // Find rows for this booking that are NOT in the current team set
+            const staleTeamRows = await db
+              .select({ id: cleanerJobs.id })
+              .from(cleanerJobs)
+              .where(
+                and(
+                  eq(cleanerJobs.bookingId, booking.id),
+                  eq(cleanerJobs.jobDate, dateStr),
+                  notInArray(cleanerJobs.cleanerProfileId, currentProfileIds)
+                )
+              );
+            for (const row of staleTeamRows) {
+              await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+              teamReassignRemoved++;
+            }
+          }
+        } catch (err) {
+          errors.push(`Team-reassign cleanup booking ${booking.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
       // ── Stale cleanup: mark rows that are no longer in Launch27's response as "rescheduled" ──
       // Collect all (bookingId, cleanerProfileId) pairs returned by Launch27 for this date.
       // Any DB row for this date whose bookingId is NOT in that set was removed/rescheduled
@@ -1416,6 +1455,7 @@ export const qualityRouter = router({
         bookingsFetched: bookings.length,
         jobsCreated: created,
         jobsUpdated: updated,
+        teamReassignRemoved,
         staleMarked,
         errors,
       };
