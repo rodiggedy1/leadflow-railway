@@ -41,3 +41,5 @@
 - [x] Fix cron_heartbeats resultSummary column overflow (truncate before insert)
 - [x] Pin Node to exact version 22.13.0 (.node-version + package.json engines)
 - [x] Audit lifecycle scripts (postinstall/prepare) across all dependencies
+- [ ] Add Handover to Human / Handover to AI toggle button left of AI Assist in drawer bottom bar
+- [x] Remove streamdown (pulls 130MB of mermaid/shiki/katex bloat), replace with react-markdown in AIChatBox
