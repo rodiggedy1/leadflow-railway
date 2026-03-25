@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules } from "../drizzle/schema";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
@@ -124,9 +124,10 @@ export const cleanerRouter = router({
         )
         .orderBy(cleanerJobs.serviceDateTime);
 
-      // Fetch photos for each job
+      // Fetch photos and applied custom pay rules for each job
       const jobIds = jobs.map(j => j.id);
       let photos: typeof jobPhotos.$inferSelect[] = [];
+      let appliedCustomRules: typeof cleanerJobCustomRules.$inferSelect[] = [];
       if (jobIds.length > 0) {
         // Fetch photos for all jobs in one query
         const allPhotos = await db
@@ -134,6 +135,11 @@ export const cleanerRouter = router({
           .from(jobPhotos)
           .where(eq(jobPhotos.cleanerProfileId, ctx.cleaner.cleanerId));
         photos = allPhotos.filter(p => jobIds.includes(p.cleanerJobId));
+        // Fetch applied custom pay rules for all jobs in one query
+        appliedCustomRules = await db
+          .select()
+          .from(cleanerJobCustomRules)
+          .where(inArray(cleanerJobCustomRules.cleanerJobId, jobIds));
       }
 
       return jobs.map(job => ({
@@ -142,6 +148,9 @@ export const cleanerRouter = router({
           ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
           : null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
+        customRules: appliedCustomRules
+          .filter(r => r.cleanerJobId === job.id)
+          .map(r => ({ id: r.id, label: r.appliedLabel, amount: r.appliedAmount, type: r.appliedType })),
       }));
     }),
 

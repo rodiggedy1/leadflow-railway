@@ -43,3 +43,5 @@
 - [x] Audit lifecycle scripts (postinstall/prepare) across all dependencies
 - [ ] Add Handover to Human / Handover to AI toggle button left of AI Assist in drawer bottom bar
 - [x] Remove streamdown (pulls 130MB of mermaid/shiki/katex bloat), replace with react-markdown in AIChatBox
+- [x] Color positive amounts green in Cleaner Portal job card description text
+- [x] Show custom pay rules (Google Review bonus, Late penalty, etc.) in Cleaner Portal job card breakdown

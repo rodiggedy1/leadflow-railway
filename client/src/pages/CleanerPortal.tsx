@@ -161,6 +161,7 @@ type Job = {
   manualAdjustmentNote: string | null;
   recleanPenalty: string | null;
   checklistItems: Array<{ text: string; checked: boolean }> | null;
+  customRules?: Array<{ id: number; label: string; amount: string; type: string }>;
 };
 
 const JOB_STATUSES = [
@@ -290,9 +291,12 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   const manualAdj = parseFloat(job.manualAdjustment ?? "0") || 0;
   const recleanAdj = job.recleanPenalty != null ? parseFloat(job.recleanPenalty) : 0;
   const recleanPending = !isComplete && job.recleanPenalty === null; // show as Pending until job completed
+  // Custom pay rules applied by admin (e.g. Google Review bonus, Late penalty)
+  const customRules = job.customRules ?? [];
+  const customRulesTotal = customRules.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
   // Always recalculate display total from components — stored finalPay may be stale
   // (e.g. set before photoAdjustment column existed). DB finalPay is for payroll records only.
-  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj;
+  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj + customRulesTotal;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   return (
@@ -437,7 +441,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
                 <div className="flex justify-between items-start py-2 border-b border-slate-800">
                   <div>
                     <p className="text-slate-400 text-sm font-medium">Rating Bonus</p>
-                    <p className="text-slate-500 text-xs mt-0.5">+${payRules?.fiveStarBonus ?? 10} for 5 stars · <span style={{color: '#f87171'}}>-${payRules?.lowRatingDeduction ?? 20}</span> for 3 stars or below</p>
+                    <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#34d399'}}>+${payRules?.fiveStarBonus ?? 10}</span> for 5 stars · <span style={{color: '#f87171'}}>-${payRules?.lowRatingDeduction ?? 20}</span> for 3 stars or below</p>
                   </div>
                   <span className="text-slate-500 text-xs italic">Pending</span>
                 </div>
@@ -481,7 +485,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
                 {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
               </p>
               <p className="text-slate-500 text-xs mt-0.5">
-                {hasPhoto ? "Completion photo uploaded" : <>Upload a photo to earn +${payRules?.photoBonus ?? 5} and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span></>}
+                {hasPhoto ? "Completion photo uploaded" : <>Upload a photo to earn <span style={{color: '#34d399'}}>+${payRules?.photoBonus ?? 5}</span> and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span></>}
               </p>
             </div>
             {photoPending ? (
@@ -523,7 +527,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             <div className="flex justify-between items-start py-2 border-b border-slate-800">
               <div>
                 <p className="text-slate-400 text-sm font-medium">Streak Bonus</p>
-                <p className="text-slate-500 text-xs mt-0.5">+${payRules?.streakBonus ?? 50} for {payRules?.streakTarget ?? 10} clean jobs with no issues</p>
+                <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#34d399'}}>+${payRules?.streakBonus ?? 50}</span> for {payRules?.streakTarget ?? 10} clean jobs with no issues</p>
               </div>
               <span className="text-slate-500 text-xs italic">Not earned</span>
             </div>
@@ -545,6 +549,25 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
               </span>
             </div>
           )}
+
+          {/* Custom pay rules applied by admin */}
+          {customRules.map(rule => {
+            const amt = parseFloat(rule.amount) || 0;
+            const isBonus = amt > 0;
+            return (
+              <div key={rule.id} className="flex justify-between items-start py-2 border-b border-slate-800">
+                <div>
+                  <p className={`text-sm font-medium ${isBonus ? "text-emerald-300" : "text-red-300"}`}>
+                    {rule.label}
+                  </p>
+                  <p className="text-slate-500 text-xs mt-0.5">{isBonus ? "Bonus" : "Deduction"} applied by manager</p>
+                </div>
+                <span className={`font-semibold text-sm ${isBonus ? "text-emerald-400" : "text-red-400"}`}>
+                  {isBonus ? "+" : ""}{formatCurrency(amt.toFixed(2))}
+                </span>
+              </div>
+            );
+          })}
 
           {/* Final total */}
           <div className="flex justify-between items-center pt-3 mt-1">
