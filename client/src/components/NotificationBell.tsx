@@ -33,9 +33,11 @@ interface NotificationBellProps {
   onSessionOpen?: (sessionId: number) => void;
   /** Only fetch notifications when true (requires Manus OAuth session). */
   enabled?: boolean;
+  /** Number of follow-ups due today — shows an orange dot badge when > 0 */
+  followUpCount?: number;
 }
 
-export default function NotificationBell({ onSessionOpen, enabled = false }: NotificationBellProps = {}) {
+export default function NotificationBell({ onSessionOpen, enabled = false, followUpCount = 0 }: NotificationBellProps = {}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -85,6 +87,13 @@ export default function NotificationBell({ onSessionOpen, enabled = false }: Not
           <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
+        )}
+        {unreadCount === 0 && followUpCount > 0 && (
+          <span
+            className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5 rounded-full border-2 border-white"
+            style={{ backgroundColor: "#F97316" }}
+            title={`${followUpCount} follow-up${followUpCount > 1 ? "s" : ""} due today`}
+          />
         )}
       </Button>
 

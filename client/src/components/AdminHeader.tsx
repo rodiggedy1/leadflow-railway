@@ -466,8 +466,10 @@ interface AdminHeaderProps {
   pagePermissions?: string[] | null;
   /** true = full admin (Manus OAuth). false/undefined = agent session only. */
   isAdmin?: boolean;
+  /** Number of follow-ups due today — shows orange dot on bell when > 0 */
+  followUpCount?: number;
 }
-export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false }: AdminHeaderProps) {
+export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false, followUpCount = 0 }: AdminHeaderProps) {
   // Determine which page IDs this agent is allowed to see.
   // null means unrestricted (admin or no restrictions set).
   const allowedPageIds: string[] | null = pagePermissions ?? null;
@@ -513,7 +515,7 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
           {isAdmin && <WebhookHealthBadge enabled={isAdmin} />}
           {isAdmin && <SyncHealthBadge enabled={isAdmin} />}
           {rightExtra}
-          <NotificationBell onSessionOpen={onSessionOpen} enabled={isAdmin} />
+          <NotificationBell onSessionOpen={onSessionOpen} enabled={isAdmin} followUpCount={followUpCount} />
           {isAdmin && <PreviewAgentButton />}
         </div>
       </div>

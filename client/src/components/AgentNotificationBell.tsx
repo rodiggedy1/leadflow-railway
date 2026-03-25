@@ -28,7 +28,7 @@ const TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
   default:  { icon: "🔔", color: "text-gray-500"    },
 };
 
-export default function AgentNotificationBell() {
+export default function AgentNotificationBell({ followUpCount = 0 }: { followUpCount?: number } = {}) {
   const [open, setOpen] = useState(false);
   const [readAt, setReadAt] = useState<Date>(() => new Date(Date.now() - 24 * 60 * 60 * 1000));
   const ref = useRef<HTMLDivElement>(null);
@@ -77,6 +77,13 @@ export default function AgentNotificationBell() {
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </Badge>
+        )}
+        {unreadCount === 0 && followUpCount > 0 && (
+          <span
+            className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5 rounded-full border-2 border-white"
+            style={{ backgroundColor: "#F97316" }}
+            title={`${followUpCount} follow-up${followUpCount > 1 ? "s" : ""} due today`}
+          />
         )}
       </Button>
 

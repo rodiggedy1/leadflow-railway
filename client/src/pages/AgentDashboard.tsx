@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useLeadReplyNotifier } from "@/hooks/useLeadReplyNotifier";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import AgentNotificationBell from "@/components/AgentNotificationBell";
+import { FollowUpReminderToast, useTodayFollowUps } from "@/components/FollowUpReminderToast";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -1033,6 +1034,7 @@ function LeadCard({
       <div
         className="group relative bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer"
         style={{ opacity: isNotInterested ? 0.65 : 1 }}
+        data-session-id={session.id}
         onClick={() => setShowConversation(true)}
       >
         {/* Left stage accent bar */}
@@ -1270,6 +1272,21 @@ export default function AgentDashboard() {
   // regardless of whether a conversation drawer is open.
   useLeadReplyNotifier(allSessions);
 
+  // ── Follow-up reminder toasts ───────────────────────────────────────────────────────────────────────────
+  const todayFollowUps = useTodayFollowUps(!!agentMe);
+  // When a toast card is clicked, we need to open the LeadCard's drawer.
+  // We do this by scrolling to the card and programmatically triggering a click.
+  // We store the pending session ID and resolve it once allSessions is populated.
+  const [pendingOpenId, setPendingOpenId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!pendingOpenId || allSessions.length === 0) return;
+    const el = document.querySelector<HTMLElement>(`[data-session-id="${pendingOpenId}"]`);
+    if (el) {
+      el.click();
+      setPendingOpenId(null);
+    }
+  }, [pendingOpenId, allSessions]);
+
   const filtered = useMemo(() => {
     return (allSessions as Session[]).filter(s => {
       if (viewMode === "my" && s.assignedAgentId !== agentMe?.id) return false;
@@ -1316,6 +1333,12 @@ export default function AgentDashboard() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#FFF8F5" }}>
+      {/* Follow-up reminder toasts */}
+      <FollowUpReminderToast
+        leads={todayFollowUps}
+        onOpen={(id) => setPendingOpenId(id)}
+      />
+
       {/* Header */}
       <header className="bg-white border-b sticky top-0 z-40" style={{ borderColor: "#F0D8D0" }}>
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
@@ -1334,7 +1357,7 @@ export default function AgentDashboard() {
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
             </Button>
-            <AgentNotificationBell />
+            <AgentNotificationBell followUpCount={todayFollowUps.length} />
             <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()} className="gap-1.5 text-gray-500">
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </Button>
@@ -1541,3 +1564,4 @@ export default function AgentDashboard() {
     </div>
   );
 }
+

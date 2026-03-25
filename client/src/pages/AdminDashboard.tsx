@@ -2828,6 +2828,7 @@ export default function AdminDashboard() {
         pagePermissions={agentPagePermissions}
         isAdmin={isAdmin}
         onSessionOpen={handleSessionOpen}
+        followUpCount={todayFollowUps.length}
         rightExtra={
           <>
             {unhandledCount > 0 && activeTab === "leads" && (
