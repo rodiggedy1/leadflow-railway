@@ -201,7 +201,7 @@ export interface OpenPhoneRecording {
 /**
  * Fetches all recordings for a given OpenPhone callId.
  * Returns an empty array if none exist or on error.
- * Docs: GET https://api.openphone.com/v1/call-recordings?callId={callId}
+ * Docs: GET https://api.openphone.com/v1/call-recordings/{callId}
  */
 export async function fetchCallRecordings(callId: string): Promise<OpenPhoneRecording[]> {
   const apiKey = ENV.openPhoneApiKey;
@@ -210,7 +210,7 @@ export async function fetchCallRecordings(callId: string): Promise<OpenPhoneReco
     return [];
   }
   try {
-    const url = `https://api.openphone.com/v1/call-recordings?callId=${encodeURIComponent(callId)}`;
+    const url = `https://api.openphone.com/v1/call-recordings/${encodeURIComponent(callId)}`;
     const res = await fetch(url, {
       headers: { Authorization: apiKey, "Content-Type": "application/json" },
     });
