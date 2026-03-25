@@ -1099,6 +1099,8 @@ function ConversationDrawer({
   const { data: voiceCalls } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
   // AI call scoring
   const [scoringRecId, setScoringRecId] = useState<number | null>(null);
+  const scoreColor = (s: number) => s >= 80 ? "#16a34a" : s >= 60 ? "#d97706" : "#dc2626";
+
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [scorePanel, setScorePanel] = useState<{ recId: number; data: {
     overallScore: number;
@@ -1458,7 +1460,6 @@ function ConversationDrawer({
                       }
                       const isScoring = scoringRecId === rec.id;
                       const activePanelData = scorePanel?.recId === rec.id ? scorePanel.data : existingScore;
-                      const scoreColor = (s: number) => s >= 80 ? "#16a34a" : s >= 60 ? "#d97706" : "#dc2626";
                       return (
                         <div key={`rec-${rec.id ?? idx}`}>
                           {showSep && recTs != null && <MessageDateSeparator label={formatMsgDate(recTs)} />}
