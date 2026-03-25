@@ -112,6 +112,7 @@ import KanbanBoard from "@/components/KanbanBoard";
 import DailyRecapModal, { hasShownToday, markShownToday } from "@/components/DailyRecapModal";
 import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
 import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
+import CallGuide from "@/components/CallGuide";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
 /**
  * Slide-in toast stack that appears from the bottom-right when leads have
@@ -2040,6 +2041,9 @@ function ConversationDrawer({
               </div>
             )}
           </div>
+
+          {/* ── CALL GUIDE widget ── */}
+          <CallGuide collapsed />
 
           {/* ── FOLLOW-UP PLAN card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

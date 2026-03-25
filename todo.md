@@ -102,4 +102,10 @@
 - [x] Add scoreCall tRPC procedure with home services AI sales rubric
 - [x] Add AI Score button + score breakdown UI to call card in AdminDashboard
 - [x] Add call/transcript indicator badges to lead list rows
-- [ ] Move AI call score breakdown from inline call card to a full popup modal\n
+- [x] Move AI call score breakdown from inline call card to a full popup modal
+- [x] Fix scoreColor ReferenceError in AI score modal
+- [ ] Build CallGuide component with 6-stage home services sales playbook
+- [ ] Add AI objection rebuttal tRPC procedure
+- [ ] Integrate CallGuide widget into Agent Dashboard
+- [ ] Integrate CallGuide widget into Admin Dashboard (ConversationDrawer)
+

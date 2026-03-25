@@ -1539,6 +1539,37 @@ Respond with ONLY valid JSON in this exact format:
       }),
 
     /**
+     * leads.getObjectionRebuttal — AI-powered live call objection rebuttal.
+     * Used by the CallGuide widget. Takes the customer's objection text and returns
+     * a ready-to-say rebuttal script based on home services sales best practices.
+     */
+    getObjectionRebuttal: adminAgentProcedure
+      .input(z.object({ objection: z.string().min(1).max(500) }))
+      .mutation(async ({ input }) => {
+        const prompt = `You are a world-class home services sales coach. An agent is on a live call right now and the customer just said:
+
+"${input.objection}"
+
+Write a single, ready-to-say rebuttal script the agent can use immediately. Requirements:
+- 2-4 sentences max
+- Empathize first, then redirect
+- Natural, conversational tone (not robotic)
+- Based on highest-converting home services sales techniques
+- Do NOT use bullet points or headers — just the script they say out loud
+- Start with an empathy phrase, then pivot to value or urgency
+
+Return ONLY the script text, nothing else.`;
+        const llmResult = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are a world-class home services sales coach. Return only the rebuttal script, no explanation." },
+            { role: "user", content: prompt },
+          ],
+        });
+        const rebuttal = llmResult?.choices?.[0]?.message?.content?.trim() ?? "I understand — let me address that for you.";
+        return { rebuttal };
+      }),
+
+    /**
      * leads.getClosingRecommendation — AI-powered closing recommendation.
      *
      * Analyzes the full conversation history, detects the objection type,

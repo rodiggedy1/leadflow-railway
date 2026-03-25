@@ -59,6 +59,7 @@ import {
   Check,
   X,
 } from "lucide-react";
+import CallGuide from "@/components/CallGuide";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
@@ -1041,6 +1042,11 @@ function ConversationDrawer({
                 })}
               </div>
             )}
+
+            {/* Call Guide */}
+            <div className="px-4 py-3 border-b" style={{ borderColor: "#F0D8D0" }}>
+              <CallGuide collapsed />
+            </div>
 
             {/* Internal Notes */}
             <div className="px-4 py-3 flex-1">
