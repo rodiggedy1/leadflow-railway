@@ -1017,6 +1017,42 @@ If TOP OBJECTIONS are provided in the metrics:
     }),
 
   /**
+   * Preview the SMS that would be sent for a given lead.
+   * Returns the default message text so the agent can review/edit before sending.
+   */
+  getLeadSmsPreview: adminAgentProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const session = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          stage: conversationSessions.stage,
+          aiClosingRecCache: conversationSessions.aiClosingRecCache,
+        })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session[0]) throw new Error("Session not found");
+      const s = session[0];
+      const firstName = (s.leadName ?? "there").split(" ")[0];
+      // Use the AI-generated suggestedMessage if available
+      let suggestedMessage: string | null = null;
+      if (s.aiClosingRecCache) {
+        try {
+          const cached = JSON.parse(s.aiClosingRecCache) as { suggestedMessage?: string };
+          suggestedMessage = cached.suggestedMessage ?? null;
+        } catch { /* ignore */ }
+      }
+      // Fall back to stage-based default
+      const defaultMessage = suggestedMessage
+        ?? `Hi ${firstName}! Just checking in — are you still interested in scheduling your cleaning? We have openings this week!`;
+      return { message: defaultMessage, firstName };
+    }),
+
+  /**
    * Bulk action: send follow-up SMS to all leads in a given stage.
    */
   executeBulkAction: adminAgentProcedure

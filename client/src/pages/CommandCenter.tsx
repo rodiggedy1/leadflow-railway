@@ -458,7 +458,7 @@ function HotLeadCard({
     intentScore: number;
     context: string | null;
   };
-  onSms: (id: number, name: string) => void;
+  onSms: (id: number, name: string, customMessage?: string) => void;
   onCall: (id: number, name: string) => void;
   smsSending: boolean;
   callSending: boolean;
@@ -468,7 +468,32 @@ function HotLeadCard({
   const scoreBg = isHot ? "bg-red-500" : isWarm ? "bg-amber-500" : "bg-gray-400";
   const stageCls = stageColors[lead.stage] ?? "bg-gray-100 text-gray-500";
 
+  // SMS preview dialog state
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false);
+  const [editedMessage, setEditedMessage] = useState("");
+  const previewQuery = trpc.commandCenter.getLeadSmsPreview.useQuery(
+    { sessionId: lead.id },
+    { enabled: smsDialogOpen, staleTime: 60_000 }
+  );
+
+  // Sync preview into editable field when it loads
+  const previewMessage = previewQuery.data?.message;
+  useEffect(() => {
+    if (previewMessage) setEditedMessage(previewMessage);
+  }, [previewMessage]);
+
+  const handleOpenSmsDialog = () => {
+    setEditedMessage("");
+    setSmsDialogOpen(true);
+  };
+
+  const handleSendSms = () => {
+    setSmsDialogOpen(false);
+    onSms(lead.id, lead.name, editedMessage.trim() || undefined);
+  };
+
   return (
+    <>
     <div className={`rounded-xl border p-4 mb-3 last:mb-0 transition-all ${
       isHot ? "border-red-200 bg-red-50/40" :
       isWarm ? "border-amber-200 bg-amber-50/30" :
@@ -507,7 +532,7 @@ function HotLeadCard({
                 size="sm"
                 variant="outline"
                 className="h-7 px-2.5 gap-1 text-xs bg-white"
-                onClick={() => onSms(lead.id, lead.name)}
+                onClick={handleOpenSmsDialog}
                 disabled={smsSending}
               >
                 {smsSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <MessageSquare className="w-3 h-3" />}
@@ -532,6 +557,51 @@ function HotLeadCard({
         </div>
       </div>
     </div>
+
+    {/* SMS Preview & Send Dialog */}
+    <Dialog open={smsDialogOpen} onOpenChange={setSmsDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-gray-500" />
+            Send SMS to {lead.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="rounded-lg bg-gray-50 border border-gray-100 px-4 py-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Sending to</p>
+            <p className="text-sm text-gray-800">{lead.phone}</p>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Message</p>
+            {previewQuery.isLoading ? (
+              <div className="h-24 rounded-lg bg-gray-100 animate-pulse" />
+            ) : (
+              <textarea
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-blue-200"
+                rows={4}
+                value={editedMessage}
+                onChange={e => setEditedMessage(e.target.value)}
+                placeholder="Type a message..."
+              />
+            )}
+            <p className="text-xs text-gray-400">{editedMessage.length} / 160 chars</p>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setSmsDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleSendSms}
+            disabled={smsSending || !editedMessage.trim()}
+            className="gap-1.5"
+          >
+            {smsSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+            Send SMS
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -699,10 +769,10 @@ export default function CommandCenter() {
     }
   }, [executeBulkAction]);
 
-  const handleLeadSms = useCallback(async (sessionId: number, name: string) => {
+  const handleLeadSms = useCallback(async (sessionId: number, name: string, customMessage?: string) => {
     setSmsSending(sessionId);
     try {
-      const result = await executeLeadAction.mutateAsync({ sessionId, actionType: "send_sms" });
+      const result = await executeLeadAction.mutateAsync({ sessionId, actionType: "send_sms", customMessage });
       if (result.success) {
         toast.success(`SMS sent to ${name}`);
       } else {

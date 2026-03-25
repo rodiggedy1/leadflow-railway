@@ -68,3 +68,4 @@
 - [x] Replace header tags with AI-generated conversation context phrase showing where the conversation left off
 - [x] Redesign Lead Snapshot card — returning customer hero block at top, source demoted to small footer pill
 - [x] Shorten AI context phrase in drawer header to 4-5 word pill
+- [x] Add SMS preview/confirm dialog to Hot Leads Queue SMS button — shows AI-drafted message, editable, confirm before send
