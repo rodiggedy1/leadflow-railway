@@ -171,12 +171,13 @@ const JOB_STATUSES = [
   { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
-function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules }: {
+function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules }: {
   job: Job;
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
   onStatusUpdated: () => void;
   payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
+  activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -291,12 +292,13 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   const manualAdj = parseFloat(job.manualAdjustment ?? "0") || 0;
   const recleanAdj = job.recleanPenalty != null ? parseFloat(job.recleanPenalty) : 0;
   const recleanPending = !isComplete && job.recleanPenalty === null; // show as Pending until job completed
-  // Custom pay rules applied by admin (e.g. Google Review bonus, Late penalty)
-  const customRules = job.customRules ?? [];
-  const customRulesTotal = customRules.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  // Active custom pay rules — shown on every job (e.g. Google Review bonus, Late penalty)
+  // These are global rules defined in Settings, shown as informational line items on every job card.
+  // The amounts are NOT added to the pay total — they are informational ("you can earn this").
+  const shownCustomRules = activeCustomRules ?? [];
   // Always recalculate display total from components — stored finalPay may be stale
   // (e.g. set before photoAdjustment column existed). DB finalPay is for payroll records only.
-  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj + customRulesTotal;
+  const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
 
   return (
@@ -550,20 +552,22 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             </div>
           )}
 
-          {/* Custom pay rules applied by admin */}
-          {customRules.map(rule => {
+          {/* Active custom pay rules — shown on every job */}
+          {shownCustomRules.map(rule => {
+            const isBonus = rule.type === "bonus";
             const amt = parseFloat(rule.amount) || 0;
-            const isBonus = amt > 0;
             return (
               <div key={rule.id} className="flex justify-between items-start py-2 border-b border-slate-800">
                 <div>
                   <p className={`text-sm font-medium ${isBonus ? "text-emerald-300" : "text-red-300"}`}>
                     {rule.label}
                   </p>
-                  <p className="text-slate-500 text-xs mt-0.5">{isBonus ? "Bonus" : "Deduction"} applied by manager</p>
+                  {rule.description && (
+                    <p className="text-slate-500 text-xs mt-0.5">{rule.description}</p>
+                  )}
                 </div>
                 <span className={`font-semibold text-sm ${isBonus ? "text-emerald-400" : "text-red-400"}`}>
-                  {isBonus ? "+" : ""}{formatCurrency(amt.toFixed(2))}
+                  {isBonus ? "+" : "-"}{formatCurrency(amt.toFixed(2))}
                 </span>
               </div>
             );
@@ -1197,6 +1201,7 @@ export default function CleanerPortal() {
                 onMarkedComplete={refetch}
                 onStatusUpdated={refetch}
                 payRules={payRules}
+                activeCustomRules={activeCustomRules}
               />
             ))}
 
