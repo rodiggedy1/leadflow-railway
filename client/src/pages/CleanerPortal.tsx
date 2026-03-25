@@ -4,7 +4,7 @@
  * Individual cleaner portal. Login with phone + password.
  * Shows today's jobs (with date browsing), pay breakdown, ratings, photo upload, mark complete.
  */
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,52 +64,6 @@ function StarRating({ rating }: { rating: number | null }) {
         />
       ))}
       <span className="ml-1 text-sm font-medium">{rating}/5</span>
-    </div>
-  );
-}
-
-// ── Magic Link Handler ───────────────────────────────────────────────────────
-/**
- * MagicLinkHandler — auto-verifies a magic token from the URL query string.
- * Renders a loading screen while verifying, then calls onLogin() on success
- * or falls back to the normal login form on failure.
- */
-function MagicLinkHandler({ token, onLogin, onFallback }: {
-  token: string;
-  onLogin: () => void;
-  onFallback: () => void;
-}) {
-  const verifyMutation = trpc.cleaner.verifyMagicLink.useMutation({
-    onSuccess: () => {
-      toast.success("Logged in successfully!");
-      // Remove the magic token from the URL so it can't be bookmarked or reused
-      const url = new URL(window.location.href);
-      url.searchParams.delete("magic");
-      window.history.replaceState({}, "", url.toString());
-      onLogin();
-    },
-    onError: (err) => {
-      toast.error(err.message || "Login link failed");
-      // Clean up URL even on failure
-      const url = new URL(window.location.href);
-      url.searchParams.delete("magic");
-      window.history.replaceState({}, "", url.toString());
-      onFallback();
-    },
-  });
-
-  useEffect(() => {
-    verifyMutation.mutate({ token });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="text-center">
-        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mx-auto mb-4" />
-        <p className="text-slate-300 text-sm">Logging you in…</p>
-        <p className="text-slate-500 text-xs mt-1">Please wait a moment</p>
-      </div>
     </div>
   );
 }
@@ -1192,21 +1146,10 @@ function WeekJobRow({
 export default function CleanerPortal() {
   const [date, setDate] = useState(getTodayET);
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
-  // Check for magic link token in URL query string — read once on mount
-  const [magicToken] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("magic") ?? null;
-  });
-  // magicDone: true once the magic link attempt has completed (success or failure)
-  const [magicDone, setMagicDone] = useState(false);
-  const [magicFailed, setMagicFailed] = useState(false);
   const utils = trpc.useUtils();
 
-  // Delay the me query until magic link is resolved — prevents existing session
-  // from winning over the magic link (e.g. GoGreen was logged in, MaidsPlus link tapped)
   const meQuery = trpc.cleaner.me.useQuery(undefined, {
     retry: false,
-    enabled: !magicToken || magicDone,
   });
   const jobsQuery = trpc.cleaner.myJobs.useQuery(
     { date },
@@ -1255,25 +1198,6 @@ export default function CleanerPortal() {
     }
     return days;
   }, [weekJobs0, weekStart]);
-
-  // If there's a magic token and we haven't tried it yet, show the handler immediately
-  // (before meQuery even runs, so an existing session can't intercept)
-  if (magicToken && !magicDone) {
-    return (
-      <MagicLinkHandler
-        token={magicToken}
-        onLogin={() => {
-          // Invalidate the me cache so it re-fetches as the new cleaner
-          utils.cleaner.me.invalidate();
-          setMagicDone(true);
-        }}
-        onFallback={() => {
-          setMagicFailed(true);
-          setMagicDone(true);
-        }}
-      />
-    );
-  }
 
   // Not yet loaded
   if (meQuery.isLoading) {

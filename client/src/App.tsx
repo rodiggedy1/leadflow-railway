@@ -26,6 +26,7 @@ const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 const TrackerFlow = lazy(() => import("./pages/TrackerFlow"));
 const FieldManagement = lazy(() => import("./pages/FieldManagement"));
 const ReactivationEngine = lazy(() => import("./pages/ReactivationEngine"));
+const CleanerAuthCallback = lazy(() => import("./pages/CleanerAuthCallback"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -53,6 +54,7 @@ function Router() {
       <Route path={"/admin/revenue"} component={RevenueAttribution} />
       <Route path={"/admin/quality"} component={CleanerDashboard} />
       <Route path={"/cleaner"} component={CleanerPortal} />
+      <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
       <Route path={"/track/:token"} component={JobTracker} />
       <Route path={"/admin/settings"} component={SettingsPage} />
       <Route path={"/admin/command-center"} component={CommandCenter} />

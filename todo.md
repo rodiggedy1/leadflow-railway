@@ -79,3 +79,5 @@
 - [x] Fix magic link: after tapping link it shows login page instead of auto-logging in (verifyMagicLink failing or MagicLinkHandler not working)
 - [x] Fix magic link: first tap showed wrong cleaner (GoGreen) because existing session was not cleared before verifying new token
 - [x] Extend magic link token expiry from 15 minutes to 30 days
+- [x] Debug magic link: clicking link still shows login page — run end-to-end test to find exact failure
+- [x] Build dedicated /auth/cleaner-callback route for magic link token exchange (separate from CleanerPortal)

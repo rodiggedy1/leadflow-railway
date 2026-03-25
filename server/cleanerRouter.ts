@@ -629,8 +629,8 @@ export const cleanerRouter = router({
         used: 0,
       });
 
-      // Build the magic link URL using the frontend origin
-      const magicUrl = `${input.origin}/cleaner?magic=${rawToken}`;
+      // Build the magic link URL using the dedicated auth callback route
+      const magicUrl = `${input.origin}/auth/cleaner-callback?token=${rawToken}`;
 
       // Send the SMS — BEFORE any further DB work (per leadflow-sms skill)
       const firstName = cleaner.name.split(" ")[0];
