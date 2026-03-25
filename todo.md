@@ -87,3 +87,5 @@
 - [x] Update SMS preview text in job log UI to match new format
 - [x] Update FieldManagement workflow page SMS preview text to reflect new magic link messages
 - [x] Add ability to set/edit lead name from the drawer for leads with no name
+- [x] Redesign drawer bottom action bar: clean layout for AI recommendation buttons, no wrapping
+- [x] Add "Add Note" button to lead drawer (saves a timestamped internal note on the lead)

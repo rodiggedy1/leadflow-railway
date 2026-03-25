@@ -75,6 +75,7 @@ import {
   ChevronDown,
   Pencil,
   Check,
+  StickyNote,
 } from "lucide-react";
 import {
   Dialog,
@@ -1090,6 +1091,7 @@ function ConversationDrawer({
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
+  const [showNoteInput, setShowNoteInput] = useState(false);
   const updateNotes = trpc.agents.updateNotes.useMutation({
     onSuccess: () => { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000); },
     onError: (e) => toast.error(e.message),
@@ -1434,32 +1436,75 @@ function ConversationDrawer({
               </div>
 
               {/* ── Suggestion pills — use AI-generated labels and messages ── */}
-              <div className="flex items-center gap-2 px-4 pt-2 pb-1.5 flex-wrap shrink-0 bg-white border-t border-gray-100">
-                {[
-                  { index: -1, label: closingRec?.primaryMove ?? "Primary" },
-                  { index: 0, label: closingRec?.alternativeMoves?.[0] ?? "Alt 1" },
-                  { index: 1, label: closingRec?.alternativeMoves?.[1] ?? "Alt 2" },
-                  { index: 2, label: closingRec?.alternativeMoves?.[2] ?? "Alt 3" },
-                ].map(({ index, label }) => (
+              <div className="shrink-0 bg-white border-t border-gray-100">
+                {/* Row 1: 4 suggestion pills in a fixed grid */}
+                <div className="grid grid-cols-4 gap-1.5 px-3 pt-2 pb-1">
+                  {[
+                    { index: -1, label: closingRec?.primaryMove ?? "Primary" },
+                    { index: 0, label: closingRec?.alternativeMoves?.[0] ?? "Alt 1" },
+                    { index: 1, label: closingRec?.alternativeMoves?.[1] ?? "Alt 2" },
+                    { index: 2, label: closingRec?.alternativeMoves?.[2] ?? "Alt 3" },
+                  ].map(({ index, label }) => (
+                    <button
+                      key={index}
+                      onClick={() => applySuggestion(index)}
+                      title={label}
+                      className="text-xs font-medium px-2 py-1.5 rounded-full border transition-colors border-gray-200 text-gray-600 bg-white hover:bg-gray-50 truncate"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {/* Row 2: Add Note + AI assist toggle */}
+                <div className="flex items-center gap-2 px-3 pb-2">
                   <button
-                    key={index}
-                    onClick={() => applySuggestion(index)}
-                    className="text-xs font-medium px-3.5 py-1.5 rounded-full border transition-colors border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
+                    onClick={() => setShowNoteInput(v => !v)}
+                    className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
                   >
-                    {label}
+                    <StickyNote className="w-3 h-3" />
+                    {(notes || loadedNotes) ? "Edit Note" : "Add Note"}
+                    {(notes || loadedNotes) && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />}
                   </button>
-                ))}
-                <button
-                  onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
-                  disabled={setAiModeMutation.isPending}
-                  className={`ml-auto text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-colors ${
-                    session.aiMode === 1
-                      ? "text-green-700 bg-white border-green-200 hover:bg-green-50"
-                      : "text-gray-500 bg-white border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {session.aiMode === 1 ? "AI assist on" : "AI assist off"}
-                </button>
+                  <button
+                    onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
+                    disabled={setAiModeMutation.isPending}
+                    className={`ml-auto text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-colors ${
+                      session.aiMode === 1
+                        ? "text-green-700 bg-white border-green-200 hover:bg-green-50"
+                        : "text-gray-500 bg-white border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {session.aiMode === 1 ? "AI assist on" : "AI assist off"}
+                  </button>
+                </div>
+                {/* Inline note input — shown when Add Note is clicked */}
+                {showNoteInput && (
+                  <div className="px-3 pb-2">
+                    <Textarea
+                      placeholder="e.g. Left voicemail, price objection, follow up Friday..."
+                      value={notes !== "" ? notes : loadedNotes}
+                      onChange={e => setNotes(e.target.value)}
+                      rows={2}
+                      className="resize-none text-sm"
+                      autoFocus
+                    />
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-xs text-gray-400">Visible to agents and admins only</span>
+                      <div className="flex items-center gap-2">
+                        {notesSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-3 text-xs"
+                          onClick={() => { updateNotes.mutate({ sessionId: session.id, notes: notes !== "" ? notes : loadedNotes }); setShowNoteInput(false); }}
+                          disabled={updateNotes.isPending}
+                        >
+                          {updateNotes.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── Compose box ── */}
