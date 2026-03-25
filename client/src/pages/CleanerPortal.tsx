@@ -171,13 +171,14 @@ const JOB_STATUSES = [
   { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
-function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules }: {
+function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo }: {
   job: Job;
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
   onStatusUpdated: () => void;
   payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
+  streakInfo?: { currentStreak: number; bestStreak: number } | null;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -293,13 +294,38 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   const recleanAdj = job.recleanPenalty != null ? parseFloat(job.recleanPenalty) : 0;
   const recleanPending = !isComplete && job.recleanPenalty === null; // show as Pending until job completed
   // Active custom pay rules — shown on every job (e.g. Google Review bonus, Late penalty)
-  // These are global rules defined in Settings, shown as informational line items on every job card.
-  // The amounts are NOT added to the pay total — they are informational ("you can earn this").
   const shownCustomRules = activeCustomRules ?? [];
   // Always recalculate display total from components — stored finalPay may be stale
-  // (e.g. set before photoAdjustment column existed). DB finalPay is for payroll records only.
   const finalPay = basePay + ratingAdj + photoAdj + streakBonus + manualAdj + recleanAdj;
   const isPayFinalized = job.ratingAdjustment != null; // pay is finalized once rating is processed
+
+  // ── 4-tile summary calculations ──────────────────────────────────────────
+  // BASE PAY tile: just the base
+  const summaryBasePay = basePay;
+  // LIKELY PAY: base + photo bonus (if uploaded or +5 expected) + rating bonus if earned, else add photo bonus
+  const photoBonus = payRules?.photoBonus ?? 5;
+  const fiveStarBonus = payRules?.fiveStarBonus ?? 10;
+  const likelyPhotoAdj = hasPhoto ? photoAdj : photoBonus; // assume photo uploaded
+  const likelyRatingAdj = ratingAdj !== 0 ? ratingAdj : fiveStarBonus; // assume 5-star if not yet rated
+  const summaryLikelyPay = basePay + likelyPhotoAdj + likelyRatingAdj + streakBonus + manualAdj + recleanAdj;
+  // POTENTIAL EARNINGS: likely pay + all active custom bonus rules
+  const customBonusTotal = shownCustomRules
+    .filter(r => r.type === "bonus")
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const summaryPotentialPay = summaryLikelyPay + customBonusTotal;
+  // RISK FLOOR: base + no-photo penalty + low-rating penalty + reclean penalty + custom deductions
+  const noPhotoPenalty = payRules?.noPhotoPenalty ?? 10;
+  const lowRatingDeduction = payRules?.lowRatingDeduction ?? 20;
+  const recleanPenaltyAmt = payRules?.recleanPenalty ?? 30;
+  const customDeductionTotal = shownCustomRules
+    .filter(r => r.type === "deduction")
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const summaryRiskFloor = basePay - noPhotoPenalty - lowRatingDeduction - recleanPenaltyAmt - customDeductionTotal + manualAdj;
+  // Streak progress
+  const streakTarget = payRules?.streakTarget ?? 10;
+  const currentStreak = streakInfo?.currentStreak ?? 0;
+  const streakProgress = Math.min(currentStreak, streakTarget);
+  const streakRemaining = Math.max(0, streakTarget - currentStreak);
 
   return (
     <Card className={`bg-slate-800 border-slate-700 overflow-hidden transition-all ${isComplete ? "opacity-80" : ""}`}>
@@ -417,136 +443,216 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
           </div>
         )}
 
-        {/* Pay breakdown */}
-        <div className="bg-slate-900/60 rounded-xl p-4 space-y-0">
-          <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">Pay Breakdown</p>
-
-          {/* Base pay */}
-          <div className="flex justify-between items-start py-2 border-b border-slate-800">
-            <div>
-              <p className="text-slate-200 text-sm font-medium">Base Pay</p>
-              <p className="text-slate-500 text-xs mt-0.5">{job.serviceType ?? "Cleaning service"}</p>
-            </div>
-            <span className="text-white font-semibold text-sm">{formatCurrency(job.basePay)}</span>
+        {/* Pay Summary — redesigned */}
+        <div className="rounded-xl overflow-hidden border border-slate-700/60">
+          {/* Header */}
+          <div className="bg-slate-900 px-4 pt-4 pb-3">
+            <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-1">Pay Summary</p>
+            <p className="text-white font-bold text-lg leading-tight">Know exactly what this job can pay</p>
+            <p className="text-slate-400 text-xs mt-1">Cleaner-friendly breakdown with guaranteed pay, upside, and any deductions that could reduce final payout.</p>
           </div>
 
-          {/* Rating bonus/penalty */}
+          {/* 4-tile summary row */}
+          <div className="grid grid-cols-2 gap-2 px-3 py-3 bg-slate-900/80">
+            {/* Base Pay */}
+            <div className="rounded-xl p-3 border border-teal-700/40 bg-teal-900/20">
+              <p className="text-teal-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Base Pay</p>
+              <p className="text-teal-300 font-bold text-xl">{formatCurrency(summaryBasePay.toFixed(2))}</p>
+              <p className="text-slate-400 text-[11px] mt-1">What you have locked in</p>
+            </div>
+            {/* Likely Pay */}
+            <div className="rounded-xl p-3 border border-slate-600/40 bg-slate-800/60">
+              <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Likely Pay</p>
+              <p className="text-white font-bold text-xl">{formatCurrency(summaryLikelyPay.toFixed(2))}</p>
+              <p className="text-slate-400 text-[11px] mt-1">If photos uploaded and no issues</p>
+            </div>
+            {/* Potential Earnings */}
+            <div className="rounded-xl p-3 border border-purple-700/40 bg-purple-900/20">
+              <p className="text-purple-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Potential Earnings</p>
+              <p className="text-purple-300 font-bold text-xl">{formatCurrency(summaryPotentialPay.toFixed(2))}</p>
+              <p className="text-slate-400 text-[11px] mt-1">Including all available bonuses</p>
+            </div>
+            {/* Risk Floor */}
+            <div className="rounded-xl p-3 border border-red-800/40 bg-red-900/20">
+              <p className="text-red-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Risk Floor</p>
+              <p className="text-red-300 font-bold text-xl">{formatCurrency(Math.max(0, summaryRiskFloor).toFixed(2))}</p>
+              <p className="text-slate-400 text-[11px] mt-1">If penalties hit</p>
+            </div>
+          </div>
+
+          {/* Detailed line items */}
+          <div className="bg-slate-900/40 divide-y divide-slate-800/60">
+
+          {/* Base pay row */}
+          <div className="flex justify-between items-start px-4 py-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-slate-100 text-sm font-semibold">Base Pay</p>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-900/50 text-teal-300 border border-teal-700/40">Earned</span>
+              </div>
+              <p className="text-slate-500 text-xs mt-0.5">{job.serviceType ?? "Cleaning service"}</p>
+              <p className="text-slate-600 text-xs">Guaranteed for completing the job</p>
+            </div>
+            <span className="text-white font-bold text-base">{formatCurrency(summaryBasePay.toFixed(2))}</span>
+          </div>
+
+          {/* Rating Bonus row */}
           {(() => {
             const rating = job.customerRating;
             const isMissed = job.missedSomething === 1;
             const isBonus = ratingAdj > 0;
             const isPenalty = ratingAdj < 0;
+            const isPending = rating === null && !isMissed && ratingAdj === 0;
 
-            // No rating yet — show pending with rules
-            if (rating === null && !isMissed && ratingAdj === 0) {
-              return (
-                <div className="flex justify-between items-start py-2 border-b border-slate-800">
-                  <div>
-                    <p className="text-slate-400 text-sm font-medium">Rating Bonus</p>
-                    <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#34d399'}}>+${payRules?.fiveStarBonus ?? 10}</span> for 5 stars · <span style={{color: '#f87171'}}>-${payRules?.lowRatingDeduction ?? 20}</span> for 3 stars or below</p>
-                  </div>
-                  <span className="text-slate-500 text-xs italic">Pending</span>
-                </div>
-              );
-            }
+            let label = "Rating Bonus";
+            let reason = `+$${payRules?.fiveStarBonus ?? 10} for 5 stars · -$${payRules?.lowRatingDeduction ?? 20} for 3 stars or below`;
+            let badge = <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">Pending</span>;
+            let amountEl = <span className="text-slate-400 text-sm font-semibold">${payRules?.fiveStarBonus ?? 10}.00</span>;
+            let downsideEl = <span className="text-red-400 text-xs">Downside -${payRules?.lowRatingDeduction ?? 20}.00</span>;
 
-            // Rating received — show result
-            let label = "Rating";
-            let reason = "";
-            if (rating === 5 && !isMissed) {
-              label = "5-Star Rating Bonus";
-              reason = "Perfect score — keep it up!";
-            } else if (isMissed) {
-              label = "Rating Penalty";
-              reason = "Customer reported an issue";
-            } else if (rating !== null && rating <= 3) {
-              label = "Rating Penalty";
-              reason = `${rating}-star rating`;
-            } else if (rating !== null) {
-              label = `${rating}-Star Rating`;
-              reason = "No bonus or penalty at this level";
+            if (!isPending) {
+              if (rating === 5 && !isMissed) {
+                label = "5-Star Rating Bonus";
+                reason = "Perfect score — keep it up!";
+              } else if (isMissed || (rating !== null && rating <= 3)) {
+                label = "Rating Penalty";
+                reason = isMissed ? "Customer reported an issue" : `${rating}-star rating`;
+              } else if (rating !== null) {
+                label = `${rating}-Star Rating`;
+                reason = "No bonus or penalty at this level";
+              }
+              badge = isBonus
+                ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">Earned</span>
+                : isPenalty
+                  ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">Applied</span>
+                  : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">No change</span>;
+              amountEl = <span className={`text-sm font-semibold ${isBonus ? "text-emerald-400" : isPenalty ? "text-red-400" : "text-slate-400"}`}>{isBonus ? "+" : ""}{ratingAdj !== 0 ? formatCurrency(ratingAdj.toFixed(2)) : "—"}</span>;
+              downsideEl = <></>;
             }
 
             return (
-              <div className="flex justify-between items-start py-2 border-b border-slate-800">
+              <div className="flex justify-between items-start px-4 py-3">
                 <div>
-                  <p className={`text-sm font-medium ${isBonus ? "text-emerald-300" : isPenalty ? "text-red-300" : "text-slate-200"}`}>{label}</p>
-                  {reason && <p className="text-slate-500 text-xs mt-0.5">{reason}</p>}
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{label}</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">{reason}</p>
+                  <p className="text-slate-600 text-xs">Final after customer rating</p>
                 </div>
-                <span className={`font-semibold text-sm ${isBonus ? "text-emerald-400" : isPenalty ? "text-red-400" : "text-slate-400"}`}>
-                  {isBonus ? "+" : ""}{ratingAdj !== 0 ? formatCurrency(ratingAdj.toFixed(2)) : "—"}
-                </span>
+                <div className="text-right shrink-0 ml-3">
+                  {amountEl}
+                  <div>{downsideEl}</div>
+                </div>
               </div>
             );
           })()}
 
-          {/* Photo bonus/penalty */}
-          <div className="flex justify-between items-start py-2 border-b border-slate-800">
-            <div>
-              <p className={`text-sm font-medium ${hasPhoto ? "text-emerald-300" : photoPending ? "text-slate-400" : "text-red-300"}`}>
-                {hasPhoto ? "Photo Bonus" : "No Photo Penalty"}
-              </p>
-              <p className="text-slate-500 text-xs mt-0.5">
-                {hasPhoto ? "Completion photo uploaded" : <>Upload a photo to earn <span style={{color: '#34d399'}}>+${payRules?.photoBonus ?? 5}</span> and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span></>}
-              </p>
-            </div>
-            {photoPending ? (
-              <span className="text-slate-500 text-xs italic">Pending</span>
-            ) : (
-              <span className={`font-semibold text-sm ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>
-                {hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}
-              </span>
-            )}
-          </div>
-
-          {/* Reclean penalty */}
-          <div className="flex justify-between items-start py-2 border-b border-slate-800">
-            <div>
-              <p className={`text-sm font-medium ${job.recleanPenalty != null ? "text-red-300" : "text-slate-400"}`}>
-                Poor Service / Reclean
-              </p>
-              <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#f87171'}}>-${payRules?.recleanPenalty ?? 30}</span> if job requires a reclean</p>
-            </div>
-            {recleanPending ? (
-              <span className="text-slate-500 text-xs italic">Pending</span>
-            ) : (
-              <span className="font-semibold text-sm text-red-400">
-                {formatCurrency(recleanAdj.toFixed(2))}
-              </span>
-            )}
-          </div>
-
-          {/* Streak bonus */}
-          {streakBonus > 0 ? (
-            <div className="flex justify-between items-start py-2 border-b border-slate-800">
-              <div>
-                <p className="text-emerald-300 text-sm font-medium">Streak Bonus</p>
-                <p className="text-slate-500 text-xs mt-0.5">10 clean jobs in a row — amazing work!</p>
+          {/* Photo Bonus row */}
+          {(() => {
+            const isPending = photoPending;
+            const isEarned = hasPhoto && photoAdjFromDB !== null;
+            const isActionNeeded = !hasPhoto && !isComplete;
+            const isPenaltyApplied = !hasPhoto && isComplete;
+            const badge = isEarned
+              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">Earned</span>
+              : isPenaltyApplied
+                ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">Applied</span>
+                : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/40">Action needed</span>;
+            return (
+              <div className="flex justify-between items-start px-4 py-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{hasPhoto ? "Photo Bonus" : "Photo Bonus"}</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">+${payRules?.photoBonus ?? 5} when after photos are uploaded · -${payRules?.noPhotoPenalty ?? 10} if missing</p>
+                  <p className="text-slate-600 text-xs">Upload photos before marking complete</p>
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  {isPending ? (
+                    <span className="text-slate-400 text-sm font-semibold">${payRules?.photoBonus ?? 5}.00</span>
+                  ) : (
+                    <span className={`text-sm font-semibold ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>{hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}</span>
+                  )}
+                  {!hasPhoto && !isComplete && <div><span className="text-red-400 text-xs">Downside -${payRules?.noPhotoPenalty ?? 10}.00</span></div>}
+                </div>
               </div>
-              <span className="text-emerald-400 font-semibold text-sm">+{formatCurrency(job.streakBonus)}</span>
-            </div>
-          ) : (
-            <div className="flex justify-between items-start py-2 border-b border-slate-800">
-              <div>
-                <p className="text-slate-400 text-sm font-medium">Streak Bonus</p>
-                <p className="text-slate-500 text-xs mt-0.5"><span style={{color: '#34d399'}}>+${payRules?.streakBonus ?? 50}</span> for {payRules?.streakTarget ?? 10} clean jobs with no issues</p>
+            );
+          })()}
+
+          {/* Reclean Deduction row */}
+          {(() => {
+            const isApplied = job.recleanPenalty != null;
+            const badge = isApplied
+              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">Applied</span>
+              : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">Pending</span>;
+            return (
+              <div className="flex justify-between items-start px-4 py-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">Reclean Deduction</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">-${payRules?.recleanPenalty ?? 30} if the job requires a reclean</p>
+                  <p className="text-slate-600 text-xs">Avoided when there are no issues</p>
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  {recleanPending ? (
+                    <span className="text-red-400 text-sm font-semibold">-${payRules?.recleanPenalty ?? 30}.00</span>
+                  ) : (
+                    <span className="text-red-400 text-sm font-semibold">{formatCurrency(recleanAdj.toFixed(2))}</span>
+                  )}
+                </div>
               </div>
-              <span className="text-slate-500 text-xs italic">Not earned</span>
-            </div>
-          )}
+            );
+          })()}
+
+          {/* Streak Bonus row */}
+          {(() => {
+            const isEarned = streakBonus > 0;
+            const badge = isEarned
+              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">Earned</span>
+              : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">Locked</span>;
+            return (
+              <div className="flex justify-between items-start px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">Streak Bonus</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">+${payRules?.streakBonus ?? 50} after {streakTarget} clean jobs with no issues</p>
+                  {!isEarned && streakRemaining > 0 && (
+                    <p className="text-slate-500 text-xs">{streakRemaining} more clean job{streakRemaining !== 1 ? "s" : ""} to unlock</p>
+                  )}
+                  {/* Progress bar */}
+                  {!isEarned && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                        <span>Progress</span>
+                        <span>{streakProgress} / {streakTarget} jobs</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all"
+                          style={{ width: `${(streakProgress / streakTarget) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  <span className={`text-sm font-semibold ${isEarned ? "text-emerald-400" : "text-slate-400"}`}>
+                    {isEarned ? "+" : ""}{formatCurrency((payRules?.streakBonus ?? 50).toString())}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Manual adjustment — only shown if set by admin */}
           {manualAdj !== 0 && (
-            <div className="flex justify-between items-start py-2 border-b border-slate-800">
+            <div className="flex justify-between items-start px-4 py-3">
               <div>
-                <p className={`text-sm font-medium ${manualAdj > 0 ? "text-emerald-300" : "text-red-300"}`}>
-                  {manualAdj > 0 ? "Adjustment (Bonus)" : "Adjustment (Deduction)"}
-                </p>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                    manualAdj > 0 ? "bg-emerald-900/50 text-emerald-300 border-emerald-700/40" : "bg-red-900/50 text-red-300 border-red-700/40"
+                  }`}>Applied</span>
+                  <p className="text-slate-100 text-sm font-semibold">{manualAdj > 0 ? "Adjustment (Bonus)" : "Adjustment (Deduction)"}</p>
+                </div>
                 {job.manualAdjustmentNote && (
                   <p className="text-slate-500 text-xs mt-0.5">{job.manualAdjustmentNote}</p>
                 )}
               </div>
-              <span className={`font-semibold text-sm ${manualAdj > 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <span className={`font-semibold text-sm shrink-0 ml-3 ${manualAdj > 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {manualAdj > 0 ? "+" : ""}{formatCurrency(manualAdj.toFixed(2))}
               </span>
             </div>
@@ -557,16 +663,19 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             const isBonus = rule.type === "bonus";
             const amt = parseFloat(rule.amount) || 0;
             return (
-              <div key={rule.id} className="flex justify-between items-start py-2 border-b border-slate-800">
+              <div key={rule.id} className="flex justify-between items-start px-4 py-3">
                 <div>
-                  <p className={`text-sm font-medium ${isBonus ? "text-emerald-300" : "text-red-300"}`}>
-                    {rule.label}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                      isBonus ? "bg-emerald-900/50 text-emerald-300 border-emerald-700/40" : "bg-red-900/50 text-red-300 border-red-700/40"
+                    }`}>{isBonus ? "Available" : "Risk"}</span>
+                    <p className="text-slate-100 text-sm font-semibold">{rule.label}</p>
+                  </div>
                   {rule.description && (
                     <p className="text-slate-500 text-xs mt-0.5">{rule.description}</p>
                   )}
                 </div>
-                <span className={`font-semibold text-sm ${isBonus ? "text-emerald-400" : "text-red-400"}`}>
+                <span className={`font-semibold text-sm shrink-0 ml-3 ${isBonus ? "text-emerald-400" : "text-red-400"}`}>
                   {isBonus ? "+" : "-"}{formatCurrency(amt.toFixed(2))}
                 </span>
               </div>
@@ -574,7 +683,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
           })}
 
           {/* Final total */}
-          <div className="flex justify-between items-center pt-3 mt-1">
+          <div className="flex justify-between items-center px-4 py-4 bg-slate-900/60">
             <div>
               <span className="text-white font-bold text-base">Total Pay</span>
               {!isPayFinalized && (
@@ -585,7 +694,9 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
               {formatCurrency(finalPay.toFixed(2))}
             </span>
           </div>
-        </div>
+
+          </div>{/* end divide-y */}
+        </div>{/* end outer card */}
 
         {/* Rating */}
         <div className="flex items-center gap-2">
@@ -902,6 +1013,8 @@ export default function CleanerPortal() {
   const payRules = payRulesQuery.data;
   const activeCustomRulesQuery = trpc.cleaner.getActiveCustomRules.useQuery();
   const activeCustomRules = activeCustomRulesQuery.data ?? [];
+  const streakInfoQuery = trpc.cleaner.getStreakInfo.useQuery(undefined, { enabled: !!meQuery.data });
+  const streakInfo = streakInfoQuery.data;
 
   const logoutMutation = trpc.cleaner.logout.useMutation({
     onSuccess: () => utils.cleaner.me.invalidate(),
@@ -1202,6 +1315,7 @@ export default function CleanerPortal() {
                 onStatusUpdated={refetch}
                 payRules={payRules}
                 activeCustomRules={activeCustomRules}
+                streakInfo={streakInfo}
               />
             ))}
 

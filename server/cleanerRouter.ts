@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks } from "../drizzle/schema";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
@@ -561,6 +561,24 @@ export const cleanerRouter = router({
       amount: r.amount,
       description: r.description ?? null,
     }));
+  }),
+
+  /**
+   * cleaner.getStreakInfo — returns the current cleaner's streak count for display in the portal.
+   */
+  getStreakInfo: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { currentStreak: 0, bestStreak: 0 };
+    const rows = await db
+      .select()
+      .from(cleanerStreaks)
+      .where(eq(cleanerStreaks.cleanerProfileId, ctx.cleaner.cleanerId))
+      .limit(1);
+    const row = rows[0];
+    return {
+      currentStreak: row?.currentStreak ?? 0,
+      bestStreak: row?.bestStreak ?? 0,
+    };
   }),
 
   listProfiles: agentProcedure.query(async () => {
