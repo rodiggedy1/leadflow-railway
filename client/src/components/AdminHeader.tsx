@@ -38,6 +38,7 @@ import {
   Settings,
   BrainCircuit,
   Smartphone,
+  Sparkles,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -254,7 +255,8 @@ export type AdminTab =
   | "tracker-flow"
   | "command-center"
   | "settings"
-  | "field-management";
+  | "field-management"
+  | "reactivation";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -323,6 +325,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { id: "campaigns", label: "Campaigns", href: "/admin/campaigns",  icon: <Send className="w-3.5 h-3.5" /> },
       { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
       { id: "campaign-approval", label: "Approvals", href: "/admin/campaign-approval", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+      { id: "reactivation", label: "Reactivation Engine", href: "/admin/reactivation", icon: <Sparkles className="w-3.5 h-3.5" /> },
     ],
   },
   // Happiness nav item hidden — to be redesigned later
