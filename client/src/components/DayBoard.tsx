@@ -136,9 +136,26 @@ function nowMinutes(): number {
   return (h - BOARD_START_HOUR) * 60 + m;
 }
 
-/** Convert minutes-from-board-start to a percentage of board width */
+/**
+ * Convert minutes-from-board-start to a percentage of board width.
+ *
+ * The header uses N equal-width flex cells (one per hour label). Each label
+ * text is centered inside its cell, so the visual center of hour i sits at:
+ *   (i + 0.5) / N * 100
+ *
+ * To place a line at an exact time we:
+ *   1. Find the fractional hour index: minutes / 60
+ *   2. Offset by +0.5 so that minute=0 of hour i aligns with the left edge
+ *      of that cell (not the center of the previous cell)
+ *   3. Multiply by cellWidth
+ *
+ * Result: 7:00 AM → 3.33% (center of cell 0), 9:00 AM → 16.67% (center of cell 2)
+ */
 function toPercent(minutes: number): number {
-  return Math.max(0, Math.min(100, (minutes / BOARD_MINUTES) * 100));
+  const N = HOUR_LABELS.length;       // 15 cells (7 AM … 9 PM)
+  const cellWidth = 100 / N;          // 6.667% per cell
+  const pct = (minutes / 60 + 0.5) * cellWidth;
+  return Math.max(0, Math.min(100, pct));
 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -405,7 +422,7 @@ function SwimLane({
           <div
             key={i}
             className="absolute top-0 bottom-0 w-px bg-slate-100"
-            style={{ left: `${(i / (HOUR_LABELS.length - 1)) * 100}%` }}
+            style={{ left: `${((i + 0.5) / HOUR_LABELS.length) * 100}%` }}
           />
         ))}
 
@@ -499,7 +516,7 @@ function SmsHealthStrip({ jobs }: { jobs: Job[] }) {
           <div
             key={i}
             className="absolute top-0 bottom-0 w-px bg-slate-100"
-            style={{ left: `${(i / (HOUR_LABELS.length - 1)) * 100}%` }}
+            style={{ left: `${((i + 0.5) / HOUR_LABELS.length) * 100}%` }}
           />
         ))}
 
@@ -1172,15 +1189,14 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
                   <div className="w-28 shrink-0 border-r border-slate-100 px-3 py-2">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cleaner</span>
                   </div>
-                  <div className="flex-1 relative" style={{ height: "28px" }}>
+                  <div className="flex-1 flex">
                     {HOUR_LABELS.map((label, i) => (
-                      <span
+                      <div
                         key={i}
-                        className="absolute text-[10px] text-slate-400 font-medium -translate-x-1/2 top-1/2 -translate-y-1/2"
-                        style={{ left: `${(i / (HOUR_LABELS.length - 1)) * 100}%` }}
+                        className="flex-1 text-[10px] text-slate-400 font-medium py-2 text-center first:text-left first:pl-1 last:text-right last:pr-1"
                       >
                         {label}
-                      </span>
+                      </div>
                     ))}
                   </div>
                 </div>
