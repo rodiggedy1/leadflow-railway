@@ -256,10 +256,11 @@ function NowLine({ boardDate }: { boardDate: string }) {
   const [pos, setPos] = useState<number | null>(null);
 
   useEffect(() => {
-    const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-    if (boardDate !== todayET) { setPos(null); return; }
-
     const update = () => {
+      // Re-evaluate today's date on every tick so DST changes, date rollovers,
+      // and stale component state all self-correct without needing a remount.
+      const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      if (boardDate !== todayET) { setPos(null); return; }
       const m = nowMinutes();
       if (m < 0 || m > BOARD_MINUTES) { setPos(null); return; }
       setPos(toPercent(m));

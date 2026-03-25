@@ -58,3 +58,4 @@
 - [x] Upgrade AI Recommendation panel to live AI state: "AI is acting", "Next action in 2h", "Waiting on reply", "Recycling in 14 days"
 - [x] Add additional world-class UI elements to Reactivation Engine (AI Activity Feed, score rings, segment sparklines)
 - [x] Add "Run Today" confirmation modal to Reactivation Engine with segment breakdown, lead counts, and projected revenue
+- [x] Fix NowLine red time indicator to re-evaluate todayET on every interval tick (not just on mount)
