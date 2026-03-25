@@ -73,6 +73,8 @@ import {
   Settings,
   LayoutGrid,
   ChevronDown,
+  Pencil,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -940,6 +942,19 @@ function ConversationDrawer({
 
   const activeAgents = agentList.filter(a => a.isActive);
 
+  // Lead name editing
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(session.leadName ?? "");
+  const updateLeadNameMutation = trpc.leads.updateLeadName.useMutation({
+    onSuccess: (data) => {
+      onSessionUpdate({ leadName: data.leadName });
+      utils.leads.list.invalidate();
+      setEditingName(false);
+      toast.success("Name updated");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Booked amount editing
   const [bookedAmountInput, setBookedAmountInput] = useState(
     session.bookedAmount !== null && session.bookedAmount !== undefined
@@ -1188,7 +1203,40 @@ function ConversationDrawer({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <span className="text-[17px] font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
+                {editingName ? (
+                  <form
+                    className="flex items-center gap-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = nameInput.trim();
+                      if (!trimmed) return;
+                      updateLeadNameMutation.mutate({ sessionId: session.id, leadName: trimmed });
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      className="text-[17px] font-bold text-gray-900 border-b border-gray-400 bg-transparent outline-none w-40"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Escape") { setEditingName(false); setNameInput(session.leadName ?? ""); } }}
+                    />
+                    <button type="submit" disabled={updateLeadNameMutation.isPending} className="text-green-600 hover:text-green-700">
+                      {updateLeadNameMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    </button>
+                    <button type="button" onClick={() => { setEditingName(false); setNameInput(session.leadName ?? ""); }} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="flex items-center gap-1.5 group"
+                    onClick={() => { setNameInput(session.leadName ?? ""); setEditingName(true); }}
+                    title="Edit name"
+                  >
+                    <span className="text-[17px] font-bold text-gray-900">{session.leadName ?? <span className="text-gray-400 font-normal italic">No name — click to add</span>}</span>
+                    <Pencil className="w-3 h-3 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                  </button>
+                )}
                 {/* AI context pill — where the conversation left off */}
                 {closingRec?.objectionSummary && (
                   <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 whitespace-nowrap">

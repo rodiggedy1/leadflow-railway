@@ -783,6 +783,25 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.updateLeadName — admin or agent sets/updates the name for a lead.
+     * Used when a lead comes in with no name (e.g. voice/SMS with no form submission).
+     */
+    updateLeadName: adminAgentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        leadName: z.string().min(1).max(255).trim(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ leadName: input.leadName })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true, leadName: input.leadName };
+      }),
+
+    /**
      * leads.sendMessage — agent or admin sends an outbound SMS to a lead from the app.
      * Stores the message in messageHistory and sends via OpenPhone.
      */

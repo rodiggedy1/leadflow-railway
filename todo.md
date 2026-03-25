@@ -85,3 +85,5 @@
 - [x] Add magic login link to all 6 cleaner SMS messages (Pre-Job, Late-Assignment, Arrived, Mid-Job, Completion, Exception)
 - [x] Remove static portal URL and email login hint from cleaner SMS
 - [x] Update SMS preview text in job log UI to match new format
+- [x] Update FieldManagement workflow page SMS preview text to reflect new magic link messages
+- [x] Add ability to set/edit lead name from the drawer for leads with no name

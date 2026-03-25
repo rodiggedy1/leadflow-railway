@@ -53,6 +53,9 @@ import {
   Mic,
   PlayCircle,
   RotateCcw,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -415,6 +418,19 @@ function ConversationDrawer({
     }));
   }
 
+  // Lead name editing
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(session.leadName ?? "");
+  const updateLeadNameMutation = trpc.leads.updateLeadName.useMutation({
+    onSuccess: (data) => {
+      utils.leads.list.invalidate();
+      setEditingName(false);
+      // Update local session display via freshSession
+      toast.success(`Name set to ${data.leadName}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Reply / send message
   const [replyText, setReplyText] = useState("");
   const [localMessages, setLocalMessages] = useState<{ role: string; content: string; ts?: number }[]>(
@@ -538,7 +554,40 @@ function ConversationDrawer({
               {(session.leadName ?? "?").charAt(0).toUpperCase()}
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? formatPhone(session.leadPhone)}</h3>
+              {editingName ? (
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const trimmed = nameInput.trim();
+                    if (!trimmed) return;
+                    updateLeadNameMutation.mutate({ sessionId: session.id, leadName: trimmed });
+                  }}
+                >
+                  <input
+                    autoFocus
+                    className="text-sm font-semibold text-gray-900 border-b border-gray-400 bg-transparent outline-none w-36"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Escape") { setEditingName(false); setNameInput(session.leadName ?? ""); } }}
+                  />
+                  <button type="submit" disabled={updateLeadNameMutation.isPending} className="text-green-600 hover:text-green-700">
+                    {updateLeadNameMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  </button>
+                  <button type="button" onClick={() => { setEditingName(false); setNameInput(session.leadName ?? ""); }} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className="flex items-center gap-1 group"
+                  onClick={() => { setNameInput(session.leadName ?? ""); setEditingName(true); }}
+                  title="Edit name"
+                >
+                  <h3 className="font-semibold text-gray-900 leading-tight">{session.leadName ?? <span className="text-gray-400 font-normal italic text-xs">No name — tap to add</span>}</h3>
+                  <Pencil className="w-2.5 h-2.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                </button>
+              )}
               <div className="flex items-center gap-2">
                 <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
                 <a
