@@ -184,7 +184,7 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
       title: "Base Pay",
       color: "teal",
       items: [
-        { label: "Guaranteed pay", desc: "You earn this just by completing the job. It's locked in the moment you're assigned.", positive: true },
+        { label: "Base pay", desc: "You earn this just by completing the job. It's locked in the moment you're assigned.", positive: true },
       ],
     },
     {
@@ -649,10 +649,10 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-slate-100 text-sm font-semibold">Base Pay</p>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-900/50 text-teal-300 border border-teal-700/40">Earned</span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-900/50 text-teal-300 border border-teal-700/40">Standard</span>
               </div>
               <p className="text-slate-500 text-xs mt-0.5">{job.serviceType ?? "Cleaning service"}</p>
-              <p className="text-slate-600 text-xs">Guaranteed for completing the job</p>
+              <p className="text-slate-600 text-xs">Base pay for completing this job</p>
             </div>
             <span className="text-white font-bold text-base">{formatCurrency(summaryBasePay.toFixed(2))}</span>
           </div>
