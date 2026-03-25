@@ -47,3 +47,5 @@
 - [x] Show custom pay rules (Google Review bonus, Late penalty, etc.) in Cleaner Portal job card breakdown
 - [x] Show all active custom pay rules automatically on every cleaner portal job card (not per-job application)
 - [x] Redesign Cleaner Portal job card pay breakdown: 4-tile summary (Base Pay / Likely Pay / Potential Earnings / Risk Floor), status badges, downside amounts, streak progress bar
+- [x] Add "View Payout Rules" button in pay summary header opening a modal with plain-language rule explanations
+- [x] Update Likely Pay tile subtitle to "Best-case: 5 stars + photo bonus"

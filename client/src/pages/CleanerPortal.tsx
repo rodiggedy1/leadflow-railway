@@ -10,11 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Camera, Star, CheckCircle2, Clock, MapPin, DollarSign,
   ChevronLeft, ChevronRight, Upload, Loader2, LogOut, User,
-  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle
+  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, X
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -171,6 +172,115 @@ const JOB_STATUSES = [
   { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
+function PayoutRulesModal({ open, onClose, payRules, activeCustomRules }: {
+  open: boolean;
+  onClose: () => void;
+  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
+  activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
+}) {
+  const rules = [
+    {
+      title: "Base Pay",
+      color: "teal",
+      items: [
+        { label: "Guaranteed pay", desc: "You earn this just by completing the job. It's locked in the moment you're assigned.", positive: true },
+      ],
+    },
+    {
+      title: "Rating Bonus / Penalty",
+      color: "yellow",
+      items: [
+        { label: `+$${payRules?.fiveStarBonus ?? 10} — 5-star rating`, desc: "Customer gives you a perfect score. Keep communication high and leave the home spotless.", positive: true },
+        { label: `No change — 4-star rating`, desc: "Good job, no bonus or penalty at this level.", positive: null },
+        { label: `-$${payRules?.lowRatingDeduction ?? 20} — 3 stars or below`, desc: "Customer reports an issue or gives a low score. Avoid by double-checking your work before leaving.", positive: false },
+      ],
+    },
+    {
+      title: "Photo Bonus / Penalty",
+      color: "blue",
+      items: [
+        { label: `+$${payRules?.photoBonus ?? 5} — Photos uploaded`, desc: "Upload at least one after-photo before marking the job complete. Takes 30 seconds and earns you extra.", positive: true },
+        { label: `-$${payRules?.noPhotoPenalty ?? 10} — No photos`, desc: "If you mark complete without uploading photos, this deduction applies automatically.", positive: false },
+      ],
+    },
+    {
+      title: "Reclean Deduction",
+      color: "red",
+      items: [
+        { label: `-$${payRules?.recleanPenalty ?? 30} — Job requires a reclean`, desc: "If the customer reports a serious issue and a reclean is needed, this is applied. Avoid by doing a thorough walkthrough before leaving.", positive: false },
+      ],
+    },
+    {
+      title: "Streak Bonus",
+      color: "purple",
+      items: [
+        { label: `+$${payRules?.streakBonus ?? 50} — ${payRules?.streakTarget ?? 10} clean jobs in a row`, desc: `Complete ${payRules?.streakTarget ?? 10} consecutive jobs with no complaints and a rating of 4+ to unlock this bonus. Your streak resets if you get a complaint or low rating.`, positive: true },
+      ],
+    },
+  ];
+
+  const customBonuses = (activeCustomRules ?? []).filter(r => r.type === "bonus");
+  const customDeductions = (activeCustomRules ?? []).filter(r => r.type === "deduction");
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-white text-base font-bold">Payout Rules</DialogTitle>
+        </DialogHeader>
+        <p className="text-slate-400 text-xs -mt-2 mb-4">Here's exactly how your pay is calculated — no surprises.</p>
+        <div className="space-y-5">
+          {rules.map(section => (
+            <div key={section.title}>
+              <p className="text-slate-300 text-xs font-semibold uppercase tracking-widest mb-2">{section.title}</p>
+              <div className="space-y-2">
+                {section.items.map((item, i) => (
+                  <div key={i} className="flex gap-3 items-start">
+                    <span className={`mt-0.5 shrink-0 text-sm font-bold ${
+                      item.positive === true ? "text-emerald-400" : item.positive === false ? "text-red-400" : "text-slate-400"
+                    }`}>{item.positive === true ? "+" : item.positive === false ? "−" : "○"}</span>
+                    <div>
+                      <p className={`text-sm font-semibold ${
+                        item.positive === true ? "text-emerald-300" : item.positive === false ? "text-red-300" : "text-slate-300"
+                      }`}>{item.label}</p>
+                      <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {(customBonuses.length > 0 || customDeductions.length > 0) && (
+            <div>
+              <p className="text-slate-300 text-xs font-semibold uppercase tracking-widest mb-2">Special Rules</p>
+              <div className="space-y-2">
+                {customBonuses.map(r => (
+                  <div key={r.id} className="flex gap-3 items-start">
+                    <span className="mt-0.5 shrink-0 text-sm font-bold text-emerald-400">+</span>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-300">{r.label} (+${parseFloat(r.amount).toFixed(2)})</p>
+                      {r.description && <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">{r.description}</p>}
+                    </div>
+                  </div>
+                ))}
+                {customDeductions.map(r => (
+                  <div key={r.id} className="flex gap-3 items-start">
+                    <span className="mt-0.5 shrink-0 text-sm font-bold text-red-400">−</span>
+                    <div>
+                      <p className="text-sm font-semibold text-red-300">{r.label} (-${parseFloat(r.amount).toFixed(2)})</p>
+                      {r.description && <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">{r.description}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo }: {
   job: Job;
   onPhotoUploaded: () => void;
@@ -181,6 +291,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPayoutRules, setShowPayoutRules] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [completing, setCompleting] = useState(false);
@@ -445,10 +556,26 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
         <div className="rounded-xl overflow-hidden border border-slate-700/60">
           {/* Header */}
           <div className="bg-slate-900 px-4 pt-4 pb-3">
-            <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-1">Pay Summary</p>
-            <p className="text-white font-bold text-lg leading-tight">Know exactly what this job can pay</p>
-            <p className="text-slate-400 text-xs mt-1">Cleaner-friendly breakdown with guaranteed pay, upside, and any deductions that could reduce final payout.</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-1">Pay Summary</p>
+                <p className="text-white font-bold text-lg leading-tight">Know exactly what this job can pay</p>
+                <p className="text-slate-400 text-xs mt-1">Cleaner-friendly breakdown with guaranteed pay, upside, and any deductions that could reduce final payout.</p>
+              </div>
+              <button
+                onClick={() => setShowPayoutRules(true)}
+                className="shrink-0 mt-1 text-[11px] font-semibold text-slate-300 border border-slate-600 rounded-lg px-2.5 py-1.5 hover:bg-slate-800 hover:border-slate-500 transition-colors whitespace-nowrap"
+              >
+                View payout rules
+              </button>
+            </div>
           </div>
+          <PayoutRulesModal
+            open={showPayoutRules}
+            onClose={() => setShowPayoutRules(false)}
+            payRules={payRules}
+            activeCustomRules={activeCustomRules}
+          />
 
           {/* 4-tile summary row */}
           <div className="grid grid-cols-2 gap-2 px-3 py-3 bg-slate-900/80">
@@ -462,7 +589,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             <div className="rounded-xl p-3 border border-slate-600/40 bg-slate-800/60">
               <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Likely Pay</p>
               <p className="text-white font-bold text-xl">{formatCurrency(summaryLikelyPay.toFixed(2))}</p>
-              <p className="text-slate-400 text-[11px] mt-1">If photos uploaded and no issues</p>
+              <p className="text-slate-400 text-[11px] mt-1">Best-case: 5 stars + photo bonus</p>
             </div>
             {/* Potential Earnings */}
             <div className="rounded-xl p-3 border border-purple-700/40 bg-purple-900/20">
