@@ -468,8 +468,10 @@ interface AdminHeaderProps {
   isAdmin?: boolean;
   /** Number of follow-ups due today — shows orange dot on bell when > 0 */
   followUpCount?: number;
+  /** Callback to open the Live Call Guide panel */
+  onCallGuide?: () => void;
 }
-export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false, followUpCount = 0 }: AdminHeaderProps) {
+export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false, followUpCount = 0, onCallGuide }: AdminHeaderProps) {
   // Determine which page IDs this agent is allowed to see.
   // null means unrestricted (admin or no restrictions set).
   const allowedPageIds: string[] | null = pagePermissions ?? null;
@@ -514,6 +516,15 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
           {isAdmin && <WidgetHealthBadge enabled={isAdmin} />}
           {isAdmin && <WebhookHealthBadge enabled={isAdmin} />}
           {isAdmin && <SyncHealthBadge enabled={isAdmin} />}
+          {onCallGuide && (
+            <button
+              onClick={onCallGuide}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+            >
+              <Phone className="w-3 h-3" />
+              Call Guide
+            </button>
+          )}
           {rightExtra}
           <NotificationBell onSessionOpen={onSessionOpen} enabled={isAdmin} followUpCount={followUpCount} />
           {isAdmin && <PreviewAgentButton />}

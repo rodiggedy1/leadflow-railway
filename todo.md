@@ -104,8 +104,11 @@
 - [x] Add call/transcript indicator badges to lead list rows
 - [x] Move AI call score breakdown from inline call card to a full popup modal
 - [x] Fix scoreColor ReferenceError in AI score modal
-- [ ] Build CallGuide component with 6-stage home services sales playbook
-- [ ] Add AI objection rebuttal tRPC procedure
-- [ ] Integrate CallGuide widget into Agent Dashboard
-- [ ] Integrate CallGuide widget into Admin Dashboard (ConversationDrawer)
+- [x] Build CallGuide component with 6-stage home services sales playbook
+- [x] Add AI objection rebuttal tRPC procedure
+- [x] Integrate CallGuide widget into Agent Dashboard
+- [x] Integrate CallGuide widget into Admin Dashboard (ConversationDrawer)
+- [ ] Move Call Guide to top nav button in AdminDashboard (next to Widget/SMS Webhook/Sync Issue/Refresh)
+- [ ] Move Call Guide to top nav button in AgentDashboard
+- [ ] Remove CallGuide from conversation drawer sidebar (now accessible via nav)
 

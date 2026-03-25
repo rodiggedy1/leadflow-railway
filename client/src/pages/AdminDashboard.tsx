@@ -2042,9 +2042,6 @@ function ConversationDrawer({
             )}
           </div>
 
-          {/* ── CALL GUIDE widget ── */}
-          <CallGuide collapsed />
-
           {/* ── FOLLOW-UP PLAN card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
@@ -2846,6 +2843,7 @@ export default function AdminDashboard() {
     return "leads";
   });
   const [showSimulator, setShowSimulator] = useState(false);
+  const [showCallGuide, setShowCallGuide] = useState(false);
   const [showCompletedCallbacks, setShowCompletedCallbacks] = useState(false);
   const { data: callbackList, refetch: refetchCallbacks } = trpc.voice.listCallbacks.useQuery(
     { includeCompleted: showCompletedCallbacks },
@@ -3031,6 +3029,7 @@ export default function AdminDashboard() {
         isAdmin={isAdmin}
         onSessionOpen={handleSessionOpen}
         followUpCount={todayFollowUps.length}
+        onCallGuide={() => setShowCallGuide(true)}
         rightExtra={
           <>
             {unhandledCount > 0 && activeTab === "leads" && (
@@ -3799,6 +3798,32 @@ export default function AdminDashboard() {
           onRefresh={() => refetch()}
           currentAgentName={meQuery.data?.name ?? "Admin"}
         />
+      )}
+
+      {/* Live Call Guide slide-in panel */}
+      {showCallGuide && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowCallGuide(false)}>
+          <div
+            className="relative w-full max-w-md h-full bg-white shadow-2xl overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <span className="text-sm font-semibold text-violet-700 flex items-center gap-1.5">
+                <Phone className="w-4 h-4" />
+                Live Call Guide
+              </span>
+              <button
+                onClick={() => setShowCallGuide(false)}
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              <CallGuide />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

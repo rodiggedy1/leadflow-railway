@@ -1043,11 +1043,6 @@ function ConversationDrawer({
               </div>
             )}
 
-            {/* Call Guide */}
-            <div className="px-4 py-3 border-b" style={{ borderColor: "#F0D8D0" }}>
-              <CallGuide collapsed />
-            </div>
-
             {/* Internal Notes */}
             <div className="px-4 py-3 flex-1">
               <AgentNotesSection
@@ -1311,6 +1306,7 @@ export default function AgentDashboard() {
   const utils = trpc.useUtils();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
+  const [showCallGuide, setShowCallGuide] = useState(false);
   const [stageFilter, setStageFilter] = useState("all");
   const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "all">("all");
 
@@ -1449,6 +1445,13 @@ export default function AgentDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCallGuide(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+            >
+              <Phone className="w-3 h-3" />
+              Call Guide
+            </button>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
             </Button>
@@ -1656,6 +1659,32 @@ export default function AgentDashboard() {
           </div>
         )}
       </main>
+
+      {/* Live Call Guide slide-in panel */}
+      {showCallGuide && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowCallGuide(false)}>
+          <div
+            className="relative w-full max-w-md h-full bg-white shadow-2xl overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <span className="text-sm font-semibold text-violet-700 flex items-center gap-1.5">
+                <Phone className="w-4 h-4" />
+                Live Call Guide
+              </span>
+              <button
+                onClick={() => setShowCallGuide(false)}
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              <CallGuide />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
