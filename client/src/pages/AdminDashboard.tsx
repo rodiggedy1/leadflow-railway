@@ -1185,7 +1185,7 @@ function ConversationDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 overscroll-contain"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       onWheel={e => e.stopPropagation()}
     >
@@ -1342,7 +1342,7 @@ function ConversationDrawer({
           {drawerTab === "conversation" && (
             <div className="flex flex-col flex-1 min-h-0">
                {/* Messages scroll area — white bg, no gray */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-3 bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {/* AI recommendation banner — scrolls with messages */}
                 <div className="mb-4 px-4 py-3 rounded-xl bg-orange-50">
                   <div className="flex items-center justify-between mb-0.5">
@@ -1572,7 +1572,8 @@ function ConversationDrawer({
               FLOW VIEW TAB
           ══════════════════════════════════════════════════════════ */}
           {drawerTab === "flow" && (
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-white">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4 bg-white">
+              {/* Flow tab */}
               {(() => {
                 const pipelineStages = ["Lead In", "Quoted", "In Progress", "Follow-Up", "Re-engage", "Booked"];
                 const stageToIndex: Record<string, number> = {
@@ -1652,7 +1653,8 @@ function ConversationDrawer({
               PERFORMANCE TAB
           ══════════════════════════════════════════════════════════ */}
           {drawerTab === "performance" && (
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-white">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4 bg-white">
+              {/* Performance tab */}
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: "Close probability", value: `${Math.min(95, 30 + localMessages.filter(m => m.role === "user").length * 8)}%`, color: "text-green-600" },
@@ -1687,7 +1689,7 @@ function ConversationDrawer({
         {/* ══════════════════════════════════════════════════════════
             RIGHT PANEL — Sidebar
         ══════════════════════════════════════════════════════════ */}
-        <div className="w-[310px] shrink-0 flex flex-col gap-3 overflow-y-auto h-full pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="w-[310px] shrink-0 flex flex-col gap-3 overflow-y-auto overscroll-contain h-full pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
           {/* ── NEXT ACTION card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

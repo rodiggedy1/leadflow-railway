@@ -92,3 +92,4 @@
 - [x] Show saved note visibly in drawer without clicking — amber block below header, edit pencil to modify
 - [x] Label note block as "Staff note:" in the drawer
 - [x] Fix drawer scroll bleeding through to the page behind it
+- [ ] Fix background page scrolling when drawer is open (regression from recent changes)
