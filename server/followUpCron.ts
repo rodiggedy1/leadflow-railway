@@ -84,8 +84,8 @@ export async function runSilenceFollowUp(): Promise<{
         eq(conversationSessions.autoFollowUpSent, 0),
         // AI mode is on
         eq(conversationSessions.aiMode, 1),
-        // Never nudge already-booked leads
-        eq(conversationSessions.isBooked, 0)
+        // Skip leads booked within the last 30 days — old bookings (>30d) are lapsed and fair game
+        sql`(${conversationSessions.isBooked} = 0 OR ${conversationSessions.bookedAt} IS NULL OR ${conversationSessions.bookedAt} < DATE_SUB(NOW(), INTERVAL 30 DAY))`
       )
     )
     .limit(50); // Safety cap — process at most 50 per run
@@ -257,8 +257,8 @@ export async function runScheduledFollowUp(): Promise<{
         eq(conversationSessions.followUpDate, todayET),
         eq(conversationSessions.followUpSent, 0),
         eq(conversationSessions.aiMode, 1),
-        // Never circle-back to already-booked leads
-        eq(conversationSessions.isBooked, 0)
+        // Skip leads booked within the last 30 days — old bookings (>30d) are lapsed and fair game
+        sql`(${conversationSessions.isBooked} = 0 OR ${conversationSessions.bookedAt} IS NULL OR ${conversationSessions.bookedAt} < DATE_SUB(NOW(), INTERVAL 30 DAY))`
       )
     )
     .limit(100);

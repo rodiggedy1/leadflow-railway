@@ -61,3 +61,4 @@
 - [x] Fix NowLine red time indicator to re-evaluate todayET on every interval tick (not just on mount)
 - [ ] Fix duplicate key error for job 120003-in_progress in DayBoard swim lanes
 - [x] Prevent AI from auto re-engaging booked leads — guard in webhook auto-reply, 5-min silence nudge, and scheduled circle-back cron (campaign and always-on sends are deliberate outreach, not affected)
+- [x] Replace permanent isBooked guard with 30-day recency check — only suppress AI auto-replies if bookedAt is within the last 30 days

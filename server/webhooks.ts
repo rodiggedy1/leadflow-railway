@@ -303,10 +303,14 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // If the lead is already booked, store the inbound message but do NOT send an AI reply.
-      // Booked leads should only be contacted by a human agent — the AI must not re-engage them.
-      if (session.isBooked === 1) {
-        console.log(`[Webhook] Lead ${fromPhone} (session ${session.id}) is already BOOKED — storing inbound, skipping AI reply.`);
+      // If the lead was booked within the last 30 days, do NOT send an AI auto-reply.
+      // A booking older than 30 days is considered lapsed — the lead is fair game for re-engagement.
+      const BOOKED_SILENCE_DAYS = 30;
+      const bookedAt = session.bookedAt ? new Date(session.bookedAt).getTime() : null;
+      const bookedRecently = session.isBooked === 1 && bookedAt !== null &&
+        (Date.now() - bookedAt) < BOOKED_SILENCE_DAYS * 24 * 60 * 60 * 1000;
+      if (bookedRecently) {
+        console.log(`[Webhook] Lead ${fromPhone} (session ${session.id}) was booked ${Math.floor((Date.now() - bookedAt!) / 86400000)}d ago — storing inbound, skipping AI reply.`);
         await db
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history) })
