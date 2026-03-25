@@ -6,8 +6,17 @@
  * conversation drawer for that lead.
  *
  * Used in both AdminDashboard and AgentDashboard.
+ *
+ * Dismissal strategy:
+ *   - A module-level singleton Set stores dismissed IDs. Because it lives
+ *     outside React's lifecycle, it is NEVER reset when the component
+ *     unmounts and remounts during page navigation.
+ *   - On first load the Set is seeded from sessionStorage so dismissals
+ *     also survive a full page refresh within the same browser session.
+ *   - sessionStorage (not localStorage) is used so the slate is wiped
+ *     when the tab is closed, giving agents fresh reminders next session.
  */
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -20,26 +29,32 @@ export type FollowUpLead = {
   stage: string;
 };
 
+// ── Module-level singleton ────────────────────────────────────────────────────
+// Seeded once from sessionStorage; never reset by React remounts.
 const SESSION_KEY = "followup_dismissed_ids";
 
-function readDismissed(): Set<number> {
+function seedFromStorage(): Set<number> {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return new Set();
-    const arr = JSON.parse(raw) as number[];
-    return new Set(arr);
+    return new Set(JSON.parse(raw) as number[]);
   } catch {
     return new Set();
   }
 }
 
-function writeDismissed(ids: Set<number>) {
+// The singleton — shared across all instances and page navigations.
+const _dismissed: Set<number> = seedFromStorage();
+
+function persistDismissed() {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify([...ids]));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify([..._dismissed]));
   } catch {
     // sessionStorage unavailable — degrade silently
   }
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function FollowUpReminderToast({
   leads,
@@ -48,9 +63,20 @@ export function FollowUpReminderToast({
   leads: FollowUpLead[];
   onOpen: (sessionId: number) => void;
 }) {
-  const [dismissed, setDismissed] = useState<Set<number>>(() => readDismissed());
-  const visible = leads.filter((l) => !dismissed.has(l.id));
+  // A simple counter used to force a re-render after mutating the singleton.
+  const [, forceUpdate] = useState(0);
+  const rerender = useCallback(() => forceUpdate((n) => n + 1), []);
 
+  const dismiss = useCallback(
+    (id: number) => {
+      _dismissed.add(id);
+      persistDismissed();
+      rerender();
+    },
+    [rerender]
+  );
+
+  const visible = leads.filter((l) => !_dismissed.has(l.id));
   if (visible.length === 0) return null;
 
   return (
@@ -87,11 +113,7 @@ export function FollowUpReminderToast({
                 </div>
               </div>
               <button
-              onClick={() => {
-                const next = new Set(dismissed).add(lead.id);
-                writeDismissed(next);
-                setDismissed(next);
-              }}
+                onClick={() => dismiss(lead.id)}
                 className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5"
               >
                 <X className="w-3.5 h-3.5" />
@@ -105,9 +127,7 @@ export function FollowUpReminderToast({
             <button
               onClick={() => {
                 onOpen(lead.id);
-                const next = new Set(dismissed).add(lead.id);
-                writeDismissed(next);
-                setDismissed(next);
+                dismiss(lead.id);
               }}
               className="mt-3 w-full text-xs font-semibold text-white py-2 rounded-xl transition-all hover:opacity-90 active:scale-95"
               style={{ backgroundColor: "#F97316" }}
@@ -133,3 +153,4 @@ export function useTodayFollowUps(enabled: boolean) {
   });
   return data;
 }
+ 
