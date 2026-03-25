@@ -49,3 +49,5 @@
 - [x] Redesign Cleaner Portal job card pay breakdown: 4-tile summary (Base Pay / Likely Pay / Potential Earnings / Risk Floor), status badges, downside amounts, streak progress bar
 - [x] Add "View Payout Rules" button in pay summary header opening a modal with plain-language rule explanations
 - [x] Update Likely Pay tile subtitle to "Best-case: 5 stars + photo bonus"
+- [x] Add cleaner's first name to Payout Rules modal greeting
+- [x] Add "Tips to maximize your pay" section at bottom of Payout Rules modal

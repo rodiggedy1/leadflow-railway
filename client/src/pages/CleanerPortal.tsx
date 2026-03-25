@@ -172,11 +172,12 @@ const JOB_STATUSES = [
   { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
-function PayoutRulesModal({ open, onClose, payRules, activeCustomRules }: {
+function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerName }: {
   open: boolean;
   onClose: () => void;
   payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
+  cleanerName?: string;
 }) {
   const rules = [
     {
@@ -228,7 +229,13 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules }: {
         <DialogHeader>
           <DialogTitle className="text-white text-base font-bold">Payout Rules</DialogTitle>
         </DialogHeader>
-        <p className="text-slate-400 text-xs -mt-2 mb-4">Here's exactly how your pay is calculated — no surprises.</p>
+        <p className="text-slate-400 text-xs -mt-2 mb-4">
+          {cleanerName ? (
+            <>Here’s how your pay works, <span className="text-white font-semibold">{cleanerName.split(" ")[0]}</span>. No surprises.</>
+          ) : (
+            "Here’s exactly how your pay is calculated — no surprises."
+          )}
+        </p>
         <div className="space-y-5">
           {rules.map(section => (
             <div key={section.title}>
@@ -275,13 +282,40 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules }: {
               </div>
             </div>
           )}
+          {/* Tips section */}
+          <div className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-4">
+            <p className="text-slate-300 text-xs font-semibold uppercase tracking-widest mb-3">Tips to maximize your pay</p>
+            <div className="space-y-3">
+              <div className="flex gap-3 items-start">
+                <span className="text-emerald-400 text-base shrink-0">📸</span>
+                <div>
+                  <p className="text-slate-200 text-sm font-semibold">Upload photos before leaving</p>
+                  <p className="text-slate-500 text-xs mt-0.5">Takes 30 seconds and earns you +${payRules?.photoBonus ?? 5}. Open the job card, tap the camera icon, and snap a few after-photos.</p>
+                </div>
+              </div>
+              <div className="flex gap-3 items-start">
+                <span className="text-emerald-400 text-base shrink-0">🗣️</span>
+                <div>
+                  <p className="text-slate-200 text-sm font-semibold">Ask the customer if everything looks good</p>
+                  <p className="text-slate-500 text-xs mt-0.5">A quick check-in before you leave gives the customer a chance to flag anything small — so it doesn’t turn into a complaint or reclean.</p>
+                </div>
+              </div>
+              <div className="flex gap-3 items-start">
+                <span className="text-emerald-400 text-base shrink-0">⭐</span>
+                <div>
+                  <p className="text-slate-200 text-sm font-semibold">Protect your streak</p>
+                  <p className="text-slate-500 text-xs mt-0.5">Every clean job with no issues moves you closer to the +${payRules?.streakBonus ?? 50} streak bonus. One complaint resets it, so consistency is key.</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo }: {
+function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName }: {
   job: Job;
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
@@ -289,6 +323,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
+  cleanerName?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPayoutRules, setShowPayoutRules] = useState(false);
@@ -575,6 +610,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             onClose={() => setShowPayoutRules(false)}
             payRules={payRules}
             activeCustomRules={activeCustomRules}
+            cleanerName={cleanerName}
           />
 
           {/* 4-tile summary row */}
@@ -1441,6 +1477,7 @@ export default function CleanerPortal() {
                 payRules={payRules}
                 activeCustomRules={activeCustomRules}
                 streakInfo={streakInfo}
+                cleanerName={cleaner.name}
               />
             ))}
 
