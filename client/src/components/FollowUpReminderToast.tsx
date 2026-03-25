@@ -20,6 +20,27 @@ export type FollowUpLead = {
   stage: string;
 };
 
+const SESSION_KEY = "followup_dismissed_ids";
+
+function readDismissed(): Set<number> {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as number[];
+    return new Set(arr);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDismissed(ids: Set<number>) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify([...ids]));
+  } catch {
+    // sessionStorage unavailable — degrade silently
+  }
+}
+
 export function FollowUpReminderToast({
   leads,
   onOpen,
@@ -27,7 +48,7 @@ export function FollowUpReminderToast({
   leads: FollowUpLead[];
   onOpen: (sessionId: number) => void;
 }) {
-  const [dismissed, setDismissed] = useState<Set<number>>(() => new Set());
+  const [dismissed, setDismissed] = useState<Set<number>>(() => readDismissed());
   const visible = leads.filter((l) => !dismissed.has(l.id));
 
   if (visible.length === 0) return null;
@@ -66,9 +87,11 @@ export function FollowUpReminderToast({
                 </div>
               </div>
               <button
-                onClick={() =>
-                  setDismissed((prev) => new Set(prev).add(lead.id))
-                }
+              onClick={() => {
+                const next = new Set(dismissed).add(lead.id);
+                writeDismissed(next);
+                setDismissed(next);
+              }}
                 className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5"
               >
                 <X className="w-3.5 h-3.5" />
@@ -82,7 +105,9 @@ export function FollowUpReminderToast({
             <button
               onClick={() => {
                 onOpen(lead.id);
-                setDismissed((prev) => new Set(prev).add(lead.id));
+                const next = new Set(dismissed).add(lead.id);
+                writeDismissed(next);
+                setDismissed(next);
               }}
               className="mt-3 w-full text-xs font-semibold text-white py-2 rounded-xl transition-all hover:opacity-90 active:scale-95"
               style={{ backgroundColor: "#F97316" }}
