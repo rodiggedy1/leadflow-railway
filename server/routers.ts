@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -1357,6 +1357,23 @@ export const appRouter = router({
           .set({ followUpSent: 1 })
           .where(eq(conversationSessions.id, input.sessionId));
         return { ok: true };
+      }),
+
+    /**
+     * leads.getCallRecordings — returns all call recordings for a session.
+     * Sorted by callStartedAt ascending so they appear in chronological order
+     * when merged into the conversation thread.
+     */
+    getCallRecordings: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        return db
+          .select()
+          .from(openphoneCallRecordings)
+          .where(eq(openphoneCallRecordings.sessionId, input.sessionId))
+          .orderBy(openphoneCallRecordings.callStartedAt);
       }),
 
     /**

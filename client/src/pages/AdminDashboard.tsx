@@ -1090,8 +1090,9 @@ function ConversationDrawer({
 
   // Call logs (agent-logged)
   const { data: callLogs } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
-
-  // Voice calls (Vapi AI calls)
+  // OpenPhone call recordings
+  const { data: callRecordings } = trpc.leads.getCallRecordings.useQuery({ sessionId: session.id });
+  // Voice calls (Vapi AI calls))
   const { data: voiceCalls } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
 
   // Internal notes
@@ -1373,15 +1374,118 @@ function ConversationDrawer({
                   </button>
                 </div>
                 <div className="space-y-4">
-                {localMessages.length === 0 ? (
-                  <div className="flex items-center justify-center h-32 text-gray-400 text-sm">No messages yet</div>
-                ) : (
-                  localMessages.map((msg, i) => {
+                {(() => {
+                  // Build merged timeline: SMS messages + call recordings, sorted by timestamp
+                  type TimelineItem =
+                    | { kind: "msg"; msg: typeof localMessages[0]; i: number; prevTs?: number }
+                    | { kind: "recording"; rec: NonNullable<typeof callRecordings>[0] };
+
+                  const items: TimelineItem[] = [
+                    ...localMessages.map((msg, i) => ({
+                      kind: "msg" as const,
+                      msg,
+                      i,
+                      prevTs: i > 0 ? localMessages[i - 1]?.ts : undefined,
+                    })),
+                    ...(callRecordings ?? []).map(rec => ({
+                      kind: "recording" as const,
+                      rec,
+                    })),
+                  ].sort((a, b) => {
+                    const tsA = a.kind === "msg" ? (a.msg.ts ?? 0) : new Date(a.rec.callStartedAt ?? 0).getTime();
+                    const tsB = b.kind === "msg" ? (b.msg.ts ?? 0) : new Date(b.rec.callStartedAt ?? 0).getTime();
+                    return tsA - tsB;
+                  });
+
+                  if (items.length === 0) {
+                    return <div className="flex items-center justify-center h-32 text-gray-400 text-sm">No messages yet</div>;
+                  }
+
+                  let lastRenderedTs: number | undefined;
+
+                  return items.map((item, idx) => {
+                    if (item.kind === "recording") {
+                      const rec = item.rec;
+                      const recTs = rec.callStartedAt ? new Date(rec.callStartedAt).getTime() : undefined;
+                      const showSep = recTs != null && (lastRenderedTs == null || isDifferentDay(lastRenderedTs, recTs));
+                      if (recTs != null) lastRenderedTs = recTs;
+                      const timeLabel = recTs ? new Date(recTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : null;
+                      const mins = rec.durationSeconds ? Math.floor(rec.durationSeconds / 60) : 0;
+                      const secs = rec.durationSeconds ? rec.durationSeconds % 60 : 0;
+                      const durLabel = rec.durationSeconds ? `${mins}m ${secs}s` : null;
+                      // Parse transcript dialogue array
+                      type DialogueTurn = { identifier: string; content: string; start: number; end: number };
+                      let dialogue: DialogueTurn[] = [];
+                      if (rec.transcript) {
+                        try { dialogue = JSON.parse(rec.transcript); } catch { dialogue = []; }
+                      }
+                      // Map phone identifiers to readable labels
+                      const speakerLabel = (id: string) => {
+                        if (!id) return "Unknown";
+                        // External phone number = lead
+                        if (id.startsWith("+")) return session.leadName ?? id;
+                        // Internal user ID = staff
+                        return "Staff";
+                      };
+                      return (
+                        <div key={`rec-${rec.id ?? idx}`}>
+                          {showSep && recTs != null && <MessageDateSeparator label={formatMsgDate(recTs)} />}
+                          <div className="flex justify-center my-2">
+                            <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm w-full max-w-sm">
+                              {/* Header row */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                                  <PhoneIncoming className="w-3.5 h-3.5 text-blue-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-semibold text-gray-700">
+                                    {rec.direction === "outgoing" ? "Outbound call" : "Inbound call"}
+                                    {durLabel && <span className="font-normal text-gray-400 ml-1">· {durLabel}</span>}
+                                  </div>
+                                  {timeLabel && <div className="text-[11px] text-gray-400">{timeLabel}</div>}
+                                </div>
+                              </div>
+                              {/* Audio player */}
+                              {rec.recordingUrl && (
+                                <audio
+                                  controls
+                                  src={rec.recordingUrl}
+                                  className="w-full h-8 mb-2"
+                                  style={{ accentColor: "#f97316" }}
+                                />
+                              )}
+                              {/* Transcript */}
+                              {dialogue.length > 0 && (
+                                <details className="mt-1">
+                                  <summary className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600 transition-colors">
+                                    Transcript · {dialogue.length} turns
+                                  </summary>
+                                  <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                    {dialogue.map((turn, ti) => (
+                                      <div key={ti} className="flex gap-2">
+                                        <span className="text-[10px] font-semibold shrink-0 mt-0.5"
+                                          style={{ color: turn.identifier?.startsWith("+") ? "#6b7280" : "#f97316" }}>
+                                          {speakerLabel(turn.identifier)}
+                                        </span>
+                                        <span className="text-[11px] text-gray-600 leading-snug">{turn.content}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // SMS message item
+                    const { msg, prevTs } = item;
                     const isOutbound = msg.role === "assistant";
                     const isSystem = msg.role === "system";
-                    const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
                     const curTs = msg.ts;
-                    const showSeparator = curTs != null && (i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true));
+                    const showSeparator = curTs != null && (lastRenderedTs == null || isDifferentDay(lastRenderedTs, curTs));
+                    if (curTs != null) lastRenderedTs = curTs;
                     const timeLabel = curTs != null
                       ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
                       : null;
@@ -1457,8 +1561,8 @@ function ConversationDrawer({
                         )}
                       </div>
                     );
-                  })
-                )}
+                  });
+                })()}
                 </div>
                 <div ref={messagesEndRef} />
               </div>
@@ -3498,3 +3602,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+ 

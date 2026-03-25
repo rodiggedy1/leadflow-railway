@@ -1,0 +1,1 @@
+ALTER TABLE `openphone_call_recordings` ADD `transcript` text;

@@ -185,3 +185,43 @@ export function estimatePrice(params: {
   const total = base + bathExtra + surcharge;
   return total.toString();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Call Recording helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface OpenPhoneRecording {
+  id: string;
+  url: string;
+  duration: number;    // seconds
+  status: string;      // "completed" | "processing"
+  startTime: string;   // ISO 8601
+}
+
+/**
+ * Fetches all recordings for a given OpenPhone callId.
+ * Returns an empty array if none exist or on error.
+ * Docs: GET https://api.openphone.com/v1/call-recordings?callId={callId}
+ */
+export async function fetchCallRecordings(callId: string): Promise<OpenPhoneRecording[]> {
+  const apiKey = ENV.openPhoneApiKey;
+  if (!apiKey) {
+    console.error("[OpenPhone] fetchCallRecordings: missing API key");
+    return [];
+  }
+  try {
+    const url = `https://api.openphone.com/v1/call-recordings?callId=${encodeURIComponent(callId)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: apiKey, "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      console.error(`[OpenPhone] fetchCallRecordings HTTP ${res.status} for callId=${callId}`);
+      return [];
+    }
+    const json = (await res.json()) as { data?: OpenPhoneRecording[] };
+    return json.data ?? [];
+  } catch (err) {
+    console.error("[OpenPhone] fetchCallRecordings error:", err);
+    return [];
+  }
+}

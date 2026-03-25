@@ -93,3 +93,7 @@
 - [x] Label note block as "Staff note:" in the drawer
 - [x] Fix drawer scroll bleeding through to the page behind it
 - [ ] Fix background page scrolling when drawer is open (regression from recent changes)
+- [x] Add transcript column to openphone_call_recordings table
+- [x] Add call.transcript.completed webhook handler (uses OpenPhone's native transcript, no Whisper needed)
+- [x] Show transcript inline in call card (AdminDashboard + AgentDashboard)
+- [x] Keep audio player + transcript together in call card

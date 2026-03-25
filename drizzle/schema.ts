@@ -1417,3 +1417,40 @@ export const cleanerMagicLinkTokens = mysqlTable("cleaner_magic_link_tokens", {
 }));
 export type CleanerMagicLinkToken = typeof cleanerMagicLinkTokens.$inferSelect;
 export type InsertCleanerMagicLinkToken = typeof cleanerMagicLinkTokens.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// openphone_call_recordings — one row per inbound/outbound call recording
+// received via the call.recording.completed OpenPhone webhook.
+// Transcript is populated separately via the call.transcript.completed webhook.
+// ─────────────────────────────────────────────────────────────────────────────
+export const openphoneCallRecordings = mysqlTable("openphone_call_recordings", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The conversation session this recording belongs to (matched by leadPhone) */
+  sessionId: int("sessionId").notNull(),
+  /** OpenPhone's call ID — UNIQUE to prevent duplicate inserts if webhook fires twice */
+  openphoneCallId: varchar("openphoneCallId", { length: 255 }).notNull().unique(),
+  /** Caller phone in E.164 format */
+  callerPhone: varchar("callerPhone", { length: 20 }).notNull(),
+  /** Call direction from the lead's perspective */
+  direction: mysqlEnum("direction", ["incoming", "outgoing"]).notNull().default("incoming"),
+  /** Duration of the recording in seconds */
+  durationSeconds: int("durationSeconds"),
+  /** Direct MP3 URL from OpenPhone — playable in <audio> */
+  recordingUrl: text("recordingUrl").notNull(),
+  /** Processing status from OpenPhone */
+  status: varchar("status", { length: 50 }).notNull().default("completed"),
+  /** When the call actually happened (used for chronological sorting in thread) */
+  callStartedAt: timestamp("callStartedAt").notNull(),
+  /**
+   * Full call transcript as JSON array of dialogue turns.
+   * Each turn: { identifier: string, content: string, start: number, end: number }
+   * Populated by the call.transcript.completed webhook.
+   */
+  transcript: text("transcript"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxSession: index("idx_ocr_session").on(table.sessionId),
+  idxCallId: index("idx_ocr_call_id").on(table.openphoneCallId),
+}));
+export type OpenphoneCallRecording = typeof openphoneCallRecordings.$inferSelect;
+export type InsertOpenphoneCallRecording = typeof openphoneCallRecordings.$inferInsert;

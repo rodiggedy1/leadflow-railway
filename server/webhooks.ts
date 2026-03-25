@@ -23,8 +23,8 @@
 import type { Express } from "express";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
-import { sendSms } from "./openphone";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, openphoneCallRecordings } from "../drizzle/schema";
+import { sendSms, fetchCallRecordings } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
 import type { ChatMessage, ConversationContext } from "./conversationEngine";
@@ -54,6 +54,17 @@ export function registerWebhookRoutes(app: Express) {
 
     try {
       const event = req.body;
+
+      // Route by event type
+      if (event?.type === "call.recording.completed") {
+        await handleCallRecordingCompleted(event);
+        return;
+      }
+
+      if (event?.type === "call.transcript.completed" || event?.type === "callTranscript") {
+        await handleCallTranscriptCompleted(event);
+        return;
+      }
 
       // Only handle inbound SMS messages
       if (event?.type !== "message.received") return;
@@ -625,5 +636,151 @@ export function registerWebhookRoutes(app: Express) {
     } catch (err) {
       console.error('[Webhook] tryStoreJobSmsReply error:', err);
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// handleCallRecordingCompleted
+// Fired when OpenPhone finishes processing a call recording.
+// Payload shape:
+//   event.data.object = {
+//     id: string,           // callId
+//     direction: "incoming" | "outgoing",
+//     participants: [{ phoneNumber: string, type: "user" | "external" }],
+//     createdAt: string,    // ISO 8601 — when the call started
+//     duration: number,     // seconds
+//   }
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleCallRecordingCompleted(event: any): Promise<void> {
+  try {
+    const call = event?.data?.object;
+    if (!call?.id) {
+      console.warn("[CallRecording] Missing call object or id in payload");
+      return;
+    }
+
+    const callId: string = call.id;
+    const direction: string = call.direction ?? "incoming";
+    const callStartedAt = call.createdAt ? new Date(call.createdAt) : new Date();
+    const durationSeconds: number = call.duration ?? 0;
+
+    // Extract the external (lead) phone number from participants
+    const participants: Array<{ phoneNumber?: string; type?: string }> = call.participants ?? [];
+    const externalParticipant = participants.find(p => p.type === "external");
+    const rawPhone = externalParticipant?.phoneNumber;
+    if (!rawPhone) {
+      console.warn(`[CallRecording] No external participant phone for callId=${callId}`);
+      return;
+    }
+    const leadPhone = normalizePhone(rawPhone);
+
+    console.log(`[CallRecording] Processing callId=${callId} direction=${direction} leadPhone=${leadPhone}`);
+
+    // Fetch the recording URL from OpenPhone API
+    const recordings = await fetchCallRecordings(callId);
+    if (recordings.length === 0) {
+      console.warn(`[CallRecording] No recordings returned for callId=${callId}`);
+      return;
+    }
+    const recording = recordings[0]; // take the first (usually only one)
+
+    const db = await getDb();
+    if (!db) {
+      console.error("[CallRecording] No DB connection");
+      return;
+    }
+
+    // Match to the most recent active conversation session for this phone
+    const sessions = await db
+      .select()
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, leadPhone))
+      .orderBy(conversationSessions.createdAt)
+      .limit(50);
+
+    const session =
+      sessions.slice().reverse().find(s => s.stage !== "DONE") ??
+      sessions[sessions.length - 1];
+
+    if (!session) {
+      console.warn(`[CallRecording] No session found for leadPhone=${leadPhone} — skipping storage`);
+      return;
+    }
+
+    // Insert with ON DUPLICATE KEY UPDATE for idempotency
+    // (openphoneCallId has a UNIQUE constraint — duplicate webhooks are silently ignored)
+    await db
+      .insert(openphoneCallRecordings)
+      .values({
+        sessionId: session.id,
+        openphoneCallId: callId,
+        callerPhone: leadPhone,
+        direction: direction === "outgoing" ? "outgoing" : "incoming",
+        durationSeconds,
+        recordingUrl: recording.url,
+        status: recording.status ?? "completed",
+        callStartedAt,
+      })
+      .onDuplicateKeyUpdate({
+        set: { recordingUrl: recording.url, status: recording.status ?? "completed" },
+      });
+
+    console.log(`[CallRecording] Stored recording for callId=${callId} sessionId=${session.id}`);
+  } catch (err) {
+    console.error("[CallRecording] handleCallRecordingCompleted error:", err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// handleCallTranscriptCompleted
+// Fired when OpenPhone finishes generating a call transcript.
+// Payload shape (event.data.object):
+//   callId: string
+//   dialogue: [{ identifier: string, content: string, start: number, end: number }]
+//   duration: number
+//   status: "completed"
+//
+// Strategy: patch the existing openphone_call_recordings row (matched by callId)
+// with the transcript JSON. If the recording row doesn't exist yet (transcript
+// arrived before recording), we log a warning and skip — the recording webhook
+// will arrive shortly and the transcript can be fetched on demand if needed.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleCallTranscriptCompleted(event: any): Promise<void> {
+  try {
+    const obj = event?.data?.object;
+    const callId: string | undefined = obj?.callId;
+    if (!callId) {
+      console.warn("[CallTranscript] Missing callId in payload");
+      return;
+    }
+
+    const dialogue = obj?.dialogue;
+    if (!Array.isArray(dialogue) || dialogue.length === 0) {
+      console.warn(`[CallTranscript] Empty or missing dialogue for callId=${callId}`);
+      return;
+    }
+
+    const transcriptJson = JSON.stringify(dialogue);
+
+    const db = await getDb();
+    if (!db) {
+      console.error("[CallTranscript] No DB connection");
+      return;
+    }
+
+    // Patch the recording row that was created by call.recording.completed
+    const result = await db
+      .update(openphoneCallRecordings)
+      .set({ transcript: transcriptJson })
+      .where(eq(openphoneCallRecordings.openphoneCallId, callId));
+
+    const affectedRows = (result as any)?.[0]?.affectedRows ?? 0;
+    if (affectedRows === 0) {
+      console.warn(`[CallTranscript] No recording row found for callId=${callId} — transcript will be lost`);
+    } else {
+      console.log(`[CallTranscript] Transcript saved for callId=${callId} (${dialogue.length} turns)`);
+    }
+  } catch (err) {
+    console.error("[CallTranscript] handleCallTranscriptCompleted error:", err);
   }
 }

@@ -36,6 +36,7 @@ import {
   PhoneCall,
   PhoneMissed,
   PhoneOff,
+  PhoneIncoming,
   User,
   CheckCircle2,
   Clock,
@@ -531,6 +532,8 @@ function ConversationDrawer({
 
   // Sync notes when data loads
   const { data: callLogs = [] } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
+  // OpenPhone call recordings
+  const { data: callRecordings } = trpc.leads.getCallRecordings.useQuery({ sessionId: session.id });
 
   // Voice calls (Vapi AI)
   const { data: voiceCalls = [] } = trpc.voice.getCallsBySession.useQuery({ sessionId: session.id });
@@ -617,30 +620,115 @@ function ConversationDrawer({
           <div className="flex flex-col flex-1 min-w-0 border-r" style={{ borderColor: "#F0D8D0" }}>
             {/* Messages */}
             <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-gray-50">
-              {localMessages.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>
-              ) : (
-                localMessages.map((msg, i) => {
+              {(() => {
+                type AgentTimelineItem =
+                  | { kind: "msg"; msg: typeof localMessages[0]; i: number }
+                  | { kind: "recording"; rec: NonNullable<typeof callRecordings>[0] };
+
+                const items: AgentTimelineItem[] = [
+                  ...localMessages.map((msg, i) => ({ kind: "msg" as const, msg, i })),
+                  ...(callRecordings ?? []).map(rec => ({ kind: "recording" as const, rec })),
+                ].sort((a, b) => {
+                  const tsA = a.kind === "msg" ? (a.msg.ts ?? 0) : new Date(a.rec.callStartedAt ?? 0).getTime();
+                  const tsB = b.kind === "msg" ? (b.msg.ts ?? 0) : new Date(b.rec.callStartedAt ?? 0).getTime();
+                  return tsA - tsB;
+                });
+
+                if (items.length === 0) {
+                  return <p className="text-sm text-gray-400 text-center py-6">No messages yet</p>;
+                }
+
+                let lastTs: number | undefined;
+
+                return items.map((item, idx) => {
+                  if (item.kind === "recording") {
+                    const rec = item.rec;
+                    const recTs = rec.callStartedAt ? new Date(rec.callStartedAt).getTime() : undefined;
+                    const showSep = recTs != null && (lastTs == null || isDifferentDay(lastTs, recTs));
+                    if (recTs != null) lastTs = recTs;
+                    const timeLabel = recTs ? new Date(recTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : null;
+                    const mins = rec.durationSeconds ? Math.floor(rec.durationSeconds / 60) : 0;
+                    const secs = rec.durationSeconds ? rec.durationSeconds % 60 : 0;
+                    const durLabel = rec.durationSeconds ? `${mins}m ${secs}s` : null;
+                    // Parse transcript dialogue array
+                    type AgentDialogueTurn = { identifier: string; content: string; start: number; end: number };
+                    let agentDialogue: AgentDialogueTurn[] = [];
+                    if (rec.transcript) {
+                      try { agentDialogue = JSON.parse(rec.transcript); } catch { agentDialogue = []; }
+                    }
+                    const agentSpeakerLabel = (id: string) => {
+                      if (!id) return "Unknown";
+                      if (id.startsWith("+")) return session.leadName ?? id;
+                      return "Staff";
+                    };
+                    return (
+                      <div key={`rec-${rec.id ?? idx}`}>
+                        {showSep && recTs != null && <MessageDateSeparator label={formatMsgDate(recTs)} />}
+                        <div className="flex justify-center my-2">
+                          <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm w-full max-w-sm">
+                            {/* Header row */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                                <PhoneIncoming className="w-3.5 h-3.5 text-blue-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-semibold text-gray-700">
+                                  {rec.direction === "outgoing" ? "Outbound call" : "Inbound call"}
+                                  {durLabel && <span className="font-normal text-gray-400 ml-1">· {durLabel}</span>}
+                                </div>
+                                {timeLabel && <div className="text-[11px] text-gray-400">{timeLabel}</div>}
+                              </div>
+                            </div>
+                            {/* Audio player */}
+                            {rec.recordingUrl && (
+                              <audio
+                                controls
+                                src={rec.recordingUrl}
+                                className="w-full h-8 mb-2"
+                                style={{ accentColor: "#E8603C" }}
+                              />
+                            )}
+                            {/* Transcript */}
+                            {agentDialogue.length > 0 && (
+                              <details className="mt-1">
+                                <summary className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:text-gray-600 transition-colors">
+                                  Transcript · {agentDialogue.length} turns
+                                </summary>
+                                <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                  {agentDialogue.map((turn, ti) => (
+                                    <div key={ti} className="flex gap-2">
+                                      <span className="text-[10px] font-semibold shrink-0 mt-0.5"
+                                        style={{ color: turn.identifier?.startsWith("+") ? "#6b7280" : "#E8603C" }}>
+                                        {agentSpeakerLabel(turn.identifier)}
+                                      </span>
+                                      <span className="text-[11px] text-gray-600 leading-snug">{turn.content}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const { msg } = item;
                   const isOutbound = msg.role === "assistant";
-                  const prevTs = i > 0 ? localMessages[i - 1]?.ts : undefined;
                   const curTs = msg.ts;
-                  // Show a day separator whenever the calendar day changes (ts is always set now via fallback)
-                  const showSeparator = curTs != null && (
-                    i === 0 || (prevTs != null ? isDifferentDay(prevTs, curTs) : true)
-                  );
-                  // Small time label shown below each bubble (e.g. "2:34 PM")
+                  const showSeparator = curTs != null && (lastTs == null || isDifferentDay(lastTs, curTs));
+                  if (curTs != null) lastTs = curTs;
                   const timeLabel = curTs != null
                     ? new Date(curTs).toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
                     : null;
                   const senderName = (msg as any).senderName as string | undefined;
                   const isAiMessage = isOutbound && !senderName;
                   return (
-                    <div key={i}>
+                    <div key={idx}>
                       {showSeparator && curTs != null && (
                         <MessageDateSeparator label={formatMsgDate(curTs)} />
                       )}
                       <div className={`flex mb-3 ${isOutbound ? "justify-end" : "justify-start"}`}>
-                        {/* Robot icon on left for AI messages */}
                         {isAiMessage && (
                           <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-1.5 mt-0.5" style={{ backgroundColor: "#e0f2fe", border: "1px solid #bae6fd" }}>
                             <span className="text-[11px]">🤖</span>
@@ -669,8 +757,8 @@ function ConversationDrawer({
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
               <div ref={messagesEndRef} />
             </div>
 
@@ -1566,4 +1654,7 @@ export default function AgentDashboard() {
   );
 }
 
+ 
+ 
+ 
  
