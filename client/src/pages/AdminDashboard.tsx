@@ -732,6 +732,9 @@ type DrawerSession = {
   followUpSent: number;
   language: string | null;
   barkQA: string | null;
+  jobFrequency: string | null;
+  lastJobDate: string | null;
+  lastJobPrice: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -1186,30 +1189,13 @@ function ConversationDrawer({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
                 <span className="text-[17px] font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
-                {session.followUpDate && (() => {
-                  const fDate = new Date(session.followUpDate);
-                  const isOverdue = fDate < new Date();
-                  const label = isOverdue
-                    ? `Overdue · ${fDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                    : `Follow-up ${fDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-                  return (
-                    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${
-                      isOverdue
-                        ? "border-red-200 text-red-600 bg-red-50"
-                        : "border-orange-200 text-orange-600 bg-orange-50"
-                    }`}>
-                      {label}
-                    </span>
-                  );
-                })()}
-                {session.leadSource && (
-                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-200 text-purple-600 bg-purple-50">
-                    {session.leadSource.startsWith("campaign:")
-                      ? `Campaign · ${session.leadSource.replace("campaign:", "").replace(/_/g, " ")}`
-                      : session.leadSource.charAt(0).toUpperCase() + session.leadSource.slice(1).replace(/_/g, " ")}
-                  </span>
-                )}
               </div>
+              {/* AI context phrase — where the conversation left off */}
+              {closingRec?.objectionSummary && (
+                <div className="text-xs text-gray-500 mt-0.5 leading-snug">
+                  &#10024; {closingRec.objectionSummary}
+                </div>
+              )}
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span>{formatPhone(session.leadPhone)}</span>
                 {lastReplyTime && (
@@ -3170,7 +3156,7 @@ export default function AdminDashboard() {
                       key={session.id}
                       className="cursor-pointer transition-all duration-100 group hj-table-row"
                       style={{ backgroundColor: rowBg, borderLeft: `3px solid ${accentColor}` }}
-                      onClick={() => setSelectedSession(session)}
+                      onClick={() => setSelectedSession(session as unknown as DrawerSession)}
                       onMouseEnter={e => { if (!isBooked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
                       onMouseLeave={e => { e.currentTarget.style.backgroundColor = rowBg; }}
                     >

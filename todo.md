@@ -65,3 +65,4 @@
 - [x] Fix AI recommendation buttons — each button now inserts the AI-written message matching its label (not hardcoded templates)
 - [x] Redesign lead drawer status selector — now shows colored stage label with border and chevron icon
 - [x] Replace stale "Waiting until March" tag — now shows exact follow-up date (Overdue in red if past), and lead source instead of hardcoded "Warm lead"
+- [x] Replace header tags with AI-generated conversation context phrase showing where the conversation left off
