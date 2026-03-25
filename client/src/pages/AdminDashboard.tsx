@@ -1185,8 +1185,9 @@ function ConversationDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 overscroll-contain"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onWheel={e => e.stopPropagation()}
     >
       <div className="flex w-full max-w-[1080px] h-[90vh] gap-3 items-start">
 
@@ -1321,8 +1322,11 @@ function ConversationDrawer({
 
              {/* ── Persistent note display ── */}
           {(loadedNotes || notes) && !showNoteInput && (
-            <div className="mx-4 mb-1 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100">
-              <StickyNote className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+            <div className="mx-4 mb-1 flex flex-col gap-1 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100">
+              <div className="flex items-center gap-1.5">
+                <StickyNote className="w-3 h-3 text-amber-500 shrink-0" />
+                <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">Staff note</span>
+              </div>
               <p className="flex-1 text-xs text-amber-800 leading-relaxed whitespace-pre-wrap">{notes || loadedNotes}</p>
               <button
                 onClick={() => setShowNoteInput(true)}
@@ -2561,6 +2565,15 @@ export default function AdminDashboard() {
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
+
+  // Lock body scroll when drawer is open to prevent bleed-through
+  useEffect(() => {
+    if (selectedSession) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [selectedSession]);
   const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("month");
 
   // Compute the active date range to send to the backend

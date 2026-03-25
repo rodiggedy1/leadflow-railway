@@ -90,3 +90,5 @@
 - [x] Redesign drawer bottom action bar: clean layout for AI recommendation buttons, no wrapping
 - [x] Add "Add Note" button to lead drawer (saves a timestamped internal note on the lead)
 - [x] Show saved note visibly in drawer without clicking — amber block below header, edit pencil to modify
+- [x] Label note block as "Staff note:" in the drawer
+- [x] Fix drawer scroll bleeding through to the page behind it
