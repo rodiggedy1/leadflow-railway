@@ -60,4 +60,4 @@
 - [x] Add "Run Today" confirmation modal to Reactivation Engine with segment breakdown, lead counts, and projected revenue
 - [x] Fix NowLine red time indicator to re-evaluate todayET on every interval tick (not just on mount)
 - [ ] Fix duplicate key error for job 120003-in_progress in DayBoard swim lanes
-- [x] Prevent AI from re-engaging leads whose status is already "booked" — guard in engine, webhook AI handler, and cron send paths
+- [x] Prevent AI from auto re-engaging booked leads — guard in webhook auto-reply, 5-min silence nudge, and scheduled circle-back cron (campaign and always-on sends are deliberate outreach, not affected)

@@ -212,26 +212,6 @@ export async function sendAlwaysOnBatch(
     result.attempted = pending.length;
 
     for (const enrollment of pending) {
-      // Skip enrollments where the lead already has a booked session — never re-engage a booked lead.
-      const bookedCheck = await db
-        .select({ id: conversationSessions.id })
-        .from(conversationSessions)
-        .where(
-          and(
-            eq(conversationSessions.leadPhone, enrollment.phone),
-            eq(conversationSessions.isBooked, 1)
-          )
-        )
-        .limit(1);
-      if (bookedCheck.length > 0) {
-        console.log(`[AlwaysOn] Skipping ${enrollment.phone} — already has a BOOKED session. Marking enrollment SKIPPED.`);
-        await db
-          .update(alwaysOnEnrollments)
-          .set({ status: "SKIPPED" })
-          .where(eq(alwaysOnEnrollments.id, enrollment.id));
-        continue;
-      }
-
       const message = personalizeMessage(group.messageTemplate, {
         firstName: enrollment.firstName,
         lastBookingPrice: enrollment.lastBookingPrice,
