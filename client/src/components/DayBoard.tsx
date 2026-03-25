@@ -251,8 +251,18 @@ function eventIcon(type: string) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Thin vertical "now" line that tracks current ET time */
-function NowLine({ boardDate }: { boardDate: string }) {
+/**
+ * Render-prop component that tracks the current ET time position (0–100%).
+ * Passes `nowPos` (number | null) to children so the line can be rendered
+ * inside the timeline area of each SwimLane, not the full-width container.
+ */
+function NowLineProvider({
+  boardDate,
+  children,
+}: {
+  boardDate: string;
+  children: (nowPos: number | null) => React.ReactNode;
+}) {
   const [pos, setPos] = useState<number | null>(null);
 
   useEffect(() => {
@@ -271,19 +281,7 @@ function NowLine({ boardDate }: { boardDate: string }) {
     return () => clearInterval(id);
   }, [boardDate]);
 
-  if (pos === null) return null;
-
-  return (
-    <div
-      className="absolute top-0 bottom-0 z-20 pointer-events-none"
-      style={{ left: `${pos}%` }}
-    >
-      {/* Needle */}
-      <div className="absolute top-0 w-px h-full bg-rose-500 opacity-80" />
-      {/* Top cap */}
-      <div className="absolute -top-1 -translate-x-1/2 w-2 h-2 rounded-full bg-rose-500 shadow-sm" />
-    </div>
-  );
+  return <>{children(pos)}</>;
 }
 
 /** A single job block on the swim lane */
@@ -381,12 +379,14 @@ function SwimLane({
   selectedJobId,
   onJobClick,
   unreadJobIds,
+  nowPos,
 }: {
   cleanerName: string;
   jobs: Job[];
   selectedJobId: number | null;
   onJobClick: (job: Job) => void;
   unreadJobIds?: Set<number>;
+  nowPos?: number | null;
 }) {
   return (
     <div className="flex items-stretch border-b border-slate-100 last:border-b-0 group">
@@ -408,6 +408,17 @@ function SwimLane({
             style={{ left: `${(i / (HOUR_LABELS.length - 1)) * 100}%` }}
           />
         ))}
+
+        {/* Now line — rendered here so it's scoped to the timeline area, not the label column */}
+        {nowPos != null && (
+          <div
+            className="absolute top-0 bottom-0 z-20 pointer-events-none"
+            style={{ left: `${nowPos}%` }}
+          >
+            <div className="absolute top-0 w-px h-full bg-rose-500 opacity-80" />
+            <div className="absolute -top-1 -translate-x-1/2 w-2 h-2 rounded-full bg-rose-500 shadow-sm" />
+          </div>
+        )}
 
         {jobs.map((job) => (
           <JobBlock
@@ -1180,17 +1191,19 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
 
                 {/* Swim lanes + now line */}
                 <div className="relative">
-                  <NowLine boardDate={date} />
-                  {lanes.map(([cleanerName, laneJobs]) => (
-                    <SwimLane
-                      key={cleanerName}
-                      cleanerName={cleanerName}
-                      jobs={laneJobs}
-                      selectedJobId={selectedJob?.id ?? null}
-                      onJobClick={handleJobClick}
-                      unreadJobIds={unreadJobIds}
-                    />
-                  ))}
+                  <NowLineProvider boardDate={date}>
+                    {(nowPos) => lanes.map(([cleanerName, laneJobs]) => (
+                      <SwimLane
+                        key={cleanerName}
+                        cleanerName={cleanerName}
+                        jobs={laneJobs}
+                        selectedJobId={selectedJob?.id ?? null}
+                        onJobClick={handleJobClick}
+                        unreadJobIds={unreadJobIds}
+                        nowPos={nowPos}
+                      />
+                    ))}
+                  </NowLineProvider>
                 </div>
 
                 {/* SMS health strip */}
