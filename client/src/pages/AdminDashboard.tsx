@@ -1186,14 +1186,29 @@ function ConversationDrawer({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
                 <span className="text-[17px] font-bold text-gray-900">{session.leadName ?? "Unknown"}</span>
-                {session.followUpDate && (
-                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-orange-200 text-orange-600 bg-orange-50">
-                    Waiting until {new Date(session.followUpDate).toLocaleString("en-US", { month: "long" })}
+                {session.followUpDate && (() => {
+                  const fDate = new Date(session.followUpDate);
+                  const isOverdue = fDate < new Date();
+                  const label = isOverdue
+                    ? `Overdue · ${fDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                    : `Follow-up ${fDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+                  return (
+                    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${
+                      isOverdue
+                        ? "border-red-200 text-red-600 bg-red-50"
+                        : "border-orange-200 text-orange-600 bg-orange-50"
+                    }`}>
+                      {label}
+                    </span>
+                  );
+                })()}
+                {session.leadSource && (
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-200 text-purple-600 bg-purple-50">
+                    {session.leadSource.startsWith("campaign:")
+                      ? `Campaign · ${session.leadSource.replace("campaign:", "").replace(/_/g, " ")}`
+                      : session.leadSource.charAt(0).toUpperCase() + session.leadSource.slice(1).replace(/_/g, " ")}
                   </span>
                 )}
-                <span className="text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-200 text-purple-600 bg-purple-50">
-                  Warm lead
-                </span>
               </div>
               <div className="flex items-center gap-3 text-xs text-gray-400">
                 <span>{formatPhone(session.leadPhone)}</span>

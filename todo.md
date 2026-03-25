@@ -64,3 +64,4 @@
 - [x] Replace permanent isBooked guard with 30-day recency check — only suppress AI auto-replies if bookedAt is within the last 30 days
 - [x] Fix AI recommendation buttons — each button now inserts the AI-written message matching its label (not hardcoded templates)
 - [x] Redesign lead drawer status selector — now shows colored stage label with border and chevron icon
+- [x] Replace stale "Waiting until March" tag — now shows exact follow-up date (Overdue in red if past), and lead source instead of hardcoded "Warm lead"
