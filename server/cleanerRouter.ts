@@ -9,7 +9,9 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens } from "../drizzle/schema";
+import { randomBytes } from "crypto";
+import { sendSms } from "./openphone";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
@@ -580,6 +582,127 @@ export const cleanerRouter = router({
       bestStreak: row?.bestStreak ?? 0,
     };
   }),
+
+  /**
+   * cleaner.sendMagicLink — admin sends a one-time SMS login link to a cleaner.
+   * Generates a secure random token, stores it in the DB, and sends an SMS.
+   * Token expires in 15 minutes and is single-use.
+   */
+  sendMagicLink: agentProcedure
+    .input(z.object({
+      cleanerProfileId: z.number().int().positive(),
+      /** Frontend origin (e.g. https://quote.maidinblack.com) — used to build the magic link URL */
+      origin: z.string().url(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Fetch the cleaner profile
+      const [cleaner] = await db
+        .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone, isActive: cleanerProfiles.isActive })
+        .from(cleanerProfiles)
+        .where(eq(cleanerProfiles.id, input.cleanerProfileId))
+        .limit(1);
+
+      if (!cleaner) throw new TRPCError({ code: "NOT_FOUND", message: "Cleaner not found" });
+      if (!cleaner.isActive) throw new TRPCError({ code: "BAD_REQUEST", message: "Cleaner is not active" });
+      if (!cleaner.phone) throw new TRPCError({ code: "BAD_REQUEST", message: "Cleaner has no phone number on file" });
+
+      // Expire any existing unused tokens for this cleaner (cleanup)
+      await db
+        .update(cleanerMagicLinkTokens)
+        .set({ used: 1 })
+        .where(and(
+          eq(cleanerMagicLinkTokens.cleanerProfileId, input.cleanerProfileId),
+          eq(cleanerMagicLinkTokens.used, 0),
+        ));
+
+      // Generate a cryptographically secure token
+      const rawToken = randomBytes(32).toString("hex"); // 64-char hex string
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+      await db.insert(cleanerMagicLinkTokens).values({
+        cleanerProfileId: cleaner.id,
+        token: rawToken,
+        expiresAt,
+        used: 0,
+      });
+
+      // Build the magic link URL using the frontend origin
+      const magicUrl = `${input.origin}/cleaner?magic=${rawToken}`;
+
+      // Send the SMS — BEFORE any further DB work (per leadflow-sms skill)
+      const firstName = cleaner.name.split(" ")[0];
+      const smsText = `Hi ${firstName}! Tap to log into your Maids in Black portal \u2014 no password needed:\n${magicUrl}\n\nLink expires in 15 minutes.`;
+      const smsResult = await sendSms({ to: cleaner.phone, content: smsText });
+
+      if (!smsResult.success) {
+        console.error(`[MagicLink] Failed to send SMS to ${cleaner.phone}:`, smsResult.error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send SMS. Check phone number format." });
+      }
+
+      console.log(`[MagicLink] Sent login link to ${cleaner.name} (${cleaner.phone}). Token expires ${expiresAt.toISOString()}`);
+      return { success: true, phone: cleaner.phone };
+    }),
+
+  /**
+   * cleaner.verifyMagicLink — exchange a magic link token for a session cookie.
+   * Called by the frontend when the cleaner taps the link.
+   * Returns the cleaner info on success; throws on invalid/expired/used token.
+   */
+  verifyMagicLink: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Look up the token
+      const [row] = await db
+        .select()
+        .from(cleanerMagicLinkTokens)
+        .where(eq(cleanerMagicLinkTokens.token, input.token))
+        .limit(1);
+
+      if (!row) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid login link" });
+      if (row.used) throw new TRPCError({ code: "UNAUTHORIZED", message: "This link has already been used" });
+      if (new Date() > row.expiresAt) throw new TRPCError({ code: "UNAUTHORIZED", message: "This link has expired \u2014 please request a new one" });
+
+      // Mark the token as used immediately (single-use)
+      await db
+        .update(cleanerMagicLinkTokens)
+        .set({ used: 1 })
+        .where(eq(cleanerMagicLinkTokens.id, row.id));
+
+      // Fetch the cleaner profile
+      const [cleaner] = await db
+        .select()
+        .from(cleanerProfiles)
+        .where(eq(cleanerProfiles.id, row.cleanerProfileId))
+        .limit(1);
+
+      if (!cleaner || !cleaner.isActive) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Cleaner account is not active" });
+      }
+
+      // Issue a session cookie (same as password login — 1 year)
+      const sessionToken = await signCleanerSession({
+        cleanerId: cleaner.id,
+        cleanerName: cleaner.name,
+        cleanerPhone: cleaner.phone ?? "",
+      });
+      const cookieOpts = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(CLEANER_COOKIE_NAME, sessionToken, {
+        ...cookieOpts,
+        maxAge: ONE_YEAR_MS,
+      });
+
+      console.log(`[MagicLink] Cleaner ${cleaner.name} (id=${cleaner.id}) logged in via magic link`);
+      return {
+        success: true,
+        cleaner: { id: cleaner.id, name: cleaner.name, email: cleaner.email },
+      };
+    }),
 
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();

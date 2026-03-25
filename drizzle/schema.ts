@@ -1393,3 +1393,27 @@ export const cleanerJobCustomRules = mysqlTable("cleaner_job_custom_rules", {
   idxCleanerJob: index("idx_cjcr_cleaner_job").on(table.cleanerJobId),
 }));
 export type CleanerJobCustomRule = typeof cleanerJobCustomRules.$inferSelect;
+
+// ── Cleaner Magic Link Tokens ─────────────────────────────────────────────────
+/**
+ * cleanerMagicLinkTokens — one-time login tokens for cleaner SMS magic links.
+ * Admin sends a text with a link; cleaner taps it to log in without a password.
+ * Token is single-use and expires after 15 minutes.
+ */
+export const cleanerMagicLinkTokens = mysqlTable("cleaner_magic_link_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The cleaner this token belongs to */
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  /** Cryptographically random token (hex string, 32 bytes = 64 chars) */
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  /** When this token expires (15 minutes from creation) */
+  expiresAt: timestamp("expiresAt").notNull(),
+  /** Whether this token has already been used */
+  used: tinyint("used").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxCleanerProfile: index("idx_cmlt_cleaner_profile").on(table.cleanerProfileId),
+  idxToken: index("idx_cmlt_token").on(table.token),
+}));
+export type CleanerMagicLinkToken = typeof cleanerMagicLinkTokens.$inferSelect;
+export type InsertCleanerMagicLinkToken = typeof cleanerMagicLinkTokens.$inferInsert;

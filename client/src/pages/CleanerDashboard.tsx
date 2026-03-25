@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
   CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink,
-  X, ZoomIn, Images, Pencil
+  X, ZoomIn, Images, Pencil, Link2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -1123,6 +1123,17 @@ function JobCard({ job, onRefetch }: { job: JobRow; onRefetch: () => void }) {
 // ── Pay Summary Card ──────────────────────────────────────────────────────────
 
 function PaySummarySection({ date, onSetPassword }: { date: string; onSetPassword: (id: number, name: string) => void }) {
+  const [sendingMagicFor, setSendingMagicFor] = useState<number | null>(null);
+  const sendMagicLinkMutation = trpc.cleaner.sendMagicLink.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Login link sent to ${data.phone}`);
+      setSendingMagicFor(null);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to send login link");
+      setSendingMagicFor(null);
+    },
+  });
   const [y, m, d] = date.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   const dow = dt.getDay();
@@ -1196,6 +1207,25 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
                   onClick={() => onSetPassword(s.cleanerProfileId, s.cleanerName)}
                 >
                   <KeyRound className="w-3 h-3" /> Set PW
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => {
+                    setSendingMagicFor(s.cleanerProfileId);
+                    sendMagicLinkMutation.mutate({
+                      cleanerProfileId: s.cleanerProfileId,
+                      origin: window.location.origin,
+                    });
+                  }}
+                  disabled={sendingMagicFor === s.cleanerProfileId && sendMagicLinkMutation.isPending}
+                  title="Send a one-tap login link via SMS"
+                >
+                  {sendingMagicFor === s.cleanerProfileId && sendMagicLinkMutation.isPending
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Link2 className="w-3 h-3" />}
+                  {" "}Send Link
                 </Button>
                 <a
                   href="/cleaner"

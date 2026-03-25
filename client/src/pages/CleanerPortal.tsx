@@ -4,7 +4,7 @@
  * Individual cleaner portal. Login with phone + password.
  * Shows today's jobs (with date browsing), pay breakdown, ratings, photo upload, mark complete.
  */
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,52 @@ function StarRating({ rating }: { rating: number | null }) {
         />
       ))}
       <span className="ml-1 text-sm font-medium">{rating}/5</span>
+    </div>
+  );
+}
+
+// ── Magic Link Handler ───────────────────────────────────────────────────────
+/**
+ * MagicLinkHandler — auto-verifies a magic token from the URL query string.
+ * Renders a loading screen while verifying, then calls onLogin() on success
+ * or falls back to the normal login form on failure.
+ */
+function MagicLinkHandler({ token, onLogin, onFallback }: {
+  token: string;
+  onLogin: () => void;
+  onFallback: () => void;
+}) {
+  const verifyMutation = trpc.cleaner.verifyMagicLink.useMutation({
+    onSuccess: () => {
+      toast.success("Logged in successfully!");
+      // Remove the magic token from the URL so it can't be bookmarked or reused
+      const url = new URL(window.location.href);
+      url.searchParams.delete("magic");
+      window.history.replaceState({}, "", url.toString());
+      onLogin();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Login link failed");
+      // Clean up URL even on failure
+      const url = new URL(window.location.href);
+      url.searchParams.delete("magic");
+      window.history.replaceState({}, "", url.toString());
+      onFallback();
+    },
+  });
+
+  useEffect(() => {
+    verifyMutation.mutate({ token });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="text-center">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mx-auto mb-4" />
+        <p className="text-slate-300 text-sm">Logging you in…</p>
+        <p className="text-slate-500 text-xs mt-1">Please wait a moment</p>
+      </div>
     </div>
   );
 }
@@ -1146,6 +1192,12 @@ function WeekJobRow({
 export default function CleanerPortal() {
   const [date, setDate] = useState(getTodayET);
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
+  // Check for magic link token in URL query string
+  const [magicToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("magic") ?? null;
+  });
+  const [magicFailed, setMagicFailed] = useState(false);
   const utils = trpc.useUtils();
 
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false });
@@ -1206,8 +1258,18 @@ export default function CleanerPortal() {
     );
   }
 
-  // Not logged in
+  // Not logged in — check for magic link first
   if (!meQuery.data) {
+    // If there's a magic token in the URL and it hasn't failed yet, try to verify it
+    if (magicToken && !magicFailed) {
+      return (
+        <MagicLinkHandler
+          token={magicToken}
+          onLogin={() => utils.cleaner.me.invalidate()}
+          onFallback={() => setMagicFailed(true)}
+        />
+      );
+    }
     return <LoginForm onLogin={() => utils.cleaner.me.invalidate()} />;
   }
 
