@@ -57,3 +57,4 @@
 - [x] Add depth-on-click lead drawer: smooth expand with full SMS thread, touch timeline, AI reasoning
 - [x] Upgrade AI Recommendation panel to live AI state: "AI is acting", "Next action in 2h", "Waiting on reply", "Recycling in 14 days"
 - [x] Add additional world-class UI elements to Reactivation Engine (AI Activity Feed, score rings, segment sparklines)
+- [x] Add "Run Today" confirmation modal to Reactivation Engine with segment breakdown, lead counts, and projected revenue

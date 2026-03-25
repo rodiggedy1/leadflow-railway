@@ -1046,6 +1046,235 @@ function LeadCard({ lead, selected, onClick }: { lead: Lead; selected: boolean; 
   );
 }
 
+// ── Run Today Modal ──────────────────────────────────────────────────────────
+
+const RUN_SEGMENTS = [
+  {
+    id: "high_intent",
+    label: "High Intent",
+    description: "Recent, high spend customers",
+    count: 12,
+    avgValue: 220,
+    replyRate: 42,
+    urgency: "high" as const,
+    color: "emerald",
+    icon: <Flame className="w-4 h-4" />,
+    projectedBookings: 5,
+    projectedRevenue: 1100,
+  },
+  {
+    id: "reactivation_gold",
+    label: "Reactivation Gold",
+    description: "Repeat customers, 30–90 days lapsed",
+    count: 18,
+    avgValue: 180,
+    replyRate: 35,
+    urgency: "medium" as const,
+    color: "amber",
+    icon: <Star className="w-4 h-4" />,
+    projectedBookings: 6,
+    projectedRevenue: 1080,
+  },
+  {
+    id: "long_lapsed",
+    label: "Long Lapsed",
+    description: "120+ days, win-back sequence",
+    count: 42,
+    avgValue: 140,
+    replyRate: 18,
+    urgency: "low" as const,
+    color: "violet",
+    icon: <Clock className="w-4 h-4" />,
+    projectedBookings: 8,
+    projectedRevenue: 1120,
+  },
+];
+
+function RunTodayModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(["high_intent", "reactivation_gold", "long_lapsed"]));
+  const [confirming, setConfirming] = useState(false);
+
+  const toggleSeg = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const activeSegs = RUN_SEGMENTS.filter(s => selected.has(s.id));
+  const totalLeads = activeSegs.reduce((s, seg) => s + seg.count, 0);
+  const totalProjectedRevenue = activeSegs.reduce((s, seg) => s + seg.projectedRevenue, 0);
+  const totalProjectedBookings = activeSegs.reduce((s, seg) => s + seg.projectedBookings, 0);
+  const avgReplyRate = activeSegs.length > 0
+    ? Math.round(activeSegs.reduce((s, seg) => s + seg.replyRate, 0) / activeSegs.length)
+    : 0;
+
+  const urgencyBg: Record<string, string> = {
+    high: "bg-emerald-50 border-emerald-200",
+    medium: "bg-amber-50 border-amber-200",
+    low: "bg-violet-50 border-violet-200",
+  };
+  const urgencyText: Record<string, string> = {
+    high: "text-emerald-600",
+    medium: "text-amber-600",
+    low: "text-violet-600",
+  };
+  const urgencyDot: Record<string, string> = {
+    high: "bg-emerald-400",
+    medium: "bg-amber-400",
+    low: "bg-violet-400",
+  };
+
+  const handleConfirm = () => {
+    setConfirming(true);
+    setTimeout(() => { onConfirm(); }, 900);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[3px]" />
+
+      {/* Modal */}
+      <div
+        className="relative w-[560px] bg-white rounded-3xl shadow-2xl overflow-hidden"
+        style={{ animation: "fadeScaleIn 0.22s cubic-bezier(0.22,1,0.36,1)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-7 h-7 rounded-xl bg-gray-900 flex items-center justify-center">
+                  <Play className="w-3.5 h-3.5 text-white" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900">Run Today</h2>
+              </div>
+              <p className="text-sm text-gray-400">Review which segments will fire and confirm your send</p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Segments */}
+        <div className="px-6 py-4 space-y-3">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Select segments to include</p>
+          {RUN_SEGMENTS.map(seg => {
+            const active = selected.has(seg.id);
+            return (
+              <div
+                key={seg.id}
+                onClick={() => toggleSeg(seg.id)}
+                className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  active ? urgencyBg[seg.urgency] : "bg-gray-50 border-gray-100 opacity-60"
+                }`}
+              >
+                {/* Checkbox */}
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  active ? "bg-gray-900 border-gray-900" : "border-gray-300 bg-white"
+                }`}>
+                  {active && <CheckCircle2 className="w-3 h-3 text-white" />}
+                </div>
+
+                {/* Urgency dot + label */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className={`w-2 h-2 rounded-full ${urgencyDot[seg.urgency]}`} />
+                  <div className={urgencyText[seg.urgency]}>{seg.icon}</div>
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm">{seg.label}</p>
+                  <p className="text-xs text-gray-400">{seg.description}</p>
+                </div>
+
+                {/* Stats */}
+                <div className="flex items-center gap-4 flex-shrink-0 text-right">
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">{seg.count}</p>
+                    <p className="text-[10px] text-gray-400">leads</p>
+                  </div>
+                  <div>
+                    <p className={`text-sm font-bold ${urgencyText[seg.urgency]}`}>{seg.replyRate}%</p>
+                    <p className="text-[10px] text-gray-400">reply rate</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-emerald-600">${seg.projectedRevenue.toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-400">projected</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Projection Summary */}
+        <div className="mx-6 mb-4 bg-gray-900 rounded-2xl p-4">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Today's projection</p>
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: "Leads", value: String(totalLeads), color: "text-white" },
+              { label: "Est. replies", value: `~${Math.round(totalLeads * avgReplyRate / 100)}`, color: "text-blue-300" },
+              { label: "Est. bookings", value: `~${totalProjectedBookings}`, color: "text-violet-300" },
+              { label: "Est. revenue", value: `$${totalProjectedRevenue.toLocaleString()}`, color: "text-emerald-400" },
+            ].map(kpi => (
+              <div key={kpi.label} className="text-center">
+                <p className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{kpi.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-800 flex items-center gap-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+            <p className="text-[10px] text-gray-500">Messages will be paced throughout the day to protect deliverability. Daily cap: 50.</p>
+          </div>
+        </div>
+
+        {/* AI Timing Tip */}
+        <div className="mx-6 mb-5 flex items-start gap-2.5 bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
+          <Bot className="w-4 h-4 text-violet-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-violet-700 leading-relaxed">
+            <span className="font-semibold">AI timing tip:</span> High Intent segment converts 3× better before 11am. Consider scheduling for tomorrow morning if it's past 10am.
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="px-6 pb-6 flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 h-11 rounded-xl border-gray-200 text-sm font-semibold"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 h-11 rounded-xl bg-gray-900 hover:bg-gray-700 text-white text-sm font-semibold shadow-md disabled:opacity-50"
+            disabled={selected.size === 0 || confirming}
+            onClick={handleConfirm}
+          >
+            {confirming ? (
+              <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Launching...</>
+            ) : (
+              <><Play className="w-4 h-4 mr-2" /> Confirm & Run {totalLeads} leads</>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeScaleIn {
+          from { opacity: 0; transform: scale(0.95) translateY(8px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ReactivationEngine() {
@@ -1054,6 +1283,7 @@ export default function ReactivationEngine() {
   const [leadSearch, setLeadSearch] = useState("");
   const [runningToday, setRunningToday] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
 
   const filteredLeads = LEADS.filter(l => l.name.toLowerCase().includes(leadSearch.toLowerCase()));
   const sequenceSteps = sequenceTab === "recent" ? SEQUENCE_STEPS_RECENT : SEQUENCE_STEPS_LAPSED;
@@ -1084,7 +1314,7 @@ export default function ReactivationEngine() {
             className={`h-10 px-5 rounded-xl font-semibold text-sm shadow-md transition-all ${
               runningToday ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-900 hover:bg-gray-700 text-white"
             }`}
-            onClick={() => setRunningToday(!runningToday)}
+            onClick={() => runningToday ? null : setShowRunModal(true)}
           >
             {runningToday ? <><CheckCircle2 className="w-4 h-4 mr-2" /> Running</> : <><Play className="w-4 h-4 mr-2" /> Run Today</>}
           </Button>
@@ -1272,6 +1502,14 @@ export default function ReactivationEngine() {
       {/* Lead Depth Drawer */}
       {drawerOpen && (
         <LeadDepthDrawer lead={selectedLead} onClose={() => setDrawerOpen(false)} />
+      )}
+
+      {/* Run Today Modal */}
+      {showRunModal && (
+        <RunTodayModal
+          onClose={() => setShowRunModal(false)}
+          onConfirm={() => { setRunningToday(true); setShowRunModal(false); }}
+        />
       )}
     </div>
   );
