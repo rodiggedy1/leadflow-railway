@@ -125,3 +125,6 @@
 - [x] Live Call Assist: split Objection stage into quick-tap sub-types (Price, Timing, Trust, Already have someone)
 - [x] Live Call Assist: clicking a suggestion logs it as agent line in conversation, clears customer input, and auto-focuses for next customer response
 - [x] Live Call Assist: remove alternative suggestions — return single best AI response, update backend prompt for world-class human-sounding home service selling
+- [x] Live Call Assist: strip rationale and coachingNote from AI response — return suggestion only for faster output
+- [x] Live Call Assist: log customer line to transcript when Enter is pressed in the center column
+- [x] Live Call Assist: update stage descriptions to inbound booking framing

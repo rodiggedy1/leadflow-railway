@@ -220,8 +220,6 @@ interface TranscriptLine {
 
 interface AISuggestion {
   suggestion: string;
-  rationale: string;
-  coachingNote: string;
 }
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -712,21 +710,10 @@ function CenterColumn({
                 <CopyBtn text={suggestion.suggestion} />
               </div>
 
-              {/* The suggestion itself — large and easy to read */}
+              {/* The suggestion — large and easy to read */}
               <p className="text-base font-medium text-gray-800 leading-relaxed">
                 {suggestion.suggestion}
               </p>
-
-              {/* Why this works */}
-              <p className="text-xs text-gray-500 italic border-l-2 pl-3" style={{ borderColor: stage.color }}>
-                {suggestion.rationale}
-              </p>
-
-              {/* Coaching note */}
-              <div className="flex items-start gap-2 bg-white/70 rounded-xl px-3 py-2">
-                <Lightbulb className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: stage.color }} />
-                <p className="text-[11px] text-gray-600">{suggestion.coachingNote}</p>
-              </div>
 
               {/* I said this button */}
               <button
@@ -833,11 +820,7 @@ export default function LiveCallAssist() {
 
   const suggestionMutation = trpc.leads.getLiveCallSuggestions.useMutation({
     onSuccess: (data) => {
-      setSuggestion({
-        suggestion: data.suggestion,
-        rationale: data.rationale,
-        coachingNote: data.coachingNote,
-      });
+      setSuggestion({ suggestion: data.suggestion });
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
       }
@@ -881,8 +864,12 @@ export default function LiveCallAssist() {
   }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, objectionType, suggestionMutation]);
 
   const handleGetSuggestion = useCallback(() => {
+    // Log the customer line to the transcript before firing AI
+    if (lastCustomerLine.trim()) {
+      handleAddLine("customer", lastCustomerLine.trim());
+    }
     fireSuggestion(activeStage, lastCustomerLine);
-  }, [activeStage, lastCustomerLine, fireSuggestion]);
+  }, [activeStage, lastCustomerLine, fireSuggestion, handleAddLine]);
 
   // Called when agent clicks "I said this" on a suggestion:
   // 1. Log the agent line to the transcript

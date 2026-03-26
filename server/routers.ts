@@ -1745,12 +1745,13 @@ Analyze this conversation and return a JSON object with exactly these fields:
       }))
       .mutation(async ({ input }) => {
         const stageDescriptions: Record<string, string> = {
-          opener: "Pattern Interrupt Opener — grab attention, break the script, create curiosity",
-          discovery: "Discovery — uncover pain points, timeline, budget, decision-maker",
-          pain: "Pain Amplification — deepen the emotional cost of NOT solving the problem",
-          value: "Value Anchoring — connect your service to what they care about most",
-          close: "Assumptive Close — move toward booking as if it's already happening",
-          objection: "Objection Handler — address resistance and re-anchor to value",
+          opener: "Warm Welcome — greet the caller warmly, make them feel heard, confirm they want to book or have questions",
+          discovery: "Understand Their Situation — ask about home size, service type, frequency, and what matters most to them",
+          situation: "Learn Their History — first-time customer or had cleaners before? Understand past frustrations to set expectations",
+          value: "Show What Makes You Different — same team every visit, background-checked, supplies included, reliable and trustworthy",
+          recap: "Mirror Back — summarize what you heard before giving the price to build trust and show you listened",
+          close: "Book It — give the price once confidently then immediately pivot to scheduling: morning or afternoon?",
+          objection: "Handle Hesitation — stay warm, acknowledge their concern, and re-anchor to the value without being pushy",
         };
         const stageDesc = stageDescriptions[input.stage] ?? input.stage;
         const leadContext = [
@@ -1775,9 +1776,7 @@ ${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}
 ${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}
 ${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
 Based on this, give the agent their next move. Return a JSON object with:
-- suggestion: the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural)
-- rationale: why this is the right move (1 short sentence, coaching insight)
-- coachingNote: one practical tip for how to deliver this line (tone, pace, pause, etc.)`;
+- suggestion: the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural)`;
 
         try {
           const response = await invokeLLM({
@@ -1794,10 +1793,8 @@ Based on this, give the agent their next move. Return a JSON object with:
                   type: "object",
                   properties: {
                     suggestion: { type: "string" },
-                    rationale: { type: "string" },
-                    coachingNote: { type: "string" },
                   },
-                  required: ["suggestion", "rationale", "coachingNote"],
+                  required: ["suggestion"],
                   additionalProperties: false,
                 },
               },
@@ -1806,18 +1803,12 @@ Based on this, give the agent their next move. Return a JSON object with:
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as {
-            suggestion: string;
-            rationale: string;
-            coachingNote: string;
-          };
-          return { success: true as const, ...result };
+          const result = JSON.parse(content) as { suggestion: string };
+          return { success: true as const, suggestion: result.suggestion };
         } catch {
           return {
             success: false as const,
             suggestion: "That's a great question — let me make sure I give you the right information. Can you tell me a bit more about what you're looking for?",
-            rationale: "Buys a moment and re-engages the customer.",
-            coachingNote: "Slow down, keep your tone warm and unhurried.",
           };
         }
       }),
