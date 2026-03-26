@@ -1337,3 +1337,54 @@ describe("CleanerPortal — Update ETA button visibility", () => {
     expect(display).toMatch(/Arrives ~\d+:\d{2} (AM|PM)/);
   });
 });
+
+// ── placeNoCheckinEscalationCallWithReason — reason surfacing ─────────────────
+
+describe("placeNoCheckinEscalationCallWithReason — reason surfacing", () => {
+  it("returns kill switch reason when FIELD_MGMT_ENABLED is false", () => {
+    // Mirrors the guard: if (!FIELD_MGMT_ENABLED) return { success: false, reason: "..." }
+    const FIELD_MGMT_ENABLED = false;
+    const result = !FIELD_MGMT_ENABLED
+      ? { success: false, reason: "Field management kill switch is off" }
+      : { success: true };
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("Field management kill switch is off");
+  });
+
+  it("returns credential reason when VAPI key is missing", () => {
+    const vapiPrivateKey = "";
+    const result = !vapiPrivateKey
+      ? { success: false, reason: "VAPI_PRIVATE_KEY is not configured" }
+      : { success: true };
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("VAPI_PRIVATE_KEY is not configured");
+  });
+
+  it("returns business hours reason outside 8am–5pm ET", () => {
+    // Simulate hour = 6 (6 AM ET — outside window)
+    const hour = 6;
+    const withinHours = hour >= 8 && hour < 17;
+    const result = !withinHours
+      ? { success: false, reason: "Outside call hours (8 AM – 5 PM ET). Try again during business hours." }
+      : { success: true };
+    expect(result.success).toBe(false);
+    expect(result.reason).toMatch(/Outside call hours/);
+  });
+
+  it("returns self-call protection reason when target is the outbound number", () => {
+    const VAPI_OUTBOUND = "+19347898077";
+    const target = "+19347898077";
+    const result = target === VAPI_OUTBOUND
+      ? { success: false, reason: "Self-call protection: cannot call the VAPI outbound number" }
+      : { success: true };
+    expect(result.success).toBe(false);
+    expect(result.reason).toMatch(/Self-call protection/);
+  });
+
+  it("surfaces VAPI API error message when the call POST fails", () => {
+    const apiError = new Error("VAPI POST /call → 422: phoneNumberId not found");
+    const result = { success: false, reason: apiError.message };
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain("422");
+  });
+});

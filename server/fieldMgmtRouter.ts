@@ -30,6 +30,7 @@ import {
   formatTimeET,
   recordStep,
   placeNoCheckinEscalationCall,
+  placeNoCheckinEscalationCallWithReason,
 } from "./fieldMgmtEngine";
 
 // ── Test override phone ───────────────────────────────────────────────────────
@@ -1117,7 +1118,7 @@ export const fieldMgmtRouter = router({
         ? new Date(job.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })
         : "scheduled time";
 
-      const success = await placeNoCheckinEscalationCall({
+      const callResult = await placeNoCheckinEscalationCallWithReason({
         cleanerName: job.cleanerName ?? job.teamName ?? "the cleaner",
         customerName: job.customerName ?? "the client",
         jobAddress: job.jobAddress ?? "the job address",
@@ -1127,8 +1128,8 @@ export const fieldMgmtRouter = router({
         cleanerPhone: job.cleanerPhone ?? undefined,
       });
 
-      if (!success) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to place call — check VAPI credentials or kill switch" });
+      if (!callResult.success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: callResult.reason ?? "Failed to place call — check VAPI credentials or kill switch" });
       }
 
       return { success: true };

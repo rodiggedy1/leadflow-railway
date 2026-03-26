@@ -134,7 +134,7 @@ async function vapiPost(path: string, body: unknown): Promise<unknown> {
  * - Business hours only (8 AM – 5 PM ET). Outside hours the call is silently skipped.
  * - Never calls the Vapi outbound number itself (self-call loop protection).
  */
-export async function placeNoCheckinEscalationCall(params: {
+export async function placeNoCheckinEscalationCallWithReason(params: {
   cleanerName: string;
   customerName: string;
   jobAddress: string;
@@ -142,17 +142,17 @@ export async function placeNoCheckinEscalationCall(params: {
   cleanerJobId?: number;
   step?: string;
   cleanerPhone?: string;
-}): Promise<boolean> {
-  if (!FIELD_MGMT_ENABLED) return false;
+}): Promise<{ success: boolean; reason?: string }> {
+  if (!FIELD_MGMT_ENABLED) return { success: false, reason: "Field management kill switch is off" };
   if (!ENV.vapiPrivateKey) {
     console.warn("[FieldMgmt] VAPI_PRIVATE_KEY not set — skipping escalation call");
-    return false;
+    return { success: false, reason: "VAPI_PRIVATE_KEY is not configured" };
   }
 
-  // ── Business hours guard (8 AM – 5 PM ET) ────────────────────────────────
+  // ── Business hours guard (8 AM – 5 PM ET) ────────────────────────────────────────────
   if (!isWithinEscalationHours()) {
     console.log("[FieldMgmt] Outside escalation call hours (8am–5pm ET) — skipping call");
-    return false;
+    return { success: false, reason: "Outside call hours (8 AM – 5 PM ET). Try again during business hours." };
   }
 
   const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step, cleanerPhone } = params;
@@ -166,7 +166,7 @@ export async function placeNoCheckinEscalationCall(params: {
   const normalizedTarget = callTarget.startsWith("+") ? callTarget : `+1${callTarget.replace(/\D/g, "")}`;
   if (normalizedTarget === VAPI_OUTBOUND_PHONE_NUMBER) {
     console.error(`[FieldMgmt] Self-call protection triggered — refusing to call Vapi outbound number ${normalizedTarget}`);
-    return false;
+    return { success: false, reason: "Self-call protection: cannot call the VAPI outbound number" };
   }
 
   const isCsTeam = normalizedTarget === CS_ALERT_NUMBER;
@@ -237,11 +237,18 @@ export async function placeNoCheckinEscalationCall(params: {
       }
     }
 
-    return true;
+    return { success: true };
   } catch (err) {
-    console.error("[FieldMgmt] Escalation call FAILED:", err);
-    return false;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[FieldMgmt] Escalation call FAILED:", msg);
+    return { success: false, reason: msg };
   }
+}
+
+/** Backwards-compatible boolean wrapper for cron/engine callers */
+export async function placeNoCheckinEscalationCall(params: Parameters<typeof placeNoCheckinEscalationCallWithReason>[0]): Promise<boolean> {
+  const result = await placeNoCheckinEscalationCallWithReason(params);
+  return result.success;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
