@@ -167,3 +167,4 @@
 - [x] Live Call Assist: Recap stage must mirror back what the customer said (beds/baths/service type + their WHY) — not a generic value statement
 - [x] Live Call Assist: Situation stage — ONE question only, must end with a question mark, no statements, no comments, no empathy filler, fires once and advances
 - [x] Live Call Assist: remove Situation stage entirely — flow goes Opener → Discovery → Value → Recap → Close → Objection
+- [x] Live Call Assist: apply provided Recap and Objection prompts to those stages

@@ -1760,16 +1760,16 @@ Analyze this conversation and return a JSON object with exactly these fields:
             advance: "You've made one tailored value statement.",
           },
           recap: {
-            goal: "Mirror back exactly what they told you in ONE sentence. Use their specific details: bedrooms, bathrooms, service type, and their WHY. Example: 'So we're looking at a 3-bed, 2-bath standard clean — you've got guests coming this weekend and you want it done right.' That's it. Specific. Personal. Shows you listened. Do NOT give a generic value statement. Do NOT say things like 'nothing beats coming home to a fresh space.' Use THEIR words and THEIR situation.",
-            advance: "You've mirrored back their specific details.",
+            goal: `You are a top 1% sales rep recapping a live call before closing. Write a SHORT, natural-sounding recap (3-5 sentences max) that: (1) restates their situation in plain English using their specific details from the conversation, (2) calls out the emotional driver — stress, embarrassment, urgency, event, etc., (3) reinforces what they want the outcome to be, (4) gives a light transition toward solving it NOW. STYLE RULES: sound like a human on the phone, not a report. No bullet points. No corporate tone. No filler words. No 'based on what you said'. No repeating everything — only what matters emotionally. EXAMPLE STYLE: 'Alright — so it sounds like things just got a bit out of control with the house, and with everything going on, you just want it handled so you can breathe again. Totally get that. You're not looking for anything crazy — just someone to come in, reset everything, and make it feel good again.' Make the customer feel understood AND ready to say yes.`,
+            advance: "You've delivered the recap.",
           },
           close: {
             goal: "Give the price confidently — no apology, no hesitation. Then immediately move to scheduling with an assumptive question. Don't pause and wait. Keep the momentum.",
             advance: "Price has been given and customer has responded.",
           },
           objection: {
-            goal: "Empathy first, then flip. Price → anchor to value and what they'd pay in stress. Timing → create urgency around today's slot. Trust → offer the guarantee. 'Already have someone' → ask what they love about them, find the gap. Always end by asking for the booking.",
-            advance: "Objection has been addressed with empathy and a reframe.",
+            goal: `You are a top-performing sales closer handling objections naturally and confidently. Respond to the customer's objection following this flow: (1) ACKNOWLEDGE with real empathy — not fake. (2) REFRAME — shift how they see the situation. (3) REDUCE RISK — make it feel safe to move forward. (4) CLOSE FORWARD — guide them back to booking. STYLE RULES: conversational, like you're on the phone. Short sentences. No corporate language. No 'I understand your concern'. No long explanations. No pressure — but confident. COMMON OBJECTIONS: 'I need to think about it' → ask if it's timing or price, then push the open slot. 'That's a bit expensive' → anchor to value and what they'd pay in stress. 'My house is too messy' → normalize it, no judgment. 'I'll call back later' → create urgency around today's slot. EXAMPLE: Objection 'I need to think about it' → 'Yeah, totally fair. Usually when people say that, it's either the timing or the price — which one is it for you? Either way, we do have that slot open today, and honestly it sounds like getting this handled now would take a lot off your plate. Let's just lock it in, and if anything comes up, we can adjust.' Handle the objection AND move the sale forward in the same breath.`,
+            advance: "Objection has been addressed and customer is moving toward booking.",
           },
         };
 
