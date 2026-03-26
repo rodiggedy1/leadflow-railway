@@ -135,3 +135,5 @@
 - [x] Live Call Assist: remove AI auto-fire on stage click — show intro script only, AI fires only when agent types customer response
 - [ ] Live Call Assist: replace context fields with bedrooms, bathrooms, address, home details (remove service type and quoted price)
 - [x] Live Call Assist: AI auto-advances to next stage when it determines the current stage is complete (advanceStage flag in response)
+- [x] Live Call Assist: hide intro after first customer input is submitted, never show again for that stage
+- [x] Live Call Assist: remove advance delay and toast — instant stage transition, AI suggestion appears immediately
