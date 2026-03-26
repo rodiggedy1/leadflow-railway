@@ -120,7 +120,7 @@ const STAGES = [
     borderColor: "border-purple-200",
     textColor: "text-purple-700",
     goal: "Mirror back what they told you so they feel heard — then present the price",
-    intro: "Mirror back what they told you in Discovery — beds, baths, clean type. The AI will generate the exact line for you below.",
+    intro: "",
     introLabel: "Mirror Back",
     introNote: "Repeat their own words back to them. This builds trust, confirms accuracy, and creates a natural pause before the price — making the number land better.",
   },
@@ -135,7 +135,7 @@ const STAGES = [
     borderColor: "border-red-200",
     textColor: "text-red-700",
     goal: "Give the price confidently and immediately pivot to scheduling — assume they're booking",
-    intro: "Give the price confidently — the AI will generate the exact line with your quoted price below.",
+    intro: "",
     introLabel: "Quote & Close",
     introNote: "Give the number once, confidently, then immediately move to scheduling. Don't pause and wait — the silence after a price is where deals die. Keep moving.",
   },
@@ -565,7 +565,7 @@ function CenterColumn({
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
 
         {/* ── Intro script — shown until first customer response is submitted ── */}
-        {introVisible && (
+        {introVisible && dynamicIntro && (
           <div className={`px-5 py-4 border-b ${stage.borderColor} ${stage.bgColor}`}>
             <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: stage.color }}>
               {stage.introLabel} — say this to open
