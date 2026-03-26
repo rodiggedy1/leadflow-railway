@@ -3,13 +3,15 @@
  *
  * Layout: 3-column
  *   Left:   Quick Context (lead info) + Stage tracker
- *   Center: Customer line (top) → AI suggestion card (auto-fires on stage select)
+ *   Center: Customer line (top, Enter to submit) → AI suggestion card
  *   Right:  Live transcript input
  *
  * UX principles:
  * - Clicking a stage immediately fires AI — no second "Get Suggestion" click
- * - Customer's last line is pinned at the top of the center column
+ * - Customer's last line is pinned at the top of the center column with Enter-to-submit
  * - Each stage has a built-in intro/opening script shown before any AI response
+ * - Recap micro-stage between Value and Close
+ * - Objection stage has quick-tap sub-types (Price, Timing, Trust, Already have someone)
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
@@ -33,6 +35,13 @@ import {
   Star,
   RotateCcw,
   ChevronDown,
+  RefreshCw,
+  ClipboardList,
+  DollarSign,
+  Clock,
+  UserCheck,
+  Users,
+  SendHorizonal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -42,7 +51,7 @@ import { useLocation } from "wouter";
 const STAGES = [
   {
     id: "opener",
-    label: "Pattern Interrupt Opener",
+    label: "Warm Welcome",
     shortLabel: "Opener",
     emoji: "⚡",
     icon: Zap,
@@ -72,8 +81,8 @@ const STAGES = [
   },
   {
     id: "pain",
-    label: "Pain Amplification",
-    shortLabel: "Pain",
+    label: "Situation & History",
+    shortLabel: "Situation",
     emoji: "💡",
     icon: Lightbulb,
     color: "#d97706",
@@ -101,8 +110,23 @@ const STAGES = [
     introNote: "Say this before you give the price. You're not selling cleaning — you're selling time, trust, and consistency. Make the number feel like a bargain.",
   },
   {
+    id: "recap",
+    label: "Recap Before Close",
+    shortLabel: "Recap",
+    emoji: "📝",
+    icon: ClipboardList,
+    color: "#7e22ce",
+    bgColor: "bg-purple-50",
+    borderColor: "border-purple-200",
+    textColor: "text-purple-700",
+    goal: "Mirror back what they told you so they feel heard — then present the price",
+    intro: "So just to make sure I have this right — you've got a [X bed / X bath], you're looking for a [regular / deep] clean, and [any situation detail they shared]. Does that sound right?",
+    introLabel: "Mirror & Confirm",
+    introNote: "Repeat their own words back to them. This builds trust, confirms accuracy, and creates a natural pause before the price — making the number land better.",
+  },
+  {
     id: "close",
-    label: "Assumptive Close",
+    label: "Quote & Close",
     shortLabel: "Close",
     emoji: "📋",
     icon: TrendingUp,
@@ -133,6 +157,57 @@ const STAGES = [
 ] as const;
 
 type StageId = typeof STAGES[number]["id"];
+
+// ─── Objection sub-types ──────────────────────────────────────────────────────
+
+const OBJECTION_TYPES = [
+  {
+    id: "price",
+    label: "Too Expensive",
+    icon: DollarSign,
+    color: "#dc2626",
+    bgColor: "bg-red-50",
+    borderColor: "border-red-200",
+    textColor: "text-red-700",
+    rebuttal: "I completely understand — price is always a factor. Can I ask what you're currently paying, or what you were expecting? I want to make sure we're comparing apples to apples, because a lot of our clients found they were actually paying more with other services once they factored in supplies and reliability.",
+    rebuttalnote: "Don't discount immediately. Understand their anchor first. Then reframe value.",
+  },
+  {
+    id: "timing",
+    label: "Not Ready Yet",
+    icon: Clock,
+    color: "#d97706",
+    bgColor: "bg-amber-50",
+    borderColor: "border-amber-200",
+    textColor: "text-amber-700",
+    rebuttal: "That's totally fine — I'm not trying to rush you. Can I ask what would need to happen for it to feel like the right time? Sometimes locking in a date a few weeks out actually takes the pressure off.",
+    rebuttalnote: "Don't push. Ask what 'ready' looks like. Offer a future booking to remove urgency.",
+  },
+  {
+    id: "trust",
+    label: "Not Sure About You",
+    icon: UserCheck,
+    color: "#0891b2",
+    bgColor: "bg-cyan-50",
+    borderColor: "border-cyan-200",
+    textColor: "text-cyan-700",
+    rebuttal: "That's a fair concern — you're letting people into your home. All our cleaners are background-checked and we've been serving [area] for [X years]. Would it help if I sent you some reviews from clients in your neighborhood?",
+    rebuttalnote: "Validate the concern — it's legitimate. Then offer social proof specific to their area.",
+  },
+  {
+    id: "competitor",
+    label: "Already Have Someone",
+    icon: Users,
+    color: "#059669",
+    bgColor: "bg-emerald-50",
+    borderColor: "border-emerald-200",
+    textColor: "text-emerald-700",
+    rebuttal: "Oh that's great — it sounds like you already value having a clean home. Can I ask what you like about your current service? I'm not trying to poach you, but if there's something they're not delivering, I'd love to show you what we do differently.",
+    rebuttalnote: "Don't trash the competitor. Ask what they like — then find the gap. Most people call because something isn't working.",
+  },
+] as const;
+
+type ObjectionTypeId = typeof OBJECTION_TYPES[number]["id"];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -417,6 +492,61 @@ function TranscriptPanel({
   );
 }
 
+// ─── Objection sub-type panel ─────────────────────────────────────────────────
+
+function ObjectionSubTypes({
+  activeType,
+  onSelect,
+}: {
+  activeType: ObjectionTypeId | null;
+  onSelect: (id: ObjectionTypeId) => void;
+}) {
+  const active = OBJECTION_TYPES.find((t) => t.id === activeType);
+
+  return (
+    <div className="px-4 py-3 border-b border-gray-100 space-y-2">
+      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">What's the objection?</div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {OBJECTION_TYPES.map((type) => {
+          const Icon = type.icon;
+          const isSelected = activeType === type.id;
+          return (
+            <button
+              key={type.id}
+              onClick={() => onSelect(type.id)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all ${
+                isSelected
+                  ? `${type.bgColor} ${type.borderColor} shadow-sm`
+                  : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? type.textColor : "text-gray-400"}`} />
+              <span className={`text-[11px] font-semibold ${isSelected ? type.textColor : "text-gray-600"}`}>
+                {type.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Show the rebuttal for the selected type */}
+      {active && (
+        <div className={`rounded-xl border p-3 space-y-2 mt-1 ${active.bgColor} ${active.borderColor}`}>
+          <div className="flex items-start gap-2">
+            <p className="flex-1 text-xs font-medium text-gray-800 leading-relaxed italic">
+              "{active.rebuttal}"
+            </p>
+            <CopyBtn text={active.rebuttal} size="xs" />
+          </div>
+          <p className="text-[10px] text-gray-500 border-l-2 pl-2" style={{ borderColor: active.color }}>
+            {active.rebuttalnote}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Center column: Customer line banner + AI suggestion ──────────────────────
 
 function CenterColumn({
@@ -426,6 +556,8 @@ function CenterColumn({
   onGetSuggestion,
   lastCustomerLine,
   onLastCustomerLineChange,
+  objectionType,
+  onObjectionTypeChange,
 }: {
   suggestion: AISuggestion | null;
   isLoading: boolean;
@@ -433,6 +565,8 @@ function CenterColumn({
   onGetSuggestion: () => void;
   lastCustomerLine: string;
   onLastCustomerLineChange: (v: string) => void;
+  objectionType: ObjectionTypeId | null;
+  onObjectionTypeChange: (id: ObjectionTypeId) => void;
 }) {
   const [selectedAlt, setSelectedAlt] = useState<number | null>(null);
   const [introExpanded, setIntroExpanded] = useState(true);
@@ -452,6 +586,15 @@ function CenterColumn({
   useEffect(() => {
     if (!suggestion) setIntroExpanded(true);
   }, [activeStage]);
+
+  const handleCustomerLineKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (lastCustomerLine.trim()) {
+        onGetSuggestion();
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -482,7 +625,7 @@ function CenterColumn({
           {isLoading ? (
             <><Loader2 className="w-3 h-3 animate-spin" /> Thinking...</>
           ) : (
-            <><Zap className="w-3 h-3" /> {suggestion ? "Refresh" : "Get Suggestion"}</>
+            <><RefreshCw className="w-3 h-3" /> {suggestion ? "Refresh" : "Get Suggestion"}</>
           )}
         </button>
       </div>
@@ -522,20 +665,42 @@ function CenterColumn({
           )}
         </div>
 
+        {/* ── Objection sub-types (only on objection stage) ── */}
+        {activeStage === "objection" && (
+          <ObjectionSubTypes
+            activeType={objectionType}
+            onSelect={onObjectionTypeChange}
+          />
+        )}
+
         {/* ── Customer's last line ── */}
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-1.5 mb-1.5">
             <div className="w-4 h-4 rounded-full bg-gray-400 flex items-center justify-center text-[9px] font-bold text-white shrink-0">C</div>
             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Customer just said</span>
           </div>
-          <textarea
-            value={lastCustomerLine}
-            onChange={(e) => onLastCustomerLineChange(e.target.value)}
-            placeholder="Type or paste what the customer just said…"
-            rows={2}
-            className="w-full text-sm rounded-xl border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white"
-          />
-          <p className="text-[10px] text-gray-400 mt-1">This is the main input for AI suggestions — update it as the conversation progresses</p>
+          <div className="flex gap-2">
+            <textarea
+              value={lastCustomerLine}
+              onChange={(e) => onLastCustomerLineChange(e.target.value)}
+              onKeyDown={handleCustomerLineKeyDown}
+              placeholder="Type what the customer just said, then press Enter or click →"
+              rows={2}
+              className="flex-1 text-sm rounded-xl border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white"
+            />
+            <button
+              onClick={onGetSuggestion}
+              disabled={isLoading || !lastCustomerLine.trim()}
+              title="Get AI suggestion (Enter)"
+              className="self-end p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors"
+            >
+              {isLoading
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <SendHorizonal className="w-4 h-4" />
+              }
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1">Press Enter to get AI suggestion · Shift+Enter for newline</p>
         </div>
 
         {/* ── AI suggestion area ── */}
@@ -550,8 +715,8 @@ function CenterColumn({
               </div>
               <p className="text-sm text-gray-500">
                 {lastCustomerLine.trim()
-                  ? "Click \"Get Suggestion\" to get AI coaching based on what the customer said."
-                  : "Enter what the customer said above, then click \"Get Suggestion\"."}
+                  ? "Press Enter or click → to get AI coaching."
+                  : "Enter what the customer said above, then press Enter."}
               </p>
             </div>
           )}
@@ -742,6 +907,9 @@ export default function LiveCallAssist() {
   // Customer's last line — lives in main state so center column can read it
   const [lastCustomerLine, setLastCustomerLine] = useState("");
 
+  // Objection sub-type
+  const [objectionType, setObjectionType] = useState<ObjectionTypeId | null>(null);
+
   // AI suggestions
   const [suggestion, setSuggestion] = useState<AISuggestion | null>(null);
 
@@ -775,13 +943,17 @@ export default function LiveCallAssist() {
     setLastCustomerLine("");
   }, []);
 
-  const buildAndFire = useCallback((stageId: StageId, customerLine?: string) => {
+  const fireSuggestion = useCallback((stageId: StageId, customerLine: string) => {
     const recentLines = transcriptLines.slice(-20);
     const transcriptText = recentLines
       .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
       .join("\n");
 
-    const effectiveCustomerLine = customerLine ?? lastCustomerLine;
+    // Build objection context string if on objection stage
+    const objType = OBJECTION_TYPES.find((t) => t.id === objectionType);
+    const objContext = stageId === "objection" && objType
+      ? `Objection type: ${objType.label}`
+      : undefined;
 
     suggestionMutation.mutate({
       stage: stageId,
@@ -789,30 +961,37 @@ export default function LiveCallAssist() {
       leadName: leadName.trim() || undefined,
       serviceType: serviceType.trim() || undefined,
       quotedPrice: quotedPrice.trim() || undefined,
-      lastCustomerLine: effectiveCustomerLine.trim() || undefined,
+      lastCustomerLine: (customerLine.trim() || lastCustomerLine.trim() || objContext) || undefined,
     });
-  }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, suggestionMutation]);
+  }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, objectionType, suggestionMutation]);
 
   const handleGetSuggestion = useCallback(() => {
-    buildAndFire(activeStage);
-  }, [activeStage, buildAndFire]);
+    fireSuggestion(activeStage, lastCustomerLine);
+  }, [activeStage, lastCustomerLine, fireSuggestion]);
 
   // Clicking a stage immediately fires AI — no second click required
   const handleStageSelect = useCallback((id: StageId) => {
     setActiveStage(id);
     setSuggestion(null);
-    // Auto-fire immediately when switching stages
+    if (id !== "objection") setObjectionType(null);
+    fireSuggestion(id, lastCustomerLine);
+  }, [lastCustomerLine, fireSuggestion]);
+
+  // When an objection type is selected, immediately fire AI with that context
+  const handleObjectionTypeChange = useCallback((id: ObjectionTypeId) => {
+    setObjectionType(id);
+    const objType = OBJECTION_TYPES.find((t) => t.id === id)!;
     const recentLines = transcriptLines.slice(-20);
     const transcriptText = recentLines
       .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
       .join("\n");
     suggestionMutation.mutate({
-      stage: id,
+      stage: "objection",
       transcript: transcriptText,
       leadName: leadName.trim() || undefined,
       serviceType: serviceType.trim() || undefined,
       quotedPrice: quotedPrice.trim() || undefined,
-      lastCustomerLine: lastCustomerLine.trim() || undefined,
+      lastCustomerLine: lastCustomerLine.trim() || `Objection type: ${objType.label}`,
     });
   }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, suggestionMutation]);
 
@@ -834,6 +1013,7 @@ export default function LiveCallAssist() {
     setServiceType("");
     setQuotedPrice("");
     setLastCustomerLine("");
+    setObjectionType(null);
   };
 
   const progress = Math.round((completedStages.size / STAGES.length) * 100);
@@ -945,6 +1125,8 @@ export default function LiveCallAssist() {
             onGetSuggestion={handleGetSuggestion}
             lastCustomerLine={lastCustomerLine}
             onLastCustomerLineChange={setLastCustomerLine}
+            objectionType={objectionType}
+            onObjectionTypeChange={handleObjectionTypeChange}
           />
         </div>
 
