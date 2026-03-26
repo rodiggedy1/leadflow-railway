@@ -88,7 +88,7 @@ function estimateBasePrice(bedrooms: string, bathrooms: string, serviceType: str
 
 export default function LiveCallAssist() {
   const [, navigate] = useLocation();
-  const { agentId, agentName } = useAgentPermissions();
+  const { agentId, agentName, isAdmin } = useAgentPermissions();
 
   // Context fields (filled in as agent learns them during the call)
   const [leadName, setLeadName]       = useState("");
@@ -439,7 +439,7 @@ export default function LiveCallAssist() {
       {/* ── Top bar ── */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
         <button
-          onClick={() => navigate("/agent-dashboard")}
+          onClick={() => navigate(isAdmin ? "/admin-dashboard" : "/agent-dashboard")}
           className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors shrink-0"
         >
           <X className="w-3.5 h-3.5" /> Exit Call Assist
