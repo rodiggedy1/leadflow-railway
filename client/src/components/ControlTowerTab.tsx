@@ -361,16 +361,25 @@ export default function ControlTowerTab() {
     onError: (err) => toast.error(err.message || "Failed to place call"),
   });
 
+  const getMagicLinkMutation = trpc.cleaner.getMagicLink.useMutation({
+    onSuccess: ({ url, cleanerName }) => {
+      navigator.clipboard.writeText(url).then(() => {
+        toast.success(`Magic link for ${cleanerName} copied!`);
+      }).catch(() => {
+        toast.info(`Magic link: ${url}`, { duration: 10000 });
+      });
+    },
+    onError: (err) => toast.error(err.message || "Failed to generate magic link"),
+  });
+
   const copyMagicLink = (job: Job) => {
-    if (!job.magicLinkToken) {
-      toast.error("No active magic link found for this cleaner. Send one via SMS first.");
+    if (!job.cleanerProfileId) {
+      toast.error("No cleaner profile linked to this job.");
       return;
     }
-    const url = `https://quote.maidinblack.com/auth/cleaner-callback?token=${job.magicLinkToken}`;
-    navigator.clipboard.writeText(url).then(() => {
-      toast.success(`Magic link for ${job.cleanerName ?? "cleaner"} copied!`);
-    }).catch(() => {
-      toast.info(`Magic link: ${url}`, { duration: 10000 });
+    getMagicLinkMutation.mutate({
+      cleanerProfileId: job.cleanerProfileId,
+      origin: "https://quote.maidinblack.com",
     });
   };
 

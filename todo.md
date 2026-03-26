@@ -188,3 +188,4 @@
 - [x] Store voice alert call recording URL in DB after call completes (already handled by Vapi end-of-call webhook)
 - [x] Add tRPC procedure to fetch call recordings per job/cleaner (getJobCalls already existed)
 - [x] Display call recording player in Control Tower Communication & Workflow section
+- [x] Copy Magic Link button: generate token on demand if none exists (don't depend on pre-job SMS having fired)
