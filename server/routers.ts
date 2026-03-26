@@ -1831,12 +1831,21 @@ TONE EXAMPLES:
 ✓ "Totally fair — is it the timing or the price giving you pause? I want to make sure we find something that works."
 ✓ "A lot of our clients felt the same way before their first clean — now they won't go back."
 
-The agent controls when to move to the next stage. Your only job is to give the best next line based on the full conversation.`;
+STAGE DETECTION RULES — for the currentStage field:
+- opener: customer hasn't confirmed they want a cleaning yet
+- discovery: customer confirmed they want a cleaning but beds/baths/service type not yet collected
+- value: beds/baths/service type collected, value pitch not yet delivered
+- recap: value pitch delivered, recap not yet done
+- close: recap done, price not yet given
+- objection: customer expressed hesitation, price concern, or said they need to think about it
+
+Always return the stage the conversation is CURRENTLY in — not where it was when the call started.`;
 
         const userPrompt = `STAGE: ${input.stage}
 GOAL: ${stage.goal}
 ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVERSATION SO FAR:\n${input.transcript}\n\n` : ""}${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n\n` : ""}What should the agent say right now? Return JSON with:
 - suggestion: the exact words to say (1-2 sentences, human, ready to read aloud)
+- currentStage: which stage the conversation is NOW in, based on the full transcript. One of: opener, discovery, value, recap, close, objection
 `;
 
         try {
@@ -1854,8 +1863,9 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
                   type: "object",
                   properties: {
                     suggestion: { type: "string" },
+                    currentStage: { type: "string", enum: ["opener", "discovery", "value", "recap", "close", "objection"] },
                   },
-                  required: ["suggestion"],
+                  required: ["suggestion", "currentStage"],
                   additionalProperties: false,
                 },
               },
@@ -1864,11 +1874,12 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as { suggestion: string };
-          return { success: true as const, suggestion: result.suggestion, advanceStage: false };
+          const result = JSON.parse(content) as { suggestion: string; currentStage: string };
+          return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage, advanceStage: false };
         } catch {
           return {
             success: false as const,
+            currentStage: input.stage,
             suggestion: "That's a great question — let me make sure I give you the right information. Can you tell me a bit more about what you're looking for?",
             advanceStage: false,
           };

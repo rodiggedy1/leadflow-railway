@@ -173,3 +173,5 @@
 - [x] Live Call Assist: Value stage must deliver a real pitch with differentiators (same team, background-checked, supplies included, weekends back) — not just echo what customer said
 - [x] Live Call Assist: Value stage must NOT auto-fire — wait for agent to type customer's WHY before generating the pitch
 - [x] Live Call Assist: remove all stage logic from AI — pure conversation, agent types customer line, AI gives next line, stage pills are visual only
+- [x] Live Call Assist: auto-advance stage pill after each AI response (AI returns currentStage, frontend updates pill)
+- [x] Live Call Assist: AI must always end response with a forward-moving question — no dead-end statements

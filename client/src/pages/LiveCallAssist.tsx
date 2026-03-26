@@ -785,6 +785,9 @@ export default function LiveCallAssist() {
   // Stage tracking
   const [activeStage, setActiveStage] = useState<StageId>("opener");
   const [completedStages, setCompletedStages] = useState<Set<StageId>>(new Set());
+  const activeStageRef = useRef<StageId>("opener");
+  // Keep ref in sync with state so onSuccess can read current stage without stale closure
+  useEffect(() => { activeStageRef.current = activeStage; }, [activeStage]);
 
   // Transcript
   const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
@@ -814,9 +817,21 @@ export default function LiveCallAssist() {
           { id: nextId.current++, speaker: "agent", text: data.suggestion, ts: Date.now() },
         ]);
       }
-      // NOTE: No auto-advance. The agent reads the suggestion, says it, types the next customer
-      // line and hits Enter. The AI reads the full transcript and naturally gives the right line.
-      // Stage pills advance only when the agent manually clicks the next stage or marks complete.
+      // Update stage pill based on what the AI determined from the conversation
+      if (data.currentStage && data.currentStage !== activeStageRef.current) {
+        const stageIds = STAGES.map((s) => s.id);
+        const newIdx = stageIds.indexOf(data.currentStage as StageId);
+        const oldIdx = stageIds.indexOf(activeStageRef.current);
+        if (newIdx > oldIdx) {
+          // Mark all stages up to (but not including) the new one as complete
+          setCompletedStages((prev) => {
+            const s = new Set(prev);
+            for (let i = 0; i < newIdx; i++) s.add(stageIds[i]);
+            return s;
+          });
+          setActiveStage(data.currentStage as StageId);
+        }
+      }
     },
     onError: (e) => toast.error(e.message),
   });
