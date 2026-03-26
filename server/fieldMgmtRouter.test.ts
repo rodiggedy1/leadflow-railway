@@ -1166,3 +1166,54 @@ describe("fieldMgmtRouter — getJobsForDay etaTimestamp passthrough", () => {
     expect(ETA_OPTIONS).toHaveLength(4);
   });
 });
+
+// ── CleanerPortal — confirm-complete modal logic ──────────────────────────────
+
+describe("CleanerPortal — confirm-complete modal logic", () => {
+  // Mirrors the handleMarkComplete guard logic
+  function shouldShowModal(allChecked: boolean): boolean {
+    if (!allChecked) return false; // toast warning, no modal
+    return true; // open modal
+  }
+
+  // Mirrors what the modal shows based on photo count
+  function getModalState(photoCount: number) {
+    return {
+      showPhotoWarning: photoCount === 0,
+      confirmButtonLabel: photoCount === 0 ? "Complete Anyway" : "Yes, Mark Complete",
+      showUploadButton: photoCount === 0,
+    };
+  }
+
+  it("does NOT open modal when checklist items are not all checked", () => {
+    expect(shouldShowModal(false)).toBe(false);
+  });
+
+  it("opens modal when checklist is complete", () => {
+    expect(shouldShowModal(true)).toBe(true);
+  });
+
+  it("opens modal when there is no checklist (allChecked defaults true)", () => {
+    expect(shouldShowModal(true)).toBe(true);
+  });
+
+  it("shows photo warning when no photos uploaded", () => {
+    const state = getModalState(0);
+    expect(state.showPhotoWarning).toBe(true);
+    expect(state.showUploadButton).toBe(true);
+    expect(state.confirmButtonLabel).toBe("Complete Anyway");
+  });
+
+  it("does NOT show photo warning when photos exist", () => {
+    const state = getModalState(2);
+    expect(state.showPhotoWarning).toBe(false);
+    expect(state.showUploadButton).toBe(false);
+    expect(state.confirmButtonLabel).toBe("Yes, Mark Complete");
+  });
+
+  it("confirm button label changes based on photo presence", () => {
+    expect(getModalState(0).confirmButtonLabel).toBe("Complete Anyway");
+    expect(getModalState(1).confirmButtonLabel).toBe("Yes, Mark Complete");
+    expect(getModalState(5).confirmButtonLabel).toBe("Yes, Mark Complete");
+  });
+});

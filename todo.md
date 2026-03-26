@@ -195,3 +195,5 @@
 - [x] ETA display: show 🚗 ETA badge on DayBoard job blocks (on_the_way / running_late)
 - [x] ETA display: show ETA banner in DayBoard detail panel (on_the_way / running_late)
 - [x] ETA display: Control Tower already had ETA on job cards and detail panel
+- [x] Cleaner portal: "Are you sure?" confirmation modal before Mark Complete (warn if no photos uploaded)
+- [x] Cleaner portal: confirmation modal for "Completed" status button (irreversible)

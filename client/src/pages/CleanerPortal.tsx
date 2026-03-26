@@ -337,12 +337,14 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   const [etaPickerFor, setEtaPickerFor] = useState<"on_the_way" | "running_late" | null>(null);
 
   const ETA_OPTIONS = [
-    { label: "30 minutes", value: "30 minutes" },
+    { label: "30 min",      value: "30 minutes" },
     { label: "1 hour",     value: "1 hour" },
     { label: "1 hr 30 min", value: "1 hr 30 min" },
     { label: "2 hours",    value: "2 hours" },
-    { label: "Don't know", value: "Don't know" },
   ];
+
+  // Confirm-complete modal state
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
 
   const statusMutation = trpc.cleaner.updateJobStatus.useMutation({
     onSuccess: () => { onStatusUpdated(); },
@@ -381,6 +383,12 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
       toast.warning("Please check off all checklist items before marking complete.");
       return;
     }
+    // Show confirmation modal (which also checks for photos)
+    setShowCompleteConfirm(true);
+  };
+
+  const confirmMarkComplete = () => {
+    setShowCompleteConfirm(false);
     setCompleting(true);
     completeMutation.mutate({ cleanerJobId: job.id });
   };
@@ -1060,6 +1068,72 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
           )}
         </div>
       </CardContent>
+
+      {/* ── Mark Complete Confirmation Modal ─────────────────────────────── */}
+      <Dialog open={showCompleteConfirm} onOpenChange={setShowCompleteConfirm}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-sm mx-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white text-lg flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              Mark Job Complete?
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-1">
+            {/* No photos warning */}
+            {job.photos.length === 0 && (
+              <div className="flex items-start gap-3 p-3 bg-amber-950/60 border border-amber-600/40 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-300">No photos uploaded</p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">Photos protect you if there&apos;s a dispute. We strongly recommend uploading at least one before completing.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Irreversible warning */}
+            <div className="flex items-start gap-3 p-3 bg-slate-800 border border-slate-700 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-slate-300">This cannot be undone. Once marked complete, the job is closed and your pay is finalized.</p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 pt-1">
+              {/* Upload photos first — only shown when no photos */}
+              {job.photos.length === 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 border-amber-600/50 text-amber-300 hover:bg-amber-950/60 bg-transparent"
+                  onClick={() => {
+                    setShowCompleteConfirm(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <Camera className="w-3.5 h-3.5 mr-1.5" />
+                  Upload Photos First
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className={`${job.photos.length === 0 ? "" : "flex-1"} border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent`}
+                onClick={() => setShowCompleteConfirm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
+                onClick={confirmMarkComplete}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                {job.photos.length === 0 ? "Complete Anyway" : "Yes, Mark Complete"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
