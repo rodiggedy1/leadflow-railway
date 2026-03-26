@@ -165,3 +165,4 @@
 - [x] Live Call Assist: upgrade system prompt with world-class sales coach principles (pattern interrupt, pain amplification, value-first, assumptive close, objection-proof)
 - [x] Live Call Assist: Situation stage must NEVER give price, must ask ONE emotional WHY question then advance immediately — no therapy, no follow-ups
 - [x] Live Call Assist: Recap stage must mirror back what the customer said (beds/baths/service type + their WHY) — not a generic value statement
+- [x] Live Call Assist: Situation stage — ONE question only, must end with a question mark, no statements, no comments, no empathy filler, fires once and advances
