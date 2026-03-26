@@ -14,6 +14,7 @@ export const ENV = {
   launch27Subdomain: process.env.LAUNCH27_TENANT ?? process.env.LAUNCH27_SUBDOMAIN ?? "maidsinblack",
   vapiPrivateKey: process.env.VAPI_PRIVATE_KEY ?? "",
   vapiPublicKey: process.env.VAPI_PUBLIC_KEY ?? "",
+  vapiWebhookUrl: process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi",
   mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? "",
   zapierWebhookSecret: process.env.ZAPIER_WEBHOOK_SECRET ?? "",
 };

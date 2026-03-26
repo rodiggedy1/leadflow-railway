@@ -185,6 +185,8 @@ export async function placeNoCheckinEscalationCall(params: {
   const payload = {
     phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
     customer: { number: normalizedTarget },
+    // Tell Vapi where to POST the end-of-call-report so we can update the DB row
+    server: { url: ENV.vapiWebhookUrl },
     assistant: {
       name: "FieldMgmtAlert",
       firstMessage: script,
@@ -205,6 +207,8 @@ export async function placeNoCheckinEscalationCall(params: {
         useSpeakerBoost: true,
       },
       maxDurationSeconds: 45,
+      // Emit end-of-call-report to our webhook so recording/outcome are stored
+      server: { url: ENV.vapiWebhookUrl },
     },
   };
 

@@ -222,10 +222,15 @@ export function registerVapiWebhookRoute(app: Express): void {
           const recordingUrl = (artifact?.recordingUrl as string | undefined) ?? null;
           const endedReason = callMsg?.endedReason as string | undefined;
           // Determine outcome from endedReason
-          const outcome = endedReason === "customer-ended-call" ? "answered"
-            : endedReason?.includes("voicemail") ? "voicemail"
-            : endedReason?.includes("no-answer") ? "no_answer"
-            : durationSeconds > 5 ? "answered" : "no_answer";
+          const outcome =
+            endedReason === "customer-ended-call"     ? "answered"  :
+            endedReason === "exceeded-max-duration"   ? "answered"  :  // call ran full length = connected
+            endedReason === "assistant-ended-call"    ? "answered"  :
+            endedReason?.includes("voicemail")        ? "voicemail" :
+            endedReason?.includes("no-answer")        ? "no_answer" :
+            endedReason === "customer-busy"           ? "no_answer" :
+            endedReason === "customer-did-not-answer" ? "no_answer" :
+            durationSeconds > 5                       ? "answered"  : "no_answer";
 
           getDb().then(async (db) => {
             if (!db) return;
