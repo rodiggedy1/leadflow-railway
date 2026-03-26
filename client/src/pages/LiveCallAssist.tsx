@@ -361,14 +361,25 @@ export default function LiveCallAssist() {
           </div>
 
           {/* Suggestion area */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
-            {!suggestion && !mutation.isPending && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-14 h-14 rounded-full bg-violet-50 flex items-center justify-center mb-4">
-                  <Phone className="w-6 h-6 text-violet-400" />
-                </div>
-                <p className="text-base font-semibold text-gray-500">Type what the customer says, hit Enter</p>
-                <p className="text-sm text-gray-400 mt-1">AI will give you the exact next line to say</p>
+          <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0 space-y-5">
+
+            {/* Opener intro — always visible until first customer line is submitted */}
+            {conversation.length === 0 && (
+              <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-6">
+                <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Opening Line — say this first</p>
+                <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
+                  "Hi, thank you for calling Maids in Black, this is [Your Name]! You called at the perfect time — how can I help you today?"
+                </p>
+              </div>
+            )}
+
+            {!suggestion && !mutation.isPending && conversation.length === 0 && (
+              <p className="text-sm text-gray-400 text-center pt-2">After they respond, type what they said below and hit Enter</p>
+            )}
+
+            {!suggestion && !mutation.isPending && conversation.length > 0 && (
+              <div className="flex flex-col items-center justify-center h-32 text-center">
+                <p className="text-sm text-gray-400">Type their next response and hit Enter</p>
               </div>
             )}
 
