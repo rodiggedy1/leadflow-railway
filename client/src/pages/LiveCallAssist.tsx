@@ -28,7 +28,6 @@ import {
   User,
   Mic,
   MessageSquare,
-  Lightbulb,
   Target,
   Shield,
   TrendingUp,
@@ -79,21 +78,7 @@ const STAGES = [
     introLabel: "Discovery Opener",
     introNote: "Get all three in one shot: beds, baths, and standard/recurring/move-out. Keep it warm — not a form. If they mention anything emotional, acknowledge it before moving on.",
   },
-  {
-    id: "pain",
-    label: "Situation & History",
-    shortLabel: "Situation",
-    emoji: "💡",
-    icon: Lightbulb,
-    color: "#d97706",
-    bgColor: "bg-amber-50",
-    borderColor: "border-amber-200",
-    textColor: "text-amber-700",
-    goal: "Uncover the emotional WHY behind this call",
-    intro: "",
-    introLabel: "Situation Question",
-    introNote: "Ask what's driving the need right NOW. Event? Guests coming? Finally hit a breaking point? Their answer is gold — use it to make Value feel personal.",
-  },
+
   {
     id: "value",
     label: "Value Anchoring",
@@ -507,7 +492,7 @@ function ObjectionSubTypes({
 
 // ─── Center column: Customer line banner + AI suggestion ──────────────────────
 
-const AUTO_FIRE_STAGES: StageId[] = ["situation", "recap", "close"];
+const AUTO_FIRE_STAGES: StageId[] = ["recap", "close"];
 
 function CenterColumn({
   suggestion,

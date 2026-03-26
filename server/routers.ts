@@ -1754,10 +1754,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
             goal: "Ask bedrooms, bathrooms, and service type all in one warm question. The three service types are: Standard clean, Recurring clean, or Move-out clean. Keep it conversational — not a form. If they mention urgency, embarrassment, or an event — acknowledge it in one warm phrase before moving on.",
             advance: "You have bedrooms, bathrooms, AND service type (standard, recurring, or move-out).",
           },
-          situation: {
-            goal: "Output EXACTLY ONE question. The question must end with a question mark. The question uncovers their emotional WHY — what's driving this call. Good examples: 'What's been the biggest thing keeping you from getting it done?' / 'Is there something coming up that's making this feel urgent?' / 'What made you finally decide to call today?' ZERO tolerance rules: NO statements. NO empathy comments. NO filler like 'I totally get that' or 'That makes sense.' NO price. NO value pitch. ONE question. Ends with ?. That is the entire output.",
-            advance: "Customer has said anything in response. Advance immediately. Do not ask a second question.",
-          },
+
           value: {
             goal: "Connect their WHY to what Maids in Black delivers. Personal, not generic. Embarrassment → 'no judgment, our team has seen it all.' Trust → 'same team every time, background-checked.' Urgency → 'we can get someone out today.' One strong statement, then move.",
             advance: "You've made one tailored value statement.",
@@ -1813,7 +1810,7 @@ HARD OUTPUT RULES:
 4. Never ask follow-up questions once the stage goal is met. Move forward.
 5. Always end with a specific next step — a question toward booking or a confident close.
 6. NEVER give the price in any stage except Close. If you're in Opener, Discovery, Situation, Value, or Recap — DO NOT mention any dollar amount. Price belongs ONLY in Close.
-7. In the Situation stage: output EXACTLY ONE question ending with a question mark. Nothing else. No statements before it. No empathy filler. No price. No value. Just the question. If the customer has already answered, set advanceStage=true immediately.
+7. The call flow is: Opener → Discovery → Value → Recap → Close → Objection. Do not skip stages or jump ahead.
 
 TONE EXAMPLES:
 ✓ "You called the right place."
