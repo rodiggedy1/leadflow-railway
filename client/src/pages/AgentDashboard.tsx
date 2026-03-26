@@ -58,6 +58,7 @@ import {
   Pencil,
   Check,
   X,
+  StickyNote,
 } from "lucide-react";
 import CallGuide from "@/components/CallGuide";
 import { useLocation } from "wouter";
@@ -545,6 +546,37 @@ function ConversationDrawer({
   // Keep local notes in sync with fetched data
   const loadedNotes = notesData?.notes ?? "";
 
+  // AI closing recommendation — same as admin drawer
+  const { data: closingRec, isLoading: isLoadingRec, refetch: refetchRec } = trpc.leads.getClosingRecommendation.useQuery(
+    { sessionId: session.id },
+    { staleTime: 5 * 60 * 1000, retry: 1 }
+  );
+
+  // Tabs: conversation | flow
+  const [drawerTab, setDrawerTab] = useState<"conversation" | "flow">("conversation");
+
+  // Note input toggle (inline in compose toolbar)
+  const [showNoteInput, setShowNoteInput] = useState(false);
+
+  // Apply AI suggestion into compose box
+  const applySuggestion = (index: number) => {
+    if (index === -1) {
+      setReplyText(closingRec?.suggestedMessage ?? "");
+    } else {
+      const msg = closingRec?.alternativeMessages?.[index];
+      setReplyText(msg ?? "");
+    }
+    setDrawerTab("conversation");
+  };
+
+  // Pre-fill compose box with AI suggested message on first load
+  useEffect(() => {
+    if (closingRec?.suggestedMessage && !replyText) {
+      setReplyText(closingRec.suggestedMessage);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closingRec?.suggestedMessage]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
@@ -622,8 +654,64 @@ function ConversationDrawer({
 
           {/* LEFT: full-height conversation + compose */}
           <div className="flex flex-col flex-1 min-w-0 border-r" style={{ borderColor: "#F0D8D0" }}>
+
+            {/* ── Tab bar ── */}
+            <div className="flex items-center gap-0 px-4 shrink-0 border-b border-gray-100">
+              {(["conversation", "flow"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setDrawerTab(tab)}
+                  className={`px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px ${
+                    drawerTab === tab
+                      ? "border-orange-400 text-gray-900"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  {tab === "conversation" ? "Conversation" : "Flow View"}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Persistent note display ── */}
+            {(loadedNotes || notes) && !showNoteInput && drawerTab === "conversation" && (
+              <div className="mx-4 mt-2 mb-0 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50/60 border border-amber-100">
+                <StickyNote className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                <p className="flex-1 text-xs text-amber-800/80 leading-relaxed whitespace-pre-wrap">{notes || loadedNotes}</p>
+                <button
+                  onClick={() => setShowNoteInput(true)}
+                  className="shrink-0 text-amber-300 hover:text-amber-500 transition-colors mt-0.5"
+                  title="Edit note"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {/* ── CONVERSATION TAB ── */}
+            {drawerTab === "conversation" && (
+            <div className="flex flex-col flex-1 min-h-0">
             {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-gray-50">
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {/* AI recommendation strip */}
+              <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50/70 border border-orange-100">
+                <span className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide shrink-0">AI</span>
+                <span className="flex-1 text-xs text-orange-700/80 leading-snug">
+                  {isLoadingRec ? (
+                    <span className="animate-pulse text-orange-300">Analyzing...</span>
+                  ) : closingRec ? (
+                    closingRec.objectionSummary
+                  ) : (
+                    "AI recommendation will appear here"
+                  )}
+                </span>
+                <button
+                  onClick={() => refetchRec()}
+                  className="shrink-0 text-orange-300 hover:text-orange-500 transition-colors"
+                  title="Refresh recommendation"
+                >
+                  {isLoadingRec ? <Loader2 className="w-3 h-3 animate-spin" /> : <span className="text-[11px]">&#8635;</span>}
+                </button>
+              </div>
               {(() => {
                 type AgentTimelineItem =
                   | { kind: "msg"; msg: typeof localMessages[0]; i: number }
@@ -766,49 +854,198 @@ function ConversationDrawer({
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Compose box */}
-            <div className="px-5 pt-2.5 pb-3 border-t bg-white shrink-0" style={{ borderColor: "#F0D8D0" }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs">
-                  {session.aiMode === 1
-                    ? <span className="flex items-center gap-1 text-green-600 font-medium"><Bot className="w-3.5 h-3.5" />AI is handling replies</span>
-                    : <span className="flex items-center gap-1 text-amber-600 font-medium"><BotOff className="w-3.5 h-3.5" />Manual mode — you're in control</span>
-                  }
-                </span>
-                <button
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    session.aiMode === 1
-                      ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                      : "border-green-300 text-green-700 hover:bg-green-50"
-                  }`}
-                  onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
-                  disabled={setAiModeMutation.isPending}
-                >
-                  {session.aiMode === 1 ? "Take over" : "Hand back to AI"}
-                </button>
+            {/* ── AI suggestion pills ── */}
+            <div className="shrink-0 border-t border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide shrink-0 mr-0.5">AI</span>
+                {[
+                  { index: -1, label: closingRec?.primaryMove ?? "Primary move" },
+                  { index: 0, label: closingRec?.alternativeMoves?.[0] ?? "Alternative 1" },
+                  { index: 1, label: closingRec?.alternativeMoves?.[1] ?? "Alternative 2" },
+                  { index: 2, label: closingRec?.alternativeMoves?.[2] ?? "Alternative 3" },
+                ].map(({ index, label }, i) => {
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => applySuggestion(index)}
+                      title={label}
+                      className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-all whitespace-nowrap ${
+                        i === 0
+                          ? "border-orange-200 text-orange-600 bg-orange-50 hover:bg-orange-100"
+                          : "border-gray-200 text-gray-500 bg-white hover:bg-gray-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-              {/* Typing indicator */}
+            </div>
+
+            {/* ── Compose box (admin-style unified toolbar) ── */}
+            <div className="mx-4 mb-4 mt-2 rounded-2xl border border-gray-150 bg-white overflow-hidden shrink-0 shadow-sm">
               {typingData?.typingAgentName && (
-                <div className="flex items-center gap-2 mb-2 px-1">
+                <div className="flex items-center gap-2 px-4 pt-2">
                   <span className="inline-flex gap-0.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                     <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "150ms" }} />
                     <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                   </span>
-                  <span className="text-xs text-orange-600 font-medium">
-                    {typingData.typingAgentName} is typing...
-                  </span>
+                  <span className="text-xs text-orange-600 font-medium">{typingData.typingAgentName} is typing...</span>
                 </div>
               )}
-              <SmsComposeBox
+              <textarea
                 value={replyText}
-                onChange={setReplyText}
-                onSend={handleSend}
-                isSending={sendMessageMutation.isPending}
-                placeholder="Write a message..."
-                onTypingChange={handleTypingChange}
+                onChange={e => { setReplyText(e.target.value); handleTypingChange(e.target.value.length > 0); }}
+                onBlur={() => handleTypingChange(false)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Type a message..."
+                rows={3}
+                className="w-full px-4 pt-3 pb-1 text-sm text-gray-800 resize-none outline-none bg-transparent placeholder-gray-300"
               />
+              {/* Inline note input */}
+              {showNoteInput && (
+                <div className="px-4 pb-2 border-t border-gray-100 pt-2">
+                  <textarea
+                    placeholder="e.g. Left voicemail, price objection, follow up Friday..."
+                    value={notes !== "" ? notes : loadedNotes}
+                    onChange={e => setNotes(e.target.value)}
+                    rows={2}
+                    className="w-full resize-none text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-orange-300"
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-xs text-gray-400">Visible to agents and admins only</span>
+                    <div className="flex items-center gap-2">
+                      {notesSaved && <span className="text-xs text-green-600 font-medium">Saved ✓</span>}
+                      <button
+                        className="h-7 px-3 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        onClick={() => { updateNotes.mutate({ sessionId: session.id, notes: notes !== "" ? notes : loadedNotes }); setShowNoteInput(false); }}
+                        disabled={updateNotes.isPending}
+                      >
+                        {updateNotes.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Toolbar: note icon + AI toggle + Send */}
+              <div className="flex items-center gap-2 px-3 pb-3 pt-1">
+                {/* Note icon */}
+                <button
+                  onClick={() => setShowNoteInput(v => !v)}
+                  title={notes || loadedNotes ? "Edit note" : "Add note"}
+                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
+                    notes || loadedNotes
+                      ? "text-amber-500 bg-amber-50 hover:bg-amber-100"
+                      : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  <StickyNote className="w-3.5 h-3.5" />
+                </button>
+                {/* AI toggle */}
+                <button
+                  onClick={() => setAiModeMutation.mutate({ sessionId: session.id, aiMode: session.aiMode === 1 ? 0 : 1 })}
+                  disabled={setAiModeMutation.isPending}
+                  title={session.aiMode === 1 ? "AI is handling replies — click to take over" : "AI is paused — click to resume"}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+                    session.aiMode === 1
+                      ? "text-green-700 bg-green-50 border-green-200 hover:bg-green-100"
+                      : "text-gray-400 bg-white border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  {session.aiMode === 1 ? "AI on" : "AI off"}
+                </button>
+                <button
+                  onClick={handleSend}
+                  disabled={!replyText.trim() || sendMessageMutation.isPending}
+                  className="ml-auto flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40"
+                  style={{ backgroundColor: "#F97316" }}
+                >
+                  {sendMessageMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Send &#8594;
+                </button>
+              </div>
             </div>
+            </div>
+            )} {/* end conversation tab */}
+
+            {/* ── FLOW VIEW TAB ── */}
+            {drawerTab === "flow" && (
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4 bg-white">
+                {/* Pipeline Stage */}
+                {(() => {
+                  const pipelineStages = ["Lead In", "Quoted", "In Progress", "Follow-Up", "Re-engage", "Booked"];
+                  const stageToIndex: Record<string, number> = {
+                    WIDGET_SIZING: 0, QUOTE_SENT: 1, AVAILABILITY: 2, SLOT_CHOICE: 2, ADDRESS: 2,
+                    CONFIRMATION: 2, CALL_SCHEDULED: 2, DONE: 2, UNHANDLED: 2,
+                    FOLLOW_UP_SCHEDULED: 3, NOT_INTERESTED: 4, BOOKED: 5,
+                  };
+                  const currentIdx = stageToIndex[session.stage] ?? 0;
+                  return (
+                    <div className="bg-gray-50 rounded-2xl p-4">
+                      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Pipeline Stage</div>
+                      <div className="flex items-center gap-1">
+                        {pipelineStages.map((stage, idx) => (
+                          <div key={stage} className="flex items-center flex-1">
+                            <div className={`flex-1 text-center py-2 px-1 rounded-lg text-xs font-medium ${
+                              idx === currentIdx ? "bg-gray-900 text-white" :
+                              idx < currentIdx ? "bg-orange-100 text-orange-700" :
+                              "bg-white text-gray-400 border border-gray-200"
+                            }`}>
+                              {stage}
+                            </div>
+                            {idx < pipelineStages.length - 1 && (
+                              <div className={`w-3 h-0.5 shrink-0 ${idx < currentIdx ? "bg-orange-300" : "bg-gray-200"}`} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Lead details summary */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-2">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Lead Summary</div>
+                  {session.quotedPrice && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Quote</span>
+                      <span className="font-semibold" style={{ color: "#E8603C" }}>${computeTotalQuote(session.quotedPrice, session.extras)}</span>
+                    </div>
+                  )}
+                  {session.serviceType && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Service</span>
+                      <span className="font-medium">{session.serviceType}</span>
+                    </div>
+                  )}
+                  {session.selectedSlot && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Slot</span>
+                      <span className="font-medium text-xs">{session.selectedSlot}</span>
+                    </div>
+                  )}
+                  {session.address && (
+                    <div className="flex justify-between text-sm gap-2">
+                      <span className="text-gray-500 shrink-0">Address</span>
+                      <span className="font-medium text-xs text-right">{session.address}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Messages</span>
+                    <span className="font-medium">{localMessages.length}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
 
           {/* RIGHT: lead details panel */}

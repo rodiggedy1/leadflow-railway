@@ -175,3 +175,7 @@
 - [x] Live Call Assist: remove all stage logic from AI — pure conversation, agent types customer line, AI gives next line, stage pills are visual only
 - [x] Live Call Assist: auto-advance stage pill after each AI response (AI returns currentStage, frontend updates pill)
 - [x] Live Call Assist: AI must always end response with a forward-moving question — no dead-end statements
+- [x] Agent drawer: add AI recommendation strip (orange pinned banner at top of conversation)
+- [x] Agent drawer: add AI suggestion pills row (Primary move + alternatives that pre-fill compose)
+- [x] Agent drawer: add Conversation / Flow View tabs matching admin
+- [x] Agent drawer: unify compose toolbar to match admin (note icon + AI toggle + Send in one row)
