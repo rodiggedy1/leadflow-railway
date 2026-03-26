@@ -345,16 +345,29 @@ function TranscriptPanel({
   onClear,
   lastCustomerLine,
   onLastCustomerLineChange,
+  focusRef,
 }: {
   lines: TranscriptLine[];
   onAddLine: (speaker: "agent" | "customer", text: string) => void;
   onClear: () => void;
   lastCustomerLine: string;
   onLastCustomerLineChange: (v: string) => void;
+  focusRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [inputText, setInputText] = useState("");
   const [activeSpeaker, setActiveSpeaker] = useState<"customer" | "agent">("customer");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Expose a focus function to the parent via focusRef
+  useEffect(() => {
+    if (focusRef) {
+      focusRef.current = () => {
+        setActiveSpeaker("customer");
+        inputRef.current?.focus();
+      };
+    }
+  }, [focusRef]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -467,6 +480,7 @@ function TranscriptPanel({
         </div>
         <div className="flex gap-2">
           <textarea
+            ref={inputRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -558,6 +572,7 @@ function CenterColumn({
   onLastCustomerLineChange,
   objectionType,
   onObjectionTypeChange,
+  onUseSuggestion,
 }: {
   suggestion: AISuggestion | null;
   isLoading: boolean;
@@ -567,6 +582,7 @@ function CenterColumn({
   onLastCustomerLineChange: (v: string) => void;
   objectionType: ObjectionTypeId | null;
   onObjectionTypeChange: (id: ObjectionTypeId) => void;
+  onUseSuggestion: (text: string) => void;
 }) {
   const [selectedAlt, setSelectedAlt] = useState<number | null>(null);
   const [introExpanded, setIntroExpanded] = useState(true);
@@ -784,6 +800,13 @@ function CenterColumn({
                 <p className="text-[11px] text-gray-500 italic border-l-2 pl-2" style={{ borderColor: stage.color }}>
                   {suggestion.primaryRationale}
                 </p>
+                <button
+                  onClick={() => onUseSuggestion(suggestion.primarySuggestion)}
+                  className="w-full py-1.5 rounded-xl text-xs font-bold text-white transition-colors hover:opacity-90 flex items-center justify-center gap-1.5"
+                  style={{ background: stage.color }}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> I said this — what did they say next?
+                </button>
               </div>
 
               {/* Alternative suggestions */}
@@ -795,14 +818,16 @@ function CenterColumn({
                   return (
                     <div
                       key={i}
-                      className={`rounded-xl border p-3 space-y-2 cursor-pointer transition-all ${
+                      className={`rounded-xl border p-3 space-y-2 transition-all ${
                         isSelected
                           ? "border-gray-300 bg-gray-50 shadow-sm"
                           : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/50"
                       }`}
-                      onClick={() => setSelectedAlt(isSelected ? null : i)}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div
+                        className="flex items-center justify-between gap-2 cursor-pointer"
+                        onClick={() => setSelectedAlt(isSelected ? null : i)}
+                      >
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 shrink-0">
                             {letter}
@@ -815,6 +840,14 @@ function CenterColumn({
                       <p className={`text-xs leading-relaxed pl-7 ${isSelected ? "text-gray-600" : "text-gray-400 line-clamp-1"}`}>
                         {alt.suggestion}
                       </p>
+                      {isSelected && (
+                        <button
+                          onClick={() => onUseSuggestion(alt.suggestion)}
+                          className="w-full py-1.5 rounded-xl text-xs font-bold bg-gray-800 text-white hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5 ml-0"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> I said this — what did they say next?
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -903,6 +936,7 @@ export default function LiveCallAssist() {
   // Transcript
   const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
   const nextId = useRef(1);
+  const transcriptFocusRef = useRef<() => void>(null);
 
   // Customer's last line — lives in main state so center column can read it
   const [lastCustomerLine, setLastCustomerLine] = useState("");
@@ -968,6 +1002,18 @@ export default function LiveCallAssist() {
   const handleGetSuggestion = useCallback(() => {
     fireSuggestion(activeStage, lastCustomerLine);
   }, [activeStage, lastCustomerLine, fireSuggestion]);
+
+  // Called when agent clicks "I said this" on a suggestion:
+  // 1. Log the agent line to the transcript
+  // 2. Clear the customer line input so it's ready for the next response
+  // 3. Focus the transcript customer input
+  const handleUseSuggestion = useCallback((text: string) => {
+    handleAddLine("agent", text);
+    setLastCustomerLine("");
+    setSuggestion(null);
+    // Focus the right-column customer input after a short delay
+    setTimeout(() => transcriptFocusRef.current?.(), 50);
+  }, [handleAddLine]);
 
   // Clicking a stage immediately fires AI — no second click required
   const handleStageSelect = useCallback((id: StageId) => {
@@ -1127,6 +1173,7 @@ export default function LiveCallAssist() {
             onLastCustomerLineChange={setLastCustomerLine}
             objectionType={objectionType}
             onObjectionTypeChange={handleObjectionTypeChange}
+            onUseSuggestion={handleUseSuggestion}
           />
         </div>
 
@@ -1138,6 +1185,7 @@ export default function LiveCallAssist() {
             onClear={handleClearTranscript}
             lastCustomerLine={lastCustomerLine}
             onLastCustomerLineChange={setLastCustomerLine}
+            focusRef={transcriptFocusRef}
           />
         </div>
       </div>

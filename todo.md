@@ -123,3 +123,4 @@
 - [x] Live Call Assist: fix customer line input — add Enter key submit and a visible submit button
 - [x] Live Call Assist: add Recap micro-stage between Value and Close
 - [x] Live Call Assist: split Objection stage into quick-tap sub-types (Price, Timing, Trust, Already have someone)
+- [x] Live Call Assist: clicking a suggestion logs it as agent line in conversation, clears customer input, and auto-focuses for next customer response
