@@ -119,3 +119,4 @@
 - [x] Live Call Assist: remove confirm-click on stage progression — clicking a stage should immediately show suggestions, not require a second click
 - [x] Live Call Assist: move "What did the customer say?" field to top of center column so it kicks off the conversation
 - [x] Live Call Assist: add intro/opening script at the top of the page (before any stage is active)
+- [x] Live Call Assist: rewrite all 6 stage intro scripts for inbound booking calls (not cold outbound)
