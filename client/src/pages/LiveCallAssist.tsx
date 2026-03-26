@@ -13,7 +13,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import {
-  Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw,
+  Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw, X,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
   SendHorizonal, MessageSquare, User, Plus, Minus,
 } from "lucide-react";
@@ -355,7 +355,14 @@ export default function LiveCallAssist() {
       {/* ── Outcome Modals ── */}
       {outcomeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setOutcomeModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden relative" onClick={e => e.stopPropagation()}>
+            {/* Universal close X */}
+            <button
+              onClick={() => setOutcomeModal(null)}
+              className="absolute top-3 right-3 w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors z-10"
+            >
+              <X className="w-3.5 h-3.5 text-gray-500" />
+            </button>
 
             {/* ─ BOOKED ─ */}
             {outcomeModal === 'booked' && (
@@ -432,7 +439,7 @@ export default function LiveCallAssist() {
       {/* ── Top bar ── */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
         <button
-          onClick={() => navigate(-1 as any)}
+          onClick={() => navigate("/agent-dashboard")}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors shrink-0"
         >
           <ArrowLeft className="w-4 h-4" /> Back
