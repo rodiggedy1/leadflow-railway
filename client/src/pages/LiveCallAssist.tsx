@@ -92,6 +92,7 @@ export default function LiveCallAssist() {
 
   // Context fields (filled in as agent learns them during the call)
   const [leadName, setLeadName]       = useState("");
+  const [phone, setPhone]             = useState("");
   const [address, setAddress]         = useState("");
   const [bedrooms, setBedrooms]       = useState("");
   const [bathrooms, setBathrooms]     = useState("");
@@ -167,6 +168,7 @@ export default function LiveCallAssist() {
       if (data.success && data.extracted) {
         const ex = data.extracted;
         if (ex.customerName  && !leadName)      setLeadName(ex.customerName);
+        if (ex.phone         && !phone)         setPhone(ex.phone);
         if (ex.address       && !address)       setAddress(ex.address);
         if (ex.preferredDate && !preferredDate) setPreferredDate(ex.preferredDate);
         // Bedrooms — match to dropdown options
@@ -229,6 +231,7 @@ export default function LiveCallAssist() {
 
     const context = [
       leadName   ? `Customer name: ${leadName}` : null,
+      phone      ? `Customer phone: ${phone}` : null,
       address    ? `Address: ${address}` : null,
       bedrooms   ? `Bedrooms: ${bedrooms}` : null,
       bathrooms  ? `Bathrooms: ${bathrooms}` : null,
@@ -269,6 +272,7 @@ export default function LiveCallAssist() {
     setActiveStage("opener");
     setDoneStages(new Set());
     setLeadName("");
+    setPhone("");
     setAddress("");
     setBedrooms("");
     setBathrooms("");
@@ -288,6 +292,7 @@ export default function LiveCallAssist() {
         .join("\n");
       saveCallLead.mutate({
         name:          leadName.trim() || "Unknown",
+        phone:         phone || undefined,
         address:       address || undefined,
         bedrooms:      bedrooms || "Unknown",
         bathrooms:     bathrooms || "Unknown",
@@ -321,6 +326,7 @@ export default function LiveCallAssist() {
     setActiveStage("opener");
     setDoneStages(new Set());
     setLeadName("");
+    setPhone("");
     setAddress("");
     setBedrooms("");
     setBathrooms("");
@@ -441,6 +447,15 @@ export default function LiveCallAssist() {
               <input
                 type="text" value={leadName} onChange={e => setLeadName(e.target.value)}
                 placeholder="e.g. Sarah"
+                className="w-full text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-300 placeholder-gray-400"
+              />
+            </Field>
+
+            {/* Phone */}
+            <Field label="Phone Number">
+              <input
+                type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                placeholder="e.g. (702) 555-1234"
                 className="w-full text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-300 placeholder-gray-400"
               />
             </Field>

@@ -1926,6 +1926,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
                       type: "object",
                       properties: {
                         customerName:  { type: ["string", "null"] },
+                        phone:         { type: ["string", "null"] },
                         address:       { type: ["string", "null"] },
                         bedrooms:      { type: ["string", "null"] },
                         bathrooms:     { type: ["string", "null"] },
@@ -1933,7 +1934,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
                         preferredDate: { type: ["string", "null"] },
                         addExtras:     { type: ["array", "null"], items: { type: "string" } },
                       },
-                      required: ["customerName", "address", "bedrooms", "bathrooms", "serviceType", "preferredDate", "addExtras"],
+                      required: ["customerName", "phone", "address", "bedrooms", "bathrooms", "serviceType", "preferredDate", "addExtras"],
                       additionalProperties: false,
                     },
                   },
@@ -1946,7 +1947,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as { suggestion: string; currentStage: string; extracted: { customerName: string|null; address: string|null; bedrooms: string|null; bathrooms: string|null; serviceType: string|null; preferredDate: string|null; addExtras: string[]|null } };
+          const result = JSON.parse(content) as { suggestion: string; currentStage: string; extracted: { customerName: string|null; phone: string|null; address: string|null; bedrooms: string|null; bathrooms: string|null; serviceType: string|null; preferredDate: string|null; addExtras: string[]|null } };
           return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage, extracted: result.extracted };
         } catch {
           return {
