@@ -541,10 +541,9 @@ function CenterColumn({
   // Use the stage's static intro text
   const dynamicIntro = stage.intro;
 
-  // Reset intro visibility when stage changes
-  useEffect(() => {
-    setIntroVisible(!AUTO_FIRE_STAGES.includes(activeStage));
-  }, [activeStage]);
+  // NOTE: We do NOT reset introVisible on stage change.
+  // When AI auto-advances the stage indicator, the suggestion stays on screen.
+  // introVisible only changes when the agent submits their first customer line.
 
   const handleSubmit = () => {
     if (!lastCustomerLine.trim()) return;
@@ -823,7 +822,18 @@ export default function LiveCallAssist() {
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
       }
-      // advanceStage hint — we no longer auto-advance. Agent reads the suggestion and clicks next manually.
+      // AI says this stage is done — update the stage indicator instantly, keep suggestion visible
+      if (data.advanceStage) {
+        setActiveStage((current) => {
+          const idx = STAGES.findIndex((s) => s.id === current);
+          const next = STAGES[idx + 1];
+          if (next) {
+            setCompletedStages((prev) => { const s = new Set(prev); s.add(current); return s; });
+            return next.id;
+          }
+          return current;
+        });
+      }
     },
     onError: (e) => toast.error(e.message),
   });

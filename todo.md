@@ -155,3 +155,4 @@
 - [x] Live Call Assist: fix Situation/Value/Recap blank — advanceStage was clearing suggestion before agent could read it; now shows suggestion for 3s before advancing
 - [x] Live Call Assist: rewrite system prompt + stage scripts to be more human/empathetic based on AI call scoring feedback (better opener, pain amplification, value before price, assumptive close)
 - [x] Live Call Assist: remove auto-advance entirely — suggestion was flashing then disappearing; agent now reads and moves manually
+- [x] Live Call Assist: rebuild as continuous flow — no manual stage clicks, no auto-advance; AI tracks where you are internally and just gives the next line every time agent presses Enter
