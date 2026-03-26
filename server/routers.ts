@@ -1842,6 +1842,58 @@ STAGE DETECTION — return the stage the conversation is currently in:
           };
         }
       }),
+
+    /**
+     * leads.extractBookingDetails — parse a call transcript and extract structured booking info.
+     * Called when agent clicks "Complete Booking" to pre-fill the modal.
+     */
+    extractBookingDetails: adminAgentProcedure
+      .input(z.object({
+        transcript: z.string().max(8000),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: `You extract booking details from a phone call transcript between a cleaning company agent and a customer. Return only what was explicitly mentioned. If something wasn't mentioned, return null for that field.`,
+              },
+              {
+                role: "user",
+                content: `Extract the booking details from this call transcript:\n\n${input.transcript}\n\nReturn JSON with these fields:\n- customerName: string | null\n- address: string | null\n- bedrooms: string | null (e.g. "3 Bedrooms")\n- bathrooms: string | null (e.g. "2 Bathrooms")\n- serviceType: string | null (e.g. "Standard Cleaning", "Deep Cleaning", "Move-In / Move-Out Cleaning")\n- preferredDate: string | null\n- price: string | null (just the number, e.g. "229")`,
+              },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "booking_details",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    customerName:  { type: ["string", "null"] },
+                    address:       { type: ["string", "null"] },
+                    bedrooms:      { type: ["string", "null"] },
+                    bathrooms:     { type: ["string", "null"] },
+                    serviceType:   { type: ["string", "null"] },
+                    preferredDate: { type: ["string", "null"] },
+                    price:         { type: ["string", "null"] },
+                  },
+                  required: ["customerName", "address", "bedrooms", "bathrooms", "serviceType", "preferredDate", "price"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          const rawContent = response.choices?.[0]?.message?.content;
+          const content = typeof rawContent === "string" ? rawContent : null;
+          if (!content) throw new Error("Empty LLM response");
+          return { success: true as const, ...JSON.parse(content) };
+        } catch {
+          return { success: false as const, customerName: null, address: null, bedrooms: null, bathrooms: null, serviceType: null, preferredDate: null, price: null };
+        }
+      }),
   }),
 
   /**

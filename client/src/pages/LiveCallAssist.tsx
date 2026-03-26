@@ -206,6 +206,47 @@ export default function LiveCallAssist() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingCardLast4, setBookingCardLast4] = useState("");
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+
+  // Extracted fields (editable in modal)
+  const [extractedName, setExtractedName] = useState("");
+  const [extractedAddress, setExtractedAddress] = useState("");
+  const [extractedBedrooms, setExtractedBedrooms] = useState("");
+  const [extractedBathrooms, setExtractedBathrooms] = useState("");
+  const [extractedService, setExtractedService] = useState("");
+  const [extractedDate, setExtractedDate] = useState("");
+  const [extractedPrice, setExtractedPrice] = useState("");
+
+  const extractMutation = trpc.leads.extractBookingDetails.useMutation();
+
+  const openBookingModal = async () => {
+    setShowBookingModal(true);
+    setExtracting(true);
+    const transcript = conversation
+      .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
+      .join("\n");
+    try {
+      const result = await extractMutation.mutateAsync({ transcript });
+      setExtractedName(result.customerName ?? leadName);
+      setExtractedAddress(result.address ?? address);
+      setExtractedBedrooms(result.bedrooms ?? bedrooms);
+      setExtractedBathrooms(result.bathrooms ?? bathrooms);
+      setExtractedService(result.serviceType ?? serviceType);
+      setExtractedDate(result.preferredDate ?? preferredDate);
+      setExtractedPrice(result.price ?? quotedPrice);
+    } catch {
+      // Fall back to whatever is in the context panel
+      setExtractedName(leadName);
+      setExtractedAddress(address);
+      setExtractedBedrooms(bedrooms);
+      setExtractedBathrooms(bathrooms);
+      setExtractedService(serviceType);
+      setExtractedDate(preferredDate);
+      setExtractedPrice(quotedPrice);
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   const handleCompleteBooking = () => {
     setBookingConfirmed(true);
@@ -224,6 +265,13 @@ export default function LiveCallAssist() {
       setPreferredDate("");
       setBookingNotes("");
       setBookingCardLast4("");
+      setExtractedName("");
+      setExtractedAddress("");
+      setExtractedBedrooms("");
+      setExtractedBathrooms("");
+      setExtractedService("");
+      setExtractedDate("");
+      setExtractedPrice("");
       setBookingConfirmed(false);
       setShowBookingModal(false);
       toast.success("Booking complete — ready for next call");
@@ -278,24 +326,36 @@ export default function LiveCallAssist() {
 
                 <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
 
-                  {/* Summary of what was collected */}
-                  <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 space-y-2">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Booking Summary</p>
-                    {[
-                      { label: "Customer",  value: leadName },
-                      { label: "Address",   value: address },
-                      { label: "Service",   value: serviceType },
-                      { label: "Bedrooms",  value: bedrooms },
-                      { label: "Bathrooms", value: bathrooms },
-                      { label: "Date",      value: preferredDate },
-                      { label: "Price",     value: quotedPrice ? `$${quotedPrice}` : "" },
-                    ].map(({ label, value }) => value ? (
-                      <div key={label} className="flex items-start gap-2">
-                        <span className="text-xs font-semibold text-gray-400 w-20 shrink-0">{label}</span>
-                        <span className="text-xs text-gray-800 font-medium">{value}</span>
-                      </div>
-                    ) : null)}
-                  </div>
+                  {extracting ? (
+                    <div className="flex items-center justify-center gap-2 py-8 text-gray-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-sm">Reading transcript...</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Booking Details</p>
+                      {([
+                        { label: "Customer Name", value: extractedName,    set: setExtractedName },
+                        { label: "Address",       value: extractedAddress, set: setExtractedAddress },
+                        { label: "Service",       value: extractedService, set: setExtractedService },
+                        { label: "Bedrooms",      value: extractedBedrooms,set: setExtractedBedrooms },
+                        { label: "Bathrooms",     value: extractedBathrooms,set: setExtractedBathrooms },
+                        { label: "Date",          value: extractedDate,    set: setExtractedDate },
+                        { label: "Price",         value: extractedPrice,   set: setExtractedPrice },
+                      ] as { label: string; value: string; set: (v: string) => void }[]).map(({ label, value, set }) => (
+                        <div key={label}>
+                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">{label}</label>
+                          <input
+                            type="text"
+                            value={value}
+                            onChange={e => set(e.target.value)}
+                            placeholder={`Enter ${label.toLowerCase()}...`}
+                            className="w-full text-sm rounded-xl border border-gray-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-300"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Card last 4 */}
                   <div>
@@ -392,7 +452,7 @@ export default function LiveCallAssist() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setShowBookingModal(true)}
+            onClick={openBookingModal}
             className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 transition-colors"
           >
             <CheckCircle2 className="w-3 h-3" /> Complete Booking
