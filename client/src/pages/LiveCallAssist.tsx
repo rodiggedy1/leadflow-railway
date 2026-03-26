@@ -541,9 +541,8 @@ function CenterColumn({
   // Use the stage's static intro text
   const dynamicIntro = stage.intro;
 
-  // NOTE: We do NOT reset introVisible on stage change.
-  // When AI auto-advances the stage indicator, the suggestion stays on screen.
-  // introVisible only changes when the agent submits their first customer line.
+  // Do NOT reset introVisible when stage auto-advances.
+  // The suggestion stays on screen — agent reads it, says it, then types the next customer line.
 
   const handleSubmit = () => {
     if (!lastCustomerLine.trim()) return;
@@ -822,7 +821,8 @@ export default function LiveCallAssist() {
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
       }
-      // AI says this stage is done — update the stage indicator instantly, keep suggestion visible
+      // AI says stage is done — update the left-panel indicator instantly.
+      // Suggestion stays on screen. Agent reads it, says it, then types the next customer line.
       if (data.advanceStage) {
         setActiveStage((current) => {
           const idx = STAGES.findIndex((s) => s.id === current);

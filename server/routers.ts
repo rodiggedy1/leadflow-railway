@@ -1744,82 +1744,75 @@ Analyze this conversation and return a JSON object with exactly these fields:
         lastCustomerLine: z.string().max(500).optional(),
       }))
       .mutation(async ({ input }) => {
-        const stageDescriptions: Record<string, { goal: string; exitCondition: string; maxExchanges: number }> = {
+        // Stage playbook — what to accomplish and when to move on
+        const playbook: Record<string, { goal: string; advance: string }> = {
           opener: {
-            goal: "Create an immediate spark — greet them warmly by name if you have it, show genuine excitement that they called, make them feel like they just called the right place. End with an open question that invites them to share why they're calling.",
-            exitCondition: "Customer has said why they're calling or confirmed they want a quote/booking. Advance immediately.",
-            maxExchanges: 1,
+            goal: "Warm welcome. Make them feel like they called the right place. If you have their name, use it. End with an open question — what can I help you with today?",
+            advance: "Customer has confirmed they want a quote or to book.",
           },
           discovery: {
-            goal: "Gather home size (beds/baths) and clean type — but make it feel like a friendly conversation, not a form. Sprinkle in genuine warmth. If they mention urgency, clutter, an event, or embarrassment — acknowledge it briefly before moving on.",
-            exitCondition: "You know the home size and clean type. Advance as soon as you have those two facts.",
-            maxExchanges: 2,
+            goal: "Get beds, baths, and type of clean. Make it feel like a conversation, not a form. If they mention urgency, embarrassment, or an event — acknowledge it warmly in one phrase before moving on.",
+            advance: "You have the home size and clean type.",
           },
           situation: {
-            goal: "Uncover the emotional WHY behind this call. Ask what's driving the need right now — is there an event, a guest coming, stress about the mess, or just finally hitting a breaking point? Their answer shapes everything that follows.",
-            exitCondition: "Customer has shared the emotional driver or their priority (reliability, trust, price, urgency, embarrassment, etc.). ADVANCE IMMEDIATELY. Do NOT ask follow-ups.",
-            maxExchanges: 1,
+            goal: "Find the emotional WHY. What's driving this call right now? An event? Guests coming? Finally hit a breaking point? Their answer is gold — use it to make the value pitch personal.",
+            advance: "Customer has shared their emotional driver or what matters most to them.",
           },
           value: {
-            goal: "Connect what they just said to what Maids in Black delivers. If they mentioned embarrassment — normalize it and show you've seen it all. If they mentioned trust — lead with background checks and the same team every time. If urgency — lead with same-day availability. Make the value feel personal, not like a pitch.",
-            exitCondition: "You've made one tailored, emotionally resonant value statement. Advance immediately. Don't wait for confirmation.",
-            maxExchanges: 1,
+            goal: "Connect their WHY to what Maids in Black delivers. Personal, not generic. Embarrassment → 'no judgment, our team has seen it all.' Trust → 'same team every time, background-checked.' Urgency → 'we can get someone out today.' One strong statement, then move.",
+            advance: "You've made one tailored value statement.",
           },
           recap: {
-            goal: "Tie a bow on everything before the price. Briefly confirm what they're getting in a way that makes them feel taken care of — not just a list of facts, but a mini-picture of their home after the clean.",
-            exitCondition: "You've done the recap. Advance immediately — this stage is one line only.",
-            maxExchanges: 1,
+            goal: "Tie a bow on it before the price. Paint a quick picture of their home after the clean. Make them feel taken care of, not processed.",
+            advance: "You've done the recap.",
           },
           close: {
-            goal: "Give the price once, confidently, without apologizing for it. Then immediately move to scheduling with an assumptive question — don't pause and wait for them to react. Keep the momentum going.",
-            exitCondition: "Price has been given and customer has responded. If they're hesitating, move to objection stage.",
-            maxExchanges: 2,
+            goal: "Give the price confidently — no apology, no hesitation. Then immediately move to scheduling with an assumptive question. Don't pause and wait. Keep the momentum.",
+            advance: "Price has been given and customer has responded.",
           },
           objection: {
-            goal: "Meet the objection with empathy first, then flip it. For price: anchor to what they get vs. what they'd pay for stress. For timing: create urgency around the open slot. For trust: offer the guarantee. For 'already have someone': ask what they love about them — find the gap. Always end by asking for the booking.",
-            exitCondition: "Objection has been addressed once with empathy + a reframe. Advance to close after one rebuttal.",
-            maxExchanges: 2,
+            goal: "Empathy first, then flip. Price → anchor to value and what they'd pay in stress. Timing → create urgency around today's slot. Trust → offer the guarantee. 'Already have someone' → ask what they love about them, find the gap. Always end by asking for the booking.",
+            advance: "Objection has been addressed with empathy and a reframe.",
           },
         };
-        const stageInfo = stageDescriptions[input.stage] ?? { goal: input.stage, exitCondition: "Use your judgment.", maxExchanges: 2 };
+
+        const stage = playbook[input.stage] ?? { goal: "Help the customer move toward booking.", advance: "Customer is ready to book." };
+
         const leadContext = [
           input.leadName ? `Customer name: ${input.leadName}` : null,
-          input.serviceType ? `Service: ${input.serviceType}` : null,
+          input.serviceType ? `Home: ${input.serviceType}` : null,
           input.quotedPrice ? `Quoted price: $${input.quotedPrice}` : null,
         ].filter(Boolean).join("\n");
 
-        const systemPrompt = `You are a live call coach for Maids in Black, a professional home cleaning service. You whisper the next line to a sales agent on an inbound call. The customer already reached out — they want to book or get a quote. Your job is to help the agent sound like the most warm, confident, and human version of themselves.
+        const systemPrompt = `You are a live call coach for Maids in Black, a professional home cleaning company. You whisper the single best next line to a sales agent on an inbound call in real time.
 
-YOUR ONLY JOB: Give the agent the single best next line to say. One line. That's it.
+The customer already called in — they want to book or get a quote. Your job is to make the agent sound like the warmest, most confident, most human version of themselves.
 
-STRICT RULES — NEVER VIOLATE:
-1. NEVER mirror back what the customer said word-for-word. Don't repeat their words back at them.
-2. NEVER ask follow-up questions when the stage goal is already met. Move forward.
-3. NEVER write more than 2 sentences. The agent needs to read this at a glance mid-call.
-4. NEVER use hollow filler: no "Great!", "Absolutely!", "Of course!", "Certainly!", "I understand."
-5. ALWAYS end with a specific next step — a question that moves toward booking, or a confident closing statement.
-6. Sound like a real human on the phone — warm, a little playful when appropriate, never robotic.
-7. When the customer expresses embarrassment, stress, or urgency — acknowledge it with genuine warmth before moving on. One short phrase is enough.
-8. NEVER give the price without first painting a picture of what they're getting. Value before number, always.
-9. Use assumptive language when closing — don't ask IF they want to book, ask WHEN.
+HARD RULES:
+1. Return ONE thing to say. Max 2 sentences. The agent reads this at a glance mid-call.
+2. Never mirror back the customer's words. Never say "I hear that" or repeat what they said.
+3. No hollow filler: no "Great!", "Absolutely!", "Of course!", "Certainly!"
+4. Never ask follow-up questions once the stage goal is met. Move forward.
+5. Always end with a specific next step — a question toward booking or a confident close.
+6. When customer shows embarrassment, stress, or urgency — one warm human phrase, then move.
+7. Never give the price without first saying what they're getting. Value before number.
+8. Closing language is always assumptive — ask WHEN, not IF.
 
-TONE EXAMPLES (use this energy):
-- Instead of: "I can help you with that." → "You called the right place."
-- Instead of: "Our cleaners are professional." → "Our team has seen it all — no judgment, just a spotless home."
-- Instead of: "The price is $274." → "For a deep clean on a 3-bed, 2-bath, you're looking at $274 — and that includes everything, top to bottom. Does morning or afternoon work better for you?"
-- Instead of: "I understand you need to think about it." → "Totally fair — is it the timing or the price that's giving you pause? I want to make sure we find something that works."
+TONE TO AIM FOR:
+✓ "You called the right place."
+✓ "Our team has seen it all — no judgment, just a spotless home."
+✓ "For a 3-bed deep clean you're looking at $274 — that covers everything top to bottom. Does morning or afternoon work better?"
+✓ "Totally fair — is it the timing or the price giving you pause?"
 
-FOR advanceStage: set true the moment the stage goal is met. Do not wait. When in doubt, advance.`;
+advanceStage = true the moment the stage goal is met. Don't wait. When in doubt, advance.`;
 
-        const userPrompt = `CURRENT STAGE: ${input.stage}
-STAGE GOAL: ${stageInfo.goal}
-EXIT CONDITION (advance when this is met): ${stageInfo.exitCondition}
-MAX EXCHANGES BEFORE ADVANCING: ${stageInfo.maxExchanges}
+        const userPrompt = `STAGE: ${input.stage}
+GOAL: ${stage.goal}
+ADVANCE WHEN: ${stage.advance}
 
-${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
-Give the agent their next line. Return JSON:
-- suggestion: what to say right now (1-3 sentences, human, ready to read aloud)
-- advanceStage: true if the exit condition above is met, false otherwise`;
+${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVERSATION SO FAR:\n${input.transcript}\n\n` : ""}${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n\n` : ""}What should the agent say right now? Return JSON with:
+- suggestion: the exact words to say (1-2 sentences, human, ready to read aloud)
+- advanceStage: true if the advance condition is met, false otherwise`;
 
         try {
           const response = await invokeLLM({
