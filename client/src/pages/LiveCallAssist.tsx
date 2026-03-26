@@ -649,23 +649,81 @@ function CenterColumn({
   );
 }
 
+// ─── Pricing engine (mirrors server/openphone.ts estimatePrice) ───────────────
+
+const BEDROOM_OPTIONS = [
+  "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms",
+  "4 Bedrooms", "5 Bedrooms", "6 Bedrooms", "7 Bedrooms", "7+ Bedrooms",
+];
+
+const BATHROOM_OPTIONS = [
+  "1 Bathroom", "1.5 Bathrooms", "2 Bathrooms", "2.5 Bathrooms",
+  "3 Bathrooms", "3.5 Bathrooms", "4 Bathrooms", "4+ Bathrooms",
+];
+
+const SERVICE_OPTIONS = [
+  "Standard Cleaning", "Deep Cleaning", "Move-In / Move-Out Cleaning",
+  "Post-Construction Cleaning", "Office Cleaning",
+];
+
+function estimatePrice(bedrooms: string, bathrooms: string, serviceType: string): string {
+  if (!bedrooms || !bathrooms || !serviceType) return "";
+
+  if (serviceType === "Office Cleaning") {
+    const officePricing: Record<string, number> = {
+      "Under 500 sq ft": 75, "500\u20131,000 sq ft": 120, "1,000\u20132,000 sq ft": 175,
+      "2,000\u20133,000 sq ft": 250, "3,000\u20135,000 sq ft": 375,
+      "5,000\u201310,000 sq ft": 650, "10,000+ sq ft": 999,
+    };
+    const p = officePricing[bedrooms];
+    return p ? p.toString() : "custom";
+  }
+
+  const bedroomBase: Record<string, number> = {
+    "Studio": 119, "1 Bedroom": 119, "2 Bedrooms": 209, "3 Bedrooms": 229,
+    "4 Bedrooms": 279, "5 Bedrooms": 319, "6 Bedrooms": 379,
+    "7 Bedrooms": 419, "7+ Bedrooms": 419,
+  };
+  const bathroomCount: Record<string, number> = {
+    "1 Bathroom": 1, "1.5 Bathrooms": 1, "2 Bathrooms": 2, "2.5 Bathrooms": 2,
+    "3 Bathrooms": 3, "3.5 Bathrooms": 3, "4 Bathrooms": 4, "4+ Bathrooms": 4,
+  };
+  const serviceSurcharge: Record<string, number> = {
+    "Standard Cleaning": 0, "Deep Cleaning": 60,
+    "Move-In / Move-Out Cleaning": 60, "Post-Construction Cleaning": 60,
+  };
+
+  const base = bedroomBase[bedrooms] ?? 119;
+  const baths = bathroomCount[bathrooms] ?? 1;
+  const surcharge = serviceSurcharge[serviceType] ?? 0;
+  return (base + baths * 30 + surcharge).toString();
+}
+
 // ─── Lead context panel (left column top) ────────────────────────────────────
 
 function LeadContextPanel({
   leadName,
+  bedrooms,
+  bathrooms,
   serviceType,
   quotedPrice,
   onLeadNameChange,
+  onBedroomsChange,
+  onBathroomsChange,
   onServiceTypeChange,
-  onQuotedPriceChange,
 }: {
   leadName: string;
+  bedrooms: string;
+  bathrooms: string;
   serviceType: string;
   quotedPrice: string;
   onLeadNameChange: (v: string) => void;
+  onBedroomsChange: (v: string) => void;
+  onBathroomsChange: (v: string) => void;
   onServiceTypeChange: (v: string) => void;
-  onQuotedPriceChange: (v: string) => void;
 }) {
+  const selectClass = "w-full text-xs rounded-lg border border-gray-200 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-300 focus:border-violet-300 bg-white text-gray-700";
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2.5">
       <div className="flex items-center gap-1.5">
@@ -673,6 +731,7 @@ function LeadContextPanel({
         <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Quick Context</span>
       </div>
       <div className="space-y-2">
+        {/* Customer name */}
         <div>
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Customer Name</label>
           <input
@@ -683,26 +742,39 @@ function LeadContextPanel({
             className="w-full text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400"
           />
         </div>
+        {/* Service type */}
         <div>
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Service Type</label>
-          <input
-            type="text"
-            value={serviceType}
-            onChange={(e) => onServiceTypeChange(e.target.value)}
-            placeholder="e.g. Deep clean, 3bd/2ba"
-            className="w-full text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400"
-          />
+          <select value={serviceType} onChange={(e) => onServiceTypeChange(e.target.value)} className={selectClass}>
+            <option value="">Select…</option>
+            {SERVICE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
         </div>
+        {/* Bedrooms */}
         <div>
-          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Quoted Price</label>
-          <input
-            type="text"
-            value={quotedPrice}
-            onChange={(e) => onQuotedPriceChange(e.target.value)}
-            placeholder="e.g. 180"
-            className="w-full text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400"
-          />
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Bedrooms</label>
+          <select value={bedrooms} onChange={(e) => onBedroomsChange(e.target.value)} className={selectClass}>
+            <option value="">Select…</option>
+            {BEDROOM_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
         </div>
+        {/* Bathrooms */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Bathrooms</label>
+          <select value={bathrooms} onChange={(e) => onBathroomsChange(e.target.value)} className={selectClass}>
+            <option value="">Select…</option>
+            {BATHROOM_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        {/* Auto-calculated price */}
+        {quotedPrice && (
+          <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wide">Quoted Price</span>
+            <span className="text-base font-black text-violet-700">
+              {quotedPrice === "custom" ? "Custom Quote" : `$${quotedPrice}`}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -715,8 +787,13 @@ export default function LiveCallAssist() {
 
   // Lead context
   const [leadName, setLeadName] = useState("");
+  const [bedrooms, setBedrooms] = useState("");
+  const [bathrooms, setBathrooms] = useState("");
   const [serviceType, setServiceType] = useState("");
-  const [quotedPrice, setQuotedPrice] = useState("");
+  // Auto-calculated from pricing engine — no manual entry
+  const quotedPrice = estimatePrice(bedrooms, bathrooms, serviceType);
+  // Human-readable service summary for AI context
+  const serviceContext = [bedrooms, bathrooms, serviceType].filter(Boolean).join(", ");
 
   // Stage tracking
   const [activeStage, setActiveStage] = useState<StageId>("opener");
@@ -789,7 +866,7 @@ export default function LiveCallAssist() {
       stage: stageId,
       transcript: transcriptText,
       leadName: leadName.trim() || undefined,
-      serviceType: serviceType.trim() || undefined,
+      serviceType: serviceContext.trim() || undefined,
       quotedPrice: quotedPrice.trim() || undefined,
       lastCustomerLine: (customerLine.trim() || lastCustomerLine.trim() || objContext) || undefined,
     });
@@ -839,7 +916,7 @@ export default function LiveCallAssist() {
         stage: id,
         transcript: transcriptText,
         leadName: leadName.trim() || undefined,
-        serviceType: serviceType.trim() || undefined,
+        serviceType: serviceContext.trim() || undefined,
         quotedPrice: quotedPrice.trim() || undefined,
         lastCustomerLine: instruction,
       });
@@ -858,7 +935,7 @@ export default function LiveCallAssist() {
       stage: "objection",
       transcript: transcriptText,
       leadName: leadName.trim() || undefined,
-      serviceType: serviceType.trim() || undefined,
+      serviceType: serviceContext.trim() || undefined,
       quotedPrice: quotedPrice.trim() || undefined,
       lastCustomerLine: lastCustomerLine.trim() || `Objection type: ${objType.label}`,
     });
@@ -879,8 +956,9 @@ export default function LiveCallAssist() {
     setTranscriptLines([]);
     setSuggestion(null);
     setLeadName("");
+    setBedrooms("");
+    setBathrooms("");
     setServiceType("");
-    setQuotedPrice("");
     setLastCustomerLine("");
     setObjectionType(null);
   };
@@ -947,11 +1025,14 @@ export default function LiveCallAssist() {
             {/* Lead context */}
             <LeadContextPanel
               leadName={leadName}
+              bedrooms={bedrooms}
+              bathrooms={bathrooms}
               serviceType={serviceType}
               quotedPrice={quotedPrice}
               onLeadNameChange={setLeadName}
+              onBedroomsChange={setBedrooms}
+              onBathroomsChange={setBathrooms}
               onServiceTypeChange={setServiceType}
-              onQuotedPriceChange={setQuotedPrice}
             />
 
             {/* Stage tracker */}

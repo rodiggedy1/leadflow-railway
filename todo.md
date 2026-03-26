@@ -146,3 +146,4 @@
 - [x] Live Call Assist: remove pre-written rebuttal card from objection sub-types — clicking fires AI only, one clean response
 - [x] Live Call Assist: Recap and Close intro scripts pull real values from context panel (beds/baths, service type, quoted price)
 - [x] Live Call Assist: fix Recap intro — AI generates the mirror-back line from the transcript on stage entry (no placeholder text)
+- [x] Live Call Assist: wire pricing engine to auto-calculate quoted price from beds/baths/clean type — replace free-text Quoted Price field
