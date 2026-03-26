@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
-  SendHorizonal, MessageSquare, User,
+  SendHorizonal, MessageSquare, User, CheckCircle2, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -201,6 +201,35 @@ export default function LiveCallAssist() {
 
   // ── Reset ────────────────────────────────────────────────────────────────────
 
+  // ── Booking modal state ──────────────────────────────────────────────────────
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [bookingCardLast4, setBookingCardLast4] = useState("");
+  const [bookingConfirmed, setBookingConfirmed] = useState(false);
+
+  const handleCompleteBooking = () => {
+    setBookingConfirmed(true);
+    setTimeout(() => {
+      // Full reset
+      setConversation([]);
+      setSuggestion("");
+      setCustomerInput("");
+      setActiveStage("opener");
+      setDoneStages(new Set());
+      setLeadName("");
+      setAddress("");
+      setBedrooms("");
+      setBathrooms("");
+      setServiceType("");
+      setPreferredDate("");
+      setBookingNotes("");
+      setBookingCardLast4("");
+      setBookingConfirmed(false);
+      setShowBookingModal(false);
+      toast.success("Booking complete — ready for next call");
+    }, 1200);
+  };
+
   const handleReset = () => {
     setConversation([]);
     setSuggestion("");
@@ -213,6 +242,8 @@ export default function LiveCallAssist() {
     setBathrooms("");
     setServiceType("");
     setPreferredDate("");
+    setBookingNotes("");
+    setBookingCardLast4("");
   };
 
   const activeStageObj = STAGES.find(s => s.id === activeStage)!;
@@ -221,6 +252,99 @@ export default function LiveCallAssist() {
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+
+      {/* ── Booking Summary Modal ── */}
+      {showBookingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+
+            {bookingConfirmed ? (
+              <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
+                <CheckCircle2 className="w-16 h-16 text-green-500 mb-4" />
+                <p className="text-xl font-bold text-gray-800">Booking Complete!</p>
+                <p className="text-sm text-gray-500 mt-1">Clearing for next call...</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Complete Booking</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Review details, add notes, then clear for next call</p>
+                  </div>
+                  <button onClick={() => setShowBookingModal(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                  {/* Summary of what was collected */}
+                  <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 space-y-2">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Booking Summary</p>
+                    {[
+                      { label: "Customer",  value: leadName },
+                      { label: "Address",   value: address },
+                      { label: "Service",   value: serviceType },
+                      { label: "Bedrooms",  value: bedrooms },
+                      { label: "Bathrooms", value: bathrooms },
+                      { label: "Date",      value: preferredDate },
+                      { label: "Price",     value: quotedPrice ? `$${quotedPrice}` : "" },
+                    ].map(({ label, value }) => value ? (
+                      <div key={label} className="flex items-start gap-2">
+                        <span className="text-xs font-semibold text-gray-400 w-20 shrink-0">{label}</span>
+                        <span className="text-xs text-gray-800 font-medium">{value}</span>
+                      </div>
+                    ) : null)}
+                  </div>
+
+                  {/* Card last 4 */}
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1.5">Card Last 4 Digits</label>
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={bookingCardLast4}
+                      onChange={e => setBookingCardLast4(e.target.value.replace(/\D/g, ""))}
+                      placeholder="e.g. 4242"
+                      className="w-full text-sm rounded-xl border border-gray-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-400"
+                    />
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1.5">Notes for the Team</label>
+                    <textarea
+                      value={bookingNotes}
+                      onChange={e => setBookingNotes(e.target.value)}
+                      placeholder="Entry instructions, pets, special requests, anything the team needs to know..."
+                      rows={4}
+                      className="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-400 leading-relaxed"
+                    />
+                  </div>
+
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                  <button
+                    onClick={() => setShowBookingModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    Back to Call
+                  </button>
+                  <button
+                    onClick={handleCompleteBooking}
+                    className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Complete &amp; Clear
+                  </button>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
 
       {/* ── Top bar ── */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
@@ -266,12 +390,20 @@ export default function LiveCallAssist() {
           })}
         </div>
 
-        <button
-          onClick={handleReset}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
-        >
-          <RotateCcw className="w-3 h-3" /> New Call
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowBookingModal(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+          >
+            <CheckCircle2 className="w-3 h-3" /> Complete Booking
+          </button>
+          <button
+            onClick={handleReset}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" /> New Call
+          </button>
+        </div>
       </div>
 
       {/* ── 3-column body ── */}
