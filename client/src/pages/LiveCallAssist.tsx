@@ -216,6 +216,7 @@ export default function LiveCallAssist() {
   const [extractedService, setExtractedService] = useState("");
   const [extractedDate, setExtractedDate] = useState("");
   const [extractedPrice, setExtractedPrice] = useState("");
+  const [bookingFrequency, setBookingFrequency] = useState<"one-time" | "monthly" | "biweekly">("one-time");
 
   const extractMutation = trpc.leads.extractBookingDetails.useMutation();
 
@@ -272,6 +273,7 @@ export default function LiveCallAssist() {
       setExtractedService("");
       setExtractedDate("");
       setExtractedPrice("");
+      setBookingFrequency("one-time");
       setBookingConfirmed(false);
       setShowBookingModal(false);
       toast.success("Booking complete — ready for next call");
@@ -356,6 +358,36 @@ export default function LiveCallAssist() {
                       ))}
                     </div>
                   )}
+
+                  {/* Frequency + discount */}
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Cleaning Frequency</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { id: "one-time" as const, label: "One-Time",  discount: null },
+                        { id: "monthly"  as const, label: "Monthly",   discount: "10% off" },
+                        { id: "biweekly" as const, label: "Biweekly",  discount: "15% off" },
+                      ]).map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setBookingFrequency(opt.id)}
+                          className={`flex flex-col items-center py-2.5 px-2 rounded-xl border-2 text-center transition-all ${
+                            bookingFrequency === opt.id
+                              ? "border-violet-500 bg-violet-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <span className={`text-xs font-bold ${ bookingFrequency === opt.id ? "text-violet-700" : "text-gray-700" }`}>{opt.label}</span>
+                          {opt.discount && <span className="text-[10px] text-green-600 font-semibold mt-0.5">{opt.discount}</span>}
+                        </button>
+                      ))}
+                    </div>
+                    {extractedPrice && bookingFrequency !== "one-time" && (
+                      <p className="text-xs text-green-700 font-semibold mt-2 bg-green-50 rounded-lg px-3 py-2">
+                        Discounted price: ${Math.round(parseFloat(extractedPrice) * (bookingFrequency === "monthly" ? 0.90 : 0.85))}/clean
+                      </p>
+                    )}
+                  </div>
 
                   {/* Card last 4 */}
                   <div>

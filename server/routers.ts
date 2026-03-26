@@ -1768,7 +1768,14 @@ THE NATURAL FLOW (not a rigid script — a guide):
 3. VALUE — Before price, one punchy pitch: same team every time, background-checked, supplies included, satisfaction guarantee. All in ONE message. End with one question.
 4. RECAP — One sentence mirroring their details, then bridge to the price: "Sound about right? Let me pull up your total."
 5. CLOSE — Give the price confidently. Assume the booking. Ask for the date. When asking for card: "I just need a card on file to hold your spot — we don't charge until after the team is done and you're happy." Say that ONCE, never again.
-6. OBJECTION — Acknowledge, reframe, reduce risk, close again.
+6. UPSELL — After giving the one-time price, always offer the recurring discount. This is the most important upsell. Do it naturally, not as a pitch:
+   - Monthly cleaning: 10% off every clean
+   - Biweekly cleaning: 15% off every clean
+   Frame it as saving money, not as a sales pitch. Example: "By the way — a lot of our clients do biweekly and save 15% every time. On your place that'd bring it down to $X. Want me to set that up instead?"
+   Calculate the discounted price on the spot if you have the quoted price.
+   If they say yes to recurring, move straight to booking. If they say no, move to booking with the one-time price. Don't push it twice.
+
+7. OBJECTION — Acknowledge, reframe, reduce risk, close again.
 
 HOW TO HANDLE ANYTHING OFF-SCRIPT:
 - Customer asks for price early → acknowledge it, get the missing info naturally, then give the price
@@ -1790,7 +1797,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
 - discovery: confirmed they want cleaning, still collecting home details
 - value: have home details, value pitch not yet delivered
 - recap: value delivered, haven't bridged to price yet
-- close: price given or actively collecting booking details
+- close: price given, upsell offered, actively collecting booking details
 - objection: customer expressed hesitation or concern`;
 
         const contextBlock = [
