@@ -1896,7 +1896,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           contextBlock ? `CONTEXT:\n${contextBlock}` : null,
           input.transcript ? `CONVERSATION:\n${input.transcript}` : null,
           input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"` : null,
-          `What does the agent say next? Return JSON with:\n- suggestion: the next line for the agent to say\n- currentStage: current stage (opener|discovery|value|recap|close|objection)\n- extracted: any details you can confidently extract from the conversation so far (null if not mentioned)`,
+          `What does the agent say next? Return JSON with:\n- suggestion: the next line for the agent to say\n- currentStage: current stage (opener|discovery|value|recap|close|objection)\n- extracted: any details you can confidently extract from the conversation so far (null if not mentioned). For addExtras: if the customer just agreed to an extra (e.g. said yes to pet add-on, inside oven, inside fridge, etc.), return the matching key(s) from this list: clean_inside_cabinets, clean_inside_empty_fridge, clean_inside_full_fridge, clean_inside_oven, clean_interior_windows, clean_finished_basement, green_cleaning, move_in_move_out, two_hours_organizing, load_of_laundry, i_have_pets, wipe_walls, sweep_garage, balcony_sweep, home_concierge, same_day_booking, clean_inside_microwave, shed_pool_house, wash_dishes, pool_deck. Otherwise return null.`,
         ].filter(Boolean).join("\n\n");
 
         try {
@@ -1924,8 +1924,9 @@ STAGE DETECTION — return the stage the conversation is currently in:
                         bathrooms:     { type: ["string", "null"] },
                         serviceType:   { type: ["string", "null"] },
                         preferredDate: { type: ["string", "null"] },
+                        addExtras:     { type: ["array", "null"], items: { type: "string" } },
                       },
-                      required: ["customerName", "address", "bedrooms", "bathrooms", "serviceType", "preferredDate"],
+                      required: ["customerName", "address", "bedrooms", "bathrooms", "serviceType", "preferredDate", "addExtras"],
                       additionalProperties: false,
                     },
                   },
@@ -1938,7 +1939,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as { suggestion: string; currentStage: string; extracted: { customerName: string|null; address: string|null; bedrooms: string|null; bathrooms: string|null; serviceType: string|null; preferredDate: string|null } };
+          const result = JSON.parse(content) as { suggestion: string; currentStage: string; extracted: { customerName: string|null; address: string|null; bedrooms: string|null; bathrooms: string|null; serviceType: string|null; preferredDate: string|null; addExtras: string[]|null } };
           return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage, extracted: result.extracted };
         } catch {
           return {

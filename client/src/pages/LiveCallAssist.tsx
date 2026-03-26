@@ -183,6 +183,20 @@ export default function LiveCallAssist() {
           const match = SERVICE_OPTIONS.find(o => o.toLowerCase().includes(lower) || lower.includes(o.toLowerCase().split(" ")[0]));
           if (match) setServiceType(match);
         }
+        // Auto-select extras the customer agreed to
+        if (ex.addExtras && ex.addExtras.length > 0) {
+          const validKeys = EXTRAS_LIST.map(e => e.key);
+          const toAdd = ex.addExtras.filter(k => validKeys.includes(k));
+          if (toAdd.length > 0) {
+            setSelectedExtras(prev => {
+              const next = new Set(prev);
+              toAdd.forEach(k => next.add(k));
+              return Array.from(next);
+            });
+            const labels = toAdd.map(k => EXTRAS_LIST.find(e => e.key === k)?.label).filter(Boolean).join(", ");
+            toast.success(`Added: ${labels}`);
+          }
+        }
       }
 
       // Clear input ready for next customer line
