@@ -698,6 +698,55 @@ export const cleanerRouter = router({
       };
     }),
 
+  /**
+   * cleaner.getMagicLink — generate (or reuse) a valid magic link for a cleaner and return the URL.
+   * Does NOT send an SMS — admin copies the link manually.
+   */
+  getMagicLink: agentProcedure
+    .input(z.object({
+      cleanerProfileId: z.number().int().positive(),
+      origin: z.string().url(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [cleaner] = await db
+        .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, isActive: cleanerProfiles.isActive })
+        .from(cleanerProfiles)
+        .where(eq(cleanerProfiles.id, input.cleanerProfileId))
+        .limit(1);
+      if (!cleaner) throw new TRPCError({ code: "NOT_FOUND", message: "Cleaner not found" });
+      // Reuse existing valid token or create a new one (30-day expiry)
+      const now = Date.now();
+      const existing = await db
+        .select({ token: cleanerMagicLinkTokens.token })
+        .from(cleanerMagicLinkTokens)
+        .where(
+          and(
+            eq(cleanerMagicLinkTokens.cleanerProfileId, cleaner.id),
+            eq(cleanerMagicLinkTokens.used, 0),
+            gte(cleanerMagicLinkTokens.expiresAt, new Date(now))
+          )
+        )
+        .orderBy(cleanerMagicLinkTokens.createdAt)
+        .limit(1);
+      let rawToken: string;
+      if (existing[0]) {
+        rawToken = existing[0].token;
+      } else {
+        rawToken = randomBytes(32).toString("hex");
+        const expiresAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
+        await db.insert(cleanerMagicLinkTokens).values({
+          cleanerProfileId: cleaner.id,
+          token: rawToken,
+          expiresAt,
+          used: 0,
+        });
+      }
+      const magicUrl = `${input.origin}/auth/cleaner-callback?token=${rawToken}`;
+      return { url: magicUrl, cleanerName: cleaner.name };
+    }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

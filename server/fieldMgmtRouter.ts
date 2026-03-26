@@ -19,11 +19,11 @@
  */
 
 import { z } from "zod";
-import { eq, asc, desc, gte, inArray, notInArray, and } from "drizzle-orm";
+import { eq, asc, desc, gte, gt, inArray, notInArray, and } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls, cleanerMagicLinkTokens } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import {
   parseServiceDateTime,
@@ -591,6 +591,29 @@ export const fieldMgmtRouter = router({
         .where(inArray(jobStatusHistory.cleanerJobId, jobIds))
         .orderBy(asc(jobStatusHistory.changedAt));
 
+      // Query 4: fetch valid magic link tokens for all cleaners in today's jobs
+      const cleanerProfileIds = Array.from(new Set(jobs.map(j => j.cleanerProfileId).filter((id): id is number => id != null)));
+      const magicTokenMap = new Map<number, string>();
+      if (cleanerProfileIds.length > 0) {
+        const now = new Date();
+        const tokens = await db
+          .select({ cleanerProfileId: cleanerMagicLinkTokens.cleanerProfileId, token: cleanerMagicLinkTokens.token })
+          .from(cleanerMagicLinkTokens)
+          .where(
+            and(
+              inArray(cleanerMagicLinkTokens.cleanerProfileId, cleanerProfileIds),
+              eq(cleanerMagicLinkTokens.used, 0),
+              gt(cleanerMagicLinkTokens.expiresAt, now)
+            )
+          )
+          .orderBy(asc(cleanerMagicLinkTokens.createdAt));
+        for (const t of tokens) {
+          if (!magicTokenMap.has(t.cleanerProfileId)) {
+            magicTokenMap.set(t.cleanerProfileId, t.token);
+          }
+        }
+      }
+
       // Group log rows by job ID
       const logsByJob = new Map<number, typeof allLogRows>();
       for (const row of allLogRows) {
@@ -638,6 +661,8 @@ export const fieldMgmtRouter = router({
           totalSteps: fieldMgmtSteps.length,
           timeline,
           bookingStatus: job.bookingStatus,
+          cleanerProfileId: job.cleanerProfileId,
+          magicLinkToken: job.cleanerProfileId != null ? (magicTokenMap.get(job.cleanerProfileId) ?? null) : null,
         };
       });
     }),

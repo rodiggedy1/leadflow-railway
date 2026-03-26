@@ -34,6 +34,8 @@ import {
   RefreshCw,
   Loader2,
   Calendar,
+  Copy,
+  Link,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -68,6 +70,8 @@ type Job = {
   customerName: string | null;
   customerPhone: string | null;
   cleanerPhone: string | null;
+  cleanerProfileId: number | null;
+  magicLinkToken: string | null;
   jobAddress: string | null;
   serviceDateTime: string | null;
   serviceType: string | null;
@@ -356,6 +360,19 @@ export default function ControlTowerTab() {
     },
     onError: (err) => toast.error(err.message || "Failed to place call"),
   });
+
+  const copyMagicLink = (job: Job) => {
+    if (!job.magicLinkToken) {
+      toast.error("No active magic link found for this cleaner. Send one via SMS first.");
+      return;
+    }
+    const url = `${window.location.origin}/cleaner-portal?token=${job.magicLinkToken}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success(`Magic link for ${job.cleanerName ?? "cleaner"} copied!`);
+    }).catch(() => {
+      toast.info(`Magic link: ${url}`, { duration: 10000 });
+    });
+  };
 
   // Fetch call records for the selected job (includes recording URLs once available)
   // Uses selectedId (state) instead of selectedJob (useMemo below) to avoid hoisting issues
@@ -848,6 +865,14 @@ export default function ControlTowerTab() {
                       <Phone className="mr-2 h-4 w-4" />
                     )}
                     Voice Alert Cleaner
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-violet-300 text-violet-700 hover:bg-violet-50"
+                    onClick={() => copyMagicLink(selectedJob)}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Magic Link
                   </Button>
                   <Button
                     variant="outline"
