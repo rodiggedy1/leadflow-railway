@@ -202,3 +202,4 @@
 - [x] On the Way: replace inline ETA picker with a blocking full-screen modal — must select ETA before submitting
 - [x] Cleaner portal: "Update ETA" button on job card when status is on_the_way or running_late — reopens ETA modal
 - [x] Fix voiceAlertCleaner: surface actual VAPI error in the toast instead of generic message; refactored to return reason string so toast shows the real failure cause
+- [x] Expand voice alert hours from 8 AM–5 PM to 7 AM–6 PM ET

@@ -1360,15 +1360,33 @@ describe("placeNoCheckinEscalationCallWithReason — reason surfacing", () => {
     expect(result.reason).toBe("VAPI_PRIVATE_KEY is not configured");
   });
 
-  it("returns business hours reason outside 8am–5pm ET", () => {
+  it("returns business hours reason outside 7am–6pm ET", () => {
     // Simulate hour = 6 (6 AM ET — outside window)
     const hour = 6;
-    const withinHours = hour >= 8 && hour < 17;
+    const withinHours = hour >= 7 && hour < 18;
     const result = !withinHours
-      ? { success: false, reason: "Outside call hours (8 AM – 5 PM ET). Try again during business hours." }
+      ? { success: false, reason: "Outside call hours (7 AM – 6 PM ET). Try again during operating hours." }
       : { success: true };
     expect(result.success).toBe(false);
     expect(result.reason).toMatch(/Outside call hours/);
+  });
+
+  it("allows calls at 7 AM ET (boundary open)", () => {
+    const hour = 7;
+    const withinHours = hour >= 7 && hour < 18;
+    expect(withinHours).toBe(true);
+  });
+
+  it("allows calls at 5:59 PM ET (boundary open)", () => {
+    const hour = 17; // 5 PM
+    const withinHours = hour >= 7 && hour < 18;
+    expect(withinHours).toBe(true);
+  });
+
+  it("blocks calls at 6:00 PM ET (boundary closed)", () => {
+    const hour = 18; // 6 PM
+    const withinHours = hour >= 7 && hour < 18;
+    expect(withinHours).toBe(false);
   });
 
   it("returns self-call protection reason when target is the outbound number", () => {

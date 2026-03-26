@@ -35,9 +35,7 @@ import { ENV } from "./_core/env";
 import { isWithinBusinessHours as _isWithinBusinessHours } from "./vapiLeadNotification";
 
 /**
- * Returns true if the current time is within escalation call hours: 8 AM – 5 PM ET.
- * This is stricter than the lead-alert window (7am–7pm) because escalation calls
- * wake people up and should never fire at night.
+ * Returns true if the current time is within escalation call hours: 7 AM – 6 PM ET.
  */
 export function isWithinEscalationHours(now: Date = new Date()): boolean {
   const etFormatter = new Intl.DateTimeFormat("en-US", {
@@ -46,8 +44,8 @@ export function isWithinEscalationHours(now: Date = new Date()): boolean {
     hour12: false,
   });
   const hour = parseInt(etFormatter.format(now), 10);
-  // 8 (8:00 am) inclusive → 16 (4:59 pm) inclusive; 17 (5:00 pm) is excluded
-  return hour >= 8 && hour < 17;
+  // 7 (7:00 am) inclusive → 17 (5:59 pm) inclusive; 18 (6:00 pm) is excluded
+  return hour >= 7 && hour < 18;
 }
 
 // ── Kill switch ───────────────────────────────────────────────────────────────
@@ -149,10 +147,10 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
     return { success: false, reason: "VAPI_PRIVATE_KEY is not configured" };
   }
 
-  // ── Business hours guard (8 AM – 5 PM ET) ────────────────────────────────────────────
+  // ── Operating hours guard (7 AM – 6 PM ET) ────────────────────────────────────────────
   if (!isWithinEscalationHours()) {
-    console.log("[FieldMgmt] Outside escalation call hours (8am–5pm ET) — skipping call");
-    return { success: false, reason: "Outside call hours (8 AM – 5 PM ET). Try again during business hours." };
+    console.log("[FieldMgmt] Outside escalation call hours (7am–6pm ET) — skipping call");
+    return { success: false, reason: "Outside call hours (7 AM – 6 PM ET). Try again during operating hours." };
   }
 
   const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step, cleanerPhone } = params;
