@@ -814,14 +814,16 @@ export default function LiveCallAssist() {
           { id: nextId.current++, speaker: "agent", text: data.suggestion, ts: Date.now() },
         ]);
       }
-      // AI says stage is done — update the left-panel indicator instantly.
-      // Suggestion stays on screen. Agent reads it, says it, then types the next customer line.
+      // AI says stage is done — advance to next stage and clear suggestion so it starts clean
       if (data.advanceStage) {
         setActiveStage((current) => {
           const idx = STAGES.findIndex((s) => s.id === current);
           const next = STAGES[idx + 1];
           if (next) {
             setCompletedStages((prev) => { const s = new Set(prev); s.add(current); return s; });
+            // Clear suggestion so next stage shows its intro script, not the previous stage's AI line
+            setSuggestion(null);
+            setLastCustomerLine("");
             return next.id;
           }
           return current;
