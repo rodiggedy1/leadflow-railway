@@ -1812,6 +1812,13 @@ TEAM:
 - Above-average pay — motivated, cared-for teams
 - 15 office support staff backing the field teams
 
+DAY OF SERVICE (what to tell customers who ask what happens after they book):
+- They'll receive a text message with real-time updates as the cleaner is on the way
+- They can track and communicate with the team directly from their phone
+- After the service, they'll get a text to rate their cleaner from their phone
+- Rating helps them find their perfect fit and ensures consistency on future visits
+- Confirmation email sent right after booking with all service details
+
 FAQs:
 - Do I need to be home? No — just provide access instructions. Many clients leave a key.
 - How long does it take? Standard: 2-4 hours. Deep/move-out: 4-8 hours. Depends on home size.
@@ -1819,7 +1826,8 @@ FAQs:
 - Do you bring supplies? Yes, everything. Customer provides nothing.
 - Are you insured? Yes, fully bonded and insured.
 - Do you offer gift cards? Yes.
-- Can I rate my cleaner? Yes — rate after each service to find your best fit.
+- Can I rate my cleaner? Yes — you'll get a text after service to rate right from your phone.
+- What happens after I book? You'll get a confirmation email, then a text on the day with real-time updates as the cleaner heads your way.
 --- END COMPANY KNOWLEDGE ---
 
 INFORMATION NEEDED TO QUOTE:
