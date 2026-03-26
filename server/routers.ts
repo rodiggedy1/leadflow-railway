@@ -1816,7 +1816,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           contextBlock ? `CONTEXT:\n${contextBlock}` : null,
           input.transcript ? `CONVERSATION:\n${input.transcript}` : null,
           input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"` : null,
-          `What does the agent say next? Return JSON: { "suggestion": "...", "currentStage": "opener|discovery|value|recap|close|objection" }`,
+          `What does the agent say next? Return JSON with:\n- suggestion: the next line for the agent to say\n- currentStage: current stage (opener|discovery|value|recap|close|objection)\n- extracted: any details you can confidently extract from the conversation so far (null if not mentioned)`,
         ].filter(Boolean).join("\n\n");
 
         try {
@@ -1835,8 +1835,21 @@ STAGE DETECTION — return the stage the conversation is currently in:
                   properties: {
                     suggestion:   { type: "string" },
                     currentStage: { type: "string", enum: ["opener", "discovery", "value", "recap", "close", "objection"] },
+                    extracted: {
+                      type: "object",
+                      properties: {
+                        customerName:  { type: ["string", "null"] },
+                        address:       { type: ["string", "null"] },
+                        bedrooms:      { type: ["string", "null"] },
+                        bathrooms:     { type: ["string", "null"] },
+                        serviceType:   { type: ["string", "null"] },
+                        preferredDate: { type: ["string", "null"] },
+                      },
+                      required: ["customerName", "address", "bedrooms", "bathrooms", "serviceType", "preferredDate"],
+                      additionalProperties: false,
+                    },
                   },
-                  required: ["suggestion", "currentStage"],
+                  required: ["suggestion", "currentStage", "extracted"],
                   additionalProperties: false,
                 },
               },
@@ -1845,8 +1858,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as { suggestion: string; currentStage: string };
-          return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage };
+          const result = JSON.parse(content) as { suggestion: string; currentStage: string; extracted: { customerName: string|null; address: string|null; bedrooms: string|null; bathrooms: string|null; serviceType: string|null; preferredDate: string|null } };
+          return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage, extracted: result.extracted };
         } catch {
           return {
             success: false as const,

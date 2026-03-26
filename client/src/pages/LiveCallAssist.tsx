@@ -161,6 +161,30 @@ export default function LiveCallAssist() {
         }
       }
 
+      // Auto-populate context fields from what the AI extracted — only fill empty fields
+      if (data.success && data.extracted) {
+        const ex = data.extracted;
+        if (ex.customerName  && !leadName)      setLeadName(ex.customerName);
+        if (ex.address       && !address)       setAddress(ex.address);
+        if (ex.preferredDate && !preferredDate) setPreferredDate(ex.preferredDate);
+        // Bedrooms — match to dropdown options
+        if (ex.bedrooms && !bedrooms) {
+          const match = BEDROOM_OPTIONS.find(o => o.toLowerCase().includes(ex.bedrooms!.replace(/\D/g, "")));
+          if (match) setBedrooms(match);
+        }
+        // Bathrooms — match to dropdown options
+        if (ex.bathrooms && !bathrooms) {
+          const match = BATHROOM_OPTIONS.find(o => o.toLowerCase().includes(ex.bathrooms!.replace(/\D/g, "")));
+          if (match) setBathrooms(match);
+        }
+        // Service type — match to dropdown options
+        if (ex.serviceType && !serviceType) {
+          const lower = ex.serviceType.toLowerCase();
+          const match = SERVICE_OPTIONS.find(o => o.toLowerCase().includes(lower) || lower.includes(o.toLowerCase().split(" ")[0]));
+          if (match) setServiceType(match);
+        }
+      }
+
       // Clear input ready for next customer line
       setCustomerInput("");
     },
