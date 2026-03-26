@@ -133,3 +133,5 @@
 - [x] Live Call Assist: move stage-advance button to center column (not left sidebar)
 - [x] Live Call Assist: add AI-suggested next stage hint so agent knows when to advance without manual guessing
 - [x] Live Call Assist: remove AI auto-fire on stage click — show intro script only, AI fires only when agent types customer response
+- [ ] Live Call Assist: replace context fields with bedrooms, bathrooms, address, home details (remove service type and quoted price)
+- [x] Live Call Assist: AI auto-advances to next stage when it determines the current stage is complete (advanceStage flag in response)

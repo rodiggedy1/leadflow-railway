@@ -1760,7 +1760,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
           input.quotedPrice ? `Quoted price: $${input.quotedPrice}` : null,
         ].filter(Boolean).join("\n");
 
-        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live inbound phone call. The customer has already reached out — they are interested. Your job is to give the agent the single best thing to say right now.
+        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live inbound phone call. The customer has already reached out — they are interested. Your job is to give the agent the single best thing to say right now, and to decide when the current stage is complete so the call can automatically move forward.
 
 Rules:
 - One response only — the best possible move for this exact moment
@@ -1768,7 +1768,8 @@ Rules:
 - Warm, confident, and helpful — never pushy or robotic
 - Ready to say out loud immediately, 1-3 sentences max
 - Draw on world-class home service selling: empathy, specificity, social proof, assumptive language
-- Never use bullet points, headers, or filler phrases like "Great question!"`;
+- Never use bullet points, headers, or filler phrases like "Great question!"
+- Set advanceStage to true when the current stage goal has been achieved and the call should move to the next stage. Be decisive — don't keep the agent stuck in a stage once the objective is met.`;
 
         const userPrompt = `CURRENT CALL STAGE: ${stageDesc}
 
@@ -1776,7 +1777,8 @@ ${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}
 ${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}
 ${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
 Based on this, give the agent their next move. Return a JSON object with:
-- suggestion: the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural)`;
+- suggestion: the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural)
+- advanceStage: true if the current stage goal is complete and the call should move to the next stage, false if more work is needed in this stage`;
 
         try {
           const response = await invokeLLM({
@@ -1793,8 +1795,9 @@ Based on this, give the agent their next move. Return a JSON object with:
                   type: "object",
                   properties: {
                     suggestion: { type: "string" },
+                    advanceStage: { type: "boolean" },
                   },
-                  required: ["suggestion"],
+                  required: ["suggestion", "advanceStage"],
                   additionalProperties: false,
                 },
               },
@@ -1803,12 +1806,13 @@ Based on this, give the agent their next move. Return a JSON object with:
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as { suggestion: string };
-          return { success: true as const, suggestion: result.suggestion };
+          const result = JSON.parse(content) as { suggestion: string; advanceStage: boolean };
+          return { success: true as const, suggestion: result.suggestion, advanceStage: result.advanceStage ?? false };
         } catch {
           return {
             success: false as const,
             suggestion: "That's a great question — let me make sure I give you the right information. Can you tell me a bit more about what you're looking for?",
+            advanceStage: false,
           };
         }
       }),

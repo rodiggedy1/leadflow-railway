@@ -828,6 +828,23 @@ export default function LiveCallAssist() {
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
       }
+      // AI decided this stage is complete — auto-advance after agent has a moment to read the suggestion
+      if (data.advanceStage) {
+        setTimeout(() => {
+          setActiveStage((current) => {
+            const idx = STAGES.findIndex((s) => s.id === current);
+            const next = STAGES[idx + 1];
+            if (next) {
+              setCompletedStages((prev) => { const s = new Set(prev); s.add(current); return s; });
+              setSuggestion(null);
+              setLastCustomerLine("");
+              toast.success(`Moving to: ${next.label}`);
+              return next.id;
+            }
+            return current;
+          });
+        }, 2500);
+      }
     },
     onError: (e) => toast.error(e.message),
   });
