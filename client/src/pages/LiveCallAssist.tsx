@@ -560,7 +560,7 @@ function CenterColumn({
               {stage.introLabel} — say this to open
             </p>
             <div className="flex items-start gap-2">
-              <p className="flex-1 text-sm font-medium text-gray-800 leading-relaxed italic">
+              <p className="flex-1 text-lg font-medium text-gray-800 leading-relaxed italic">
                 "{dynamicIntro}"
               </p>
               <CopyBtn text={dynamicIntro} />
@@ -598,7 +598,7 @@ function CenterColumn({
                 <div className="flex-1 h-px bg-gray-200" />
                 <CopyBtn text={suggestion.suggestion} />
               </div>
-              <p className="text-base font-semibold text-gray-900 leading-relaxed">
+              <p className="text-xl font-semibold text-gray-900 leading-relaxed">
                 {suggestion.suggestion}
               </p>
             </div>

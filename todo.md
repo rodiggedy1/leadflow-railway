@@ -169,3 +169,4 @@
 - [x] Live Call Assist: remove Situation stage entirely — flow goes Opener → Discovery → Value → Recap → Close → Objection
 - [x] Live Call Assist: apply provided Recap and Objection prompts to those stages
 - [x] Live Call Assist: transcript must show both agent (A:) and customer (C:) lines; when agent uses a suggestion, log it as agent line; pass full transcript to AI so it stops repeating itself
+- [x] Live Call Assist: make intro script and AI suggestion text larger for easier reading
