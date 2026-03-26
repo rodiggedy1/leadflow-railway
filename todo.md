@@ -153,3 +153,4 @@
 - [x] Live Call Assist: rewrite system prompt with Jade-style hard rules — one job, strict length, always ends with specific next step, no mirroring
 - [x] Live Call Assist: remove introNote fallback from Situation/Recap/Close — show spinner only while AI loads, no stale text
 - [x] Live Call Assist: fix Situation/Value/Recap blank — advanceStage was clearing suggestion before agent could read it; now shows suggestion for 3s before advancing
+- [x] Live Call Assist: rewrite system prompt + stage scripts to be more human/empathetic based on AI call scoring feedback (better opener, pain amplification, value before price, assumptive close)
