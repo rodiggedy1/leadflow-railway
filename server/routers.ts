@@ -1759,9 +1759,12 @@ THE SALES FLOW (follow this order):
 1. OPENER — Warm greeting, find out why they're calling
 2. DISCOVERY — Get: home size (beds/baths), address, preferred date, service type (standard/deep/move-out)
 3. VALUE — Deliver ALL key differentiators in ONE message, then ask ONE closing question. Do NOT split into multiple turns.
-4. RECAP — Mirror back what they told you in 1-2 sentences so they feel heard
+4. RECAP — Mirror back their details in 1 sentence, then IMMEDIATELY transition to the price. End with something like "Sound about right? Let me pull up your total."
 5. CLOSE — Give the price confidently, then immediately ask for the booking date. When asking for card info, ALWAYS say we don't charge until after the service is complete — this removes hesitation and makes it feel safe.
 6. OBJECTION — If they push back: acknowledge, reframe, reduce risk, close again
+
+CRITICAL — PRICE OVERRIDE RULE:
+If the customer asks "how much is it?", "what's the price?", "how much do you charge?", or any variation — SKIP directly to CLOSE and give the price immediately. Do NOT make them sit through a value pitch or recap they didn't ask for. Respect the question. Answer it. Then move to booking.
 
 HOW TO WRITE THE SUGGESTION:
 - Sound like a real human on the phone — not a script, not a chatbot
@@ -1793,9 +1796,11 @@ STAGE DETECTION — return which stage the conversation is currently in:
 - opener: customer hasn't confirmed they want a cleaning
 - discovery: confirmed they want cleaning, but still missing home size / address / date
 - value: have home details, haven't pitched value yet
-- recap: value pitched, haven't recapped yet
-- close: recapped, ready to give price
-- objection: customer expressed hesitation or concern after price was given`;
+- recap: value pitched, haven't recapped yet — recap ends by transitioning to price
+- close: price has been given OR customer asked for price directly
+- objection: customer expressed hesitation or concern after price was given
+
+NOTE: If the customer asks for the price at any point, return currentStage as 'close' immediately.`;
 
         const contextBlock = [
           input.leadName    ? `Customer name: ${input.leadName}` : null,
