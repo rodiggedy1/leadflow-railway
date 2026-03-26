@@ -161,3 +161,4 @@
 - [x] Live Call Assist: discovery should ask bedrooms, bathrooms, AND service type (standard/recurring/move-out) all in one question
 - [x] Live Call Assist: opener should immediately ask bedrooms/bathrooms/service type — not ask "what can I help you with today" when they already called for a quote
 - [x] Live Call Assist: move stages to top bar, remove quick context header, fix page scroll, make input field larger
+- [x] Live Call Assist: restore opener to "You called at the perfect time! How can I help you today?" — don't ask beds/baths until they confirm they want a cleaning
