@@ -492,7 +492,7 @@ function ObjectionSubTypes({
 
 // ─── Center column: Customer line banner + AI suggestion ──────────────────────
 
-const AUTO_FIRE_STAGES: StageId[] = ["recap", "close"];
+const AUTO_FIRE_STAGES: StageId[] = []; // No auto-fire — all stages wait for agent input
 
 function CenterColumn({
   suggestion,
@@ -900,29 +900,8 @@ export default function LiveCallAssist() {
     setLastCustomerLine("");
     if (id !== "objection") setObjectionType(null);
 
-    if (id === "situation" || id === "recap" || id === "close") {
-      // Auto-fire AI for Recap and Close so the agent gets a pre-built line immediately:
-      // - Recap: AI builds the mirror-back from the transcript (no placeholder text)
-      // - Close: AI builds the price line using quoted price and service type from context
-      const recentLines = transcriptLines.slice(-30);
-      const transcriptText = recentLines
-        .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
-        .join("\n");
-      const instruction = id === "situation"
-        ? "Generate a natural transition from Discovery. Acknowledge the home size they just gave (beds/baths from the transcript or context), then ask: 'What's most important to you in getting your cleaning done right?' Sound warm and human, not scripted. 1-2 sentences max."
-        : id === "recap"
-        ? "Generate the recap mirror-back line from the transcript above. Use the actual details the customer mentioned."
-        : "Generate the price quote line. Use the quoted price and service type from context. Give the number confidently and immediately ask morning or afternoon.";
-      suggestionMutation.mutate({
-        stage: id,
-        transcript: transcriptText,
-        leadName: leadName.trim() || undefined,
-        serviceType: serviceContext.trim() || undefined,
-        quotedPrice: quotedPrice.trim() || undefined,
-        lastCustomerLine: instruction,
-      });
-    }
-  }, [transcriptLines, leadName, serviceType, quotedPrice, suggestionMutation]);
+    // No auto-fire — agent types customer response and hits Enter to get AI line
+  }, []);
 
   // When an objection type is selected, immediately fire AI with that context
   const handleObjectionTypeChange = useCallback((id: ObjectionTypeId) => {

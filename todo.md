@@ -171,3 +171,4 @@
 - [x] Live Call Assist: transcript must show both agent (A:) and customer (C:) lines; when agent uses a suggestion, log it as agent line; pass full transcript to AI so it stops repeating itself
 - [x] Live Call Assist: make intro script and AI suggestion text larger for easier reading
 - [x] Live Call Assist: Value stage must deliver a real pitch with differentiators (same team, background-checked, supplies included, weekends back) — not just echo what customer said
+- [x] Live Call Assist: Value stage must NOT auto-fire — wait for agent to type customer's WHY before generating the pitch
