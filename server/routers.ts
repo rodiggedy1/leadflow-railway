@@ -1511,7 +1511,8 @@ Respond with ONLY valid JSON in this exact format:
           response_format: { type: "json_object" },
         });
 
-        const rawContent = llmResult?.choices?.[0]?.message?.content ?? "{}";
+        const rawContentRaw = llmResult?.choices?.[0]?.message?.content;
+        const rawContent = typeof rawContentRaw === "string" ? rawContentRaw : "{}";
         let scoreResult: {
           overallScore: number;
           categories: Array<{ name: string; score: number; maxScore: number; feedback: string }>;
@@ -1565,7 +1566,8 @@ Return ONLY the script text, nothing else.`;
             { role: "user", content: prompt },
           ],
         });
-        const rebuttal = llmResult?.choices?.[0]?.message?.content?.trim() ?? "I understand — let me address that for you.";
+        const rebuttalRaw = llmResult?.choices?.[0]?.message?.content;
+        const rebuttal = (typeof rebuttalRaw === "string" ? rebuttalRaw : "").trim() || "I understand — let me address that for you.";
         return { rebuttal };
       }),
 
@@ -1721,6 +1723,132 @@ Analyze this conversation and return a JSON object with exactly these fields:
             alternativeMessages: ["", "", ""],
             urgencyLevel: "medium",
             confidence: 0,
+          };
+        }
+      }),
+
+    /**
+     * leads.getLiveCallSuggestions — AI-powered real-time call coaching.
+     *
+     * Takes the current sales stage, recent transcript lines typed by the agent,
+     * and optional lead context. Returns a primary suggestion + 3 alternative angles
+     * the agent can use immediately on the live call.
+     */
+    getLiveCallSuggestions: adminAgentProcedure
+      .input(z.object({
+        stage: z.string().min(1),
+        transcript: z.string().max(4000),
+        leadName: z.string().optional(),
+        serviceType: z.string().optional(),
+        quotedPrice: z.string().optional(),
+        lastCustomerLine: z.string().max(500).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const stageDescriptions: Record<string, string> = {
+          opener: "Pattern Interrupt Opener — grab attention, break the script, create curiosity",
+          discovery: "Discovery — uncover pain points, timeline, budget, decision-maker",
+          pain: "Pain Amplification — deepen the emotional cost of NOT solving the problem",
+          value: "Value Anchoring — connect your service to what they care about most",
+          close: "Assumptive Close — move toward booking as if it's already happening",
+          objection: "Objection Handler — address resistance and re-anchor to value",
+        };
+        const stageDesc = stageDescriptions[input.stage] ?? input.stage;
+        const leadContext = [
+          input.leadName ? `Customer name: ${input.leadName}` : null,
+          input.serviceType ? `Service: ${input.serviceType}` : null,
+          input.quotedPrice ? `Quoted price: $${input.quotedPrice}` : null,
+        ].filter(Boolean).join("\n");
+
+        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live phone call. The agent can only hear you — the customer cannot. Your job is to give the agent the exact words to say right now, based on the current stage of the call and what the customer just said.
+
+Rules:
+- Suggestions must be ready-to-say out loud, natural, conversational
+- Never use bullet points or headers in the suggestion text itself
+- Keep primary suggestion under 3 sentences
+- Each alternative is a different angle/approach (empathy, urgency, social proof, etc.)
+- Do NOT repeat the same phrasing across suggestions
+- Base everything on proven home services sales techniques`;
+
+        const userPrompt = `CURRENT CALL STAGE: ${stageDesc}
+
+${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}
+${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}
+${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
+Based on this, give the agent their next move. Return a JSON object with:
+- primarySuggestion: the single best thing to say right now (2-3 sentences, ready to read aloud)
+- primaryLabel: 4-6 word label for the primary approach (e.g. "Empathy + Value Pivot")
+- primaryRationale: why this works right now (1 sentence)
+- alternatives: array of exactly 3 objects, each with:
+  - label: 4-6 word approach name
+  - suggestion: ready-to-say script (2-3 sentences)
+  - angle: one word describing the angle (e.g. "Urgency", "Empathy", "Social Proof", "Curiosity", "Assumptive")
+- liveSignals: array of 2-3 short strings flagging what the agent should watch for or notice right now (e.g. "Hesitation detected", "Good buying signal", "Price sensitivity")
+- stageProgress: integer 0-100 representing how far through this stage the conversation has progressed`;
+
+        try {
+          const response = await invokeLLM({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "live_call_suggestions",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    primarySuggestion: { type: "string" },
+                    primaryLabel: { type: "string" },
+                    primaryRationale: { type: "string" },
+                    alternatives: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          label: { type: "string" },
+                          suggestion: { type: "string" },
+                          angle: { type: "string" },
+                        },
+                        required: ["label", "suggestion", "angle"],
+                        additionalProperties: false,
+                      },
+                    },
+                    liveSignals: { type: "array", items: { type: "string" } },
+                    stageProgress: { type: "number" },
+                  },
+                  required: ["primarySuggestion", "primaryLabel", "primaryRationale", "alternatives", "liveSignals", "stageProgress"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          const rawContent = response.choices?.[0]?.message?.content;
+          const content = typeof rawContent === "string" ? rawContent : null;
+          if (!content) throw new Error("Empty LLM response");
+          const result = JSON.parse(content) as {
+            primarySuggestion: string;
+            primaryLabel: string;
+            primaryRationale: string;
+            alternatives: Array<{ label: string; suggestion: string; angle: string }>;
+            liveSignals: string[];
+            stageProgress: number;
+          };
+          return { success: true as const, ...result };
+        } catch {
+          return {
+            success: false as const,
+            primarySuggestion: "Listen actively and reflect back what you heard before responding.",
+            primaryLabel: "Active Listening",
+            primaryRationale: "Builds trust and ensures you understand their concern.",
+            alternatives: [
+              { label: "Empathy First", suggestion: "I completely understand where you're coming from. Let me address that directly.", angle: "Empathy" },
+              { label: "Value Redirect", suggestion: "That's a great point — and here's what our customers find most valuable about this.", angle: "Value" },
+              { label: "Soft Close", suggestion: "Based on what you've shared, it sounds like we'd be a great fit. What would it take to get started?", angle: "Assumptive" },
+            ],
+            liveSignals: ["Stay focused on the customer"],
+            stageProgress: 50,
           };
         }
       }),

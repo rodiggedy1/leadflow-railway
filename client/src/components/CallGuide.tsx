@@ -317,7 +317,7 @@ export default function CallGuide({ collapsed = false }: { collapsed?: boolean }
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
 
   const handleComplete = (stageId: string, index: number) => {
-    setCompletedStages(prev => new Set([...prev, stageId]));
+    setCompletedStages(prev => { const next = new Set(prev); next.add(stageId); return next; });
     // Auto-advance to next stage
     const next = STAGES[index + 1];
     if (next) setActiveStage(next.id);

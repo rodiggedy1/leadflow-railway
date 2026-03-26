@@ -10,6 +10,7 @@
  *   "completed-jobs" | "quality"
  */
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/NotificationBell";
@@ -471,6 +472,20 @@ interface AdminHeaderProps {
   /** Callback to open the Live Call Guide panel */
   onCallGuide?: () => void;
 }
+
+function CallGuideButton() {
+  const [, navigate] = useLocation();
+  return (
+    <button
+      onClick={() => navigate("/call-assist")}
+      className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+    >
+      <Phone className="w-3 h-3" />
+      Call Assist
+    </button>
+  );
+}
+
 export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false, followUpCount = 0, onCallGuide }: AdminHeaderProps) {
   // Determine which page IDs this agent is allowed to see.
   // null means unrestricted (admin or no restrictions set).
@@ -517,13 +532,7 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
           {isAdmin && <WebhookHealthBadge enabled={isAdmin} />}
           {isAdmin && <SyncHealthBadge enabled={isAdmin} />}
           {onCallGuide && (
-            <button
-              onClick={onCallGuide}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
-            >
-              <Phone className="w-3 h-3" />
-              Call Guide
-            </button>
+            <CallGuideButton />
           )}
           {rightExtra}
           <NotificationBell onSessionOpen={onSessionOpen} enabled={isAdmin} followUpCount={followUpCount} />

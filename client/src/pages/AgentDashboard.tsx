@@ -60,6 +60,7 @@ import {
   X,
 } from "lucide-react";
 import CallGuide from "@/components/CallGuide";
+import { useLocation } from "wouter";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
@@ -1300,6 +1301,19 @@ function LeadCard({
 
 // ── Main Export ───────────────────────────────────────────────────────────────
 
+function CallAssistButton() {
+  const [, navigate] = useLocation();
+  return (
+    <button
+      onClick={() => navigate("/call-assist")}
+      className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+    >
+      <Phone className="w-3 h-3" />
+      Call Assist
+    </button>
+  );
+}
+
 type ViewMode = "all" | "my" | "unassigned" | "booked";
 
 export default function AgentDashboard() {
@@ -1445,13 +1459,7 @@ export default function AgentDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowCallGuide(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
-            >
-              <Phone className="w-3 h-3" />
-              Call Guide
-            </button>
+            <CallAssistButton />
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
             </Button>

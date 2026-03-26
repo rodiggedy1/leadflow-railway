@@ -108,7 +108,11 @@
 - [x] Add AI objection rebuttal tRPC procedure
 - [x] Integrate CallGuide widget into Agent Dashboard
 - [x] Integrate CallGuide widget into Admin Dashboard (ConversationDrawer)
-- [ ] Move Call Guide to top nav button in AdminDashboard (next to Widget/SMS Webhook/Sync Issue/Refresh)
-- [ ] Move Call Guide to top nav button in AgentDashboard
-- [ ] Remove CallGuide from conversation drawer sidebar (now accessible via nav)
+- [x] Move Call Guide to top nav button in AdminDashboard (next to Widget/SMS Webhook/Sync Issue/Refresh)
+- [x] Move Call Guide to top nav button in AgentDashboard
+- [x] Remove CallGuide from conversation drawer sidebar (now accessible via nav)
+- [x] Build LiveCallAssist full-page component with 3-column layout (Quick Context, AI Suggestion card, Live Signals)
+- [x] Add getLiveCallSuggestions tRPC procedure with context-aware AI generation
+- [x] Register /call-assist route in App.tsx
+- [x] Add Call Assist navigation from both dashboards
 
