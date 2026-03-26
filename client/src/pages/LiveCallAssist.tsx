@@ -120,7 +120,7 @@ const STAGES = [
     borderColor: "border-purple-200",
     textColor: "text-purple-700",
     goal: "Mirror back what they told you so they feel heard — then present the price",
-    intro: "So just to make sure I have this right — [fill in: beds/baths, clean type, anything they mentioned]. Does that sound right?",
+    intro: "Mirror back what they told you in Discovery — beds, baths, clean type. The AI will generate the exact line for you below.",
     introLabel: "Mirror Back",
     introNote: "Repeat their own words back to them. This builds trust, confirms accuracy, and creates a natural pause before the price — making the number land better.",
   },
@@ -135,7 +135,7 @@ const STAGES = [
     borderColor: "border-red-200",
     textColor: "text-red-700",
     goal: "Give the price confidently and immediately pivot to scheduling — assume they're booking",
-    intro: "Based on what you've told me, I'd put you at [price] for [service]. That includes everything — supplies, equipment, the works. We have openings this week — do you prefer mornings or afternoons?",
+    intro: "Give the price confidently — the AI will generate the exact line with your quoted price below.",
     introLabel: "Quote & Close",
     introNote: "Give the number once, confidently, then immediately move to scheduling. Don't pause and wait — the silence after a price is where deals die. Keep moving.",
   },
@@ -517,8 +517,6 @@ function CenterColumn({
   objectionType,
   onObjectionTypeChange,
   onUseSuggestion,
-  serviceType,
-  quotedPrice,
 }: {
   suggestion: AISuggestion | null;
   isLoading: boolean;
@@ -529,30 +527,13 @@ function CenterColumn({
   objectionType: ObjectionTypeId | null;
   onObjectionTypeChange: (id: ObjectionTypeId) => void;
   onUseSuggestion: (text: string) => void;
-  serviceType: string;
-  quotedPrice: string;
 }) {
   // Intro is shown until the agent submits their first customer line for this stage
   const [introVisible, setIntroVisible] = useState(true);
   const stage = STAGES.find((s) => s.id === activeStage)!;
 
-  // Build a dynamic intro that substitutes real context values for recap/close
-  const dynamicIntro = (() => {
-    if (activeStage === "recap") {
-      const detail = serviceType.trim() || "what you told me";
-      return `So just to make sure I have this right — ${detail}. Does that sound right?`;
-    }
-    if (activeStage === "close") {
-      const price = quotedPrice.trim() ? `$${quotedPrice.trim()}` : null;
-      const svc = serviceType.trim() || null;
-      if (price && svc) {
-        return `Based on what you've told me, I'd put you at ${price} for the ${svc}. That includes everything — supplies, equipment, the works. We have openings this week — do you prefer mornings or afternoons?`;
-      } else if (price) {
-        return `Based on what you've told me, I'd put you at ${price}. That includes everything — supplies, equipment, the works. We have openings this week — do you prefer mornings or afternoons?`;
-      }
-    }
-    return stage.intro;
-  })();
+  // Use the stage's static intro text (Recap and Close auto-fire AI on entry, so their intro is just a brief instruction)
+  const dynamicIntro = stage.intro;
 
   // Reset intro visibility when stage changes
   useEffect(() => {
@@ -834,13 +815,36 @@ export default function LiveCallAssist() {
     setTimeout(() => transcriptFocusRef.current?.(), 50);
   }, [handleAddLine]);
 
-  // Clicking a stage switches to it and shows the intro script — AI fires only when the agent types what the customer said
+  // Clicking a stage switches to it and shows the intro script.
+  // Exception: Recap stage auto-fires AI immediately so the agent gets a pre-built mirror-back line
+  // generated from the transcript — no static template, no placeholder text.
   const handleStageSelect = useCallback((id: StageId) => {
     setActiveStage(id);
     setSuggestion(null);
     setLastCustomerLine("");
     if (id !== "objection") setObjectionType(null);
-  }, []);
+
+    if (id === "recap" || id === "close") {
+      // Auto-fire AI for Recap and Close so the agent gets a pre-built line immediately:
+      // - Recap: AI builds the mirror-back from the transcript (no placeholder text)
+      // - Close: AI builds the price line using quoted price and service type from context
+      const recentLines = transcriptLines.slice(-30);
+      const transcriptText = recentLines
+        .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
+        .join("\n");
+      const instruction = id === "recap"
+        ? "Generate the recap mirror-back line from the transcript above. Use the actual details the customer mentioned."
+        : "Generate the price quote line. Use the quoted price and service type from context. Give the number confidently and immediately ask morning or afternoon.";
+      suggestionMutation.mutate({
+        stage: id,
+        transcript: transcriptText,
+        leadName: leadName.trim() || undefined,
+        serviceType: serviceType.trim() || undefined,
+        quotedPrice: quotedPrice.trim() || undefined,
+        lastCustomerLine: instruction,
+      });
+    }
+  }, [transcriptLines, leadName, serviceType, quotedPrice, suggestionMutation]);
 
   // When an objection type is selected, immediately fire AI with that context
   const handleObjectionTypeChange = useCallback((id: ObjectionTypeId) => {
@@ -993,8 +997,6 @@ export default function LiveCallAssist() {
             objectionType={objectionType}
             onObjectionTypeChange={handleObjectionTypeChange}
             onUseSuggestion={handleUseSuggestion}
-            serviceType={serviceType}
-            quotedPrice={quotedPrice}
           />
         </div>
 
