@@ -1783,7 +1783,7 @@ export default function AgentDashboard() {
       <main className="max-w-4xl mx-auto px-4 py-5">
         {/* Personal performance stats bar */}
         {myStats && (
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             {[
               {
                 label: "Jobs Booked",
@@ -1793,6 +1793,7 @@ export default function AgentDashboard() {
                 color: "#16a34a",
                 bg: "#f0fdf4",
                 border: "#bbf7d0",
+                sub: `${myStats.leadsAssigned} assigned`,
               },
               {
                 label: "Revenue",
@@ -1802,6 +1803,7 @@ export default function AgentDashboard() {
                 color: "#E8603C",
                 bg: "#fff8f5",
                 border: "#F0D8D0",
+                sub: "all time",
               },
               {
                 label: "Conversion",
@@ -1811,6 +1813,17 @@ export default function AgentDashboard() {
                 color: "#7c3aed",
                 bg: "#faf5ff",
                 border: "#e9d5ff",
+                sub: "leads → booked",
+              },
+              {
+                label: "Calls Today",
+                value: myStats.callAssistToday ?? 0,
+                display: String(myStats.callAssistToday ?? 0),
+                icon: "📞",
+                color: "#0891b2",
+                bg: "#ecfeff",
+                border: "#a5f3fc",
+                sub: "via Call Assist",
               },
             ].map(stat => (
               <div
@@ -1822,7 +1835,7 @@ export default function AgentDashboard() {
                   {stat.icon} {stat.label}
                 </span>
                 <span className="text-xl font-bold text-gray-900 leading-tight">{stat.display}</span>
-                <span className="text-xs text-gray-400">{myStats.leadsAssigned} assigned</span>
+                <span className="text-xs text-gray-400">{stat.sub}</span>
               </div>
             ))}
           </div>

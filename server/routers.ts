@@ -2675,13 +2675,106 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const bookedCount = bookedRows.length;
         const bookedRevenue = bookedRows.reduce((sum, row) => sum + calcBookedRevenue(row), 0);
 
-        const conversionRate = leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0;
+         const conversionRate = leadsAssigned > 0 ? Math.round((bookedCount / leadsAssigned) * 100) : 0;
 
-        return { leadsAssigned, bookedCount, bookedRevenue, conversionRate };
+        // Call Assist stats — sessions created via Call Assist (leadSource = 'call') by this agent
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const callAssistTodayRows = await db
+          .select({ id: conversationSessions.id })
+          .from(conversationSessions)
+          .where(and(
+            eq(conversationSessions.assignedAgentId, agentSession.agentId),
+            eq(conversationSessions.leadSource, "call"),
+            gte(conversationSessions.createdAt, todayStart)
+          ));
+        const callAssistToday = callAssistTodayRows.length;
+
+        return { leadsAssigned, bookedCount, bookedRevenue, conversionRate, callAssistToday };
       }),
-
     /**
-     * agents.leaderboard — admin-only ranked leaderboard for all active agents.
+     * agents.callAssistStats — per-agent Call Assist conversion stats.
+     * Used by the Team page to show call leads, call bookings, and call conversion rate per agent.
+     * Admin-only.
+     */
+    callAssistStats: adminAgentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const { agents: agentsTable } = await import("../drizzle/schema");
+      const allAgents = await db
+        .select({ id: agentsTable.id, name: agentsTable.name, email: agentsTable.email })
+        .from(agentsTable)
+        .where(eq(agentsTable.isActive, 1));
+
+      // Today boundaries
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // All call-assist sessions per agent (leadSource = 'call')
+      const callLeadsAll = await db
+        .select({ agentId: conversationSessions.assignedAgentId, count: sql<number>`count(*)`.as("count") })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.leadSource, "call"),
+          sql`${conversationSessions.assignedAgentId} IS NOT NULL`
+        ))
+        .groupBy(conversationSessions.assignedAgentId);
+
+      // Call-assist sessions today per agent
+      const callLeadsToday = await db
+        .select({ agentId: conversationSessions.assignedAgentId, count: sql<number>`count(*)`.as("count") })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.leadSource, "call"),
+          sql`${conversationSessions.assignedAgentId} IS NOT NULL`,
+          gte(conversationSessions.createdAt, todayStart),
+          lte(conversationSessions.createdAt, todayEnd)
+        ))
+        .groupBy(conversationSessions.assignedAgentId);
+
+      // Booked call-assist sessions per agent
+      const callBookingsAll = await db
+        .select({ agentId: conversationSessions.bookedByAgentId, count: sql<number>`count(*)`.as("count") })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.leadSource, "call"),
+          eq(conversationSessions.isBooked, 1),
+          sql`${conversationSessions.bookedByAgentId} IS NOT NULL`
+        ))
+        .groupBy(conversationSessions.bookedByAgentId);
+
+      // Revenue from call-assist bookings per agent
+      const callRevenueAll = await db
+        .select({
+          agentId: conversationSessions.bookedByAgentId,
+          revenue: sql<number>`SUM(COALESCE(${conversationSessions.bookedAmount}, CAST(${conversationSessions.quotedPrice} AS UNSIGNED), 0))`.as("revenue"),
+        })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.leadSource, "call"),
+          eq(conversationSessions.isBooked, 1),
+          sql`${conversationSessions.bookedByAgentId} IS NOT NULL`
+        ))
+        .groupBy(conversationSessions.bookedByAgentId);
+
+      const callLeadsAllMap = new Map(callLeadsAll.map(r => [r.agentId, Number(r.count)]));
+      const callLeadsTodayMap = new Map(callLeadsToday.map(r => [r.agentId, Number(r.count)]));
+      const callBookingsAllMap = new Map(callBookingsAll.map(r => [r.agentId, Number(r.count)]));
+      const callRevenueAllMap = new Map(callRevenueAll.map(r => [r.agentId, Number(r.revenue)]));
+
+      return allAgents.map(agent => {
+        const totalCalls = callLeadsAllMap.get(agent.id) ?? 0;
+        const callsToday = callLeadsTodayMap.get(agent.id) ?? 0;
+        const callBookings = callBookingsAllMap.get(agent.id) ?? 0;
+        const callRevenue = callRevenueAllMap.get(agent.id) ?? 0;
+        const callConversionRate = totalCalls > 0 ? Math.round((callBookings / totalCalls) * 100) : 0;
+        return { id: agent.id, name: agent.name, email: agent.email, totalCalls, callsToday, callBookings, callRevenue, callConversionRate };
+      });
+    }),
+    /**
+     * agents.leaderboard — admin-only ranked leaderboard for all active agents..
      * Accepts optional dateFrom / dateTo (ISO date strings) for filtering.
      * Returns per-agent: leadsAssigned, bookedCount, bookedRevenue, conversionRate
      * sorted by bookedRevenue descending.

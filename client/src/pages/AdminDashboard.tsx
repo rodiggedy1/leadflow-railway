@@ -2396,6 +2396,7 @@ function AgentManagement() {
   const utils = trpc.useUtils();
   const { data: agentList = [], isLoading } = trpc.agents.list.useQuery();
   const { data: perf = [] } = trpc.agents.performance.useQuery();
+  const { data: callStats = [] } = trpc.agents.callAssistStats.useQuery();
   const [showCreate, setShowCreate] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
   const [newName, setNewName] = useState("");
@@ -2440,9 +2441,13 @@ function AgentManagement() {
     onError: (e) => toast.error(e.message),
   });
 
-  const leaderboard = [...perf].sort(
-    (a, b) => b.bookingsThisWeek - a.bookingsThisWeek || b.callsThisWeek - a.callsThisWeek
-  );
+  const callStatsMap = new Map(callStats.map(r => [r.id, r]));
+  const leaderboard = [...perf]
+    .sort((a, b) => b.bookingsThisWeek - a.bookingsThisWeek || b.callsThisWeek - a.callsThisWeek)
+    .map(agent => ({
+      ...agent,
+      callAssist: callStatsMap.get(agent.id) ?? { totalCalls: 0, callsToday: 0, callBookings: 0, callRevenue: 0, callConversionRate: 0 },
+    }));
   const medalColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
 
   return (
@@ -2519,6 +2524,30 @@ function AgentManagement() {
                   <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
                     <span>{agent.callsThisWeek} calls this week</span>
                     <span>{agent.bookingsAllTime} booked all-time</span>
+                  </div>
+                  {/* Call Assist section */}
+                  <div className="mt-2 pt-2 border-t border-cyan-100 bg-cyan-50/60 rounded-xl px-3 py-2">
+                    <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wide mb-1.5">📞 Call Assist</p>
+                    <div className="grid grid-cols-3 gap-1 text-center">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{agent.callAssist.totalCalls}</p>
+                        <p className="text-[10px] text-gray-400">Total Calls</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{agent.callAssist.callBookings}</p>
+                        <p className="text-[10px] text-gray-400">Booked</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold" style={{ color: agent.callAssist.callConversionRate >= 40 ? "#16a34a" : agent.callAssist.callConversionRate >= 20 ? "#d97706" : "#6b7280" }}>
+                          {agent.callAssist.callConversionRate}%
+                        </p>
+                        <p className="text-[10px] text-gray-400">Conv. Rate</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">
+                      {agent.callAssist.callsToday > 0 ? `${agent.callAssist.callsToday} call${agent.callAssist.callsToday > 1 ? "s" : ""} today` : "No calls today"}
+                      {agent.callAssist.callRevenue > 0 ? ` · $${agent.callAssist.callRevenue.toLocaleString()} revenue` : ""}
+                    </p>
                   </div>
                 </div>
               );

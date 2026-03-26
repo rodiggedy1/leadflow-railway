@@ -182,3 +182,6 @@
 - [x] Add Call Assist nav button to Agent Dashboard header (matching admin)
 - [x] Verify Call Assist page uses only local React state (no shared server-side session state that could bleed between agents)
 - [x] Ensure /call-assist route is accessible to agents — changed getLiveCallSuggestions and saveCallLead from adminAgentProcedure to agentProcedure
+- [x] Add tRPC procedure for per-agent call stats (calls today, total calls, booked calls, conversion rate)
+- [x] Add "My Calls Today" stat card to agent dashboard
+- [x] Add per-agent call conversion columns to Team page (calls, booked, conversion %)
