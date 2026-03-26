@@ -128,3 +128,8 @@
 - [x] Live Call Assist: strip rationale and coachingNote from AI response — return suggestion only for faster output
 - [x] Live Call Assist: log customer line to transcript when Enter is pressed in the center column
 - [x] Live Call Assist: update stage descriptions to inbound booking framing
+- [x] Live Call Assist: keep intro script visible above AI suggestion (don't hide it when AI loads)
+- [ ] Live Call Assist: reduce recap stage repetition — only show Recap once, not on every exchange
+- [x] Live Call Assist: move stage-advance button to center column (not left sidebar)
+- [x] Live Call Assist: add AI-suggested next stage hint so agent knows when to advance without manual guessing
+- [x] Live Call Assist: remove AI auto-fire on stage click — show intro script only, AI fires only when agent types customer response

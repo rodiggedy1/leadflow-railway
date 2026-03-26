@@ -530,6 +530,8 @@ function CenterColumn({
   objectionType,
   onObjectionTypeChange,
   onUseSuggestion,
+  onAdvanceStage,
+  nextStageLabel,
 }: {
   suggestion: AISuggestion | null;
   isLoading: boolean;
@@ -540,18 +542,15 @@ function CenterColumn({
   objectionType: ObjectionTypeId | null;
   onObjectionTypeChange: (id: ObjectionTypeId) => void;
   onUseSuggestion: (text: string) => void;
+  onAdvanceStage?: () => void;
+  nextStageLabel?: string;
 }) {
   const [introExpanded, setIntroExpanded] = useState(true);
   const stage = STAGES.find((s) => s.id === activeStage)!;
 
-  // Collapse intro once a suggestion loads
+  // Always expand intro when stage changes
   useEffect(() => {
-    if (suggestion) setIntroExpanded(false);
-  }, [suggestion]);
-
-  // Re-expand intro when stage changes and no suggestion yet
-  useEffect(() => {
-    if (!suggestion) setIntroExpanded(true);
+    setIntroExpanded(true);
   }, [activeStage]);
 
   const handleCustomerLineKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -673,17 +672,11 @@ function CenterColumn({
         {/* ── AI suggestion area ── */}
         <div className="px-4 py-4 space-y-4">
           {!suggestion && !isLoading && (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 text-2xl"
-                style={{ background: `${stage.color}15` }}
-              >
-                {stage.emoji}
-              </div>
-              <p className="text-sm text-gray-500">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <p className="text-sm text-gray-400">
                 {lastCustomerLine.trim()
-                  ? "Press Enter or click → to get AI coaching."
-                  : "Enter what the customer said above, then press Enter."}
+                  ? "Press Enter to get AI coaching."
+                  : "Say the opening line above, then type what the customer says and press Enter."}
               </p>
             </div>
           )}
@@ -724,6 +717,17 @@ function CenterColumn({
                 <CheckCircle2 className="w-3.5 h-3.5" /> I said this — what did they say next?
               </button>
             </div>
+          )}
+
+          {/* ── Advance to next stage — visible once a suggestion has been used ── */}
+          {onAdvanceStage && nextStageLabel && (
+            <button
+              onClick={onAdvanceStage}
+              className="w-full py-2.5 rounded-xl text-xs font-bold border-2 border-dashed transition-colors flex items-center justify-center gap-2 text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700 hover:bg-gray-50"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Move to next stage: {nextStageLabel}
+            </button>
           )}
         </div>
       </div>
@@ -883,13 +887,13 @@ export default function LiveCallAssist() {
     setTimeout(() => transcriptFocusRef.current?.(), 50);
   }, [handleAddLine]);
 
-  // Clicking a stage immediately fires AI — no second click required
+  // Clicking a stage switches to it and shows the intro script — AI fires only when the agent types what the customer said
   const handleStageSelect = useCallback((id: StageId) => {
     setActiveStage(id);
     setSuggestion(null);
+    setLastCustomerLine("");
     if (id !== "objection") setObjectionType(null);
-    fireSuggestion(id, lastCustomerLine);
-  }, [lastCustomerLine, fireSuggestion]);
+  }, []);
 
   // When an objection type is selected, immediately fire AI with that context
   const handleObjectionTypeChange = useCallback((id: ObjectionTypeId) => {
@@ -1042,6 +1046,14 @@ export default function LiveCallAssist() {
             objectionType={objectionType}
             onObjectionTypeChange={handleObjectionTypeChange}
             onUseSuggestion={handleUseSuggestion}
+            onAdvanceStage={(() => {
+              const idx = STAGES.findIndex((s) => s.id === activeStage);
+              return STAGES[idx + 1] ? () => handleMarkComplete(activeStage) : undefined;
+            })()}
+            nextStageLabel={(() => {
+              const idx = STAGES.findIndex((s) => s.id === activeStage);
+              return STAGES[idx + 1]?.label;
+            })()}
           />
         </div>
 
