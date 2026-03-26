@@ -988,16 +988,31 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             </div>
           )}
           {(job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && (
-            <p className={`text-xs rounded px-2 py-1 border ${
-              job.jobStatus === "on_the_way"
-                ? "text-blue-300 bg-blue-900/20 border-blue-700/30"
-                : "text-orange-300 bg-orange-900/20 border-orange-700/30"
-            }`}>
-              {job.etaTimestamp
-                ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
-                : null
-              }
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={`text-xs rounded px-2 py-1 border flex-1 ${
+                job.jobStatus === "on_the_way"
+                  ? "text-blue-300 bg-blue-900/20 border-blue-700/30"
+                  : "text-orange-300 bg-orange-900/20 border-orange-700/30"
+              }`}>
+                {job.etaTimestamp
+                  ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                  : job.jobStatus === "on_the_way" ? "On the Way" : "Running Late"
+                }
+              </p>
+              <button
+                onClick={() => {
+                  setEtaModalFor(job.jobStatus as "on_the_way" | "running_late");
+                  setShowEtaModal(true);
+                }}
+                className={`text-[11px] font-semibold px-2 py-1 rounded-full border transition-colors cursor-pointer ${
+                  job.jobStatus === "on_the_way"
+                    ? "text-blue-300 border-blue-600/50 bg-blue-900/30 hover:bg-blue-800/50"
+                    : "text-orange-300 border-orange-600/50 bg-orange-900/30 hover:bg-orange-800/50"
+                }`}
+              >
+                Update ETA
+              </button>
+            </div>
           )}
           {job.jobStatus === "issue_at_property" && job.issueNote && (
             <p className="text-xs rounded px-2 py-1 border text-red-300 bg-red-900/20 border-red-700/30">

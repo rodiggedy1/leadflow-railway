@@ -200,3 +200,4 @@
 - [x] Update Mark Complete modal copy: shorten irreversible note to "Once marked complete, the job is closed."
 - [x] Cleaner portal: Issue at Property note is now required — Report button disabled until note has content, red border + helper text shown
 - [x] On the Way: replace inline ETA picker with a blocking full-screen modal — must select ETA before submitting
+- [x] Cleaner portal: "Update ETA" button on job card when status is on_the_way or running_late — reopens ETA modal

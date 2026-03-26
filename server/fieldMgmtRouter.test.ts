@@ -1297,3 +1297,43 @@ describe("CleanerPortal — ETA blocking modal", () => {
     expect(canSubmitEta(null, "30 minutes")).toBe(false);
   });
 });
+
+// ── CleanerPortal — Update ETA button visibility ──────────────────────────────
+
+describe("CleanerPortal — Update ETA button visibility", () => {
+  function showUpdateEtaButton(jobStatus: string): boolean {
+    return jobStatus === "on_the_way" || jobStatus === "running_late";
+  }
+
+  it("shows Update ETA button when status is on_the_way", () => {
+    expect(showUpdateEtaButton("on_the_way")).toBe(true);
+  });
+
+  it("shows Update ETA button when status is running_late", () => {
+    expect(showUpdateEtaButton("running_late")).toBe(true);
+  });
+
+  it("hides Update ETA button for other statuses", () => {
+    expect(showUpdateEtaButton("arrived")).toBe(false);
+    expect(showUpdateEtaButton("in_progress")).toBe(false);
+    expect(showUpdateEtaButton("completed")).toBe(false);
+    expect(showUpdateEtaButton("issue_at_property")).toBe(false);
+  });
+
+  it("ETA display falls back to status label when no etaTimestamp", () => {
+    const etaTimestamp = null;
+    const jobStatus = "on_the_way";
+    const display = etaTimestamp
+      ? `Arrives ~${new Date(etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+      : jobStatus === "on_the_way" ? "On the Way" : "Running Late";
+    expect(display).toBe("On the Way");
+  });
+
+  it("ETA display shows formatted time when etaTimestamp is set", () => {
+    const etaTimestamp = new Date("2026-03-26T14:30:00").getTime();
+    const display = etaTimestamp
+      ? `Arrives ~${new Date(etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+      : "On the Way";
+    expect(display).toMatch(/Arrives ~\d+:\d{2} (AM|PM)/);
+  });
+});
