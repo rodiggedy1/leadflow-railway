@@ -1756,13 +1756,13 @@ Analyze this conversation and return a JSON object with exactly these fields:
             maxExchanges: 2,
           },
           situation: {
-            goal: "One question only: have they had a cleaner before? Get the answer. That's the entire stage.",
-            exitCondition: "Customer answered yes or no. ADVANCE IMMEDIATELY. Do not mirror back. Do not ask why. Do not ask follow-ups. The answer itself is enough.",
+            goal: "Ask: 'What's most important to you in a cleaning service?' Listen to their answer. That's it.",
+            exitCondition: "Customer has stated their priority (reliability, price, trust, consistency, etc.). ADVANCE IMMEDIATELY to Value. Do NOT ask follow-ups. Do NOT mirror back. Their answer is the input for Value stage.",
             maxExchanges: 1,
           },
           value: {
-            goal: "Share 2-3 specific things that make this company different: same team, background-checked, supplies included",
-            exitCondition: "You've shared the key differentiators once. Don't repeat. Advance after one value statement.",
+            goal: "Lead with what the customer said matters most to them in Situation, then add 1-2 supporting differentiators (same team, background-checked, supplies included). Make it feel personal to their answer.",
+            exitCondition: "You've made one tailored value statement. Advance immediately. Do not ask 'does that make sense?' or wait for confirmation.",
             maxExchanges: 1,
           },
           recap: {

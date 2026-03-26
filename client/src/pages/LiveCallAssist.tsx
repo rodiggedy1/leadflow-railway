@@ -90,9 +90,9 @@ const STAGES = [
     borderColor: "border-amber-200",
     textColor: "text-amber-700",
     goal: "Understand what's been frustrating them and why they're calling now instead of later",
-    intro: "Have you had a cleaning service before?",
+    intro: "What's most important to you in a cleaning service?",
     introLabel: "Situation Question",
-    introNote: "One question. Get the answer. Move on. If yes — great, they know the drill. If no — great, fresh start. Either way, advance to Value immediately.",
+    introNote: "Their answer tells you exactly what to lead with in Value. Reliability? Same team. Price? Value for money. Trust? Background-checked pros. Listen and advance.",
   },
   {
     id: "value",

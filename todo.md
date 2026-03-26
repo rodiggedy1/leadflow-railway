@@ -148,3 +148,4 @@
 - [x] Live Call Assist: fix Recap intro — AI generates the mirror-back line from the transcript on stage entry (no placeholder text)
 - [x] Live Call Assist: wire pricing engine to auto-calculate quoted price from beds/baths/clean type — replace free-text Quoted Price field
 - [x] Live Call Assist: fix Situation stage — one direct question, advance immediately after answer, no mirroring back
+- [x] Live Call Assist: change Situation question to "What's most important to you in a cleaning service?" — use answer to tailor Value pitch
