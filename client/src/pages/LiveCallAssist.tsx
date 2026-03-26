@@ -264,6 +264,8 @@ export default function LiveCallAssist() {
 
   // ── Clear call confirm dialog ────────────────────────────────────────────────
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showFollowUpDate, setShowFollowUpDate] = useState(false);
+  const [followUpDate, setFollowUpDate]         = useState("");
 
   const doReset = () => {
     setConversation([]);
@@ -280,13 +282,15 @@ export default function LiveCallAssist() {
     setPreferredDate("");
     setSelectedExtras([]);
     setShowClearConfirm(false);
+    setShowFollowUpDate(false);
+    setFollowUpDate("");
   };
 
-  const handleClearCall = (notInterested = false) => {
+  const handleClearCall = (notInterested = false, isFollowUp = false, fDate = "") => {
     // Only save if there's something meaningful (at least a name or 2+ conversation lines)
     const hasData = leadName.trim() || conversation.length >= 2;
     if (hasData) {
-      const isBooked = !notInterested && ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId);
+      const isBooked = !notInterested && !isFollowUp && ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId);
       const transcript = conversation
         .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
         .join("\n");
@@ -302,13 +306,20 @@ export default function LiveCallAssist() {
         extras:        selectedExtras.length > 0 ? selectedExtras : undefined,
         isBooked,
         notInterested,
+        isFollowUp,
+        followUpDate:  fDate || undefined,
         agentId:       agentId ?? undefined,
         agentName:     agentName ?? undefined,
         transcript:    transcript.slice(0, 8000),
       }, {
         onSuccess: (data) => {
           console.log(`[CallAssist] Lead saved: sessionId=${data.sessionId}`);
-          toast.success(notInterested ? "🚫 Lead marked not interested" : isBooked ? "✅ Booking saved to pipeline" : "✅ Lead saved to pipeline");
+          toast.success(
+            notInterested ? "🚫 Lead marked not interested" :
+            isFollowUp    ? `📅 Follow-up set${fDate ? ` for ${fDate}` : ""}` :
+            isBooked      ? "✅ Booking saved to pipeline" :
+                            "✅ Lead saved to pipeline"
+          );
         },
         onError: (e) => {
           console.error("[CallAssist] Failed to save lead:", e.message);
@@ -354,24 +365,58 @@ export default function LiveCallAssist() {
               <p className="text-sm text-gray-500">This will wipe the transcript, context, and suggestion. Ready for the next call.</p>
             </div>
             <div className="px-6 pb-4">
-              <button
-                onClick={() => handleClearCall(true)}
-                className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mb-2"
-              >
-                🚫 Not Interested — Clear
-              </button>
-              <button
-                onClick={() => handleClearCall(false)}
-                className="w-full py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors mb-2"
-              >
-                Clear &amp; Reset
-              </button>
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                Cancel
-              </button>
+              {/* Follow Up Later — expands to show date picker */}
+              {showFollowUpDate ? (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold text-amber-700 mb-2">📅 Pick a follow-up date</p>
+                  <input
+                    type="date"
+                    value={followUpDate}
+                    onChange={e => setFollowUpDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    className="w-full text-sm rounded-xl border border-amber-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-300 mb-2"
+                  />
+                  <button
+                    onClick={() => handleClearCall(false, true, followUpDate)}
+                    className="w-full py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition-colors mb-1"
+                  >
+                    Save Follow-Up &amp; Clear
+                  </button>
+                  <button
+                    onClick={() => setShowFollowUpDate(false)}
+                    className="w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Back
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setShowFollowUpDate(true)}
+                    className="w-full py-2.5 rounded-xl border border-amber-300 text-sm font-semibold text-amber-700 hover:bg-amber-50 transition-colors mb-2"
+                  >
+                    📅 Follow Up Later
+                  </button>
+                  <button
+                    onClick={() => handleClearCall(true)}
+                    className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mb-2"
+                  >
+                    🚫 Not Interested — Clear
+                  </button>
+                  <button
+                    onClick={() => handleClearCall(false)}
+                    className="w-full py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors mb-2"
+                  >
+                    Clear &amp; Reset
+                  </button>
+                  <button
+                    onClick={() => setShowClearConfirm(false)}
+                    className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -2028,6 +2028,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
         extras:       z.array(z.string()).optional(),
         isBooked:      z.boolean().default(false),
         notInterested: z.boolean().default(false),
+        isFollowUp:    z.boolean().default(false),
+        followUpDate:  z.string().max(20).optional(),
         agentId:       z.number().optional(),
         agentName:     z.string().max(255).optional(),
         transcript:    z.string().max(8000).optional(),
@@ -2053,7 +2055,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const leadId = (leadResult as { insertId: number }).insertId;
 
         // 2. Insert conversation session
-        const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : "CALL_SCHEDULED";
+        const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : input.isFollowUp ? "FOLLOW_UP" : "CALL_SCHEDULED";
         const [sessionResult] = await db.insert(conversationSessions).values({
           leadPhone:          input.phone,
           leadName:           input.name,
@@ -2070,6 +2072,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           extras:             extrasJson,
           assignedAgentId:    input.agentId ?? null,
           assignedAgentName:  input.agentName ?? null,
+          ...(input.isFollowUp && input.followUpDate ? { followUpDate: input.followUpDate } : {}),
           ...(input.isBooked ? {
             isBooked:         1,
             bookedAt:         new Date(),
