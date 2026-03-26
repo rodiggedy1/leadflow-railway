@@ -1,8 +1,14 @@
 /**
  * Tests for leads.getLiveCallSuggestions tRPC procedure.
  *
- * These tests verify the procedure's input validation, fallback behavior,
- * and response shape — without making real LLM calls.
+ * Verifies input validation, fallback behavior, and response shape
+ * without making real LLM calls.
+ *
+ * Current API contract:
+ *   Input:  { stage: string (min 1), transcript: string (max 6000),
+ *             leadName?, serviceType?, quotedPrice?, context?, lastCustomerLine? (max 1000) }
+ *   Output: { success: true,  suggestion: string, currentStage: string, extracted: {...} }
+ *         | { success: false, suggestion: string, currentStage: string }
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -41,29 +47,19 @@ async function createAdminContext(): Promise<TrpcContext> {
   };
 }
 
+/** A valid LLM response matching the current JSON schema */
 const VALID_LLM_RESPONSE = {
-  primarySuggestion: "Hey Sarah, I totally understand the hesitation. Most of our clients felt the same way before their first clean — and now they can't imagine going back. What would make you feel confident moving forward?",
-  primaryLabel: "Empathy + Social Proof",
-  primaryRationale: "Acknowledges her concern, uses social proof to normalize it, then re-opens the conversation.",
-  alternatives: [
-    {
-      label: "Urgency + Scarcity",
-      suggestion: "We actually have a spot opening up in your area this week that I'd hate to see go to someone else. Can we lock it in for you?",
-      angle: "Urgency",
-    },
-    {
-      label: "Risk Reversal",
-      suggestion: "Here's what I'll do — let's schedule the first clean and if it's not exactly what you expected, we'll make it right, no questions asked.",
-      angle: "Empathy",
-    },
-    {
-      label: "Assumptive Close",
-      suggestion: "Great — so do you prefer mornings or afternoons? I want to get you the best team for your area.",
-      angle: "Assumptive",
-    },
-  ],
-  liveSignals: ["Price sensitivity detected", "Good engagement — keep going"],
-  stageProgress: 65,
+  suggestion: "Hey Sarah, I totally understand the hesitation. Most of our clients felt the same way before their first clean — and now they can't imagine going back. What would make you feel confident moving forward?",
+  currentStage: "close",
+  extracted: {
+    customerName: "Sarah",
+    address: null,
+    bedrooms: null,
+    bathrooms: null,
+    serviceType: null,
+    preferredDate: null,
+    addExtras: null,
+  },
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -73,15 +69,9 @@ describe("leads.getLiveCallSuggestions", () => {
     vi.clearAllMocks();
   });
 
-  it("returns AI suggestions when LLM call succeeds", async () => {
+  it("returns AI suggestion when LLM call succeeds", async () => {
     vi.mocked(invokeLLM).mockResolvedValueOnce({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify(VALID_LLM_RESPONSE),
-          },
-        },
-      ],
+      choices: [{ message: { content: JSON.stringify(VALID_LLM_RESPONSE) } }],
     } as any);
 
     const ctx = await createAdminContext();
@@ -97,16 +87,11 @@ describe("leads.getLiveCallSuggestions", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.primarySuggestion).toBeTruthy();
-    expect(result.primaryLabel).toBeTruthy();
-    expect(result.primaryRationale).toBeTruthy();
-    expect(result.alternatives).toHaveLength(3);
-    expect(result.liveSignals.length).toBeGreaterThan(0);
-    expect(result.stageProgress).toBeGreaterThanOrEqual(0);
-    expect(result.stageProgress).toBeLessThanOrEqual(100);
+    expect(result.suggestion).toBeTruthy();
+    expect(result.currentStage).toBeTruthy();
   });
 
-  it("returns fallback suggestions when LLM call fails", async () => {
+  it("returns fallback suggestion when LLM call fails", async () => {
     vi.mocked(invokeLLM).mockRejectedValueOnce(new Error("LLM unavailable"));
 
     const ctx = await createAdminContext();
@@ -119,9 +104,8 @@ describe("leads.getLiveCallSuggestions", () => {
 
     // Should not throw — always returns a usable response
     expect(result.success).toBe(false);
-    expect(result.primarySuggestion).toBeTruthy();
-    expect(result.alternatives).toHaveLength(3);
-    expect(result.stageProgress).toBe(50);
+    expect(result.suggestion).toBeTruthy();
+    expect(result.currentStage).toBeTruthy();
   });
 
   it("returns fallback when LLM returns empty content", async () => {
@@ -138,7 +122,7 @@ describe("leads.getLiveCallSuggestions", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.primarySuggestion).toBeTruthy();
+    expect(result.suggestion).toBeTruthy();
   });
 
   it("works with minimal input (only stage and transcript)", async () => {
@@ -154,8 +138,8 @@ describe("leads.getLiveCallSuggestions", () => {
       transcript: "",
     });
 
-    expect(result.primarySuggestion).toBeTruthy();
-    expect(result.alternatives).toHaveLength(3);
+    expect(result.suggestion).toBeTruthy();
+    expect(result.currentStage).toBeTruthy();
   });
 
   it("rejects invalid stage (empty string)", async () => {
@@ -170,19 +154,35 @@ describe("leads.getLiveCallSuggestions", () => {
     ).rejects.toThrow();
   });
 
-  it("rejects transcript exceeding 4000 chars", async () => {
+  it("rejects transcript exceeding 6000 chars", async () => {
     const ctx = await createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
     await expect(
       caller.leads.getLiveCallSuggestions({
         stage: "opener",
-        transcript: "x".repeat(4001),
+        transcript: "x".repeat(6001),
       })
     ).rejects.toThrow();
   });
 
-  it("rejects lastCustomerLine exceeding 500 chars", async () => {
+  it("accepts transcript at exactly 6000 chars", async () => {
+    vi.mocked(invokeLLM).mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify(VALID_LLM_RESPONSE) } }],
+    } as any);
+
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.leads.getLiveCallSuggestions({
+      stage: "opener",
+      transcript: "x".repeat(6000),
+    });
+
+    expect(result.suggestion).toBeTruthy();
+  });
+
+  it("rejects lastCustomerLine exceeding 1000 chars", async () => {
     const ctx = await createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
@@ -190,13 +190,13 @@ describe("leads.getLiveCallSuggestions", () => {
       caller.leads.getLiveCallSuggestions({
         stage: "opener",
         transcript: "some text",
-        lastCustomerLine: "x".repeat(501),
+        lastCustomerLine: "x".repeat(1001),
       })
     ).rejects.toThrow();
   });
 
-  it("all 6 stage IDs are accepted without error", async () => {
-    const stages = ["opener", "discovery", "pain", "value", "close", "objection"];
+  it("all 6 valid stage IDs are accepted without error", async () => {
+    const stages = ["opener", "discovery", "value", "recap", "close", "objection"];
 
     vi.mocked(invokeLLM).mockResolvedValue({
       choices: [{ message: { content: JSON.stringify(VALID_LLM_RESPONSE) } }],
@@ -210,7 +210,75 @@ describe("leads.getLiveCallSuggestions", () => {
         stage,
         transcript: "",
       });
-      expect(result.primarySuggestion).toBeTruthy();
+      expect(result.suggestion).toBeTruthy();
+    }
+  });
+
+  it("auto-populates extracted fields from LLM response", async () => {
+    const responseWithExtracted = {
+      suggestion: "Great — let me pull up your address.",
+      currentStage: "discovery",
+      extracted: {
+        customerName: "John",
+        address: "123 Main St",
+        bedrooms: "3",
+        bathrooms: "2",
+        serviceType: "Standard",
+        preferredDate: "Monday",
+        addExtras: null,
+      },
+    };
+
+    vi.mocked(invokeLLM).mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify(responseWithExtracted) } }],
+    } as any);
+
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.leads.getLiveCallSuggestions({
+      stage: "discovery",
+      transcript: "CUSTOMER: I'm John at 123 Main St, 3 bed 2 bath.",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.extracted.customerName).toBe("John");
+      expect(result.extracted.address).toBe("123 Main St");
+      expect(result.extracted.bedrooms).toBe("3");
+    }
+  });
+
+  it("returns addExtras when customer agrees to an extra", async () => {
+    const responseWithExtras = {
+      suggestion: "Perfect — I've added the pet add-on. Your updated total is $194.",
+      currentStage: "close",
+      extracted: {
+        customerName: null,
+        address: null,
+        bedrooms: null,
+        bathrooms: null,
+        serviceType: null,
+        preferredDate: null,
+        addExtras: ["i_have_pets"],
+      },
+    };
+
+    vi.mocked(invokeLLM).mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify(responseWithExtras) } }],
+    } as any);
+
+    const ctx = await createAdminContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.leads.getLiveCallSuggestions({
+      stage: "close",
+      transcript: "AGENT: One thing a lot of clients with pets add is our pet add-on for just $15.\nCUSTOMER: Yes, add that.",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.extracted.addExtras).toContain("i_have_pets");
     }
   });
 });
