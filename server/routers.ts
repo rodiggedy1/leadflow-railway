@@ -1755,8 +1755,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
             advance: "You have bedrooms, bathrooms, AND service type (standard, recurring, or move-out).",
           },
           situation: {
-            goal: "Find the emotional WHY. What's driving this call right now? An event? Guests coming? Finally hit a breaking point? Their answer is gold — use it to make the value pitch personal.",
-            advance: "Customer has shared their emotional driver or what matters most to them.",
+            goal: "Ask ONE short question to find the emotional WHY behind this call. Examples: 'What's been the biggest thing keeping you from getting it done?' or 'Is there something coming up that's making this feel urgent?' ONE question. That's it. Do NOT give the price here — price is ONLY in the Close stage. Do NOT ask follow-up questions. Do NOT give value statements yet. Just ask the one question and wait for their answer.",
+            advance: "Customer has answered the WHY question — they've shared any emotional driver, event, or reason. Advance immediately after their first answer. Do not ask more questions.",
           },
           value: {
             goal: "Connect their WHY to what Maids in Black delivers. Personal, not generic. Embarrassment → 'no judgment, our team has seen it all.' Trust → 'same team every time, background-checked.' Urgency → 'we can get someone out today.' One strong statement, then move.",
@@ -1812,6 +1812,8 @@ HARD OUTPUT RULES:
 3. No hollow filler: no "Great!", "Absolutely!", "Of course!", "Certainly!", "I understand."
 4. Never ask follow-up questions once the stage goal is met. Move forward.
 5. Always end with a specific next step — a question toward booking or a confident close.
+6. NEVER give the price in any stage except Close. If you're in Opener, Discovery, Situation, Value, or Recap — DO NOT mention any dollar amount. Price belongs ONLY in Close.
+7. In the Situation stage: ask ONE question about their emotional WHY, then stop. No value statements, no price, no follow-ups.
 
 TONE EXAMPLES:
 ✓ "You called the right place."
