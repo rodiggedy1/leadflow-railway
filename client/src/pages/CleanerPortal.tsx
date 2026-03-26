@@ -1096,7 +1096,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
                 <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-amber-300">No photos uploaded</p>
-                  <p className="text-xs text-amber-400/80 mt-0.5">Photos protect you if there&apos;s a dispute. We strongly recommend uploading at least one before completing.</p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">No photo upload will cost you $20 and miss out on making $10 extra. We strongly recommend uploading photos.</p>
                 </div>
               </div>
             )}
