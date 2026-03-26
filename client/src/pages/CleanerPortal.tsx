@@ -335,6 +335,9 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   const [issueNote, setIssueNote] = useState("");
   const [showEtaPicker, setShowEtaPicker] = useState(false);
   const [etaPickerFor, setEtaPickerFor] = useState<"on_the_way" | "running_late" | null>(null);
+  // ETA modal — full blocking popup
+  const [showEtaModal, setShowEtaModal] = useState(false);
+  const [etaModalFor, setEtaModalFor] = useState<"on_the_way" | "running_late" | null>(null);
 
   const ETA_OPTIONS = [
     { label: "30 min",      value: "30 minutes" },
@@ -922,10 +925,9 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
                       return;
                     }
                     if (s.key === "running_late" || s.key === "on_the_way") {
-                      // Toggle picker open/closed; re-tap on active status also reopens it
-                      const alreadyOpen = showEtaPicker && etaPickerFor === s.key;
-                      setShowEtaPicker(!alreadyOpen);
-                      setEtaPickerFor(alreadyOpen ? null : s.key as "on_the_way" | "running_late");
+                      // Open the blocking ETA modal
+                      setEtaModalFor(s.key as "on_the_way" | "running_late");
+                      setShowEtaModal(true);
                       setShowIssueInput(false);
                       return;
                     }
@@ -945,40 +947,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
               );
             })}
           </div>
-          {/* ETA picker for On the Way / Running Late */}
-          {showEtaPicker && etaPickerFor && (
-            <div className={`mt-2 p-3 rounded-xl space-y-2 border ${
-              etaPickerFor === "on_the_way"
-                ? "bg-blue-950/30 border-blue-700/40"
-                : "bg-orange-950/30 border-orange-700/40"
-            }`}>
-              <p className={`text-xs font-semibold uppercase tracking-widest ${
-                etaPickerFor === "on_the_way" ? "text-blue-300" : "text-orange-300"
-              }`}>
-                {job.jobStatus === etaPickerFor && job.issueNote ? "Update ETA" : "When will you arrive?"}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {ETA_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      statusMutation.mutate({ cleanerJobId: job.id, status: etaPickerFor, etaLabel: opt.value });
-                      setShowEtaPicker(false);
-                      setEtaPickerFor(null);
-                    }}
-                    disabled={statusMutation.isPending}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 ${
-                      etaPickerFor === "on_the_way"
-                        ? "bg-blue-900/40 text-blue-200 border-blue-700/50 hover:bg-blue-800/60"
-                        : "bg-orange-900/40 text-orange-200 border-orange-700/50 hover:bg-orange-800/60"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* ETA inline picker removed — now a full blocking modal */}
 
           {/* Issue note input — note is required before submitting */}
           {showIssueInput && (
@@ -1078,6 +1047,95 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
           )}
         </div>
       </CardContent>
+
+      {/* ── ETA Selection Modal (blocking — must pick before status fires) ── */}
+      <Dialog
+        open={showEtaModal}
+        onOpenChange={(open) => {
+          // Only allow closing via Cancel button — not backdrop click or ESC
+          if (!open && statusMutation.isPending) return;
+          if (!open) setShowEtaModal(false);
+        }}
+      >
+        <DialogContent
+          className="bg-slate-900 border-slate-700 text-white max-w-sm mx-auto rounded-2xl"
+          onInteractOutside={e => e.preventDefault()}
+          onEscapeKeyDown={e => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl flex items-center gap-2">
+              {etaModalFor === "on_the_way" ? (
+                <>
+                  <span className="text-2xl">🚗</span> On the Way
+                </>
+              ) : (
+                <>
+                  <span className="text-2xl">⏰</span> Running Late
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-1">
+            {/* Instruction */}
+            <div className={`p-3 rounded-xl border ${
+              etaModalFor === "on_the_way"
+                ? "bg-blue-950/40 border-blue-600/40"
+                : "bg-orange-950/40 border-orange-600/40"
+            }`}>
+              <p className={`text-sm font-semibold ${
+                etaModalFor === "on_the_way" ? "text-blue-200" : "text-orange-200"
+              }`}>
+                When will you arrive?
+              </p>
+              <p className={`text-xs mt-1 ${
+                etaModalFor === "on_the_way" ? "text-blue-400" : "text-orange-400"
+              }`}>
+                Select your ETA — your client will be notified automatically.
+              </p>
+            </div>
+
+            {/* ETA option buttons — large, easy to tap */}
+            <div className="grid grid-cols-2 gap-3">
+              {ETA_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    if (!etaModalFor) return;
+                    statusMutation.mutate({ cleanerJobId: job.id, status: etaModalFor, etaLabel: opt.value });
+                    setShowEtaModal(false);
+                    setEtaModalFor(null);
+                  }}
+                  disabled={statusMutation.isPending}
+                  className={`py-4 rounded-2xl text-sm font-bold border-2 transition-all active:scale-95 disabled:opacity-50 ${
+                    etaModalFor === "on_the_way"
+                      ? "bg-blue-900/50 text-blue-100 border-blue-600/60 hover:bg-blue-700/60 hover:border-blue-400"
+                      : "bg-orange-900/50 text-orange-100 border-orange-600/60 hover:bg-orange-700/60 hover:border-orange-400"
+                  }`}
+                >
+                  {statusMutation.isPending
+                    ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                    : opt.label
+                  }
+                </button>
+              ))}
+            </div>
+
+            {/* Cancel */}
+            <Button
+              variant="outline"
+              className="w-full border-slate-600 text-slate-400 hover:bg-slate-800 bg-transparent"
+              onClick={() => {
+                setShowEtaModal(false);
+                setEtaModalFor(null);
+              }}
+              disabled={statusMutation.isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Mark Complete Confirmation Modal ─────────────────────────────── */}
       <Dialog open={showCompleteConfirm} onOpenChange={setShowCompleteConfirm}>

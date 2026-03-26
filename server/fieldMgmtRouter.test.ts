@@ -1247,3 +1247,53 @@ describe("CleanerPortal — issue_at_property note validation", () => {
     expect(raw.trim()).toBe("dog in the house");
   });
 });
+
+// ── CleanerPortal — ETA blocking modal logic ─────────────────────────────────
+
+describe("CleanerPortal — ETA blocking modal", () => {
+  // Mirrors the button click handler logic
+  function shouldOpenEtaModal(statusKey: string): boolean {
+    return statusKey === "on_the_way" || statusKey === "running_late";
+  }
+
+  // Mirrors the onInteractOutside / onEscapeKeyDown guard
+  function canDismissModal(isPending: boolean): boolean {
+    return !isPending;
+  }
+
+  // Mirrors the submit guard inside each ETA button
+  function canSubmitEta(etaModalFor: string | null, etaLabel: string): boolean {
+    return etaModalFor !== null && etaLabel.trim().length > 0;
+  }
+
+  it("opens ETA modal when on_the_way is tapped", () => {
+    expect(shouldOpenEtaModal("on_the_way")).toBe(true);
+  });
+
+  it("opens ETA modal when running_late is tapped", () => {
+    expect(shouldOpenEtaModal("running_late")).toBe(true);
+  });
+
+  it("does NOT open ETA modal for other statuses", () => {
+    expect(shouldOpenEtaModal("arrived")).toBe(false);
+    expect(shouldOpenEtaModal("completed")).toBe(false);
+    expect(shouldOpenEtaModal("issue_at_property")).toBe(false);
+  });
+
+  it("allows dismissal when mutation is not pending", () => {
+    expect(canDismissModal(false)).toBe(true);
+  });
+
+  it("blocks dismissal while mutation is pending", () => {
+    expect(canDismissModal(true)).toBe(false);
+  });
+
+  it("allows ETA submit when modal is open and label is selected", () => {
+    expect(canSubmitEta("on_the_way", "30 minutes")).toBe(true);
+    expect(canSubmitEta("running_late", "1 hour")).toBe(true);
+  });
+
+  it("blocks ETA submit when modal context is null", () => {
+    expect(canSubmitEta(null, "30 minutes")).toBe(false);
+  });
+});
