@@ -157,3 +157,5 @@
 - [x] Live Call Assist: remove auto-advance entirely — suggestion was flashing then disappearing; agent now reads and moves manually
 - [x] Live Call Assist: rebuild as continuous flow — no manual stage clicks, no auto-advance; AI tracks where you are internally and just gives the next line every time agent presses Enter
 - [ ] Live Call Assist: full rebuild — world-class, high-converting, human. Type → get next line. Stages as read-only guide only.
+- [x] Live Call Assist: discovery stage should ask bedrooms/bathrooms first, then clean type — not jump straight to clean type
+- [ ] Live Call Assist: discovery should ask bedrooms, bathrooms, AND service type (standard/recurring/move-out) all in one question

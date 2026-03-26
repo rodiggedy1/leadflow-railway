@@ -75,9 +75,9 @@ const STAGES = [
     borderColor: "border-cyan-200",
     textColor: "text-cyan-700",
     goal: "Understand their home, their situation, and what's driving them to book right now",
-    intro: "Love it — let me pull up a quote for you right now. How many bedrooms and bathrooms are we working with, and is this more of a regular maintenance clean or are we doing a deep clean?",
+    intro: "Love it — let me pull up a quote for you right now. How many bedrooms and bathrooms are we working with?",
     introLabel: "Discovery Opener",
-    introNote: "Make it feel like you're excited to help, not filling out a form. If they mention anything emotional (mess, guests coming, embarrassment) — acknowledge it before moving on.",
+    introNote: "Beds and baths first — that's what drives the price. Once you have those, ask about clean type (standard, deep, move-in/out). If they mention anything emotional — acknowledge it warmly before moving on.",
   },
   {
     id: "pain",

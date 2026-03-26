@@ -1751,8 +1751,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
             advance: "Customer has confirmed they want a quote or to book.",
           },
           discovery: {
-            goal: "Get beds, baths, and type of clean. Make it feel like a conversation, not a form. If they mention urgency, embarrassment, or an event — acknowledge it warmly in one phrase before moving on.",
-            advance: "You have the home size and clean type.",
+            goal: "Ask how many bedrooms and bathrooms first — that's the most important info for the quote. Keep it warm and conversational. Only ask about clean type (standard, deep, move-in/out) AFTER you have beds and baths. If they mention urgency, embarrassment, or an event — acknowledge it in one warm phrase before moving on.",
+            advance: "You have the number of bedrooms, bathrooms, AND the type of clean.",
           },
           situation: {
             goal: "Find the emotional WHY. What's driving this call right now? An event? Guests coming? Finally hit a breaking point? Their answer is gold — use it to make the value pitch personal.",
