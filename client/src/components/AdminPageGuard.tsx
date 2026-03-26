@@ -3,11 +3,15 @@
  *
  * Behaviour:
  *   - While auth is loading: shows a spinner
- *   - No session at all: redirects to /agent (agent login)
+ *   - No agent session: renders children (the page's own AdminLoginScreen handles auth)
  *   - Agent is admin OR pagePermissions is null (unrestricted): renders children
  *   - Agent has permissions and pageId is allowed: renders children
  *   - Agent has permissions and pageId is NOT allowed: redirects to first allowed page
  *   - Agent has no allowed pages: shows "Access Denied" screen
+ *
+ * IMPORTANT: Do NOT redirect to /agent when there is no session.
+ * The admin pages have their own login screen (AdminLoginScreen). Redirecting here
+ * would hijack the admin login flow and send the owner to the agent login instead.
  */
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
@@ -40,7 +44,7 @@ interface AdminPageGuardProps {
 export default function AdminPageGuard({ pageId, children }: AdminPageGuardProps) {
   const { pagePermissions, loaded, agentId, isAdmin } = useAgentPermissions();
 
-  // No session = not logged in at all
+  // No session = not logged in as an agent
   const hasSession = agentId !== null;
 
   // Admins are always allowed; null permissions = unrestricted agent
@@ -49,15 +53,13 @@ export default function AdminPageGuard({ pageId, children }: AdminPageGuardProps
   useEffect(() => {
     if (!loaded) return;
 
-    // No session — send to agent login
-    if (!hasSession) {
-      window.location.replace("/agent");
-      return;
-    }
+    // No agent session — do NOT redirect. Let the page's own auth guard handle it.
+    // (AdminLoginScreen is rendered by AdminDashboard/CommandCenter/etc. when hasSession is false)
+    if (!hasSession) return;
 
     if (isAllowed) return;
 
-    // Find the first allowed page and redirect there
+    // Agent is logged in but not allowed on this specific page — redirect to first allowed page
     const firstAllowed = ADMIN_PAGES.find(p => pagePermissions!.includes(p.id));
     if (firstAllowed) {
       window.location.replace(PAGE_URLS[firstAllowed.id] ?? "/agent");
@@ -73,8 +75,8 @@ export default function AdminPageGuard({ pageId, children }: AdminPageGuardProps
     );
   }
 
-  // Redirect in progress — show spinner
-  if (!hasSession || (!isAllowed && pagePermissions && pagePermissions.length > 0)) {
+  // Agent is logged in but being redirected to their allowed page — show spinner
+  if (hasSession && !isAllowed && pagePermissions && pagePermissions.length > 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -82,7 +84,8 @@ export default function AdminPageGuard({ pageId, children }: AdminPageGuardProps
     );
   }
 
-  if (!isAllowed) {
+  // Agent is logged in with no allowed pages at all
+  if (hasSession && !isAllowed) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
