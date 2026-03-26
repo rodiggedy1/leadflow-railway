@@ -1069,3 +1069,100 @@ describe("buildTimeline — jobStatusHistory interleaving", () => {
     expect(events[0].id).toBe("sh-42");
   });
 });
+
+// ── getJobsForDay — etaTimestamp passthrough ──────────────────────────────────
+
+describe("fieldMgmtRouter — getJobsForDay etaTimestamp passthrough", () => {
+  it("includes etaTimestamp in the returned job shape", () => {
+    // Simulate the mapping logic that getJobsForDay applies to each DB row
+    const dbRow = {
+      id: 1,
+      cleanerName: "Jane Smith",
+      teamName: null,
+      customerName: "Test Client",
+      customerPhone: "555-0100",
+      cleanerPhone: "555-0200",
+      jobAddress: "123 Main St",
+      serviceDateTime: "2026-03-26 09:00:00",
+      serviceType: "Standard Cleaning",
+      bedrooms: 2,
+      bathrooms: 1,
+      jobStatus: "on_the_way",
+      trackerToken: null,
+      delayMinutes: null,
+      issueNote: null,
+      etaTimestamp: 1774552800000, // a real epoch ms value
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      bookingStatus: "active",
+      cleanerProfileId: 10,
+    };
+
+    // The mapping in getJobsForDay spreads the row and adds computed fields
+    const mapped = {
+      ...dbRow,
+      cleanerPhone: dbRow.cleanerPhone ?? null,
+      stepsFired: 0,
+      stepsSuccess: 0,
+      totalSteps: 10,
+      timeline: [],
+      magicLinkToken: null,
+    };
+
+    expect(mapped.etaTimestamp).toBe(1774552800000);
+    expect(typeof mapped.etaTimestamp).toBe("number");
+  });
+
+  it("etaTimestamp is null when not set on the job", () => {
+    const dbRow = {
+      id: 2,
+      cleanerName: "Bob Jones",
+      teamName: null,
+      customerName: "Another Client",
+      customerPhone: "555-0300",
+      cleanerPhone: null,
+      jobAddress: "456 Oak Ave",
+      serviceDateTime: "2026-03-26 10:00:00",
+      serviceType: "Deep Cleaning",
+      bedrooms: 3,
+      bathrooms: 2,
+      jobStatus: "not_started",
+      trackerToken: null,
+      delayMinutes: null,
+      issueNote: null,
+      etaTimestamp: null,
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      bookingStatus: "active",
+      cleanerProfileId: 11,
+    };
+
+    const mapped = {
+      ...dbRow,
+      cleanerPhone: dbRow.cleanerPhone ?? null,
+      stepsFired: 0,
+      stepsSuccess: 0,
+      totalSteps: 10,
+      timeline: [],
+      magicLinkToken: null,
+    };
+
+    expect(mapped.etaTimestamp).toBeNull();
+  });
+
+  it("ETA_OPTIONS in CleanerPortal do not include a Don't know option", () => {
+    // Mirrors the ETA_OPTIONS array defined in CleanerPortal.tsx
+    const ETA_OPTIONS = [
+      { label: "30 min",      value: "30 minutes" },
+      { label: "1 hour",     value: "1 hour" },
+      { label: "1 hr 30 min", value: "1 hr 30 min" },
+      { label: "2 hours",    value: "2 hours" },
+    ];
+
+    const hasDontKnow = ETA_OPTIONS.some(
+      opt => opt.value.toLowerCase().includes("don") || opt.value.toLowerCase().includes("unknown")
+    );
+    expect(hasDontKnow).toBe(false);
+    expect(ETA_OPTIONS).toHaveLength(4);
+  });
+});

@@ -1008,7 +1008,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             }`}>
               {job.etaTimestamp
                 ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
-                : job.issueNote === "Don't know" ? "ETA unknown" : null
+                : null
               }
             </p>
           )}

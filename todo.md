@@ -19,7 +19,7 @@
 - [ ] Include applied custom rule totals in weekly pay summary
 - [ ] Add note field when toggling a custom rule on (audit trail)
 - [ ] Add "Recalculate Pay" button for existing jobs after rule changes
-- [ ] Fix pre-existing TS error: runClientPreJobNotifications not exported from fieldMgmtEngine
+- [x] Fix pre-existing TS error: runClientPreJobNotifications not exported from fieldMgmtEngine
 - [x] Fix leads page: add "Google Ads Form" badge for leadSource="email"
 - [x] Fix leads page: add "Google Ads Call" badge for leadSource="voice"
 - [x] Fix leads page: show barkQA details (cleaning type, email, call time) in lead card detail panel
@@ -189,3 +189,9 @@
 - [x] Add tRPC procedure to fetch call recordings per job/cleaner (getJobCalls already existed)
 - [x] Display call recording player in Control Tower Communication & Workflow section
 - [x] Copy Magic Link button: generate token on demand if none exists (don't depend on pre-job SMS having fired)
+- [x] ETA mandatory: remove "Don't know" from CleanerPortal ETA picker
+- [x] ETA mandatory: add etaTimestamp to getJobsForDay select clause (server)
+- [x] ETA mandatory: add etaTimestamp to getJobsForDay return object (server)
+- [x] ETA display: show 🚗 ETA badge on DayBoard job blocks (on_the_way / running_late)
+- [x] ETA display: show ETA banner in DayBoard detail panel (on_the_way / running_late)
+- [x] ETA display: Control Tower already had ETA on job cards and detail panel

@@ -75,6 +75,7 @@ type Job = {
   jobStatus: string | null;
   delayMinutes: number | null;
   issueNote: string | null;
+  etaTimestamp: number | null;
   updatedAt: Date | null;
   stepsFired: number;
   stepsSuccess: number;
@@ -374,15 +375,22 @@ function JobBlock({
         {widthPct > 8 && (
           <span className="text-[10px] opacity-55 truncate leading-tight mt-0.5 shrink-0">{shortAddr}</span>
         )}
-        {/* Zone 3: Status badge — spacer pushes it to the bottom */}
+        {/* Zone 3: Status badge + ETA — spacer pushes it to the bottom */}
         <div className="flex-1" />
         {widthPct > 12 && (
-          <span
-            className={`inline-flex items-center self-start gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide shrink-0 ${sc.badgeClass}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} shrink-0`} />
-            {sc.label}
-          </span>
+          <div className="flex items-center gap-1 flex-wrap">
+            <span
+              className={`inline-flex items-center self-start gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide shrink-0 ${sc.badgeClass}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} shrink-0`} />
+              {sc.label}
+            </span>
+            {job.etaTimestamp && (job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && (
+              <span className="text-[9px] font-bold text-sky-700 bg-sky-100 px-1 py-0.5 rounded-full shrink-0">
+                🚗 {new Date(job.etaTimestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </button>
@@ -727,6 +735,19 @@ function DetailPanel({
               Confirm Assignment
             </button>
           )}
+        </div>
+      )}
+
+      {/* ETA banner — shown when cleaner is on the way or running late */}
+      {job.etaTimestamp && (job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && (
+        <div className="mx-5 mt-3 p-3 bg-sky-50 border border-sky-200 rounded-lg shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sky-500 text-sm">🚗</span>
+            <div>
+              <p className="text-xs font-semibold text-sky-800">ETA: {new Date(job.etaTimestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
+              <p className="text-[11px] text-sky-600 mt-0.5">Cleaner estimated arrival time</p>
+            </div>
+          </div>
         </div>
       )}
 
