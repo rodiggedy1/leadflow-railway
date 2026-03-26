@@ -263,9 +263,9 @@ export default function LiveCallAssist() {
   const saveCallLead = trpc.leads.saveCallLead.useMutation();
 
   // ── Clear call confirm dialog ────────────────────────────────────────────────
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [showFollowUpDate, setShowFollowUpDate] = useState(false);
-  const [followUpDate, setFollowUpDate]         = useState("");
+  // outcome modal: null | 'booked' | 'followup' | 'notinterested'
+  const [outcomeModal, setOutcomeModal] = useState<null|'booked'|'followup'|'notinterested'>(null);
+  const [followUpDate, setFollowUpDate] = useState("");
 
   const doReset = () => {
     setConversation([]);
@@ -281,16 +281,15 @@ export default function LiveCallAssist() {
     setServiceType("");
     setPreferredDate("");
     setSelectedExtras([]);
-    setShowClearConfirm(false);
-    setShowFollowUpDate(false);
+    setOutcomeModal(null);
     setFollowUpDate("");
   };
 
-  const handleClearCall = (notInterested = false, isFollowUp = false, fDate = "") => {
+  const handleClearCall = (notInterested = false, isFollowUp = false, fDate = "", isBooked = false) => {
     // Only save if there's something meaningful (at least a name or 2+ conversation lines)
     const hasData = leadName.trim() || conversation.length >= 2;
     if (hasData) {
-      const isBooked = !notInterested && !isFollowUp && ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId);
+      const bookedFlag = isBooked || (!notInterested && !isFollowUp && ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId));
       const transcript = conversation
         .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
         .join("\n");
@@ -304,7 +303,7 @@ export default function LiveCallAssist() {
         preferredDate: preferredDate || undefined,
         quotedPrice:   quotedPrice || undefined,
         extras:        selectedExtras.length > 0 ? selectedExtras : undefined,
-        isBooked,
+        isBooked: bookedFlag,
         notInterested,
         isFollowUp,
         followUpDate:  fDate || undefined,
@@ -317,7 +316,7 @@ export default function LiveCallAssist() {
           toast.success(
             notInterested ? "🚫 Lead marked not interested" :
             isFollowUp    ? `📅 Follow-up set${fDate ? ` for ${fDate}` : ""}` :
-            isBooked      ? "✅ Booking saved to pipeline" :
+            bookedFlag    ? "✅ Booking saved to pipeline" :
                             "✅ Lead saved to pipeline"
           );
         },
@@ -353,71 +352,79 @@ export default function LiveCallAssist() {
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
 
-      {/* ── Clear Call Confirm Dialog ── */}
-      {showClearConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
-            <div className="px-6 py-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-                <RotateCcw className="w-5 h-5 text-red-500" />
-              </div>
-              <h2 className="text-base font-bold text-gray-900 mb-1">Clear this call?</h2>
-              <p className="text-sm text-gray-500">This will wipe the transcript, context, and suggestion. Ready for the next call.</p>
-            </div>
-            <div className="px-6 pb-4">
-              {/* Follow Up Later — expands to show date picker */}
-              {showFollowUpDate ? (
-                <div className="mb-3">
-                  <p className="text-xs font-semibold text-amber-700 mb-2">📅 Pick a follow-up date</p>
+      {/* ── Outcome Modals ── */}
+      {outcomeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setOutcomeModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+
+            {/* ─ BOOKED ─ */}
+            {outcomeModal === 'booked' && (
+              <>
+                <div className="px-6 pt-8 pb-4 text-center">
+                  <div className="text-5xl mb-3">🎉</div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1">Congratulations!</h2>
+                  <p className="text-sm text-gray-500">You booked the service. Great work — the lead has been saved to the pipeline as <span className="font-semibold text-green-600">Booked</span>.</p>
+                </div>
+                <div className="px-6 pb-6">
+                  <button
+                    onClick={() => handleClearCall(false, false, "", true)}
+                    className="w-full py-3 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 transition-colors"
+                  >
+                    Save &amp; Clear for Next Call
+                  </button>
+                  <button onClick={() => setOutcomeModal(null)} className="w-full py-2 mt-1 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
+                </div>
+              </>
+            )}
+
+            {/* ─ FOLLOW UP ─ */}
+            {outcomeModal === 'followup' && (
+              <>
+                <div className="px-6 pt-8 pb-4 text-center">
+                  <div className="text-5xl mb-3">📅</div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1">Follow Up Scheduled</h2>
+                  <p className="text-sm text-gray-500 mb-4">Pick a date to follow up with this lead.</p>
                   <input
                     type="date"
                     value={followUpDate}
                     onChange={e => setFollowUpDate(e.target.value)}
                     min={new Date().toISOString().split("T")[0]}
-                    className="w-full text-sm rounded-xl border border-amber-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-300 mb-2"
+                    className="w-full text-sm rounded-xl border border-amber-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   />
+                </div>
+                <div className="px-6 pb-6">
                   <button
                     onClick={() => handleClearCall(false, true, followUpDate)}
-                    className="w-full py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition-colors mb-1"
+                    disabled={!followUpDate}
+                    className="w-full py-3 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Save Follow-Up &amp; Clear
                   </button>
-                  <button
-                    onClick={() => setShowFollowUpDate(false)}
-                    className="w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    Back
-                  </button>
+                  <button onClick={() => setOutcomeModal(null)} className="w-full py-2 mt-1 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
                 </div>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setShowFollowUpDate(true)}
-                    className="w-full py-2.5 rounded-xl border border-amber-300 text-sm font-semibold text-amber-700 hover:bg-amber-50 transition-colors mb-2"
-                  >
-                    📅 Follow Up Later
-                  </button>
+              </>
+            )}
+
+            {/* ─ NOT INTERESTED ─ */}
+            {outcomeModal === 'notinterested' && (
+              <>
+                <div className="px-6 pt-8 pb-4 text-center">
+                  <div className="text-5xl mb-3">😔</div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1">Sorry it didn’t work out</h2>
+                  <p className="text-sm text-gray-500">No worries — the lead will be saved as <span className="font-semibold text-gray-600">Not Interested</span>. On to the next one!</p>
+                </div>
+                <div className="px-6 pb-6">
                   <button
                     onClick={() => handleClearCall(true)}
-                    className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mb-2"
+                    className="w-full py-3 rounded-xl bg-gray-800 text-white text-sm font-bold hover:bg-gray-900 transition-colors"
                   >
-                    🚫 Not Interested — Clear
+                    Save &amp; Clear for Next Call
                   </button>
-                  <button
-                    onClick={() => handleClearCall(false)}
-                    className="w-full py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors mb-2"
-                  >
-                    Clear &amp; Reset
-                  </button>
-                  <button
-                    onClick={() => setShowClearConfirm(false)}
-                    className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
+                  <button onClick={() => setOutcomeModal(null)} className="w-full py-2 mt-1 text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
+                </div>
+              </>
+            )}
+
           </div>
         </div>
       )}
@@ -468,10 +475,22 @@ export default function LiveCallAssist() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setShowClearConfirm(true)}
-            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
+            onClick={() => setOutcomeModal('booked')}
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors"
           >
-            <RotateCcw className="w-3 h-3" /> Clear Call
+            🎉 Booked
+          </button>
+          <button
+            onClick={() => setOutcomeModal('followup')}
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-amber-400 text-white hover:bg-amber-500 transition-colors"
+          >
+            📅 Follow Up
+          </button>
+          <button
+            onClick={() => setOutcomeModal('notinterested')}
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-500 transition-colors"
+          >
+            🚫 Not Interested
           </button>
         </div>
       </div>
