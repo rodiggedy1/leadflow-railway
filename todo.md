@@ -152,3 +152,4 @@
 - [x] Live Call Assist: Situation intro should be a natural transition from Discovery — acknowledge beds/baths then ask priority question
 - [x] Live Call Assist: rewrite system prompt with Jade-style hard rules — one job, strict length, always ends with specific next step, no mirroring
 - [x] Live Call Assist: remove introNote fallback from Situation/Recap/Close — show spinner only while AI loads, no stale text
+- [x] Live Call Assist: fix Situation/Value/Recap blank — advanceStage was clearing suggestion before agent could read it; now shows suggestion for 3s before advancing
