@@ -366,7 +366,7 @@ export default function ControlTowerTab() {
       toast.error("No active magic link found for this cleaner. Send one via SMS first.");
       return;
     }
-    const url = `${window.location.origin}/cleaner-portal?token=${job.magicLinkToken}`;
+    const url = `https://quote.maidinblack.com/auth/cleaner-callback?token=${job.magicLinkToken}`;
     navigator.clipboard.writeText(url).then(() => {
       toast.success(`Magic link for ${job.cleanerName ?? "cleaner"} copied!`);
     }).catch(() => {
