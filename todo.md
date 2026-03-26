@@ -205,3 +205,5 @@
 - [x] Expand voice alert hours from 8 AM–5 PM to 7 AM–6 PM ET
 - [x] Fix VAPI 400 "property server should not exist" error on voice alert cleaner call — removed server field from payload (VAPI API no longer accepts it)
 - [x] Voice alert: show "Call placed to cleaner — (XXX) XXX-XXXX" confirmation toast after successful call; shows CS fallback message if no cleaner phone on file
+- [x] Fix VAPI end-of-call webhook: set serverUrl directly on the VAPI phone number via API (PATCH /phone-number) — no code change needed
+- [x] B Karla phone: confirmed genuinely NULL in cleaner_profiles — needs to be added via Cleaner Profiles admin UI
