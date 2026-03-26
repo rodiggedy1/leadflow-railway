@@ -147,3 +147,4 @@
 - [x] Live Call Assist: Recap and Close intro scripts pull real values from context panel (beds/baths, service type, quoted price)
 - [x] Live Call Assist: fix Recap intro — AI generates the mirror-back line from the transcript on stage entry (no placeholder text)
 - [x] Live Call Assist: wire pricing engine to auto-calculate quoted price from beds/baths/clean type — replace free-text Quoted Price field
+- [x] Live Call Assist: fix Situation stage — one direct question, advance immediately after answer, no mirroring back

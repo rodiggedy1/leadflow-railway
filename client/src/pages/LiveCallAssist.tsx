@@ -90,9 +90,9 @@ const STAGES = [
     borderColor: "border-amber-200",
     textColor: "text-amber-700",
     goal: "Understand what's been frustrating them and why they're calling now instead of later",
-    intro: "Got it! And is this your first time using a cleaning service, or have you had cleaners before? I just want to make sure we get it right for you.",
+    intro: "Have you had a cleaning service before?",
     introLabel: "Situation Question",
-    introNote: "If they've had bad experiences before, this is where you learn them. If they're new, it's a chance to set great expectations. Either way, it builds trust.",
+    introNote: "One question. Get the answer. Move on. If yes — great, they know the drill. If no — great, fresh start. Either way, advance to Value immediately.",
   },
   {
     id: "value",

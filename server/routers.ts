@@ -1756,8 +1756,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
             maxExchanges: 2,
           },
           situation: {
-            goal: "One quick question: have they had a cleaner before? If yes, what happened? This takes ONE exchange max.",
-            exitCondition: "Customer has answered whether they've had a cleaner before. That's it. Advance immediately after their answer — do NOT ask follow-up questions or reflect back what they said.",
+            goal: "One question only: have they had a cleaner before? Get the answer. That's the entire stage.",
+            exitCondition: "Customer answered yes or no. ADVANCE IMMEDIATELY. Do not mirror back. Do not ask why. Do not ask follow-ups. The answer itself is enough.",
             maxExchanges: 1,
           },
           value: {
