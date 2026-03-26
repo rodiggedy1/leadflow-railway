@@ -202,7 +202,7 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
         style: 0.3,
         useSpeakerBoost: true,
       },
-      maxDurationSeconds: 45,
+      maxDurationSeconds: 25,
     },
   };
 
@@ -996,6 +996,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
 
   let sent = 0;
   let errors = 0;
+  let jobIndex = 0; // used to stagger VAPI calls 30s apart
 
   for (const job of jobs) {
     if (!job.serviceDateTime) continue;
@@ -1007,8 +1008,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
     if (serviceMs < windowStart.getTime() || serviceMs > windowEnd.getTime()) continue;
 
     // Skip if cleaner has already set on_the_way, arrived, in_progress, or completed
-    if (
-      job.jobStatus === "on_the_way" ||
+    if (job.jobStatus === "on_the_way" ||
       job.jobStatus === "arrived" ||
       job.jobStatus === "in_progress" ||
       job.jobStatus === "completed"
@@ -1053,13 +1053,17 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       }).catch(() => {});
 
       // Auto-call the CLEANER 25 minutes after the SMS alert, then log the call.
+      // Calls are staggered by 30 seconds each (jobIndex * 30s) to prevent concurrent
+      // VAPI slot exhaustion when multiple cleaners miss check-in at the same time.
       // This means the call reaches the cleaner ~35 minutes before the job starts.
       // Falls back to CS team if no cleaner phone is available.
       const jobIdForCall = job.id;
       const cleanerNameForCall = job.cleanerName ?? "Unknown";
       const cleanerPhoneForCall = job.cleanerPhone ?? undefined;
       const callRecipient = cleanerPhoneForCall ?? CS_ALERT_NUMBER;
-      sleep(25 * 60 * 1000)
+      const staggerMs = jobIndex * 30 * 1000; // 30s between each cleaner call
+      jobIndex++;
+      sleep(25 * 60 * 1000 + staggerMs)
         .then(() =>
           placeNoCheckinEscalationCall({
             cleanerName: cleanerNameForCall,

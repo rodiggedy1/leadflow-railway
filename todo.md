@@ -207,3 +207,5 @@
 - [x] Voice alert: show "Call placed to cleaner — (XXX) XXX-XXXX" confirmation toast after successful call; shows CS fallback message if no cleaner phone on file
 - [x] Fix VAPI end-of-call webhook: set serverUrl directly on the VAPI phone number via API (PATCH /phone-number) — no code change needed
 - [x] B Karla phone: confirmed genuinely NULL in cleaner_profiles — needs to be added via Cleaner Profiles admin UI
+- [x] Reduce VAPI maxDurationSeconds from 45s to 25s to release concurrent slots faster
+- [x] Stagger cleaner voice alert calls by 30 seconds each (jobIndex * 30s offset on sleep) to prevent concurrent slot exhaustion
