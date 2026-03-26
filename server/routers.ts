@@ -1,7 +1,7 @@
 import { COOKIE_NAME, AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminAgentProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminAgentProcedure, agentProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
@@ -1734,7 +1734,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
      * and optional lead context. Returns the single best thing for the agent to say
      * right now, based on world-class home service sales technique.
      */
-    getLiveCallSuggestions: adminAgentProcedure
+    getLiveCallSuggestions: agentProcedure
       .input(z.object({
         stage: z.string().min(1),
         transcript: z.string().max(6000),
@@ -2020,7 +2020,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * Called automatically when the agent clicks "Clear Call".
      * If the call reached the close stage (card given), the session is marked BOOKED.
      */
-    saveCallLead: adminAgentProcedure
+    saveCallLead: agentProcedure
       .input(z.object({
         name:         z.string().min(1).max(255),
         phone:        z.string().max(30).default("Unknown"),

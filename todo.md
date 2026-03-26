@@ -179,3 +179,6 @@
 - [x] Agent drawer: add AI suggestion pills row (Primary move + alternatives that pre-fill compose)
 - [x] Agent drawer: add Conversation / Flow View tabs matching admin
 - [x] Agent drawer: unify compose toolbar to match admin (note icon + AI toggle + Send in one row)
+- [x] Add Call Assist nav button to Agent Dashboard header (matching admin)
+- [x] Verify Call Assist page uses only local React state (no shared server-side session state that could bleed between agents)
+- [x] Ensure /call-assist route is accessible to agents — changed getLiveCallSuggestions and saveCallLead from adminAgentProcedure to agentProcedure
