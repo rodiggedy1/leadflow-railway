@@ -507,6 +507,8 @@ function ObjectionSubTypes({
 
 // ─── Center column: Customer line banner + AI suggestion ──────────────────────
 
+const AUTO_FIRE_STAGES: StageId[] = ["situation", "recap", "close"];
+
 function CenterColumn({
   suggestion,
   isLoading,
@@ -528,16 +530,20 @@ function CenterColumn({
   onObjectionTypeChange: (id: ObjectionTypeId) => void;
   onUseSuggestion: (text: string) => void;
 }) {
-  // Intro is shown until the agent submits their first customer line for this stage
-  const [introVisible, setIntroVisible] = useState(true);
   const stage = STAGES.find((s) => s.id === activeStage)!;
+  // Auto-fire stages show no intro — AI fires immediately on entry
+  const isAutoFire = AUTO_FIRE_STAGES.includes(activeStage);
 
-  // Use the stage's static intro text (Recap and Close auto-fire AI on entry, so their intro is just a brief instruction)
+  // Intro is shown until the agent submits their first customer line for this stage
+  // Auto-fire stages start with intro hidden so only the spinner shows
+  const [introVisible, setIntroVisible] = useState(!isAutoFire);
+
+  // Use the stage's static intro text
   const dynamicIntro = stage.intro;
 
   // Reset intro visibility when stage changes
   useEffect(() => {
-    setIntroVisible(true);
+    setIntroVisible(!AUTO_FIRE_STAGES.includes(activeStage));
   }, [activeStage]);
 
   const handleSubmit = () => {
@@ -589,11 +595,9 @@ function CenterColumn({
 
         {/* ── AI suggestion — fills the space once loaded ── */}
         <div className="flex-1 px-5 py-5">
-          {!suggestion && !isLoading && (
+          {!suggestion && !isLoading && !introVisible && (
             <p className="text-sm text-gray-400 text-center mt-6">
-              {introVisible
-                ? "Say the opening line, then type what the customer says below."
-                : "Type what the customer says and press Enter."}
+              Type what the customer says and press Enter.
             </p>
           )}
 

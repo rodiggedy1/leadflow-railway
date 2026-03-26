@@ -151,3 +151,4 @@
 - [x] Live Call Assist: change Situation question to "What's most important to you in a cleaning service?" — use answer to tailor Value pitch
 - [x] Live Call Assist: Situation intro should be a natural transition from Discovery — acknowledge beds/baths then ask priority question
 - [x] Live Call Assist: rewrite system prompt with Jade-style hard rules — one job, strict length, always ends with specific next step, no mirroring
+- [x] Live Call Assist: remove introNote fallback from Situation/Recap/Close — show spinner only while AI loads, no stale text
