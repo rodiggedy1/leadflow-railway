@@ -219,12 +219,9 @@ interface TranscriptLine {
 }
 
 interface AISuggestion {
-  primarySuggestion: string;
-  primaryLabel: string;
-  primaryRationale: string;
-  alternatives: Array<{ label: string; suggestion: string; angle: string }>;
-  liveSignals: string[];
-  stageProgress: number;
+  suggestion: string;
+  rationale: string;
+  coachingNote: string;
 }
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -250,45 +247,7 @@ function CopyBtn({ text, size = "sm" }: { text: string; size?: "sm" | "xs" }) {
   );
 }
 
-// ─── Angle badge ──────────────────────────────────────────────────────────────
 
-const ANGLE_COLORS: Record<string, string> = {
-  Urgency: "bg-red-100 text-red-700",
-  Empathy: "bg-blue-100 text-blue-700",
-  "Social Proof": "bg-green-100 text-green-700",
-  Curiosity: "bg-amber-100 text-amber-700",
-  Assumptive: "bg-violet-100 text-violet-700",
-  Value: "bg-emerald-100 text-emerald-700",
-};
-
-function AngleBadge({ angle }: { angle: string }) {
-  const cls = ANGLE_COLORS[angle] ?? "bg-gray-100 text-gray-600";
-  return (
-    <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>
-      {angle}
-    </span>
-  );
-}
-
-// ─── Signal badge ─────────────────────────────────────────────────────────────
-
-function SignalBadge({ signal }: { signal: string }) {
-  const lower = signal.toLowerCase();
-  const isPositive = lower.includes("buying") || lower.includes("good") || lower.includes("interest") || lower.includes("engaged");
-  const isWarning = lower.includes("hesitation") || lower.includes("price") || lower.includes("sensitive") || lower.includes("cold") || lower.includes("objection");
-  const cls = isPositive
-    ? "bg-green-50 border-green-200 text-green-700"
-    : isWarning
-    ? "bg-amber-50 border-amber-200 text-amber-700"
-    : "bg-blue-50 border-blue-200 text-blue-700";
-  const icon = isPositive ? "●" : isWarning ? "▲" : "◆";
-  return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium ${cls}`}>
-      <span className="text-[8px]">{icon}</span>
-      {signal}
-    </div>
-  );
-}
 
 // ─── Stage tracker (left column) ─────────────────────────────────────────────
 
@@ -584,14 +543,8 @@ function CenterColumn({
   onObjectionTypeChange: (id: ObjectionTypeId) => void;
   onUseSuggestion: (text: string) => void;
 }) {
-  const [selectedAlt, setSelectedAlt] = useState<number | null>(null);
   const [introExpanded, setIntroExpanded] = useState(true);
   const stage = STAGES.find((s) => s.id === activeStage)!;
-
-  // Reset selected alt when suggestion changes
-  useEffect(() => {
-    setSelectedAlt(null);
-  }, [suggestion]);
 
   // Collapse intro once a suggestion loads
   useEffect(() => {
@@ -751,108 +704,39 @@ function CenterColumn({
           )}
 
           {suggestion && !isLoading && (
-            <>
-              {/* Stage progress bar */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Stage Progress</span>
-                  <span className="text-[10px] font-bold" style={{ color: stage.color }}>{suggestion.stageProgress}%</span>
-                </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${suggestion.stageProgress}%`, background: stage.color }}
-                  />
-                </div>
+            <div className={`rounded-2xl border-2 p-5 space-y-4 ${stage.borderColor} ${stage.bgColor}`}>
+              {/* Say This label */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Say This</span>
+                <div className="flex-1 h-px bg-gray-200" />
+                <CopyBtn text={suggestion.suggestion} />
               </div>
 
-              {/* Live signals */}
-              {suggestion.liveSignals.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Live Signals</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suggestion.liveSignals.map((signal, i) => (
-                      <SignalBadge key={i} signal={signal} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* The suggestion itself — large and easy to read */}
+              <p className="text-base font-medium text-gray-800 leading-relaxed">
+                {suggestion.suggestion}
+              </p>
 
-              {/* Primary suggestion */}
-              <div className={`rounded-2xl border-2 p-4 space-y-3 ${stage.borderColor} ${stage.bgColor}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Say This</span>
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
-                        style={{ background: stage.color }}
-                      >
-                        {suggestion.primaryLabel}
-                      </span>
-                    </div>
-                    <p className="text-sm font-medium text-gray-800 leading-relaxed">
-                      {suggestion.primarySuggestion}
-                    </p>
-                  </div>
-                  <CopyBtn text={suggestion.primarySuggestion} />
-                </div>
-                <p className="text-[11px] text-gray-500 italic border-l-2 pl-2" style={{ borderColor: stage.color }}>
-                  {suggestion.primaryRationale}
-                </p>
-                <button
-                  onClick={() => onUseSuggestion(suggestion.primarySuggestion)}
-                  className="w-full py-1.5 rounded-xl text-xs font-bold text-white transition-colors hover:opacity-90 flex items-center justify-center gap-1.5"
-                  style={{ background: stage.color }}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> I said this — what did they say next?
-                </button>
+              {/* Why this works */}
+              <p className="text-xs text-gray-500 italic border-l-2 pl-3" style={{ borderColor: stage.color }}>
+                {suggestion.rationale}
+              </p>
+
+              {/* Coaching note */}
+              <div className="flex items-start gap-2 bg-white/70 rounded-xl px-3 py-2">
+                <Lightbulb className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: stage.color }} />
+                <p className="text-[11px] text-gray-600">{suggestion.coachingNote}</p>
               </div>
 
-              {/* Alternative suggestions */}
-              <div className="space-y-2">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Alternative Angles</div>
-                {suggestion.alternatives.map((alt, i) => {
-                  const letter = ["A", "B", "C"][i] ?? String(i + 1);
-                  const isSelected = selectedAlt === i;
-                  return (
-                    <div
-                      key={i}
-                      className={`rounded-xl border p-3 space-y-2 transition-all ${
-                        isSelected
-                          ? "border-gray-300 bg-gray-50 shadow-sm"
-                          : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/50"
-                      }`}
-                    >
-                      <div
-                        className="flex items-center justify-between gap-2 cursor-pointer"
-                        onClick={() => setSelectedAlt(isSelected ? null : i)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 shrink-0">
-                            {letter}
-                          </div>
-                          <span className="text-xs font-semibold text-gray-700">{alt.label}</span>
-                          <AngleBadge angle={alt.angle} />
-                        </div>
-                        <CopyBtn text={alt.suggestion} size="xs" />
-                      </div>
-                      <p className={`text-xs leading-relaxed pl-7 ${isSelected ? "text-gray-600" : "text-gray-400 line-clamp-1"}`}>
-                        {alt.suggestion}
-                      </p>
-                      {isSelected && (
-                        <button
-                          onClick={() => onUseSuggestion(alt.suggestion)}
-                          className="w-full py-1.5 rounded-xl text-xs font-bold bg-gray-800 text-white hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5 ml-0"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" /> I said this — what did they say next?
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+              {/* I said this button */}
+              <button
+                onClick={() => onUseSuggestion(suggestion.suggestion)}
+                className="w-full py-2 rounded-xl text-xs font-bold text-white transition-colors hover:opacity-90 flex items-center justify-center gap-1.5"
+                style={{ background: stage.color }}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> I said this — what did they say next?
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -950,12 +834,9 @@ export default function LiveCallAssist() {
   const suggestionMutation = trpc.leads.getLiveCallSuggestions.useMutation({
     onSuccess: (data) => {
       setSuggestion({
-        primarySuggestion: data.primarySuggestion,
-        primaryLabel: data.primaryLabel,
-        primaryRationale: data.primaryRationale,
-        alternatives: data.alternatives,
-        liveSignals: data.liveSignals,
-        stageProgress: data.stageProgress,
+        suggestion: data.suggestion,
+        rationale: data.rationale,
+        coachingNote: data.coachingNote,
       });
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");

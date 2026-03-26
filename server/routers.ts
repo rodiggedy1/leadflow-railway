@@ -1731,8 +1731,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
      * leads.getLiveCallSuggestions — AI-powered real-time call coaching.
      *
      * Takes the current sales stage, recent transcript lines typed by the agent,
-     * and optional lead context. Returns a primary suggestion + 3 alternative angles
-     * the agent can use immediately on the live call.
+     * and optional lead context. Returns the single best thing for the agent to say
+     * right now, based on world-class home service sales technique.
      */
     getLiveCallSuggestions: adminAgentProcedure
       .input(z.object({
@@ -1759,15 +1759,15 @@ Analyze this conversation and return a JSON object with exactly these fields:
           input.quotedPrice ? `Quoted price: $${input.quotedPrice}` : null,
         ].filter(Boolean).join("\n");
 
-        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live phone call. The agent can only hear you — the customer cannot. Your job is to give the agent the exact words to say right now, based on the current stage of the call and what the customer just said.
+        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live inbound phone call. The customer has already reached out — they are interested. Your job is to give the agent the single best thing to say right now.
 
 Rules:
-- Suggestions must be ready-to-say out loud, natural, conversational
-- Never use bullet points or headers in the suggestion text itself
-- Keep primary suggestion under 3 sentences
-- Each alternative is a different angle/approach (empathy, urgency, social proof, etc.)
-- Do NOT repeat the same phrasing across suggestions
-- Base everything on proven home services sales techniques`;
+- One response only — the best possible move for this exact moment
+- Must sound like a real human talking, NOT a sales script
+- Warm, confident, and helpful — never pushy or robotic
+- Ready to say out loud immediately, 1-3 sentences max
+- Draw on world-class home service selling: empathy, specificity, social proof, assumptive language
+- Never use bullet points, headers, or filler phrases like "Great question!"`;
 
         const userPrompt = `CURRENT CALL STAGE: ${stageDesc}
 
@@ -1775,15 +1775,9 @@ ${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}
 ${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}
 ${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
 Based on this, give the agent their next move. Return a JSON object with:
-- primarySuggestion: the single best thing to say right now (2-3 sentences, ready to read aloud)
-- primaryLabel: 4-6 word label for the primary approach (e.g. "Empathy + Value Pivot")
-- primaryRationale: why this works right now (1 sentence)
-- alternatives: array of exactly 3 objects, each with:
-  - label: 4-6 word approach name
-  - suggestion: ready-to-say script (2-3 sentences)
-  - angle: one word describing the angle (e.g. "Urgency", "Empathy", "Social Proof", "Curiosity", "Assumptive")
-- liveSignals: array of 2-3 short strings flagging what the agent should watch for or notice right now (e.g. "Hesitation detected", "Good buying signal", "Price sensitivity")
-- stageProgress: integer 0-100 representing how far through this stage the conversation has progressed`;
+- suggestion: the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural)
+- rationale: why this is the right move (1 short sentence, coaching insight)
+- coachingNote: one practical tip for how to deliver this line (tone, pace, pause, etc.)`;
 
         try {
           const response = await invokeLLM({
@@ -1794,31 +1788,16 @@ Based on this, give the agent their next move. Return a JSON object with:
             response_format: {
               type: "json_schema",
               json_schema: {
-                name: "live_call_suggestions",
+                name: "live_call_suggestion",
                 strict: true,
                 schema: {
                   type: "object",
                   properties: {
-                    primarySuggestion: { type: "string" },
-                    primaryLabel: { type: "string" },
-                    primaryRationale: { type: "string" },
-                    alternatives: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          label: { type: "string" },
-                          suggestion: { type: "string" },
-                          angle: { type: "string" },
-                        },
-                        required: ["label", "suggestion", "angle"],
-                        additionalProperties: false,
-                      },
-                    },
-                    liveSignals: { type: "array", items: { type: "string" } },
-                    stageProgress: { type: "number" },
+                    suggestion: { type: "string" },
+                    rationale: { type: "string" },
+                    coachingNote: { type: "string" },
                   },
-                  required: ["primarySuggestion", "primaryLabel", "primaryRationale", "alternatives", "liveSignals", "stageProgress"],
+                  required: ["suggestion", "rationale", "coachingNote"],
                   additionalProperties: false,
                 },
               },
@@ -1828,27 +1807,17 @@ Based on this, give the agent their next move. Return a JSON object with:
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
           const result = JSON.parse(content) as {
-            primarySuggestion: string;
-            primaryLabel: string;
-            primaryRationale: string;
-            alternatives: Array<{ label: string; suggestion: string; angle: string }>;
-            liveSignals: string[];
-            stageProgress: number;
+            suggestion: string;
+            rationale: string;
+            coachingNote: string;
           };
           return { success: true as const, ...result };
         } catch {
           return {
             success: false as const,
-            primarySuggestion: "Listen actively and reflect back what you heard before responding.",
-            primaryLabel: "Active Listening",
-            primaryRationale: "Builds trust and ensures you understand their concern.",
-            alternatives: [
-              { label: "Empathy First", suggestion: "I completely understand where you're coming from. Let me address that directly.", angle: "Empathy" },
-              { label: "Value Redirect", suggestion: "That's a great point — and here's what our customers find most valuable about this.", angle: "Value" },
-              { label: "Soft Close", suggestion: "Based on what you've shared, it sounds like we'd be a great fit. What would it take to get started?", angle: "Assumptive" },
-            ],
-            liveSignals: ["Stay focused on the customer"],
-            stageProgress: 50,
+            suggestion: "That's a great question — let me make sure I give you the right information. Can you tell me a bit more about what you're looking for?",
+            rationale: "Buys a moment and re-engages the customer.",
+            coachingNote: "Slow down, keep your tone warm and unhurried.",
           };
         }
       }),
