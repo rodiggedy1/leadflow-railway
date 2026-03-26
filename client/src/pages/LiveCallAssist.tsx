@@ -500,20 +500,7 @@ function ObjectionSubTypes({
         })}
       </div>
 
-      {/* Show the rebuttal for the selected type */}
-      {active && (
-        <div className={`rounded-xl border p-3 space-y-2 mt-1 ${active.bgColor} ${active.borderColor}`}>
-          <div className="flex items-start gap-2">
-            <p className="flex-1 text-xs font-medium text-gray-800 leading-relaxed italic">
-              "{active.rebuttal}"
-            </p>
-            <CopyBtn text={active.rebuttal} size="xs" />
-          </div>
-          <p className="text-[10px] text-gray-500 border-l-2 pl-2" style={{ borderColor: active.color }}>
-            {active.rebuttalnote}
-          </p>
-        </div>
-      )}
+      {/* Rebuttal is handled by AI — no pre-written card shown */}
     </div>
   );
 }
@@ -530,6 +517,8 @@ function CenterColumn({
   objectionType,
   onObjectionTypeChange,
   onUseSuggestion,
+  serviceType,
+  quotedPrice,
 }: {
   suggestion: AISuggestion | null;
   isLoading: boolean;
@@ -540,10 +529,30 @@ function CenterColumn({
   objectionType: ObjectionTypeId | null;
   onObjectionTypeChange: (id: ObjectionTypeId) => void;
   onUseSuggestion: (text: string) => void;
+  serviceType: string;
+  quotedPrice: string;
 }) {
   // Intro is shown until the agent submits their first customer line for this stage
   const [introVisible, setIntroVisible] = useState(true);
   const stage = STAGES.find((s) => s.id === activeStage)!;
+
+  // Build a dynamic intro that substitutes real context values for recap/close
+  const dynamicIntro = (() => {
+    if (activeStage === "recap") {
+      const detail = serviceType.trim() || "what you told me";
+      return `So just to make sure I have this right — ${detail}. Does that sound right?`;
+    }
+    if (activeStage === "close") {
+      const price = quotedPrice.trim() ? `$${quotedPrice.trim()}` : null;
+      const svc = serviceType.trim() || null;
+      if (price && svc) {
+        return `Based on what you've told me, I'd put you at ${price} for the ${svc}. That includes everything — supplies, equipment, the works. We have openings this week — do you prefer mornings or afternoons?`;
+      } else if (price) {
+        return `Based on what you've told me, I'd put you at ${price}. That includes everything — supplies, equipment, the works. We have openings this week — do you prefer mornings or afternoons?`;
+      }
+    }
+    return stage.intro;
+  })();
 
   // Reset intro visibility when stage changes
   useEffect(() => {
@@ -582,9 +591,9 @@ function CenterColumn({
             </p>
             <div className="flex items-start gap-2">
               <p className="flex-1 text-sm font-medium text-gray-800 leading-relaxed italic">
-                "{stage.intro}"
+                "{dynamicIntro}"
               </p>
-              <CopyBtn text={stage.intro} />
+              <CopyBtn text={dynamicIntro} />
             </div>
           </div>
         )}
@@ -984,6 +993,8 @@ export default function LiveCallAssist() {
             objectionType={objectionType}
             onObjectionTypeChange={handleObjectionTypeChange}
             onUseSuggestion={handleUseSuggestion}
+            serviceType={serviceType}
+            quotedPrice={quotedPrice}
           />
         </div>
 

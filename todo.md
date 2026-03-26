@@ -140,3 +140,8 @@
 - [x] Live Call Assist: fix Situation stage looping — AI should advance after 1-2 exchanges, not keep reflecting back
 - [x] Live Call Assist: fix Recap intro script — remove placeholder brackets, make it a natural fill-in-the-blanks prompt
 - [x] Live Call Assist: enlarge customer input textarea — more height, more padding, not cramped at bottom of page
+- [x] Live Call Assist: remove objection sub-type buttons — just show AI suggestion directly (kept buttons, removed rebuttal card)
+- [x] Live Call Assist: Recap intro pulls real beds/baths/clean type from context panel
+- [x] Live Call Assist: Close intro pulls real quoted price from context panel
+- [x] Live Call Assist: remove pre-written rebuttal card from objection sub-types — clicking fires AI only, one clean response
+- [x] Live Call Assist: Recap and Close intro scripts pull real values from context panel (beds/baths, service type, quoted price)
