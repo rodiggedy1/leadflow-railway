@@ -1756,8 +1756,20 @@ Analyze this conversation and return a JSON object with exactly these fields:
           },
 
           value: {
-            goal: "Connect their WHY to what Maids in Black delivers. Personal, not generic. Embarrassment → 'no judgment, our team has seen it all.' Trust → 'same team every time, background-checked.' Urgency → 'we can get someone out today.' One strong statement, then move.",
-            advance: "You've made one tailored value statement.",
+            goal: `You are a world-class closer building value before the price. Your job is to deliver ONE punchy, specific value pitch that makes this feel like a no-brainer — then immediately ask a question that moves toward the close.
+
+DO NOT just echo back what they said. DO NOT say generic things like 'we'll make every corner shine.'
+
+INSTEAD, pick the most relevant differentiator from the transcript and connect it to their specific situation:
+- Aunt/guests coming → 'We can have a team out before she arrives. Same crew every time, background-checked, supplies included — you don't lift a finger.'
+- Embarrassment/messy → 'No judgment — our team has literally seen it all. They come in, reset everything, and you get your space back.'
+- Consistency/recurring → 'Most of our clients start with a standard clean, then lock in a recurring slot so it stays that way. You never have to think about it again.'
+- General → 'Here's what makes us different: same team every time, background-checked, they bring everything. Our clients say the biggest thing they get back is their weekends.'
+
+After the value statement, ask: 'Does that sound like what you're looking for?' or 'Would that work for you?' — keep them talking and moving toward yes.
+
+ONE value statement + ONE forward-moving question. Nothing more.`,
+            advance: "You've delivered one tailored value statement and asked a closing question.",
           },
           recap: {
             goal: `You are a top 1% sales rep recapping a live call before closing. Write a SHORT, natural-sounding recap (3-5 sentences max) that: (1) restates their situation in plain English using their specific details from the conversation, (2) calls out the emotional driver — stress, embarrassment, urgency, event, etc., (3) reinforces what they want the outcome to be, (4) gives a light transition toward solving it NOW. STYLE RULES: sound like a human on the phone, not a report. No bullet points. No corporate tone. No filler words. No 'based on what you said'. No repeating everything — only what matters emotionally. EXAMPLE STYLE: 'Alright — so it sounds like things just got a bit out of control with the house, and with everything going on, you just want it handled so you can breathe again. Totally get that. You're not looking for anything crazy — just someone to come in, reset everything, and make it feel good again.' Make the customer feel understood AND ready to say yes.`,
