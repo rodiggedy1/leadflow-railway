@@ -138,3 +138,5 @@
 - [x] Live Call Assist: hide intro after first customer input is submitted, never show again for that stage
 - [x] Live Call Assist: remove advance delay and toast — instant stage transition, AI suggestion appears immediately
 - [x] Live Call Assist: fix Situation stage looping — AI should advance after 1-2 exchanges, not keep reflecting back
+- [x] Live Call Assist: fix Recap intro script — remove placeholder brackets, make it a natural fill-in-the-blanks prompt
+- [x] Live Call Assist: enlarge customer input textarea — more height, more padding, not cramped at bottom of page

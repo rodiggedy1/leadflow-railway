@@ -120,8 +120,8 @@ const STAGES = [
     borderColor: "border-purple-200",
     textColor: "text-purple-700",
     goal: "Mirror back what they told you so they feel heard — then present the price",
-    intro: "So just to make sure I have this right — you've got a [X bed / X bath], you're looking for a [regular / deep] clean, and [any situation detail they shared]. Does that sound right?",
-    introLabel: "Mirror & Confirm",
+    intro: "So just to make sure I have this right — [fill in: beds/baths, clean type, anything they mentioned]. Does that sound right?",
+    introLabel: "Mirror Back",
     introNote: "Repeat their own words back to them. This builds trust, confirms accuracy, and creates a natural pause before the price — making the number land better.",
   },
   {
@@ -629,28 +629,30 @@ function CenterColumn({
         </div>
 
         {/* ── Customer input — pinned at the bottom ── */}
-        <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-          <div className="flex gap-2">
+        <div className="px-5 pt-4 pb-6 border-t border-gray-100 bg-gray-50 shrink-0">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">What did they say?</p>
+          <div className="flex gap-2 items-end">
             <textarea
               value={lastCustomerLine}
               onChange={(e) => onLastCustomerLineChange(e.target.value)}
               onKeyDown={handleCustomerLineKeyDown}
-              placeholder="What did they say? (Enter to get next line)"
-              rows={2}
-              className="flex-1 text-sm rounded-xl border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white"
+              placeholder="Type their response, then press Enter..."
+              rows={3}
+              className="flex-1 text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white leading-relaxed"
             />
             <button
               onClick={handleSubmit}
               disabled={isLoading || !lastCustomerLine.trim()}
               title="Get AI suggestion (Enter)"
-              className="self-end p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors"
+              className="p-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors mb-0.5"
             >
               {isLoading
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <SendHorizonal className="w-4 h-4" />
+                ? <Loader2 className="w-5 h-5 animate-spin" />
+                : <SendHorizonal className="w-5 h-5" />
               }
             </button>
           </div>
+          <p className="text-[10px] text-gray-400 mt-2">Enter to get next line · Shift+Enter for newline</p>
         </div>
       </div>
     </div>
