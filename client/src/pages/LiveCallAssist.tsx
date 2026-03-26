@@ -578,7 +578,7 @@ export default function LiveCallAssist() {
               <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-6">
                 <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Opening Line — say this first</p>
                 <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
-                  "Hi, thank you for calling Maids in Black, this is [Your Name]! You called at the perfect time — how can I help you today?"
+                  {`"Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Your Name]"}! You called at the perfect time — how can I help you today?"`}
                 </p>
               </div>
             )}
