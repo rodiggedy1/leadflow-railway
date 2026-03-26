@@ -185,3 +185,6 @@
 - [x] Add tRPC procedure for per-agent call stats (calls today, total calls, booked calls, conversion rate)
 - [x] Add "My Calls Today" stat card to agent dashboard
 - [x] Add per-agent call conversion columns to Team page (calls, booked, conversion %)
+- [x] Store voice alert call recording URL in DB after call completes (already handled by Vapi end-of-call webhook)
+- [x] Add tRPC procedure to fetch call recordings per job/cleaner (getJobCalls already existed)
+- [x] Display call recording player in Control Tower Communication & Workflow section

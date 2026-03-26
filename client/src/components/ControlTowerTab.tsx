@@ -345,10 +345,24 @@ export default function ControlTowerTab() {
     onError: (err) => toast.error(err.message || "Failed to send"),
   });
 
+  const utils = trpc.useUtils();
   const voiceAlertMutation = trpc.fieldMgmt.voiceAlertCleaner.useMutation({
-    onSuccess: () => toast.success("Voice alert call placed to cleaner"),
+    onSuccess: () => {
+      toast.success("Voice alert call placed to cleaner — recording will appear below once the call ends");
+      // Refresh call records after a short delay to pick up the new row
+      setTimeout(() => {
+        if (selectedJob) utils.fieldMgmt.getJobCalls.invalidate({ cleanerJobId: selectedJob.id });
+      }, 3000);
+    },
     onError: (err) => toast.error(err.message || "Failed to place call"),
   });
+
+  // Fetch call records for the selected job (includes recording URLs once available)
+  // Uses selectedId (state) instead of selectedJob (useMemo below) to avoid hoisting issues
+  const { data: jobCalls = [], refetch: refetchJobCalls } = trpc.fieldMgmt.getJobCalls.useQuery(
+    { cleanerJobId: selectedId ?? 0 },
+    { enabled: selectedId !== null, refetchInterval: 15000 } // poll every 15s so recording appears automatically
+  );
 
   // Auto-scroll messages to bottom
   useEffect(() => {
@@ -707,6 +721,77 @@ export default function ControlTowerTab() {
                     </div>
                   )}
                 </div>
+
+                {/* Voice Alert Call Recordings */}
+                {jobCalls.length > 0 && (
+                  <div className="rounded-3xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-slate-500">Voice alert calls</div>
+                        <div className="text-base font-semibold text-slate-900">Call recordings &amp; outcomes</div>
+                      </div>
+                      <button
+                        onClick={() => refetchJobCalls()}
+                        className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Refresh
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {jobCalls.map((call) => {
+                        const outcomeColor =
+                          call.outcome === "answered"  ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                          call.outcome === "voicemail" ? "bg-amber-50 border-amber-200 text-amber-700" :
+                          call.outcome === "no_answer" ? "bg-rose-50 border-rose-200 text-rose-700" :
+                          "bg-slate-50 border-slate-200 text-slate-700";
+                        const outcomeIcon =
+                          call.outcome === "answered"  ? "✅" :
+                          call.outcome === "voicemail" ? "📩" :
+                          call.outcome === "no_answer" ? "❌" : "⏳";
+                        const durationLabel = call.durationSeconds > 0
+                          ? `${Math.floor(call.durationSeconds / 60)}m ${call.durationSeconds % 60}s`
+                          : null;
+                        const calledAt = call.createdAt ? new Date(call.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) : "";
+                        return (
+                          <div key={call.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <Phone className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="text-xs font-medium text-slate-700">{call.step === "manual_voice_alert" ? "Manual Voice Alert" : call.step}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${outcomeColor}`}>
+                                {outcomeIcon} {call.outcome.replace("_", " ")}
+                              </span>
+                              {durationLabel && (
+                                <span className="text-xs text-slate-400">{durationLabel}</span>
+                              )}
+                              <span className="ml-auto text-xs text-slate-400">{calledAt}</span>
+                            </div>
+                            {call.recordingUrl ? (
+                              <div className="mt-1">
+                                <p className="text-xs text-slate-500 mb-1">Recording</p>
+                                <audio
+                                  controls
+                                  src={call.recordingUrl}
+                                  className="w-full h-8"
+                                  style={{ borderRadius: "8px" }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <Loader2 className="h-3 w-3 animate-spin text-slate-300" />
+                                <span className="text-xs text-slate-400">Recording will appear here once the call ends</span>
+                              </div>
+                            )}
+                            {call.summary && (
+                              <div className="mt-2 text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2">
+                                <span className="font-medium text-slate-500">Summary: </span>{call.summary}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Action buttons */}
                 <div className="grid grid-cols-2 gap-3">
