@@ -164,3 +164,4 @@
 - [x] Live Call Assist: restore opener to "You called at the perfect time! How can I help you today?" — don't ask beds/baths until they confirm they want a cleaning
 - [x] Live Call Assist: upgrade system prompt with world-class sales coach principles (pattern interrupt, pain amplification, value-first, assumptive close, objection-proof)
 - [x] Live Call Assist: Situation stage must NEVER give price, must ask ONE emotional WHY question then advance immediately — no therapy, no follow-ups
+- [x] Live Call Assist: Recap stage must mirror back what the customer said (beds/baths/service type + their WHY) — not a generic value statement

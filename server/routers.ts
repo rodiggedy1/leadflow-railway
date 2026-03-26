@@ -1763,8 +1763,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
             advance: "You've made one tailored value statement.",
           },
           recap: {
-            goal: "Tie a bow on it before the price. Paint a quick picture of their home after the clean. Make them feel taken care of, not processed.",
-            advance: "You've done the recap.",
+            goal: "Mirror back exactly what they told you in ONE sentence. Use their specific details: bedrooms, bathrooms, service type, and their WHY. Example: 'So we're looking at a 3-bed, 2-bath standard clean — you've got guests coming this weekend and you want it done right.' That's it. Specific. Personal. Shows you listened. Do NOT give a generic value statement. Do NOT say things like 'nothing beats coming home to a fresh space.' Use THEIR words and THEIR situation.",
+            advance: "You've mirrored back their specific details.",
           },
           close: {
             goal: "Give the price confidently — no apology, no hesitation. Then immediately move to scheduling with an assumptive question. Don't pause and wait. Keep the momentum.",
