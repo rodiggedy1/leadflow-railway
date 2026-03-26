@@ -806,6 +806,14 @@ export default function LiveCallAssist() {
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
       }
+      // Auto-log the AI suggestion as an agent line so the transcript is always complete
+      // and the AI never repeats itself on the next turn
+      if (data.suggestion) {
+        setTranscriptLines((prev) => [
+          ...prev,
+          { id: nextId.current++, speaker: "agent", text: data.suggestion, ts: Date.now() },
+        ]);
+      }
       // AI says stage is done — update the left-panel indicator instantly.
       // Suggestion stays on screen. Agent reads it, says it, then types the next customer line.
       if (data.advanceStage) {
@@ -837,8 +845,13 @@ export default function LiveCallAssist() {
   }, []);
 
   const fireSuggestion = useCallback((stageId: StageId, customerLine: string) => {
-    const recentLines = transcriptLines.slice(-20);
-    const transcriptText = recentLines
+    // Build transcript synchronously — include the current customer line so AI always has full context
+    const recentLines = transcriptLines.slice(-30);
+    const lines = [...recentLines];
+    if (customerLine.trim()) {
+      lines.push({ id: -1, speaker: "customer", text: customerLine.trim(), ts: Date.now() });
+    }
+    const transcriptText = lines
       .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
       .join("\n");
 
