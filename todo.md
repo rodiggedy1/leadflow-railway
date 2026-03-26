@@ -116,3 +116,6 @@
 - [x] Register /call-assist route in App.tsx
 - [x] Add Call Assist navigation from both dashboards
 
+- [x] Live Call Assist: remove confirm-click on stage progression — clicking a stage should immediately show suggestions, not require a second click
+- [x] Live Call Assist: move "What did the customer say?" field to top of center column so it kicks off the conversation
+- [x] Live Call Assist: add intro/opening script at the top of the page (before any stage is active)

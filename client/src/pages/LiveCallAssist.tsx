@@ -2,12 +2,14 @@
  * Live Call Assist — Full-page real-time call coaching tool.
  *
  * Layout: 3-column
- *   Left:   Quick Context (lead info, stage tracker, live signals)
- *   Center: AI Suggestion card (primary + A/B/C alternatives)
- *   Right:  Transcript input (agent types what customer said)
+ *   Left:   Quick Context (lead info) + Stage tracker
+ *   Center: Customer line (top) → AI suggestion card (auto-fires on stage select)
+ *   Right:  Live transcript input
  *
- * Phase 1: Manual transcript input
- * Phase 2 (future): Mic listening with real-time transcription
+ * UX principles:
+ * - Clicking a stage immediately fires AI — no second "Get Suggestion" click
+ * - Customer's last line is pinned at the top of the center column
+ * - Each stage has a built-in intro/opening script shown before any AI response
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
@@ -19,14 +21,10 @@ import {
   Check,
   ChevronRight,
   Zap,
-  AlertCircle,
   CheckCircle2,
-  Circle,
   ArrowLeft,
-  RefreshCw,
   User,
   Mic,
-  MicOff,
   MessageSquare,
   Lightbulb,
   Target,
@@ -34,6 +32,7 @@ import {
   TrendingUp,
   Star,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -52,6 +51,9 @@ const STAGES = [
     borderColor: "border-violet-200",
     textColor: "text-violet-700",
     goal: "Create curiosity and stand out from every other cleaning company call",
+    intro: "Hi, this is [Your Name] from Maids in Black — I'm not going to give you the usual sales pitch. I just want to ask you one quick question and see if we're even a fit. Is that okay?",
+    introLabel: "Opening Line",
+    introNote: "Say this before anything else. The goal is a pattern interrupt — most cleaners lead with price.",
   },
   {
     id: "discovery",
@@ -64,6 +66,9 @@ const STAGES = [
     borderColor: "border-cyan-200",
     textColor: "text-cyan-700",
     goal: "Understand their situation deeply — not just beds/baths, but WHY they need cleaning NOW",
+    intro: "Tell me a little about your home — and more importantly, what's going on that made you reach out today?",
+    introLabel: "Discovery Opener",
+    introNote: "Open-ended question. Let them talk. Listen for the emotional reason, not just the logistics.",
   },
   {
     id: "pain",
@@ -76,6 +81,9 @@ const STAGES = [
     borderColor: "border-amber-200",
     textColor: "text-amber-700",
     goal: "Help them feel the cost of NOT solving this — make the problem vivid",
+    intro: "So if nothing changes and you don't get this handled — what does that look like for you in a few weeks?",
+    introLabel: "Pain Question",
+    introNote: "Make the problem real. You're not creating pain — you're helping them articulate what they already feel.",
   },
   {
     id: "value",
@@ -88,6 +96,9 @@ const STAGES = [
     borderColor: "border-emerald-200",
     textColor: "text-emerald-700",
     goal: "Build the value stack BEFORE you mention a number",
+    intro: "Here's what makes us different — we're not just cleaners, we're a team that shows up on time, every time, with the same people so you're not letting strangers in your home. Our clients tell us the biggest thing they get back is their weekends.",
+    introLabel: "Value Bridge",
+    introNote: "Lead with outcomes, not features. Time, trust, and consistency beat any price argument.",
   },
   {
     id: "close",
@@ -100,6 +111,9 @@ const STAGES = [
     borderColor: "border-red-200",
     textColor: "text-red-700",
     goal: "Present price confidently and assume the sale — ask WHEN, not IF",
+    intro: "Based on everything you've shared, I'd put you at [price]. That gets you [service details]. Do you want to lock in a morning or afternoon slot?",
+    introLabel: "Close Script",
+    introNote: "State the price once, confidently. Don't apologize for it. Immediately pivot to scheduling.",
   },
   {
     id: "objection",
@@ -112,6 +126,9 @@ const STAGES = [
     borderColor: "border-gray-200",
     textColor: "text-gray-700",
     goal: "Treat objections as requests for more information — empathize then redirect",
+    intro: "I completely hear you — that's actually one of the most common things people say before they become our longest-running clients. Can I ask what's behind that for you?",
+    introLabel: "Objection Opener",
+    introNote: "Never argue. Agree, validate, then ask a question to understand the real concern.",
   },
 ] as const;
 
@@ -214,7 +231,6 @@ function StageTracker({
       {STAGES.map((stage, idx) => {
         const isActive = activeStage === stage.id;
         const isDone = completedStages.has(stage.id);
-        const Icon = stage.icon;
         return (
           <button
             key={stage.id}
@@ -228,7 +244,7 @@ function StageTracker({
             }`}
           >
             <div
-              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold`}
+              className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold"
               style={{ background: isDone ? "#16a34a" : isActive ? stage.color : "#d1d5db" }}
             >
               {isDone ? "✓" : idx + 1}
@@ -252,10 +268,14 @@ function TranscriptPanel({
   lines,
   onAddLine,
   onClear,
+  lastCustomerLine,
+  onLastCustomerLineChange,
 }: {
   lines: TranscriptLine[];
   onAddLine: (speaker: "agent" | "customer", text: string) => void;
   onClear: () => void;
+  lastCustomerLine: string;
+  onLastCustomerLineChange: (v: string) => void;
 }) {
   const [inputText, setInputText] = useState("");
   const [activeSpeaker, setActiveSpeaker] = useState<"customer" | "agent">("customer");
@@ -271,9 +291,18 @@ function TranscriptPanel({
     const text = inputText.trim();
     if (!text) return;
     onAddLine(activeSpeaker, text);
+    if (activeSpeaker === "customer") {
+      onLastCustomerLineChange(text);
+    }
     setInputText("");
-    // After adding a customer line, switch to agent; after agent, switch to customer
     setActiveSpeaker(activeSpeaker === "customer" ? "agent" : "customer");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   return (
@@ -307,7 +336,7 @@ function TranscriptPanel({
               <MessageSquare className="w-5 h-5 text-gray-400" />
             </div>
             <p className="text-sm text-gray-400 font-medium">No transcript yet</p>
-            <p className="text-xs text-gray-400 mt-1">Type what the customer says below to get AI suggestions</p>
+            <p className="text-xs text-gray-400 mt-1">Type what the customer says below</p>
           </div>
         ) : (
           lines.map((line) => (
@@ -316,23 +345,20 @@ function TranscriptPanel({
               className={`flex gap-2 ${line.speaker === "agent" ? "flex-row-reverse" : "flex-row"}`}
             >
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold mt-0.5 ${
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 mt-0.5 ${
                   line.speaker === "agent" ? "bg-violet-500" : "bg-gray-400"
                 }`}
               >
                 {line.speaker === "agent" ? "A" : "C"}
               </div>
               <div
-                className={`max-w-[85%] rounded-xl px-3 py-2 ${
+                className={`max-w-[80%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
                   line.speaker === "agent"
-                    ? "bg-violet-50 border border-violet-100"
-                    : "bg-white border border-gray-200"
+                    ? "bg-violet-50 text-violet-900 rounded-tr-sm"
+                    : "bg-gray-100 text-gray-800 rounded-tl-sm"
                 }`}
               >
-                <div className={`text-[10px] font-bold mb-0.5 ${line.speaker === "agent" ? "text-violet-600" : "text-gray-500"}`}>
-                  {line.speaker === "agent" ? "You" : "Customer"}
-                </div>
-                <p className="text-xs text-gray-700 leading-relaxed">{line.text}</p>
+                {line.text}
               </div>
             </div>
           ))
@@ -345,37 +371,30 @@ function TranscriptPanel({
         <div className="flex gap-1.5">
           <button
             onClick={() => setActiveSpeaker("customer")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+            className={`flex-1 py-1 rounded-lg text-[11px] font-bold transition-colors ${
               activeSpeaker === "customer"
-                ? "bg-gray-700 text-white border-gray-700"
-                : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                ? "bg-gray-800 text-white"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
             }`}
           >
-            <User className="w-3 h-3" /> Customer
+            Customer
           </button>
           <button
             onClick={() => setActiveSpeaker("agent")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+            className={`flex-1 py-1 rounded-lg text-[11px] font-bold transition-colors ${
               activeSpeaker === "agent"
-                ? "bg-violet-600 text-white border-violet-600"
-                : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                ? "bg-violet-600 text-white"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
             }`}
           >
-            <MicOff className="w-3 h-3" /> Agent
+            Agent
           </button>
         </div>
-
-        {/* Text input */}
         <div className="flex gap-2">
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
+            onKeyDown={handleKeyDown}
             placeholder={
               activeSpeaker === "customer"
                 ? "Type what the customer said..."
@@ -392,28 +411,31 @@ function TranscriptPanel({
             Add
           </button>
         </div>
-        <p className="text-[10px] text-gray-400">Press Enter to add · Shift+Enter for newline</p>
+        <p className="text-[10px] text-gray-400">Enter to add · Shift+Enter for newline</p>
       </div>
     </div>
   );
 }
 
-// ─── AI Suggestion card (center column) ──────────────────────────────────────
+// ─── Center column: Customer line banner + AI suggestion ──────────────────────
 
-function SuggestionCard({
+function CenterColumn({
   suggestion,
   isLoading,
   activeStage,
   onGetSuggestion,
-  hasTranscript,
+  lastCustomerLine,
+  onLastCustomerLineChange,
 }: {
   suggestion: AISuggestion | null;
   isLoading: boolean;
   activeStage: StageId;
   onGetSuggestion: () => void;
-  hasTranscript: boolean;
+  lastCustomerLine: string;
+  onLastCustomerLineChange: (v: string) => void;
 }) {
   const [selectedAlt, setSelectedAlt] = useState<number | null>(null);
+  const [introExpanded, setIntroExpanded] = useState(true);
   const stage = STAGES.find((s) => s.id === activeStage)!;
 
   // Reset selected alt when suggestion changes
@@ -421,13 +443,23 @@ function SuggestionCard({
     setSelectedAlt(null);
   }, [suggestion]);
 
+  // Collapse intro once a suggestion loads
+  useEffect(() => {
+    if (suggestion) setIntroExpanded(false);
+  }, [suggestion]);
+
+  // Re-expand intro when stage changes and no suggestion yet
+  useEffect(() => {
+    if (!suggestion) setIntroExpanded(true);
+  }, [activeStage]);
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className={`px-4 py-3 border-b ${stage.borderColor} ${stage.bgColor} flex items-center justify-between`}>
+      {/* Stage header */}
+      <div className={`px-4 py-3 border-b ${stage.borderColor} ${stage.bgColor} flex items-center justify-between shrink-0`}>
         <div className="flex items-center gap-2">
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm shrink-0"
             style={{ background: stage.color }}
           >
             {stage.emoji}
@@ -440,10 +472,10 @@ function SuggestionCard({
         <button
           onClick={onGetSuggestion}
           disabled={isLoading}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors shrink-0 ${
             isLoading
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : `text-white hover:opacity-90`
+              : "text-white hover:opacity-90"
           }`}
           style={isLoading ? {} : { background: stage.color }}
         >
@@ -455,141 +487,176 @@ function SuggestionCard({
         </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
-        {!suggestion && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-2xl"
-              style={{ background: `${stage.color}15` }}
-            >
-              {stage.emoji}
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+
+        {/* ── Intro / opening script ── always shown, collapsible after suggestion loads */}
+        <div className={`border-b ${stage.borderColor}`}>
+          <button
+            onClick={() => setIntroExpanded((v) => !v)}
+            className={`w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors ${stage.bgColor} hover:opacity-90`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: stage.color }}>
+                {stage.introLabel}
+              </span>
+              <span className="text-[10px] text-gray-400">— say this first</span>
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2">Ready to coach</h3>
-            <p className="text-sm text-gray-400 max-w-xs">
-              {hasTranscript
-                ? "Click \"Get Suggestion\" to get AI coaching based on the transcript."
-                : "Add transcript lines on the right, then click \"Get Suggestion\" for contextual coaching."}
-            </p>
-            <button
-              onClick={onGetSuggestion}
-              className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-white transition-colors hover:opacity-90"
-              style={{ background: stage.color }}
-            >
-              <Zap className="w-4 h-4" /> Get Suggestion
-            </button>
-          </div>
-        )}
-
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center h-full py-12">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center mb-4"
-              style={{ background: `${stage.color}20` }}
-            >
-              <Loader2 className="w-6 h-6 animate-spin" style={{ color: stage.color }} />
-            </div>
-            <p className="text-sm text-gray-500 font-medium">Analyzing conversation...</p>
-            <p className="text-xs text-gray-400 mt-1">Getting the best move for this stage</p>
-          </div>
-        )}
-
-        {suggestion && !isLoading && (
-          <>
-            {/* Stage progress bar */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Stage Progress</span>
-                <span className="text-[10px] font-bold" style={{ color: stage.color }}>{suggestion.stageProgress}%</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform shrink-0 ${introExpanded ? "rotate-180" : ""}`}
+              style={{ color: stage.color }}
+            />
+          </button>
+          {introExpanded && (
+            <div className={`px-4 pb-3 ${stage.bgColor}`}>
+              <div className="flex items-start gap-2">
+                <p className="flex-1 text-sm font-medium text-gray-800 leading-relaxed italic">
+                  "{stage.intro}"
+                </p>
+                <CopyBtn text={stage.intro} />
               </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${suggestion.stageProgress}%`, background: stage.color }}
-                />
-              </div>
-            </div>
-
-            {/* Live signals */}
-            {suggestion.liveSignals.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Live Signals</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestion.liveSignals.map((signal, i) => (
-                    <SignalBadge key={i} signal={signal} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Primary suggestion */}
-            <div
-              className={`rounded-2xl border-2 p-4 space-y-3 ${stage.borderColor} ${stage.bgColor}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Primary Suggestion</span>
-                    <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
-                      style={{ background: stage.color }}
-                    >
-                      {suggestion.primaryLabel}
-                    </span>
-                  </div>
-                  <p className="text-sm font-medium text-gray-800 leading-relaxed">
-                    {suggestion.primarySuggestion}
-                  </p>
-                </div>
-                <CopyBtn text={suggestion.primarySuggestion} />
-              </div>
-              <p className="text-[11px] text-gray-500 italic border-l-2 pl-2" style={{ borderColor: stage.color }}>
-                {suggestion.primaryRationale}
+              <p className="text-[11px] text-gray-500 mt-2 border-l-2 pl-2" style={{ borderColor: stage.color }}>
+                {stage.introNote}
               </p>
             </div>
+          )}
+        </div>
 
-            {/* Alternative suggestions */}
-            <div className="space-y-2">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Alternative Angles</div>
-              {suggestion.alternatives.map((alt, i) => {
-                const letter = ["A", "B", "C"][i] ?? String(i + 1);
-                const isSelected = selectedAlt === i;
-                return (
-                  <div
-                    key={i}
-                    className={`rounded-xl border p-3 space-y-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? "border-gray-300 bg-gray-50 shadow-sm"
-                        : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/50"
-                    }`}
-                    onClick={() => setSelectedAlt(isSelected ? null : i)}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 shrink-0">
-                          {letter}
-                        </div>
-                        <span className="text-xs font-semibold text-gray-700">{alt.label}</span>
-                        <AngleBadge angle={alt.angle} />
-                      </div>
-                      <CopyBtn text={alt.suggestion} size="xs" />
-                    </div>
-                    {isSelected && (
-                      <p className="text-xs text-gray-600 leading-relaxed pl-7">
-                        {alt.suggestion}
-                      </p>
-                    )}
-                    {!isSelected && (
-                      <p className="text-xs text-gray-400 leading-relaxed pl-7 line-clamp-1">
-                        {alt.suggestion}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+        {/* ── Customer's last line ── */}
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="w-4 h-4 rounded-full bg-gray-400 flex items-center justify-center text-[9px] font-bold text-white shrink-0">C</div>
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Customer just said</span>
+          </div>
+          <textarea
+            value={lastCustomerLine}
+            onChange={(e) => onLastCustomerLineChange(e.target.value)}
+            placeholder="Type or paste what the customer just said…"
+            rows={2}
+            className="w-full text-sm rounded-xl border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white"
+          />
+          <p className="text-[10px] text-gray-400 mt-1">This is the main input for AI suggestions — update it as the conversation progresses</p>
+        </div>
+
+        {/* ── AI suggestion area ── */}
+        <div className="px-4 py-4 space-y-4">
+          {!suggestion && !isLoading && (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 text-2xl"
+                style={{ background: `${stage.color}15` }}
+              >
+                {stage.emoji}
+              </div>
+              <p className="text-sm text-gray-500">
+                {lastCustomerLine.trim()
+                  ? "Click \"Get Suggestion\" to get AI coaching based on what the customer said."
+                  : "Enter what the customer said above, then click \"Get Suggestion\"."}
+              </p>
             </div>
-          </>
-        )}
+          )}
+
+          {isLoading && (
+            <div className="flex flex-col items-center justify-center py-10">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mb-4"
+                style={{ background: `${stage.color}20` }}
+              >
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: stage.color }} />
+              </div>
+              <p className="text-sm text-gray-500 font-medium">Analyzing conversation...</p>
+              <p className="text-xs text-gray-400 mt-1">Getting the best move for this stage</p>
+            </div>
+          )}
+
+          {suggestion && !isLoading && (
+            <>
+              {/* Stage progress bar */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Stage Progress</span>
+                  <span className="text-[10px] font-bold" style={{ color: stage.color }}>{suggestion.stageProgress}%</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${suggestion.stageProgress}%`, background: stage.color }}
+                  />
+                </div>
+              </div>
+
+              {/* Live signals */}
+              {suggestion.liveSignals.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Live Signals</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestion.liveSignals.map((signal, i) => (
+                      <SignalBadge key={i} signal={signal} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Primary suggestion */}
+              <div className={`rounded-2xl border-2 p-4 space-y-3 ${stage.borderColor} ${stage.bgColor}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Say This</span>
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                        style={{ background: stage.color }}
+                      >
+                        {suggestion.primaryLabel}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-800 leading-relaxed">
+                      {suggestion.primarySuggestion}
+                    </p>
+                  </div>
+                  <CopyBtn text={suggestion.primarySuggestion} />
+                </div>
+                <p className="text-[11px] text-gray-500 italic border-l-2 pl-2" style={{ borderColor: stage.color }}>
+                  {suggestion.primaryRationale}
+                </p>
+              </div>
+
+              {/* Alternative suggestions */}
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Alternative Angles</div>
+                {suggestion.alternatives.map((alt, i) => {
+                  const letter = ["A", "B", "C"][i] ?? String(i + 1);
+                  const isSelected = selectedAlt === i;
+                  return (
+                    <div
+                      key={i}
+                      className={`rounded-xl border p-3 space-y-2 cursor-pointer transition-all ${
+                        isSelected
+                          ? "border-gray-300 bg-gray-50 shadow-sm"
+                          : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/50"
+                      }`}
+                      onClick={() => setSelectedAlt(isSelected ? null : i)}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 shrink-0">
+                            {letter}
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700">{alt.label}</span>
+                          <AngleBadge angle={alt.angle} />
+                        </div>
+                        <CopyBtn text={alt.suggestion} size="xs" />
+                      </div>
+                      <p className={`text-xs leading-relaxed pl-7 ${isSelected ? "text-gray-600" : "text-gray-400 line-clamp-1"}`}>
+                        {alt.suggestion}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -672,29 +739,23 @@ export default function LiveCallAssist() {
   const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
   const nextId = useRef(1);
 
+  // Customer's last line — lives in main state so center column can read it
+  const [lastCustomerLine, setLastCustomerLine] = useState("");
+
   // AI suggestions
   const [suggestion, setSuggestion] = useState<AISuggestion | null>(null);
 
   const suggestionMutation = trpc.leads.getLiveCallSuggestions.useMutation({
     onSuccess: (data) => {
-      if (data.success) {
-        setSuggestion({
-          primarySuggestion: data.primarySuggestion,
-          primaryLabel: data.primaryLabel,
-          primaryRationale: data.primaryRationale,
-          alternatives: data.alternatives,
-          liveSignals: data.liveSignals,
-          stageProgress: data.stageProgress,
-        });
-      } else {
-        setSuggestion({
-          primarySuggestion: data.primarySuggestion,
-          primaryLabel: data.primaryLabel,
-          primaryRationale: data.primaryRationale,
-          alternatives: data.alternatives,
-          liveSignals: data.liveSignals,
-          stageProgress: data.stageProgress,
-        });
+      setSuggestion({
+        primarySuggestion: data.primarySuggestion,
+        primaryLabel: data.primaryLabel,
+        primaryRationale: data.primaryRationale,
+        alternatives: data.alternatives,
+        liveSignals: data.liveSignals,
+        stageProgress: data.stageProgress,
+      });
+      if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
       }
     },
@@ -711,42 +772,56 @@ export default function LiveCallAssist() {
   const handleClearTranscript = useCallback(() => {
     setTranscriptLines([]);
     setSuggestion(null);
+    setLastCustomerLine("");
   }, []);
 
-  const handleGetSuggestion = useCallback(() => {
-    // Build transcript string from recent lines (last 20)
+  const buildAndFire = useCallback((stageId: StageId, customerLine?: string) => {
     const recentLines = transcriptLines.slice(-20);
     const transcriptText = recentLines
       .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
       .join("\n");
 
-    // Find the last customer line
-    const lastCustomerLine = [...transcriptLines]
-      .reverse()
-      .find((l) => l.speaker === "customer")?.text;
+    const effectiveCustomerLine = customerLine ?? lastCustomerLine;
 
     suggestionMutation.mutate({
-      stage: activeStage,
+      stage: stageId,
       transcript: transcriptText,
       leadName: leadName.trim() || undefined,
       serviceType: serviceType.trim() || undefined,
       quotedPrice: quotedPrice.trim() || undefined,
-      lastCustomerLine: lastCustomerLine,
+      lastCustomerLine: effectiveCustomerLine.trim() || undefined,
     });
-  }, [activeStage, transcriptLines, leadName, serviceType, quotedPrice, suggestionMutation]);
+  }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, suggestionMutation]);
 
-  const handleStageSelect = (id: StageId) => {
+  const handleGetSuggestion = useCallback(() => {
+    buildAndFire(activeStage);
+  }, [activeStage, buildAndFire]);
+
+  // Clicking a stage immediately fires AI — no second click required
+  const handleStageSelect = useCallback((id: StageId) => {
     setActiveStage(id);
-    setSuggestion(null); // clear suggestion when switching stages
-  };
+    setSuggestion(null);
+    // Auto-fire immediately when switching stages
+    const recentLines = transcriptLines.slice(-20);
+    const transcriptText = recentLines
+      .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
+      .join("\n");
+    suggestionMutation.mutate({
+      stage: id,
+      transcript: transcriptText,
+      leadName: leadName.trim() || undefined,
+      serviceType: serviceType.trim() || undefined,
+      quotedPrice: quotedPrice.trim() || undefined,
+      lastCustomerLine: lastCustomerLine.trim() || undefined,
+    });
+  }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, suggestionMutation]);
 
   const handleMarkComplete = (id: StageId) => {
     setCompletedStages((prev) => { const next = new Set(prev); next.add(id); return next; });
     const idx = STAGES.findIndex((s) => s.id === id);
-    const next = STAGES[idx + 1];
-    if (next) {
-      setActiveStage(next.id);
-      setSuggestion(null);
+    const nextStage = STAGES[idx + 1];
+    if (nextStage) {
+      handleStageSelect(nextStage.id);
     }
   };
 
@@ -758,9 +833,9 @@ export default function LiveCallAssist() {
     setLeadName("");
     setServiceType("");
     setQuotedPrice("");
+    setLastCustomerLine("");
   };
 
-  const activeStageData = STAGES.find((s) => s.id === activeStage)!;
   const progress = Math.round((completedStages.size / STAGES.length) * 100);
 
   return (
@@ -799,7 +874,6 @@ export default function LiveCallAssist() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Phase 2 placeholder */}
           <button
             onClick={() => toast.info("Mic listening coming in Phase 2")}
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 text-gray-400 hover:bg-gray-50 transition-colors"
@@ -862,14 +936,15 @@ export default function LiveCallAssist() {
           </div>
         </div>
 
-        {/* ── Center column: AI Suggestion ── */}
+        {/* ── Center column: Customer line + AI Suggestion ── */}
         <div className="flex-1 min-w-0 flex flex-col bg-white border-r border-gray-200">
-          <SuggestionCard
+          <CenterColumn
             suggestion={suggestion}
             isLoading={suggestionMutation.isPending}
             activeStage={activeStage}
             onGetSuggestion={handleGetSuggestion}
-            hasTranscript={transcriptLines.length > 0}
+            lastCustomerLine={lastCustomerLine}
+            onLastCustomerLineChange={setLastCustomerLine}
           />
         </div>
 
@@ -879,6 +954,8 @@ export default function LiveCallAssist() {
             lines={transcriptLines}
             onAddLine={handleAddLine}
             onClear={handleClearTranscript}
+            lastCustomerLine={lastCustomerLine}
+            onLastCustomerLineChange={setLastCustomerLine}
           />
         </div>
       </div>
