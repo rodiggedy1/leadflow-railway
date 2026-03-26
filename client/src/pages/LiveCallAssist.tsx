@@ -621,7 +621,7 @@ function CenterColumn({
         </div>
 
         {/* ── Customer input — pinned at the bottom ── */}
-        <div className="px-5 pt-4 pb-6 border-t border-gray-100 bg-gray-50 shrink-0">
+        <div className="px-5 pt-4 pb-5 border-t border-gray-100 bg-gray-50 shrink-0">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">What did they say?</p>
           <div className="flex gap-2 items-end">
             <textarea
@@ -629,7 +629,7 @@ function CenterColumn({
               onChange={(e) => onLastCustomerLineChange(e.target.value)}
               onKeyDown={handleCustomerLineKeyDown}
               placeholder="Type their response, then press Enter..."
-              rows={3}
+              rows={5}
               className="flex-1 text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white leading-relaxed"
             />
             <button
@@ -730,7 +730,7 @@ function LeadContextPanel({
     <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2.5">
       <div className="flex items-center gap-1.5">
         <User className="w-3.5 h-3.5 text-gray-400" />
-        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Quick Context</span>
+        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Call Context</span>
       </div>
       <div className="space-y-2">
         {/* Customer name */}
@@ -969,47 +969,55 @@ export default function LiveCallAssist() {
   const progress = Math.round((completedStages.size / STAGES.length) * 100);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shrink-0">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      {/* Top bar: back + title + stages + actions */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
         <button
           onClick={() => navigate(-1 as any)}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
-        <div className="w-px h-5 bg-gray-200" />
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center">
-            <Phone className="w-3.5 h-3.5 text-violet-600" />
+        <div className="w-px h-5 bg-gray-200 shrink-0" />
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center">
+            <Phone className="w-3 h-3 text-violet-600" />
           </div>
-          <div>
-            <div className="text-sm font-bold text-gray-800">Live Call Assist</div>
-            <div className="text-[10px] text-gray-400">Real-time AI coaching</div>
-          </div>
+          <span className="text-sm font-bold text-gray-800">Live Call Assist</span>
+        </div>
+        <div className="w-px h-5 bg-gray-200 shrink-0" />
+
+        {/* Stage pills — horizontal in top bar */}
+        <div className="flex items-center gap-1 flex-1 overflow-x-auto">
+          {STAGES.map((stage, idx) => {
+            const isActive = activeStage === stage.id;
+            const isDone = completedStages.has(stage.id);
+            return (
+              <button
+                key={stage.id}
+                onClick={() => handleStageSelect(stage.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 border ${
+                  isActive
+                    ? `${stage.bgColor} ${stage.borderColor} shadow-sm`
+                    : isDone
+                    ? "bg-green-50 border-green-200 text-green-700 opacity-80"
+                    : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                }`}
+              >
+                <span
+                  className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                  style={{ background: isDone ? "#16a34a" : isActive ? stage.color : "#d1d5db" }}
+                >
+                  {isDone ? "✓" : idx + 1}
+                </span>
+                <span className={isActive ? stage.textColor : ""}>{stage.shortLabel}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Overall progress */}
-        {completedStages.size > 0 && (
-          <div className="flex items-center gap-2 ml-4">
-            <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-violet-500 rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="text-xs text-gray-500">{completedStages.size}/{STAGES.length} stages</span>
-          </div>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => toast.info("Mic listening coming in Phase 2")}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 text-gray-400 hover:bg-gray-50 transition-colors"
-          >
-            <Mic className="w-3 h-3" /> Live Mic (Phase 2)
-          </button>
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleReset}
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
@@ -1019,11 +1027,11 @@ export default function LiveCallAssist() {
         </div>
       </div>
 
-      {/* 3-column layout */}
-      <div className="flex-1 flex overflow-hidden" style={{ height: "calc(100vh - 57px)" }}>
+      {/* 2-column layout: left = context, center+right = main work area */}
+      <div className="flex-1 flex overflow-hidden">
 
-        {/* ── Left column: Context + Stage tracker ── */}
-        <div className="w-56 shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-y-auto">
+        {/* ── Left column: Context only (no stage tracker) ── */}
+        <div className="w-52 shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-y-auto">
           <div className="p-3 space-y-3">
             {/* Lead context */}
             <LeadContextPanel
@@ -1038,34 +1046,15 @@ export default function LiveCallAssist() {
               onServiceTypeChange={setServiceType}
             />
 
-            {/* Stage tracker */}
-            <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Call Stages</span>
-                {completedStages.size > 0 && (
-                  <button
-                    onClick={() => { setCompletedStages(new Set()); setActiveStage("opener"); setSuggestion(null); }}
-                    className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-              <StageTracker
-                activeStage={activeStage}
-                completedStages={completedStages}
-                onSelect={handleStageSelect}
-              />
-              {/* Mark current stage done */}
-              {!completedStages.has(activeStage) && (
-                <button
-                  onClick={() => handleMarkComplete(activeStage)}
-                  className="w-full py-1.5 rounded-lg text-[11px] font-bold border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition-colors flex items-center justify-center gap-1"
-                >
-                  <CheckCircle2 className="w-3 h-3" /> Done — Next Stage
-                </button>
-              )}
-            </div>
+            {/* Mark current stage done */}
+            {!completedStages.has(activeStage) && (
+              <button
+                onClick={() => handleMarkComplete(activeStage)}
+                className="w-full py-2 rounded-xl text-[11px] font-bold border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition-colors flex items-center justify-center gap-1"
+              >
+                <CheckCircle2 className="w-3 h-3" /> Done — Next Stage
+              </button>
+            )}
           </div>
         </div>
 
