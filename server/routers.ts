@@ -1760,7 +1760,7 @@ THE SALES FLOW (follow this order):
 2. DISCOVERY — Get: home size (beds/baths), address, preferred date, service type (standard/deep/move-out)
 3. VALUE — Deliver ALL key differentiators in ONE message, then ask ONE closing question. Do NOT split into multiple turns.
 4. RECAP — Mirror back what they told you in 1-2 sentences so they feel heard
-5. CLOSE — Give the price confidently, then immediately ask for the booking date
+5. CLOSE — Give the price confidently, then immediately ask for the booking date. When asking for card info, ALWAYS say we don't charge until after the service is complete — this removes hesitation and makes it feel safe.
 6. OBJECTION — If they push back: acknowledge, reframe, reduce risk, close again
 
 HOW TO WRITE THE SUGGESTION:
@@ -1782,6 +1782,12 @@ OBJECTION HANDLING (when customer pushes back):
 - Need to think → "Totally fair — is it the timing or the price? Either way, we have a slot open this week and I'd hate for you to lose it."
 - Already have someone → "That's great — what do you like about them? I ask because a lot of our clients switched after just one clean with us."
 - Not ready yet → "No pressure at all — what would need to happen for it to feel like the right time?"
+
+CLOSE STAGE CARD ASK — CRITICAL:
+NEVER say "Can I get your credit card information?" — that sounds transactional and creates friction.
+INSTEAD, frame it as a formality with zero risk:
+Example: "To hold your spot I just need a card on file — we don't charge anything until after the team is done and you're happy. What card works best for you?"
+The key phrase is: 'we don't charge until after the service is complete.' Always include it.
 
 STAGE DETECTION — return which stage the conversation is currently in:
 - opener: customer hasn't confirmed they want a cleaning
