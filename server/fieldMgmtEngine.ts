@@ -140,7 +140,7 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
   cleanerJobId?: number;
   step?: string;
   cleanerPhone?: string;
-}): Promise<{ success: boolean; reason?: string }> {
+}): Promise<{ success: boolean; reason?: string; dialedNumber?: string; isCsFallback?: boolean }> {
   if (!FIELD_MGMT_ENABLED) return { success: false, reason: "Field management kill switch is off" };
   if (!ENV.vapiPrivateKey) {
     console.warn("[FieldMgmt] VAPI_PRIVATE_KEY not set — skipping escalation call");
@@ -231,7 +231,7 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
       }
     }
 
-    return { success: true };
+    return { success: true, dialedNumber: normalizedTarget, isCsFallback: isCsTeam };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[FieldMgmt] Escalation call FAILED:", msg);

@@ -351,8 +351,14 @@ export default function ControlTowerTab() {
 
   const utils = trpc.useUtils();
   const voiceAlertMutation = trpc.fieldMgmt.voiceAlertCleaner.useMutation({
-    onSuccess: () => {
-      toast.success("Voice alert call placed to cleaner — recording will appear below once the call ends");
+    onSuccess: (data) => {
+      const num = data.dialedNumber
+        ? data.dialedNumber.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+        : null;
+      const label = data.isCsFallback
+        ? `Call placed to CS office${num ? ` — ${num}` : ""} (no cleaner phone on file)`
+        : `Call placed to cleaner${num ? ` — ${num}` : ""} — recording will appear below once the call ends`;
+      toast.success(label);
       // Refresh call records after a short delay to pick up the new row
       setTimeout(() => {
         if (selectedJob) utils.fieldMgmt.getJobCalls.invalidate({ cleanerJobId: selectedJob.id });

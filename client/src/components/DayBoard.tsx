@@ -625,7 +625,15 @@ function DetailPanel({
   });
 
   const voiceAlertMutation = trpc.fieldMgmt.voiceAlertCleaner.useMutation({
-    onSuccess: () => toast.success("Voice alert call placed to cleaner"),
+    onSuccess: (data) => {
+      const num = data.dialedNumber
+        ? data.dialedNumber.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+        : null;
+      const label = data.isCsFallback
+        ? `Call placed to CS office${num ? ` — ${num}` : ""} (no cleaner phone on file)`
+        : `Call placed to cleaner${num ? ` — ${num}` : ""}`;  
+      toast.success(label);
+    },
     onError: (err: { message?: string }) => toast.error(err.message || "Failed to place call"),
   });
 

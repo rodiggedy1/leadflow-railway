@@ -1132,7 +1132,11 @@ export const fieldMgmtRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: callResult.reason ?? "Failed to place call — check VAPI credentials or kill switch" });
       }
 
-      return { success: true };
+      return {
+        success: true,
+        dialedNumber: callResult.dialedNumber,
+        isCsFallback: callResult.isCsFallback ?? false,
+      };
     }),
 
   /**
