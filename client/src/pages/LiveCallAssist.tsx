@@ -278,11 +278,11 @@ export default function LiveCallAssist() {
     setShowClearConfirm(false);
   };
 
-  const handleClearCall = () => {
+  const handleClearCall = (notInterested = false) => {
     // Only save if there's something meaningful (at least a name or 2+ conversation lines)
     const hasData = leadName.trim() || conversation.length >= 2;
     if (hasData) {
-      const isBooked = ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId);
+      const isBooked = !notInterested && ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId);
       const transcript = conversation
         .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
         .join("\n");
@@ -296,13 +296,14 @@ export default function LiveCallAssist() {
         quotedPrice:   quotedPrice || undefined,
         extras:        selectedExtras.length > 0 ? selectedExtras : undefined,
         isBooked,
+        notInterested,
         agentId:       agentId ?? undefined,
         agentName:     agentName ?? undefined,
         transcript:    transcript.slice(0, 8000),
       }, {
         onSuccess: (data) => {
           console.log(`[CallAssist] Lead saved: sessionId=${data.sessionId}`);
-          toast.success(isBooked ? "✅ Booking saved to pipeline" : "✅ Lead saved to pipeline");
+          toast.success(notInterested ? "🚫 Lead marked not interested" : isBooked ? "✅ Booking saved to pipeline" : "✅ Lead saved to pipeline");
         },
         onError: (e) => {
           console.error("[CallAssist] Failed to save lead:", e.message);
@@ -346,18 +347,24 @@ export default function LiveCallAssist() {
               <h2 className="text-base font-bold text-gray-900 mb-1">Clear this call?</h2>
               <p className="text-sm text-gray-500">This will wipe the transcript, context, and suggestion. Ready for the next call.</p>
             </div>
-            <div className="px-6 pb-6 flex gap-3">
+            <div className="px-6 pb-4">
               <button
-                onClick={() => setShowClearConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                onClick={() => handleClearCall(true)}
+                className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mb-2"
               >
-                Cancel
+                🚫 Not Interested — Clear
               </button>
               <button
-                onClick={handleClearCall}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors"
+                onClick={() => handleClearCall(false)}
+                className="w-full py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors mb-2"
               >
                 Clear &amp; Reset
+              </button>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Cancel
               </button>
             </div>
           </div>

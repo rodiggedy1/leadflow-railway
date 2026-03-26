@@ -2025,10 +2025,11 @@ STAGE DETECTION — return the stage the conversation is currently in:
         preferredDate:z.string().max(100).optional(),
         quotedPrice:  z.string().max(20).optional(),
         extras:       z.array(z.string()).optional(),
-        isBooked:     z.boolean().default(false),
-        agentId:      z.number().optional(),
-        agentName:    z.string().max(255).optional(),
-        transcript:   z.string().max(8000).optional(),
+        isBooked:      z.boolean().default(false),
+        notInterested: z.boolean().default(false),
+        agentId:       z.number().optional(),
+        agentName:     z.string().max(255).optional(),
+        transcript:    z.string().max(8000).optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -2051,7 +2052,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const leadId = (leadResult as { insertId: number }).insertId;
 
         // 2. Insert conversation session
-        const stage = input.isBooked ? "BOOKED" : "CALL_SCHEDULED";
+        const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : "CALL_SCHEDULED";
         const [sessionResult] = await db.insert(conversationSessions).values({
           leadPhone:          input.phone,
           leadName:           input.name,
