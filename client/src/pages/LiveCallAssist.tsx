@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 
 // ─── Stages (visual only — AI determines current stage) ──────────────────────
 
@@ -87,6 +88,7 @@ function estimateBasePrice(bedrooms: string, bathrooms: string, serviceType: str
 
 export default function LiveCallAssist() {
   const [, navigate] = useLocation();
+  const { agentId, agentName } = useAgentPermissions();
 
   // Context fields (filled in as agent learns them during the call)
   const [leadName, setLeadName]       = useState("");
@@ -254,10 +256,13 @@ export default function LiveCallAssist() {
     }
   };
 
+  // ── Save call lead mutation ──────────────────────────────────────────────────
+  const saveCallLead = trpc.leads.saveCallLead.useMutation();
+
   // ── Clear call confirm dialog ────────────────────────────────────────────────
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const handleClearCall = () => {
+  const doReset = () => {
     setConversation([]);
     setSuggestion("");
     setCustomerInput("");
@@ -271,7 +276,41 @@ export default function LiveCallAssist() {
     setPreferredDate("");
     setSelectedExtras([]);
     setShowClearConfirm(false);
-    toast.success("Call cleared — ready for next call");
+  };
+
+  const handleClearCall = () => {
+    // Only save if there's something meaningful (at least a name or 2+ conversation lines)
+    const hasData = leadName.trim() || conversation.length >= 2;
+    if (hasData) {
+      const isBooked = ["close", "objection"].includes(activeStage) && doneStages.has("close" as StageId);
+      const transcript = conversation
+        .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
+        .join("\n");
+      saveCallLead.mutate({
+        name:          leadName.trim() || "Unknown",
+        address:       address || undefined,
+        bedrooms:      bedrooms || "Unknown",
+        bathrooms:     bathrooms || "Unknown",
+        serviceType:   serviceType || "Standard Cleaning",
+        preferredDate: preferredDate || undefined,
+        quotedPrice:   quotedPrice || undefined,
+        extras:        selectedExtras.length > 0 ? selectedExtras : undefined,
+        isBooked,
+        agentId:       agentId ?? undefined,
+        agentName:     agentName ?? undefined,
+        transcript:    transcript.slice(0, 8000),
+      }, {
+        onSuccess: (data) => {
+          console.log(`[CallAssist] Lead saved: sessionId=${data.sessionId}`);
+          toast.success(isBooked ? "✅ Booking saved to pipeline" : "✅ Lead saved to pipeline");
+        },
+        onError: (e) => {
+          console.error("[CallAssist] Failed to save lead:", e.message);
+          toast.error("Could not save lead — call cleared anyway");
+        },
+      });
+    }
+    doReset();
   };
 
   const handleReset = () => {
@@ -287,8 +326,6 @@ export default function LiveCallAssist() {
     setServiceType("");
     setPreferredDate("");
     setSelectedExtras([]);
-    setBookingNotes("");
-    setBookingCardLast4("");
   };
 
   const activeStageObj = STAGES.find(s => s.id === activeStage)!;

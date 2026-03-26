@@ -2001,10 +2001,82 @@ STAGE DETECTION — return the stage the conversation is currently in:
           return { success: false as const, customerName: null, address: null, bedrooms: null, bathrooms: null, serviceType: null, preferredDate: null, price: null };
         }
       }),
-  }),
 
+    /**
+     * leads.saveCallLead — create a lead + conversation session from a completed call.
+     * Called automatically when the agent clicks "Clear Call".
+     * If the call reached the close stage (card given), the session is marked BOOKED.
+     */
+    saveCallLead: adminAgentProcedure
+      .input(z.object({
+        name:         z.string().min(1).max(255),
+        phone:        z.string().max(30).default("Unknown"),
+        address:      z.string().max(500).optional(),
+        bedrooms:     z.string().max(50).default("Unknown"),
+        bathrooms:    z.string().max(50).default("Unknown"),
+        serviceType:  z.string().max(100).default("Standard Cleaning"),
+        preferredDate:z.string().max(100).optional(),
+        quotedPrice:  z.string().max(20).optional(),
+        extras:       z.array(z.string()).optional(),
+        isBooked:     z.boolean().default(false),
+        agentId:      z.number().optional(),
+        agentName:    z.string().max(255).optional(),
+        transcript:   z.string().max(8000).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+        const extrasJson = input.extras && input.extras.length > 0
+          ? JSON.stringify(input.extras)
+          : null;
+
+        // 1. Insert into quote_leads
+        const [leadResult] = await db.insert(quoteLeads).values({
+          name:        input.name,
+          phone:       input.phone,
+          serviceType: input.serviceType,
+          bedrooms:    input.bedrooms,
+          bathrooms:   input.bathrooms,
+          extras:      extrasJson,
+          smsSent:     0,
+        });
+        const leadId = (leadResult as { insertId: number }).insertId;
+
+        // 2. Insert conversation session
+        const stage = input.isBooked ? "BOOKED" : "CALL_SCHEDULED";
+        const [sessionResult] = await db.insert(conversationSessions).values({
+          leadPhone:          input.phone,
+          leadName:           input.name,
+          stage,
+          quotedPrice:        input.quotedPrice ?? null,
+          serviceType:        input.serviceType,
+          bedrooms:           input.bedrooms,
+          bathrooms:          input.bathrooms,
+          address:            input.address ?? null,
+          selectedSlot:       input.preferredDate ?? null,
+          quoteLeadId:        leadId,
+          leadSource:         "call",
+          messageHistory:     "[]",
+          extras:             extrasJson,
+          assignedAgentId:    input.agentId ?? null,
+          assignedAgentName:  input.agentName ?? null,
+          ...(input.isBooked ? {
+            isBooked:         1,
+            bookedAt:         new Date(),
+            bookedByAgentId:  input.agentId ?? null,
+            bookedByAgentName:input.agentName ?? null,
+            bookedAmount:     input.quotedPrice ? Math.round(parseFloat(input.quotedPrice)) : null,
+          } : {}),
+        });
+        const sessionId = (sessionResult as { insertId: number }).insertId;
+
+        console.log(`[CallAssist] Lead saved: sessionId=${sessionId}, name=${input.name}, booked=${input.isBooked}`);
+        return { success: true as const, leadId, sessionId };
+      }),
+  }),
   /**
-   * agents — agent auth + lead action procedures.
+   * agents — agent auth + lead action procedures..
    *
    * Agents authenticate with email + password (no Manus account needed).
    * Their session is stored in a separate "agent_session_id" cookie.
