@@ -15,10 +15,11 @@ import { trpc } from "@/lib/trpc";
 import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
-  SendHorizonal, MessageSquare, User, CheckCircle2, X,
+  SendHorizonal, MessageSquare, User, CheckCircle2, X, Plus, Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
 
 // ─── Stages (visual only — AI determines current stage) ──────────────────────
 
@@ -62,8 +63,8 @@ const BEDROOM_OPTIONS = ["Studio","1 Bedroom","2 Bedrooms","3 Bedrooms","4 Bedro
 const BATHROOM_OPTIONS = ["1 Bathroom","1.5 Bathrooms","2 Bathrooms","2.5 Bathrooms","3 Bathrooms","3.5 Bathrooms","4 Bathrooms","4+ Bathrooms"];
 const SERVICE_OPTIONS = ["Standard Cleaning","Deep Cleaning","Move-In / Move-Out Cleaning","Post-Construction Cleaning"];
 
-function estimatePrice(bedrooms: string, bathrooms: string, serviceType: string): string {
-  if (!bedrooms || !bathrooms || !serviceType) return "";
+function estimateBasePrice(bedrooms: string, bathrooms: string, serviceType: string): number {
+  if (!bedrooms || !bathrooms || !serviceType) return 0;
   const bedroomBase: Record<string, number> = {
     "Studio": 119, "1 Bedroom": 119, "2 Bedrooms": 209, "3 Bedrooms": 229,
     "4 Bedrooms": 279, "5 Bedrooms": 319, "6 Bedrooms": 379, "7+ Bedrooms": 419,
@@ -79,7 +80,7 @@ function estimatePrice(bedrooms: string, bathrooms: string, serviceType: string)
   const base = bedroomBase[bedrooms] ?? 119;
   const baths = bathroomCount[bathrooms] ?? 1;
   const extra = surcharge[serviceType] ?? 0;
-  return (base + baths * 30 + extra).toString();
+  return base + baths * 30 + extra;
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -94,7 +95,17 @@ export default function LiveCallAssist() {
   const [bathrooms, setBathrooms]     = useState("");
   const [serviceType, setServiceType] = useState("");
   const [preferredDate, setPreferredDate] = useState("");
-  const quotedPrice = estimatePrice(bedrooms, bathrooms, serviceType);
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+
+  const basePrice = estimateBasePrice(bedrooms, bathrooms, serviceType);
+  const extrasTotal = calculateExtrasTotal(selectedExtras);
+  const quotedPrice = basePrice > 0 ? (basePrice + extrasTotal).toString() : "";
+
+  const toggleExtra = (key: string) => {
+    setSelectedExtras(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
 
   // Conversation history — what the AI reads
   const [conversation, setConversation] = useState<ConversationLine[]>([]);
@@ -171,6 +182,11 @@ export default function LiveCallAssist() {
       .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
       .join("\n");
 
+    const extrasLabels = selectedExtras
+      .map(k => EXTRAS_LIST.find(e => e.key === k)?.label)
+      .filter(Boolean)
+      .join(", ");
+
     const context = [
       leadName   ? `Customer name: ${leadName}` : null,
       address    ? `Address: ${address}` : null,
@@ -179,6 +195,7 @@ export default function LiveCallAssist() {
       serviceType ? `Service: ${serviceType}` : null,
       preferredDate ? `Preferred date: ${preferredDate}` : null,
       quotedPrice ? `Quoted price: $${quotedPrice}` : null,
+      extrasLabels ? `Add-ons selected: ${extrasLabels}` : null,
     ].filter(Boolean).join("\n");
 
     mutation.mutate({
@@ -274,6 +291,7 @@ export default function LiveCallAssist() {
       setExtractedDate("");
       setExtractedPrice("");
       setBookingFrequency("one-time");
+      setSelectedExtras([]);
       setBookingConfirmed(false);
       setShowBookingModal(false);
       toast.success("Booking complete — ready for next call");
@@ -292,6 +310,7 @@ export default function LiveCallAssist() {
     setBathrooms("");
     setServiceType("");
     setPreferredDate("");
+    setSelectedExtras([]);
     setBookingNotes("");
     setBookingCardLast4("");
   };
@@ -565,11 +584,55 @@ export default function LiveCallAssist() {
 
             {/* Quoted price */}
             {quotedPrice && (
-              <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wide">Price</span>
-                <span className="text-base font-black text-violet-700">${quotedPrice}</span>
+              <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wide">Total</span>
+                  <span className="text-base font-black text-violet-700">${quotedPrice}</span>
+                </div>
+                {extrasTotal > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-violet-400">Base</span>
+                    <span className="text-[10px] text-violet-500">${basePrice}</span>
+                  </div>
+                )}
+                {extrasTotal > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-violet-400">Extras</span>
+                    <span className="text-[10px] text-violet-500">+${extrasTotal}</span>
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Extras */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Plus className="w-3 h-3 text-gray-400" />
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Extras</span>
+              </div>
+              <div className="space-y-1">
+                {EXTRAS_LIST.map(extra => {
+                  const selected = selectedExtras.includes(extra.key);
+                  return (
+                    <button
+                      key={extra.key}
+                      onClick={() => toggleExtra(extra.key)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-left transition-all ${
+                        selected
+                          ? "border-violet-400 bg-violet-50 text-violet-700"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="text-[10px] font-medium leading-tight">{extra.label}</span>
+                      <span className={`text-[10px] font-bold shrink-0 ml-1 ${ selected ? "text-violet-600" : "text-gray-400" }`}>
+                        +${extra.price}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
           </div>
         </div>
 
