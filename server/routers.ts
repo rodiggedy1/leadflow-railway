@@ -1831,15 +1831,13 @@ TONE EXAMPLES:
 ✓ "Totally fair — is it the timing or the price giving you pause? I want to make sure we find something that works."
 ✓ "A lot of our clients felt the same way before their first clean — now they won't go back."
 
-advanceStage = true the moment the stage goal is met. Don't wait. When in doubt, advance.`;
+The agent controls when to move to the next stage. Your only job is to give the best next line based on the full conversation.`;
 
         const userPrompt = `STAGE: ${input.stage}
 GOAL: ${stage.goal}
-ADVANCE WHEN: ${stage.advance}
-
 ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVERSATION SO FAR:\n${input.transcript}\n\n` : ""}${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n\n` : ""}What should the agent say right now? Return JSON with:
 - suggestion: the exact words to say (1-2 sentences, human, ready to read aloud)
-- advanceStage: true if the advance condition is met, false otherwise`;
+`;
 
         try {
           const response = await invokeLLM({
@@ -1847,7 +1845,7 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt },
             ],
-            response_format: {
+              response_format: {
               type: "json_schema",
               json_schema: {
                 name: "live_call_suggestion",
@@ -1856,9 +1854,8 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
                   type: "object",
                   properties: {
                     suggestion: { type: "string" },
-                    advanceStage: { type: "boolean" },
                   },
-                  required: ["suggestion", "advanceStage"],
+                  required: ["suggestion"],
                   additionalProperties: false,
                 },
               },
@@ -1867,8 +1864,8 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
           const rawContent = response.choices?.[0]?.message?.content;
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
-          const result = JSON.parse(content) as { suggestion: string; advanceStage: boolean };
-          return { success: true as const, suggestion: result.suggestion, advanceStage: result.advanceStage ?? false };
+          const result = JSON.parse(content) as { suggestion: string };
+          return { success: true as const, suggestion: result.suggestion, advanceStage: false };
         } catch {
           return {
             success: false as const,

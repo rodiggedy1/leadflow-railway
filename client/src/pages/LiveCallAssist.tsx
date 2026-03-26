@@ -814,21 +814,9 @@ export default function LiveCallAssist() {
           { id: nextId.current++, speaker: "agent", text: data.suggestion, ts: Date.now() },
         ]);
       }
-      // AI says stage is done — advance to next stage and clear suggestion so it starts clean
-      if (data.advanceStage) {
-        setActiveStage((current) => {
-          const idx = STAGES.findIndex((s) => s.id === current);
-          const next = STAGES[idx + 1];
-          if (next) {
-            setCompletedStages((prev) => { const s = new Set(prev); s.add(current); return s; });
-            // Clear suggestion so next stage shows its intro script, not the previous stage's AI line
-            setSuggestion(null);
-            setLastCustomerLine("");
-            return next.id;
-          }
-          return current;
-        });
-      }
+      // NOTE: No auto-advance. The agent reads the suggestion, says it, types the next customer
+      // line and hits Enter. The AI reads the full transcript and naturally gives the right line.
+      // Stage pills advance only when the agent manually clicks the next stage or marks complete.
     },
     onError: (e) => toast.error(e.message),
   });
