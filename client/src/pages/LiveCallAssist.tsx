@@ -90,7 +90,7 @@ const STAGES = [
     borderColor: "border-amber-200",
     textColor: "text-amber-700",
     goal: "Understand what's been frustrating them and why they're calling now instead of later",
-    intro: "What's most important to you in a cleaning service?",
+    intro: "",
     introLabel: "Situation Question",
     introNote: "Their answer tells you exactly what to lead with in Value. Reliability? Same team. Price? Value for money. Trust? Background-checked pros. Listen and advance.",
   },
@@ -901,7 +901,7 @@ export default function LiveCallAssist() {
     setLastCustomerLine("");
     if (id !== "objection") setObjectionType(null);
 
-    if (id === "recap" || id === "close") {
+    if (id === "situation" || id === "recap" || id === "close") {
       // Auto-fire AI for Recap and Close so the agent gets a pre-built line immediately:
       // - Recap: AI builds the mirror-back from the transcript (no placeholder text)
       // - Close: AI builds the price line using quoted price and service type from context
@@ -909,7 +909,9 @@ export default function LiveCallAssist() {
       const transcriptText = recentLines
         .map((l) => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
         .join("\n");
-      const instruction = id === "recap"
+      const instruction = id === "situation"
+        ? "Generate a natural transition from Discovery. Acknowledge the home size they just gave (beds/baths from the transcript or context), then ask: 'What's most important to you in getting your cleaning done right?' Sound warm and human, not scripted. 1-2 sentences max."
+        : id === "recap"
         ? "Generate the recap mirror-back line from the transcript above. Use the actual details the customer mentioned."
         : "Generate the price quote line. Use the quoted price and service type from context. Give the number confidently and immediately ask morning or afternoon.";
       suggestionMutation.mutate({

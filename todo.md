@@ -149,3 +149,4 @@
 - [x] Live Call Assist: wire pricing engine to auto-calculate quoted price from beds/baths/clean type — replace free-text Quoted Price field
 - [x] Live Call Assist: fix Situation stage — one direct question, advance immediately after answer, no mirroring back
 - [x] Live Call Assist: change Situation question to "What's most important to you in a cleaning service?" — use answer to tailor Value pitch
+- [x] Live Call Assist: Situation intro should be a natural transition from Discovery — acknowledge beds/baths then ask priority question
