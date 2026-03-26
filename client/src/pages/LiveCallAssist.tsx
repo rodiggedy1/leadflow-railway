@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
-  SendHorizonal, MessageSquare, User, CheckCircle2, X, Plus, Minus,
+  SendHorizonal, MessageSquare, User, Plus, Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -240,86 +240,24 @@ export default function LiveCallAssist() {
     }
   };
 
-  // ── Reset ────────────────────────────────────────────────────────────────────
+  // ── Clear call confirm dialog ────────────────────────────────────────────────
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // ── Booking modal state ──────────────────────────────────────────────────────
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingNotes, setBookingNotes] = useState("");
-  const [bookingCardLast4, setBookingCardLast4] = useState("");
-  const [bookingConfirmed, setBookingConfirmed] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-
-  // Extracted fields (editable in modal)
-  const [extractedName, setExtractedName] = useState("");
-  const [extractedAddress, setExtractedAddress] = useState("");
-  const [extractedBedrooms, setExtractedBedrooms] = useState("");
-  const [extractedBathrooms, setExtractedBathrooms] = useState("");
-  const [extractedService, setExtractedService] = useState("");
-  const [extractedDate, setExtractedDate] = useState("");
-  const [extractedPrice, setExtractedPrice] = useState("");
-  const [bookingFrequency, setBookingFrequency] = useState<"one-time" | "monthly" | "biweekly">("one-time");
-
-  const extractMutation = trpc.leads.extractBookingDetails.useMutation();
-
-  const openBookingModal = async () => {
-    setShowBookingModal(true);
-    setExtracting(true);
-    const transcript = conversation
-      .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
-      .join("\n");
-    try {
-      const result = await extractMutation.mutateAsync({ transcript });
-      setExtractedName(result.customerName ?? leadName);
-      setExtractedAddress(result.address ?? address);
-      setExtractedBedrooms(result.bedrooms ?? bedrooms);
-      setExtractedBathrooms(result.bathrooms ?? bathrooms);
-      setExtractedService(result.serviceType ?? serviceType);
-      setExtractedDate(result.preferredDate ?? preferredDate);
-      setExtractedPrice(result.price ?? quotedPrice);
-    } catch {
-      // Fall back to whatever is in the context panel
-      setExtractedName(leadName);
-      setExtractedAddress(address);
-      setExtractedBedrooms(bedrooms);
-      setExtractedBathrooms(bathrooms);
-      setExtractedService(serviceType);
-      setExtractedDate(preferredDate);
-      setExtractedPrice(quotedPrice);
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const handleCompleteBooking = () => {
-    setBookingConfirmed(true);
-    setTimeout(() => {
-      // Full reset
-      setConversation([]);
-      setSuggestion("");
-      setCustomerInput("");
-      setActiveStage("opener");
-      setDoneStages(new Set());
-      setLeadName("");
-      setAddress("");
-      setBedrooms("");
-      setBathrooms("");
-      setServiceType("");
-      setPreferredDate("");
-      setBookingNotes("");
-      setBookingCardLast4("");
-      setExtractedName("");
-      setExtractedAddress("");
-      setExtractedBedrooms("");
-      setExtractedBathrooms("");
-      setExtractedService("");
-      setExtractedDate("");
-      setExtractedPrice("");
-      setBookingFrequency("one-time");
-      setSelectedExtras([]);
-      setBookingConfirmed(false);
-      setShowBookingModal(false);
-      toast.success("Booking complete — ready for next call");
-    }, 1200);
+  const handleClearCall = () => {
+    setConversation([]);
+    setSuggestion("");
+    setCustomerInput("");
+    setActiveStage("opener");
+    setDoneStages(new Set());
+    setLeadName("");
+    setAddress("");
+    setBedrooms("");
+    setBathrooms("");
+    setServiceType("");
+    setPreferredDate("");
+    setSelectedExtras([]);
+    setShowClearConfirm(false);
+    toast.success("Call cleared — ready for next call");
   };
 
   const handleReset = () => {
@@ -346,137 +284,31 @@ export default function LiveCallAssist() {
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
 
-      {/* ── Booking Summary Modal ── */}
-      {showBookingModal && (
+      {/* ── Clear Call Confirm Dialog ── */}
+      {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-
-            {bookingConfirmed ? (
-              <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-                <CheckCircle2 className="w-16 h-16 text-green-500 mb-4" />
-                <p className="text-xl font-bold text-gray-800">Booking Complete!</p>
-                <p className="text-sm text-gray-500 mt-1">Clearing for next call...</p>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="px-6 py-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+                <RotateCcw className="w-5 h-5 text-red-500" />
               </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Complete Booking</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Review details, add notes, then clear for next call</p>
-                  </div>
-                  <button onClick={() => setShowBookingModal(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-
-                  {extracting ? (
-                    <div className="flex items-center justify-center gap-2 py-8 text-gray-400">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="text-sm">Reading transcript...</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Booking Details</p>
-                      {([
-                        { label: "Customer Name", value: extractedName,    set: setExtractedName },
-                        { label: "Address",       value: extractedAddress, set: setExtractedAddress },
-                        { label: "Service",       value: extractedService, set: setExtractedService },
-                        { label: "Bedrooms",      value: extractedBedrooms,set: setExtractedBedrooms },
-                        { label: "Bathrooms",     value: extractedBathrooms,set: setExtractedBathrooms },
-                        { label: "Date",          value: extractedDate,    set: setExtractedDate },
-                        { label: "Price",         value: extractedPrice,   set: setExtractedPrice },
-                      ] as { label: string; value: string; set: (v: string) => void }[]).map(({ label, value, set }) => (
-                        <div key={label}>
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">{label}</label>
-                          <input
-                            type="text"
-                            value={value}
-                            onChange={e => set(e.target.value)}
-                            placeholder={`Enter ${label.toLowerCase()}...`}
-                            className="w-full text-sm rounded-xl border border-gray-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-300"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Frequency + discount */}
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Cleaning Frequency</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([
-                        { id: "one-time" as const, label: "One-Time",  discount: null },
-                        { id: "monthly"  as const, label: "Monthly",   discount: "10% off" },
-                        { id: "biweekly" as const, label: "Biweekly",  discount: "15% off" },
-                      ]).map(opt => (
-                        <button
-                          key={opt.id}
-                          onClick={() => setBookingFrequency(opt.id)}
-                          className={`flex flex-col items-center py-2.5 px-2 rounded-xl border-2 text-center transition-all ${
-                            bookingFrequency === opt.id
-                              ? "border-violet-500 bg-violet-50"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <span className={`text-xs font-bold ${ bookingFrequency === opt.id ? "text-violet-700" : "text-gray-700" }`}>{opt.label}</span>
-                          {opt.discount && <span className="text-[10px] text-green-600 font-semibold mt-0.5">{opt.discount}</span>}
-                        </button>
-                      ))}
-                    </div>
-                    {extractedPrice && bookingFrequency !== "one-time" && (
-                      <p className="text-xs text-green-700 font-semibold mt-2 bg-green-50 rounded-lg px-3 py-2">
-                        Discounted price: ${Math.round(parseFloat(extractedPrice) * (bookingFrequency === "monthly" ? 0.90 : 0.85))}/clean
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Card last 4 */}
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1.5">Card Last 4 Digits</label>
-                    <input
-                      type="text"
-                      maxLength={4}
-                      value={bookingCardLast4}
-                      onChange={e => setBookingCardLast4(e.target.value.replace(/\D/g, ""))}
-                      placeholder="e.g. 4242"
-                      className="w-full text-sm rounded-xl border border-gray-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-400"
-                    />
-                  </div>
-
-                  {/* Notes */}
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1.5">Notes for the Team</label>
-                    <textarea
-                      value={bookingNotes}
-                      onChange={e => setBookingNotes(e.target.value)}
-                      placeholder="Entry instructions, pets, special requests, anything the team needs to know..."
-                      rows={4}
-                      className="w-full text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-400 leading-relaxed"
-                    />
-                  </div>
-
-                </div>
-
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-                  <button
-                    onClick={() => setShowBookingModal(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    Back to Call
-                  </button>
-                  <button
-                    onClick={handleCompleteBooking}
-                    className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Complete &amp; Clear
-                  </button>
-                </div>
-              </>
-            )}
-
+              <h2 className="text-base font-bold text-gray-900 mb-1">Clear this call?</h2>
+              <p className="text-sm text-gray-500">This will wipe the transcript, context, and suggestion. Ready for the next call.</p>
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearCall}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors"
+              >
+                Clear &amp; Reset
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -527,16 +359,10 @@ export default function LiveCallAssist() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={openBookingModal}
-            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+            onClick={() => setShowClearConfirm(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
           >
-            <CheckCircle2 className="w-3 h-3" /> Complete Booking
-          </button>
-          <button
-            onClick={handleReset}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" /> New Call
+            <RotateCcw className="w-3 h-3" /> Clear Call
           </button>
         </div>
       </div>
