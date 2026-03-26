@@ -2055,7 +2055,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const leadId = (leadResult as { insertId: number }).insertId;
 
         // 2. Insert conversation session
-        const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : input.isFollowUp ? "FOLLOW_UP" : "CALL_SCHEDULED";
+        const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : input.isFollowUp ? "FOLLOW_UP_SCHEDULED" : "CALL_SCHEDULED";
         const [sessionResult] = await db.insert(conversationSessions).values({
           leadPhone:          input.phone,
           leadName:           input.name,

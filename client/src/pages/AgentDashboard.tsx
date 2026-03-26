@@ -126,8 +126,9 @@ const STAGE_LABELS: Record<string, string> = {
   CALL_SCHEDULED: "Call Scheduled",
   DONE:           "Done",
   UNHANDLED:      "Needs Review",
-  BOOKED:         "Booked ✔",
-  NOT_INTERESTED: "Not Interested",
+  BOOKED:              "Booked ✔",
+  NOT_INTERESTED:      "Not Interested",
+  FOLLOW_UP_SCHEDULED: "Follow Up 📅",
 };
 const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   WIDGET_SIZING:  { bg: "#ede9fe", text: "#7c3aed", border: "#ddd6fe" },
@@ -139,8 +140,9 @@ const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }>
   CALL_SCHEDULED: { bg: "#e0e7ff", text: "#1e3a5f", border: "#c7d2fe" },
   DONE:           { bg: "#dcfce7", text: "#14532d", border: "#bbf7d0" },
   UNHANDLED:      { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
-  BOOKED:         { bg: "#bbf7d0", text: "#14532d", border: "#4ade80" },
-  NOT_INTERESTED: { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
+  BOOKED:              { bg: "#bbf7d0", text: "#14532d", border: "#4ade80" },
+  NOT_INTERESTED:      { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
+  FOLLOW_UP_SCHEDULED: { bg: "#f5f3ff", text: "#7c3aed", border: "#ddd6fe" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
