@@ -197,3 +197,5 @@
 - [x] ETA display: Control Tower already had ETA on job cards and detail panel
 - [x] Cleaner portal: "Are you sure?" confirmation modal before Mark Complete (warn if no photos uploaded)
 - [x] Cleaner portal: confirmation modal for "Completed" status button (irreversible)
+- [x] Update Mark Complete modal copy: shorten irreversible note to "Once marked complete, the job is closed."
+- [x] Cleaner portal: Issue at Property note is now required — Report button disabled until note has content, red border + helper text shown

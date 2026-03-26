@@ -980,32 +980,42 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             </div>
           )}
 
-          {/* Issue note input */}
+          {/* Issue note input — note is required before submitting */}
           {showIssueInput && (
-            <div className="flex gap-2 mt-1">
-              <Input
-                placeholder="Describe the issue (optional)"
-                value={issueNote}
-                onChange={e => setIssueNote(e.target.value)}
-                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm h-8"
-                onKeyDown={e => {
-                  if (e.key === "Enter") {
-                    statusMutation.mutate({ cleanerJobId: job.id, status: "issue_at_property", issueNote: issueNote || undefined });
+            <div className="space-y-1.5 mt-1">
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">What's the issue? <span className="text-red-500">*</span></p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Describe the issue (required)"
+                  value={issueNote}
+                  onChange={e => setIssueNote(e.target.value)}
+                  className={`bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm h-8 ${
+                    issueNote.trim() === "" ? "border-red-600/60" : "border-slate-600"
+                  }`}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && issueNote.trim()) {
+                      statusMutation.mutate({ cleanerJobId: job.id, status: "issue_at_property", issueNote: issueNote.trim() });
+                      setShowIssueInput(false);
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-500 text-white h-8 px-3 text-xs shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    if (!issueNote.trim()) return;
+                    statusMutation.mutate({ cleanerJobId: job.id, status: "issue_at_property", issueNote: issueNote.trim() });
                     setShowIssueInput(false);
-                  }
-                }}
-              />
-              <Button
-                size="sm"
-                className="bg-red-600 hover:bg-red-500 text-white h-8 px-3 text-xs shrink-0"
-                onClick={() => {
-                  statusMutation.mutate({ cleanerJobId: job.id, status: "issue_at_property", issueNote: issueNote || undefined });
-                  setShowIssueInput(false);
-                }}
-                disabled={statusMutation.isPending}
-              >
-                Report
-              </Button>
+                  }}
+                  disabled={statusMutation.isPending || !issueNote.trim()}
+                >
+                  Report
+                </Button>
+              </div>
+              {issueNote.trim() === "" && (
+                <p className="text-[11px] text-red-400">A description is required to report an issue.</p>
+              )}
             </div>
           )}
           {(job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && (
@@ -1094,7 +1104,7 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
             {/* Irreversible warning */}
             <div className="flex items-start gap-3 p-3 bg-slate-800 border border-slate-700 rounded-xl">
               <AlertCircle className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-slate-300">This cannot be undone. Once marked complete, the job is closed and your pay is finalized.</p>
+              <p className="text-xs text-slate-300">Once marked complete, the job is closed.</p>
             </div>
 
             {/* Action buttons */}

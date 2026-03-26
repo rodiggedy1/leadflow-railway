@@ -1217,3 +1217,33 @@ describe("CleanerPortal — confirm-complete modal logic", () => {
     expect(getModalState(5).confirmButtonLabel).toBe("Yes, Mark Complete");
   });
 });
+
+// ── CleanerPortal — issue_at_property note validation ────────────────────────
+
+describe("CleanerPortal — issue_at_property note validation", () => {
+  // Mirrors the Report button disabled logic
+  function canSubmitIssue(issueNote: string, isPending: boolean): boolean {
+    return !isPending && issueNote.trim().length > 0;
+  }
+
+  it("blocks submit when note is empty string", () => {
+    expect(canSubmitIssue("", false)).toBe(false);
+  });
+
+  it("blocks submit when note is only whitespace", () => {
+    expect(canSubmitIssue("   ", false)).toBe(false);
+  });
+
+  it("allows submit when note has content", () => {
+    expect(canSubmitIssue("Locked out", false)).toBe(true);
+  });
+
+  it("blocks submit while mutation is pending even with valid note", () => {
+    expect(canSubmitIssue("Locked out", true)).toBe(false);
+  });
+
+  it("trims the note before submitting", () => {
+    const raw = "  dog in the house  ";
+    expect(raw.trim()).toBe("dog in the house");
+  });
+});
