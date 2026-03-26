@@ -1744,41 +1744,77 @@ Analyze this conversation and return a JSON object with exactly these fields:
         lastCustomerLine: z.string().max(500).optional(),
       }))
       .mutation(async ({ input }) => {
-        const stageDescriptions: Record<string, string> = {
-          opener: "Warm Welcome — greet the caller warmly, make them feel heard, confirm they want to book or have questions",
-          discovery: "Understand Their Situation — ask about home size, service type, frequency, and what matters most to them",
-          situation: "Learn Their History — first-time customer or had cleaners before? Understand past frustrations to set expectations",
-          value: "Show What Makes You Different — same team every visit, background-checked, supplies included, reliable and trustworthy",
-          recap: "Mirror Back — summarize what you heard before giving the price to build trust and show you listened",
-          close: "Book It — give the price once confidently then immediately pivot to scheduling: morning or afternoon?",
-          objection: "Handle Hesitation — stay warm, acknowledge their concern, and re-anchor to the value without being pushy",
+        const stageDescriptions: Record<string, { goal: string; exitCondition: string; maxExchanges: number }> = {
+          opener: {
+            goal: "Warm welcome — greet the caller, make them feel heard, confirm they're calling to book or get a quote",
+            exitCondition: "Customer has confirmed they want a quote or to book. Even one positive response is enough. Advance immediately.",
+            maxExchanges: 1,
+          },
+          discovery: {
+            goal: "Get the key facts: home size (beds/baths), type of clean (standard, deep, move-in/out), and how often",
+            exitCondition: "You know the home size and clean type. That's all you need. Advance as soon as you have those two facts.",
+            maxExchanges: 2,
+          },
+          situation: {
+            goal: "One quick question: have they had a cleaner before? If yes, what happened? This takes ONE exchange max.",
+            exitCondition: "Customer has answered whether they've had a cleaner before. That's it. Advance immediately after their answer — do NOT ask follow-up questions or reflect back what they said.",
+            maxExchanges: 1,
+          },
+          value: {
+            goal: "Share 2-3 specific things that make this company different: same team, background-checked, supplies included",
+            exitCondition: "You've shared the key differentiators once. Don't repeat. Advance after one value statement.",
+            maxExchanges: 1,
+          },
+          recap: {
+            goal: "Mirror back what you heard in one sentence before giving the price",
+            exitCondition: "You've done the recap. Advance immediately — this stage is one line only.",
+            maxExchanges: 1,
+          },
+          close: {
+            goal: "Give the price once, confidently. Then immediately ask: morning or afternoon?",
+            exitCondition: "Price has been given and customer has responded. If they're hesitating, move to objection stage.",
+            maxExchanges: 2,
+          },
+          objection: {
+            goal: "Handle the specific objection warmly, re-anchor to value, and ask for the booking again",
+            exitCondition: "Objection has been addressed once. Don't keep going in circles. Advance to close after one rebuttal.",
+            maxExchanges: 2,
+          },
         };
-        const stageDesc = stageDescriptions[input.stage] ?? input.stage;
+        const stageInfo = stageDescriptions[input.stage] ?? { goal: input.stage, exitCondition: "Use your judgment.", maxExchanges: 2 };
         const leadContext = [
           input.leadName ? `Customer name: ${input.leadName}` : null,
           input.serviceType ? `Service: ${input.serviceType}` : null,
           input.quotedPrice ? `Quoted price: $${input.quotedPrice}` : null,
         ].filter(Boolean).join("\n");
 
-        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live inbound phone call. The customer has already reached out — they are interested. Your job is to give the agent the single best thing to say right now, and to decide when the current stage is complete so the call can automatically move forward.
+        const systemPrompt = `You are an elite home services sales coach whispering real-time suggestions to a sales agent on a live inbound phone call. The customer has already reached out — they are interested.
 
-Rules:
-- One response only — the best possible move for this exact moment
-- Must sound like a real human talking, NOT a sales script
-- Warm, confident, and helpful — never pushy or robotic
-- Ready to say out loud immediately, 1-3 sentences max
-- Draw on world-class home service selling: empathy, specificity, social proof, assumptive language
-- Never use bullet points, headers, or filler phrases like "Great question!"
-- Set advanceStage to true when the current stage goal has been achieved and the call should move to the next stage. Be decisive — don't keep the agent stuck in a stage once the objective is met.`;
+Your job:
+1. Give the agent the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural — NOT a script)
+2. Decide if the stage is done and set advanceStage accordingly
 
-        const userPrompt = `CURRENT CALL STAGE: ${stageDesc}
+Rules for the suggestion:
+- Sound like a real human, warm and confident, never pushy or robotic
+- No bullet points, no headers, no filler phrases like "Great question!"
+- 1-3 sentences max, ready to say out loud immediately
 
-${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}
-${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}
-${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
-Based on this, give the agent their next move. Return a JSON object with:
-- suggestion: the single best thing to say right now (1-3 sentences, ready to read aloud, human and natural)
-- advanceStage: true if the current stage goal is complete and the call should move to the next stage, false if more work is needed in this stage`;
+Rules for advanceStage — BE DECISIVE:
+- Each stage has a clear exit condition. When it's met, set advanceStage: true immediately.
+- Do NOT stay in a stage to ask follow-up questions or reflect back what the customer said
+- Do NOT wait for "perfect" information — good enough is enough, move on
+- The exit condition for each stage is the ONLY thing that matters for advancing
+- When in doubt, advance — it's better to move forward than to loop`;
+
+        const userPrompt = `CURRENT STAGE: ${input.stage}
+STAGE GOAL: ${stageInfo.goal}
+EXIT CONDITION (advance when this is met): ${stageInfo.exitCondition}
+MAX EXCHANGES BEFORE ADVANCING: ${stageInfo.maxExchanges}
+
+${leadContext ? `LEAD CONTEXT:\n${leadContext}\n` : ""}${input.transcript ? `RECENT TRANSCRIPT:\n${input.transcript}\n` : ""}${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n` : ""}
+Give the agent their next line. Return JSON:
+- suggestion: what to say right now (1-3 sentences, human, ready to read aloud)
+- advanceStage: true if the exit condition above is met, false otherwise`;
 
         try {
           const response = await invokeLLM({
