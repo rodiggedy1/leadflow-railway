@@ -803,11 +803,23 @@ export default function LiveCallAssist() {
   // AI suggestions
   const [suggestion, setSuggestion] = useState<AISuggestion | null>(null);
 
+  // Ref to hold the customer line that triggered the current AI call.
+  // We store it here so onSuccess can log it to the transcript without a stale closure.
+  const pendingCustomerLineRef = useRef("");
+
   const suggestionMutation = trpc.leads.getLiveCallSuggestions.useMutation({
     onSuccess: (data) => {
       setSuggestion({ suggestion: data.suggestion });
       if (!data.success) {
         toast.error("AI suggestion failed — showing fallback");
+      }
+      // Log the customer line that triggered this AI call (captured before the async call)
+      if (pendingCustomerLineRef.current) {
+        setTranscriptLines((prev) => [
+          ...prev,
+          { id: nextId.current++, speaker: "customer", text: pendingCustomerLineRef.current, ts: Date.now() },
+        ]);
+        pendingCustomerLineRef.current = "";
       }
       // Auto-log the AI suggestion as an agent line so the transcript is always complete
       // and the AI never repeats itself on the next turn
@@ -833,7 +845,10 @@ export default function LiveCallAssist() {
         }
       }
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => {
+      pendingCustomerLineRef.current = "";
+      toast.error(e.message);
+    },
   });
 
   const handleAddLine = useCallback((speaker: "agent" | "customer", text: string) => {
@@ -877,12 +892,14 @@ export default function LiveCallAssist() {
   }, [transcriptLines, lastCustomerLine, leadName, serviceType, quotedPrice, objectionType, suggestionMutation]);
 
   const handleGetSuggestion = useCallback(() => {
-    // Log the customer line to the transcript before firing AI
-    if (lastCustomerLine.trim()) {
-      handleAddLine("customer", lastCustomerLine.trim());
-    }
+    if (!lastCustomerLine.trim()) return;
+    // Store the customer line so onSuccess can log it after the AI responds.
+    // We do NOT call handleAddLine here — that would trigger a state update before
+    // fireSuggestion reads transcriptLines, causing a stale closure where the
+    // AI never sees the customer's line in the transcript.
+    pendingCustomerLineRef.current = lastCustomerLine.trim();
     fireSuggestion(activeStage, lastCustomerLine);
-  }, [activeStage, lastCustomerLine, fireSuggestion, handleAddLine]);
+  }, [activeStage, lastCustomerLine, fireSuggestion]);
 
   // Called when agent clicks "I said this" on a suggestion:
   // 1. Log the agent line to the transcript
