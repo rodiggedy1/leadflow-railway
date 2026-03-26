@@ -440,9 +440,9 @@ export default function LiveCallAssist() {
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
         <button
           onClick={() => navigate("/agent-dashboard")}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors shrink-0"
+          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors shrink-0"
         >
-          <ArrowLeft className="w-4 h-4" /> Back
+          <X className="w-3.5 h-3.5" /> Exit Call Assist
         </button>
         <div className="w-px h-5 bg-gray-200 shrink-0" />
         <div className="flex items-center gap-2 shrink-0">
