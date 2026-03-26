@@ -1747,8 +1747,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
         // Stage playbook — what to accomplish and when to move on
         const playbook: Record<string, { goal: string; advance: string }> = {
           opener: {
-            goal: "Warm welcome. Make them feel like they called the right place. If you have their name, use it. End with an open question — what can I help you with today?",
-            advance: "Customer has confirmed they want a quote or to book.",
+            goal: "Warm greeting, then immediately ask for bedrooms, bathrooms, and service type (standard clean, recurring service, or move-out) in one question. They already called for a quote — don't waste their time asking what they need. Get straight to the info. Keep it warm and human.",
+            advance: "You have bedrooms, bathrooms, AND service type. Advance immediately.",
           },
           discovery: {
             goal: "Ask bedrooms, bathrooms, and service type all in one warm question. The three service types are: Standard clean, Recurring clean, or Move-out clean. Keep it conversational — not a form. If they mention urgency, embarrassment, or an event — acknowledge it in one warm phrase before moving on.",

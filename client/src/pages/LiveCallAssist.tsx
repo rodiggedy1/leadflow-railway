@@ -60,9 +60,9 @@ const STAGES = [
     borderColor: "border-violet-200",
     textColor: "text-violet-700",
     goal: "Warm welcome, confirm interest, and set a friendly tone before asking any questions",
-    intro: "Hi, thank you for calling Maids in Black, this is [Your Name]! You called at the perfect time — what can I help you with today?",
+    intro: "Hi, thank you for calling Maids in Black, this is [Your Name]! Let me get you a quote real quick — how many bedrooms and bathrooms, and is this a standard clean, recurring service, or a move-out?",
     introLabel: "Opening Line",
-    introNote: "They called YOU — they're already interested. Sound excited, not scripted. Make them feel like they just called their favorite person.",
+    introNote: "They called for a quote — get straight to it. Warm greeting + the three questions in one breath. No fluff.",
   },
   {
     id: "discovery",
