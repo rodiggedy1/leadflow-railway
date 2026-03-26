@@ -203,3 +203,4 @@
 - [x] Cleaner portal: "Update ETA" button on job card when status is on_the_way or running_late — reopens ETA modal
 - [x] Fix voiceAlertCleaner: surface actual VAPI error in the toast instead of generic message; refactored to return reason string so toast shows the real failure cause
 - [x] Expand voice alert hours from 8 AM–5 PM to 7 AM–6 PM ET
+- [x] Fix VAPI 400 "property server should not exist" error on voice alert cleaner call — removed server field from payload (VAPI API no longer accepts it)
