@@ -1737,122 +1737,76 @@ Analyze this conversation and return a JSON object with exactly these fields:
     getLiveCallSuggestions: adminAgentProcedure
       .input(z.object({
         stage: z.string().min(1),
-        transcript: z.string().max(4000),
+        transcript: z.string().max(6000),
         leadName: z.string().optional(),
         serviceType: z.string().optional(),
         quotedPrice: z.string().optional(),
-        lastCustomerLine: z.string().max(500).optional(),
+        lastCustomerLine: z.string().max(1000).optional(),
+        context: z.string().max(500).optional(),
       }))
       .mutation(async ({ input }) => {
-        // Stage playbook — what to accomplish and when to move on
-        const playbook: Record<string, { goal: string; advance: string }> = {
-          opener: {
-            goal: "Warm, excited greeting. You don't know why they're calling yet. Make them feel like they called the right place. Ask how you can help. Do NOT ask about bedrooms or bathrooms yet — wait until they confirm they want a cleaning.",
-            advance: "Customer has confirmed they want a cleaning or a quote. Advance to discovery.",
-          },
-          discovery: {
-            goal: "Ask bedrooms, bathrooms, and service type all in one warm question. The three service types are: Standard clean, Recurring clean, or Move-out clean. Keep it conversational — not a form. If they mention urgency, embarrassment, or an event — acknowledge it in one warm phrase before moving on.",
-            advance: "You have bedrooms, bathrooms, AND service type (standard, recurring, or move-out).",
-          },
 
-          value: {
-            goal: `You are a world-class closer building value before the price. Deliver ONE punchy, specific value pitch — then end with a question that moves toward the close. MANDATORY: your response MUST end with a question mark.
+        const systemPrompt = `You are a live sales coach whispering the next line to a phone agent at Maids in Black, a professional home cleaning company in Washington DC.
 
-DO NOT say generic things like 'we'll make every corner shine.' DO NOT give a statement with no question at the end.
+Your ONLY job: read the conversation and give the agent the single best next thing to say to move toward booking the job.
 
-Pick the most relevant differentiator from the transcript and connect it to their specific situation:
-- Aunt/guests coming → 'We can have a team out before she arrives. Same crew every time, background-checked, supplies included — you don't lift a finger. Does that sound like what you need?'
-- Embarrassment/messy → 'No judgment — our team has literally seen it all. They come in, reset everything, and you get your space back. Would that work for you?'
-- Consistency/recurring → 'Most of our clients start with a standard clean, then lock in a recurring slot so it stays that way — you never have to think about it again. Is that the kind of setup you're looking for?'
-- General → 'Here's what makes us different: same team every time, background-checked, they bring everything. Our clients say the biggest thing they get back is their weekends. Does that sound like what you're looking for?'
+WHO YOU ARE COACHING:
+- The agent is on a live inbound call
+- The customer called because they want their home cleaned
+- The goal is to book the job before the call ends
 
-ONE value statement + ONE question. Nothing more. The response MUST end with a question mark.`,
-            advance: "You've delivered one tailored value statement and asked a closing question.",
-          },
-          recap: {
-            goal: `You are a top 1% sales rep recapping a live call before closing. Write a SHORT, natural-sounding recap (2-3 sentences max) that: (1) restates their situation using their specific details, (2) calls out the emotional driver — stress, embarrassment, urgency, event, (3) ends with a question that transitions to the close. MANDATORY: your response MUST end with a question mark. STYLE: human, on the phone, not a report. No bullet points. No 'based on what you said'. EXAMPLE: 'Alright — so you've got a 3-bed, 2-bath, your aunt is coming this weekend, and you just want it handled before she gets there. Sound about right?' Make the customer feel understood AND ready to say yes. End with a question.`,
-            advance: "You've delivered the recap.",
-          },
-          close: {
-            goal: "Give the price confidently — no apology, no hesitation. Then immediately move to scheduling with an assumptive question. Don't pause and wait. Keep the momentum.",
-            advance: "Price has been given and customer has responded.",
-          },
-          objection: {
-            goal: `You are a top-performing sales closer handling objections naturally and confidently. Respond to the customer's objection following this flow: (1) ACKNOWLEDGE with real empathy — not fake. (2) REFRAME — shift how they see the situation. (3) REDUCE RISK — make it feel safe to move forward. (4) CLOSE FORWARD — guide them back to booking. STYLE RULES: conversational, like you're on the phone. Short sentences. No corporate language. No 'I understand your concern'. No long explanations. No pressure — but confident. COMMON OBJECTIONS: 'I need to think about it' → ask if it's timing or price, then push the open slot. 'That's a bit expensive' → anchor to value and what they'd pay in stress. 'My house is too messy' → normalize it, no judgment. 'I'll call back later' → create urgency around today's slot. EXAMPLE: Objection 'I need to think about it' → 'Yeah, totally fair. Usually when people say that, it's either the timing or the price — which one is it for you? Either way, we do have that slot open today, and honestly it sounds like getting this handled now would take a lot off your plate. Let's just lock it in, and if anything comes up, we can adjust.' Handle the objection AND move the sale forward in the same breath.`,
-            advance: "Objection has been addressed and customer is moving toward booking.",
-          },
-        };
+THE SALES FLOW (follow this order):
+1. OPENER — Warm greeting, find out why they're calling
+2. DISCOVERY — Get: home size (beds/baths), address, preferred date, service type (standard/deep/move-out)
+3. VALUE — Before giving price, sell why Maids in Black: same team every time, background-checked, supplies included, satisfaction guarantee, no judgment
+4. RECAP — Mirror back what they told you in 1-2 sentences so they feel heard
+5. CLOSE — Give the price confidently, then immediately ask for the booking date
+6. OBJECTION — If they push back: acknowledge, reframe, reduce risk, close again
 
-        const stage = playbook[input.stage] ?? { goal: "Help the customer move toward booking.", advance: "Customer is ready to book." };
+HOW TO WRITE THE SUGGESTION:
+- Sound like a real human on the phone — not a script, not a chatbot
+- Short. 1-2 sentences max. The agent reads this at a glance.
+- No filler words: no "Absolutely!", "Great!", "Of course!", "Certainly!"
+- Every stage except CLOSE must end with a question that moves the sale forward
+- CLOSE stage: give the price, then assume the booking ("Does morning or afternoon work better?")
+- NEVER mention price before the CLOSE stage
+- NEVER repeat what the customer just said back to them word for word
+- Be confident. Be warm. Be human.
 
-        const leadContext = [
-          input.leadName ? `Customer name: ${input.leadName}` : null,
-          input.serviceType ? `Home: ${input.serviceType}` : null,
-          input.quotedPrice ? `Quoted price: $${input.quotedPrice}` : null,
+OBJECTION HANDLING (when customer pushes back):
+- Price too high → "Our clients say the peace of mind is worth every penny — same team, background-checked, they bring everything. What were you expecting to pay?"
+- Need to think → "Totally fair — is it the timing or the price? Either way, we have a slot open this week and I'd hate for you to lose it."
+- Already have someone → "That's great — what do you like about them? I ask because a lot of our clients switched after just one clean with us."
+- Not ready yet → "No pressure at all — what would need to happen for it to feel like the right time?"
+
+STAGE DETECTION — return which stage the conversation is currently in:
+- opener: customer hasn't confirmed they want a cleaning
+- discovery: confirmed they want cleaning, but still missing home size / address / date
+- value: have home details, haven't pitched value yet
+- recap: value pitched, haven't recapped yet
+- close: recapped, ready to give price
+- objection: customer expressed hesitation or concern after price was given`;
+
+        const contextBlock = [
+          input.leadName    ? `Customer name: ${input.leadName}` : null,
+          input.context     ? input.context : null,
+          input.quotedPrice ? `Price to quote: $${input.quotedPrice}` : null,
         ].filter(Boolean).join("\n");
 
-        const systemPrompt = `You are a world-class sales coach trained in high-converting service-based sales for home services. You whisper the single best next line to a live sales agent at Maids in Black — a professional home cleaning company — in real time during an inbound call.
-
-Your job is to turn every call into a consultative, high-converting sales conversation that books jobs. Make the agent sound like a top 1% closer: confident, warm, human, and assumptive.
-
-CORE PRINCIPLES — NEVER VIOLATE:
-- Conversational, not robotic. Short sentences. Real human speech.
-- Confident and assumptive. Guide them toward booking. Never ask IF, always ask WHEN.
-- Emotionally intelligent. Identify pain (embarrassment, stress, urgency, event) and reflect it back in a way that increases motivation to act.
-- Value-first. Never lead with price. Always paint the picture of what they get before the number.
-- Objection-proof. Pre-handle resistance before it comes up. Acknowledge concerns with empathy, then redirect with certainty.
-- Pattern interrupt. Don't sound like every other cleaning company. Be specific, be real, be memorable.
-
-CALL FLOW TO FOLLOW:
-1. OPENER: Warm, excited, makes them feel they called the right place. Ask how you can help. No beds/baths yet.
-2. DISCOVERY: Once they confirm they want a cleaning — ask beds, baths, and service type in one warm question. Also uncover urgency, emotional drivers, desired outcome.
-3. PAIN AMPLIFICATION: Reflect their situation back. Make them feel understood. Increase urgency naturally.
-4. VALUE BUILDING: Connect their specific pain to what Maids in Black delivers. Background-checked team, same cleaners, satisfaction guarantee, no judgment. Tie directly to what they said.
-5. PRICE DELIVERY: Confident, no hesitation. State what's included, then the number. Immediately move to scheduling.
-6. OBJECTION HANDLING: Empathy first, then flip. Price → anchor to value. Timing → urgency. Trust → guarantee + reviews. Already have someone → find the gap.
-7. ASSUMPTIVE CLOSE: Offer a specific time slot. Make next step feel natural and expected.
-8. RE-ENGAGEMENT: If they stall — identify the real objection, re-anchor urgency, bring them back.
-
-HARD OUTPUT RULES:
-1. Return ONE line to say. Max 2 sentences. Agent reads this at a glance mid-call.
-2. Never mirror back the customer's words verbatim.
-3. No hollow filler: no "Great!", "Absolutely!", "Of course!", "Certainly!", "I understand."
-4. EVERY response in Opener, Discovery, Value, Recap, and Objection MUST end with a question mark. No exceptions. If you write a statement, add a question after it.
-5. Close stage is the only stage that does not require a question — it gives the price and assumes the booking.
-6. NEVER give the price in any stage except Close. If you're in Opener, Discovery, Value, or Recap — DO NOT mention any dollar amount. Price belongs ONLY in Close.
-7. The call flow is: Opener → Discovery → Value → Recap → Close → Objection. Do not skip stages or jump ahead.
-
-TONE EXAMPLES:
-✓ "You called the right place."
-✓ "Our team has seen it all — no judgment, just a spotless home."
-✓ "For a 3-bed standard clean you're looking at $229 — that's everything, top to bottom. Does morning or afternoon work better for you?"
-✓ "Totally fair — is it the timing or the price giving you pause? I want to make sure we find something that works."
-✓ "A lot of our clients felt the same way before their first clean — now they won't go back."
-
-STAGE DETECTION RULES — for the currentStage field:
-- opener: customer hasn't confirmed they want a cleaning yet
-- discovery: customer confirmed they want a cleaning but beds/baths/service type not yet collected
-- value: beds/baths/service type collected, value pitch not yet delivered
-- recap: value pitch delivered, recap not yet done
-- close: recap done, price not yet given
-- objection: customer expressed hesitation, price concern, or said they need to think about it
-
-Always return the stage the conversation is CURRENTLY in — not where it was when the call started.`;
-
-        const userPrompt = `STAGE: ${input.stage}
-GOAL: ${stage.goal}
-${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVERSATION SO FAR:\n${input.transcript}\n\n` : ""}${input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"\n\n` : ""}What should the agent say right now? Return JSON with:
-- suggestion: the exact words to say (1-2 sentences, human, ready to read aloud)
-- currentStage: which stage the conversation is NOW in, based on the full transcript. One of: opener, discovery, value, recap, close, objection
-`;
+        const userPrompt = [
+          contextBlock ? `CONTEXT:\n${contextBlock}` : null,
+          input.transcript ? `CONVERSATION:\n${input.transcript}` : null,
+          input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"` : null,
+          `What does the agent say next? Return JSON: { "suggestion": "...", "currentStage": "opener|discovery|value|recap|close|objection" }`,
+        ].filter(Boolean).join("\n\n");
 
         try {
           const response = await invokeLLM({
             messages: [
               { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
+              { role: "user",   content: userPrompt },
             ],
-              response_format: {
+            response_format: {
               type: "json_schema",
               json_schema: {
                 name: "live_call_suggestion",
@@ -1860,7 +1814,7 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
                 schema: {
                   type: "object",
                   properties: {
-                    suggestion: { type: "string" },
+                    suggestion:   { type: "string" },
                     currentStage: { type: "string", enum: ["opener", "discovery", "value", "recap", "close", "objection"] },
                   },
                   required: ["suggestion", "currentStage"],
@@ -1873,13 +1827,12 @@ ${leadContext ? `CONTEXT:\n${leadContext}\n\n` : ""}${input.transcript ? `CONVER
           const content = typeof rawContent === "string" ? rawContent : null;
           if (!content) throw new Error("Empty LLM response");
           const result = JSON.parse(content) as { suggestion: string; currentStage: string };
-          return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage, advanceStage: false };
+          return { success: true as const, suggestion: result.suggestion, currentStage: result.currentStage };
         } catch {
           return {
             success: false as const,
             currentStage: input.stage,
-            suggestion: "That's a great question — let me make sure I give you the right information. Can you tell me a bit more about what you're looking for?",
-            advanceStage: false,
+            suggestion: "Can you tell me a bit more about what you're looking for?",
           };
         }
       }),
