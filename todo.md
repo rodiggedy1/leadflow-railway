@@ -209,3 +209,15 @@
 - [x] B Karla phone: confirmed genuinely NULL in cleaner_profiles — needs to be added via Cleaner Profiles admin UI
 - [x] Reduce VAPI maxDurationSeconds from 45s to 25s to release concurrent slots faster
 - [x] Stagger cleaner voice alert calls by 30 seconds each (jobIndex * 30s offset on sleep) to prevent concurrent slot exhaustion
+- [ ] Tracker review flow: add reviewChipsSelected, reviewDraftPicked, reviewCopied columns to cleanerJobs schema
+- [ ] Tracker review flow: server procedure tracker.generateReviewDrafts (AI, uses chips + job data)
+- [ ] Tracker review flow: SMS trigger when job marked completed (send tracker link again with review CTA)
+- [ ] Tracker review flow: Step 1 — reframed 5-star rating with "$50 tip" hook
+- [ ] Tracker review flow: Step 2 — quick-tap chip selection + optional free text
+- [ ] Tracker review flow: Step 3 — AI generates 3 personalized draft options
+- [ ] Tracker review flow: Step 4 — pick + inline edit
+- [ ] Tracker review flow: Step 5 — 1-tap copy + open Google review link (https://tinyurl.com/26rjz5jn)
+- [ ] Tracker UI overhaul: celebratory completed state (confetti, hero moment)
+- [ ] Tracker UI overhaul: improved progress stepper (larger, labeled)
+- [ ] Tracker UI overhaul: warm team section with highlighted pill
+- [ ] Tracker UI overhaul: overall polish (spacing, typography, micro-interactions)
