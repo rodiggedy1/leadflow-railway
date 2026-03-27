@@ -60,16 +60,13 @@ const STATUS_META: Record<PriorityStatus, { label: string; bg: string; text: str
   assigned: { label: "Assigned",        bg: "bg-slate-50",  text: "text-slate-600",  border: "border-slate-200" },
 };
 
-const TIMELINE_TONE: Record<string, string> = {
-  arrival:  "bg-emerald-50 text-emerald-700 border-emerald-200",
-  photo:    "bg-sky-50 text-sky-700 border-sky-200",
-  issue:    "bg-red-50 text-red-700 border-red-200",
-  office:   "bg-violet-50 text-violet-700 border-violet-200",
-  schedule: "bg-amber-50 text-amber-700 border-amber-200",
-  complete: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  review:   "bg-indigo-50 text-indigo-700 border-indigo-200",
-  sms:      "bg-slate-50 text-slate-600 border-slate-200",
-  call:     "bg-purple-50 text-purple-700 border-purple-200",
+// time = bold colored timestamp · label = event text · bg/border = pill shell
+const TIMELINE_TONE: Record<string, { time: string; label: string; bg: string; border: string }> = {
+  arrival:  { time: "text-emerald-700", label: "text-emerald-800", bg: "bg-emerald-50",  border: "border-emerald-200" },
+  photo:    { time: "text-sky-600",     label: "text-sky-800",     bg: "bg-sky-50",      border: "border-sky-200" },
+  issue:    { time: "text-red-600",     label: "text-red-700",     bg: "bg-red-50",      border: "border-red-200" },
+  schedule: { time: "text-amber-600",   label: "text-amber-800",   bg: "bg-amber-50",    border: "border-amber-200" },
+  complete: { time: "text-emerald-700", label: "text-emerald-800", bg: "bg-emerald-50",  border: "border-emerald-200" },
 };
 
 const QUICK_ACTIONS = [
@@ -228,12 +225,12 @@ function TimelineEvent({ event }: { event: { id: string; ts: number; type: strin
   const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false });
   return (
     <span className={cn(
-      "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap shrink-0",
-      tone
+      "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm whitespace-nowrap shrink-0",
+      tone.bg, tone.border
     )}>
-      <span className="font-bold tabular-nums">{timeStr}</span>
-      <span className="opacity-40 select-none">·</span>
-      <span>{event.text}</span>
+      <span className={cn("font-bold tabular-nums", tone.time)}>{timeStr}</span>
+      <span className="text-slate-300 select-none font-light">·</span>
+      <span className={cn("font-medium", tone.label)}>{event.text}</span>
     </span>
   );
 }

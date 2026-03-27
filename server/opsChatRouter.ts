@@ -193,23 +193,26 @@ export const opsChatRouter = router({
       type TimelineEvent = {
         id: string;
         ts: number;
-        type: "arrival" | "photo" | "issue" | "office" | "schedule" | "complete" | "review" | "sms" | "call";
+        type: "arrival" | "photo" | "issue" | "schedule" | "complete";
         text: string;
       };
 
       const timeline: TimelineEvent[] = [];
 
+      // Status history — team field events only
+      const cleanerFirstName = job.cleanerName?.split(" ")[0] ?? "Team";
       for (const sh of statusHistory) {
         const statusLabels: Record<string, string> = {
-          on_the_way: "Cleaner is on the way",
-          arrived: "Cleaner checked in on site",
-          running_late: "Cleaner reported running late",
-          in_progress: "Job in progress",
-          completed: "Job marked complete",
-          issue_at_property: "Issue flagged at property",
+          on_the_way:        `${cleanerFirstName} is on the way`,
+          arrived:           `${cleanerFirstName} checked in on site`,
+          running_late:      `${cleanerFirstName} running late`,
+          in_progress:       `${cleanerFirstName} started the job`,
+          completed:         `${cleanerFirstName} marked job complete`,
+          issue_at_property: `Issue flagged at property`,
         };
-        const type = sh.status === "arrived" ? "arrival"
-          : sh.status === "completed" ? "complete"
+        const type: TimelineEvent["type"] =
+          sh.status === "arrived"           ? "arrival"
+          : sh.status === "completed"       ? "complete"
           : sh.status === "issue_at_property" ? "issue"
           : "schedule";
         timeline.push({
@@ -220,36 +223,20 @@ export const opsChatRouter = router({
         });
       }
 
-      for (const fm of fmLog) {
-        if (!fm.success) continue;
-        const stepLabels: Record<string, string> = {
-          assignment_sms: "Assignment SMS sent to cleaner",
-          pre_job_reminder: "Pre-job reminder sent",
-          client_pre_job: "Client pre-job notification sent",
-          client_on_the_way: "Client notified: cleaner on the way",
-          client_running_late: "Client notified: running late",
-          arrived_checkin: "Arrived check-in SMS sent",
-          mid_job_nudge: "Mid-job nudge sent",
-          completion_flow: "Completion flow triggered",
-          exception_sms: "Exception SMS sent",
-          exception_call: "Exception call placed",
-          noshow_alert: "No-show alert sent",
-          noshow_call: "No-show call placed",
-        };
-        timeline.push({
-          id: `fm-${fm.id}`,
-          ts: fm.firedAt.getTime(),
-          type: "office",
-          text: stepLabels[fm.step] ?? fm.step,
-        });
-      }
-
+      // Photos — grouped by minute to show count
+      const photoGroups = new Map<string, { ts: number; count: number }>();
       for (const p of photos) {
+        const key = new Date(p.createdAt).toISOString().slice(0, 16);
+        const g = photoGroups.get(key);
+        if (g) { g.count++; } else { photoGroups.set(key, { ts: p.createdAt.getTime(), count: 1 }); }
+      }
+      let pgIdx = 0;
+      for (const [, g] of Array.from(photoGroups)) {
         timeline.push({
-          id: `ph-${p.id}`,
-          ts: p.createdAt.getTime(),
+          id: `ph-${pgIdx++}`,
+          ts: g.ts,
           type: "photo",
-          text: "Photo uploaded",
+          text: g.count === 1 ? "1 photo uploaded" : `${g.count} photos uploaded`,
         });
       }
 
