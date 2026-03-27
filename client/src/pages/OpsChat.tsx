@@ -166,17 +166,12 @@ function ThreadMessage({ msg }: { msg: { id: string; ts: number; from: string; r
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   return (
     <div className={cn("flex", isOffice ? "justify-end" : "justify-start")}>
-      <div className={cn(
-        "max-w-[78%] rounded-2xl px-4 py-3",
-        isOffice
-          ? "bg-slate-900 text-white"
-          : "bg-slate-100 text-slate-900"
-      )}>
-        <p className={cn("text-xs mb-1.5", isOffice ? "text-slate-400" : "text-slate-400")}>
+      <div className="max-w-[78%] rounded-2xl px-4 py-3 bg-slate-100 text-slate-900">
+        <p className="text-xs mb-1.5 text-slate-400">
           {msg.from} • {msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}
         </p>
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-        <p className={cn("text-xs mt-1.5", isOffice ? "text-slate-500" : "text-slate-400")}>{timeStr}</p>
+        <p className="text-xs mt-1.5 text-slate-400">{timeStr}</p>
       </div>
     </div>
   );
