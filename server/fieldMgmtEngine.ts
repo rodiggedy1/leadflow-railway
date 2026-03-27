@@ -1508,7 +1508,7 @@ export async function maybeTriggerLateAssignmentSms(
 async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
 
-  if (await stepAlreadyFired(cleanerJobId, "pre_job_reminder")) return;
+  if (await stepAlreadyFired(cleanerJobId, "assignment_sms")) return;
 
   const db = await getDb();
   if (!db) return;
@@ -1565,7 +1565,7 @@ async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
 
   await recordStep({
     cleanerJobId: job.id,
-    step: "pre_job_reminder",
+    step: "assignment_sms",
     success: true,
     smsSent: msg,
     recipientPhone: profile.phone,
@@ -1574,8 +1574,8 @@ async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
   const result = await sendSms({ to: profile.phone, content: msg });
 
   if (result.success) {
-    console.log(`[FieldMgmt] Late-assignment pre-job reminder sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+    console.log(`[FieldMgmt] Assignment SMS sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
   } else {
-    console.error(`[FieldMgmt] Late-assignment pre-job reminder FAILED for job ${job.id}:`, result.error);
+    console.error(`[FieldMgmt] Assignment SMS FAILED for job ${job.id}:`, result.error);
   }
 }

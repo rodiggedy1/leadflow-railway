@@ -1248,6 +1248,7 @@ export type InsertCommandCenterCache = typeof commandCenterCache.$inferInsert;
  * for (cleanerJobId, step). Insert atomically before sending SMS.
  *
  * step values (match FieldManagement.tsx step IDs):
+ *   "assignment_sms"     → Step 0: Immediate SMS on new/re-assignment (any future job)
  *   "pre_job_reminder"   → Step 1: T-2hr SMS to cleaner
  *   "client_on_the_way"  → Step 2: On the Way SMS to client
  *   "arrived_checkin"    → Step 3: ARRIVED auto-response to cleaner
@@ -1259,6 +1260,7 @@ export type InsertCommandCenterCache = typeof commandCenterCache.$inferInsert;
  *   "noshow_call"        → Step 7b: Auto-call to CS team 10min after noshow SMS
  */
 export const fieldMgmtSteps = [
+  "assignment_sms",
   "pre_job_reminder",
   "client_pre_job",
   "client_on_the_way",
