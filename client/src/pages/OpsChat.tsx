@@ -257,7 +257,12 @@ function ThreadMessage({ msg }: { msg: { id: string; ts: number; from: string; r
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function OpsChat() {
+interface OpsChatProps {
+  onMinimize?: () => void;
+  onClose?: () => void;
+}
+
+export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // Owner auth (Manus OAuth)
   const { user, loading: ownerLoading } = useAuth();
 
@@ -266,7 +271,8 @@ export default function OpsChat() {
     retry: false,
   });
 
-  const { state: opsChatState, minimize: minimizeOpsChat } = useOpsChatWindow();
+  const { minimize: minimizeFromHook } = useOpsChatWindow();
+  const minimizeOpsChat = onMinimize ?? minimizeFromHook;
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
