@@ -1372,7 +1372,89 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="p-4 space-y-3">
 
-            {/* Actions card — TOP so flag/resolve is always immediately visible */}
+            {/* 1. Flag / Resolve card — always pinned at top */}
+            {jobDetail.job.flagged ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-red-700 uppercase tracking-wide">Needs Attention</p>
+                    {jobDetail.job.openFlagNote && (
+                      <p className="text-xs text-red-600 mt-0.5 leading-snug">{jobDetail.job.openFlagNote}</p>
+                    )}
+                    {jobDetail.job.openFlaggedBy && (
+                      <p className="text-[10px] text-red-400 mt-0.5">Flagged by {jobDetail.job.openFlaggedBy}</p>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  className="w-full h-8 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-semibold"
+                  onClick={() => setShowResolveModal(true)}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  Resolve Issue
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full h-10 rounded-2xl text-sm font-medium border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition"
+                onClick={() => setShowFlagModal(true)}
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Flag as Needs Attention
+              </Button>
+            )}
+
+            {/* 2. Job Details card */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Job Details</p>
+
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-0.5">Client</p>
+                <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Service</p>
+                  <p className="text-sm font-semibold text-slate-900 leading-snug">{jobDetail.job.serviceType || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Price</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.price || "—"}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Window</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.time || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Team</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.teamName ?? jobDetail.job.cleanerName}</p>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-0.5">Address</p>
+                <p className="text-sm font-semibold text-slate-900">{jobDetail.job.address}</p>
+              </div>
+
+              {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1.5">Notes</p>
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      {jobDetail.job.customerNotes ?? jobDetail.job.staffNotes}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Actions card — at bottom */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Actions</p>
               <div className="grid grid-cols-2 gap-2">
@@ -1420,90 +1502,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 >
                   Offer Rebook
                 </Button>
-                {/* Flag / Resolve row — full width */}
-                {jobDetail.job.flagged ? (
-                  /* Flagged: show issue note + Resolve button */
-                  <div className="col-span-2 rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-red-600 mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-bold text-red-700 uppercase tracking-wide">Needs Attention</p>
-                        {jobDetail.job.openFlagNote && (
-                          <p className="text-xs text-red-600 mt-0.5 leading-snug">{jobDetail.job.openFlagNote}</p>
-                        )}
-                        {jobDetail.job.openFlaggedBy && (
-                          <p className="text-[10px] text-red-400 mt-0.5">Flagged by {jobDetail.job.openFlaggedBy}</p>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      className="w-full h-8 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-semibold"
-                      onClick={() => setShowResolveModal(true)}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                      Resolve Issue
-                    </Button>
-                  </div>
-                ) : (
-                  /* Not flagged: show Flag button */
-                  <Button
-                    variant="outline"
-                    className="col-span-2 h-9 rounded-xl text-xs font-medium border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap transition"
-                    onClick={() => setShowFlagModal(true)}
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-                    Flag as Needs Attention
-                  </Button>
-                )}
               </div>
-            </div>
-
-            {/* Job Details card — below Actions */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Job Details</p>
-
-              <div className="mb-4">
-                <p className="text-xs text-slate-400 mb-0.5">Client</p>
-                <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Service</p>
-                  <p className="text-sm font-semibold text-slate-900 leading-snug">{jobDetail.job.serviceType || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Price</p>
-                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.price || "—"}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Window</p>
-                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.time || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Team</p>
-                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.teamName ?? jobDetail.job.cleanerName}</p>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <p className="text-xs text-slate-400 mb-0.5">Address</p>
-                <p className="text-sm font-semibold text-slate-900">{jobDetail.job.address}</p>
-              </div>
-
-              {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1.5">Notes</p>
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      {jobDetail.job.customerNotes ?? jobDetail.job.staffNotes}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
 
           </div>
