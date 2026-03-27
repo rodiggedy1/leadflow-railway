@@ -378,8 +378,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   }, [channelMsgs, callerName]);
 
   const { data: channelSeenBy } = trpc.opsChat.getSeenBy.useQuery(
-    { messageId: lastMyChannelMsgId!, channel: activeChannel },
-    { enabled: isAuthenticated && activeTab === "channels" && lastMyChannelMsgId !== null, refetchInterval: 10_000 }
+    { messageId: lastMyChannelMsgId ?? 0, channel: activeChannel },
+    { enabled: isAuthenticated && activeTab === "channels" && !!lastMyChannelMsgId && lastMyChannelMsgId > 0, refetchInterval: 10_000 }
   );
 
   // seenBy for the last my-message in current job thread
@@ -390,8 +390,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   }, [jobDetail?.thread, callerName]);
 
   const { data: threadSeenBy } = trpc.opsChat.getSeenBy.useQuery(
-    { messageId: lastMyThreadMsgId!, cleanerJobId: selectedJobId! },
-    { enabled: isAuthenticated && activeTab === "today" && lastMyThreadMsgId !== null && selectedJobId !== null, refetchInterval: 10_000 }
+    { messageId: lastMyThreadMsgId ?? 0, cleanerJobId: selectedJobId ?? 0 },
+    { enabled: isAuthenticated && activeTab === "today" && !!lastMyThreadMsgId && lastMyThreadMsgId > 0 && !!selectedJobId, refetchInterval: 10_000 }
   );
 
   // ── Send message mutation ───────────────────────────────────────────────────
