@@ -17,7 +17,7 @@ import { z } from "zod";
 import { router, publicProcedure, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs } from "../drizzle/schema";
+import { cleanerJobs, conversationSessions } from "../drizzle/schema";
 import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
 import { jobSmsReplies } from "../drizzle/schema";
 import { randomBytes } from "crypto";
@@ -189,6 +189,24 @@ export const trackerRouter = router({
           }
 
           await sendSms({ to: job.customerPhone, content: followUpMsg });
+
+          // Create a conversation session so inbound replies are routed correctly
+          // Use REVIEW_REBOOKING_REQUESTED for one-time (rebooking pitch) or REVIEW_DONE for recurring (thanks)
+          const sessionStage = isRecurring ? "REVIEW_DONE" : "REVIEW_REBOOKING_REQUESTED";
+          try {
+            await db.insert(conversationSessions).values({
+              leadPhone: job.customerPhone,
+              leadName: job.customerName ?? undefined,
+              stage: sessionStage as typeof conversationSessions.$inferInsert["stage"],
+              serviceType: job.serviceType ?? undefined,
+              leadSource: "review_rebooking",
+              messageHistory: JSON.stringify([
+                { role: "assistant", content: followUpMsg },
+              ]),
+            });
+          } catch (sessionErr) {
+            console.error("[Tracker] Failed to create review rebooking session:", sessionErr);
+          }
         } catch (err) {
           console.error("[Tracker] Failed to send post-review follow-up SMS:", err);
         }
@@ -328,6 +346,7 @@ Return a JSON object with this exact structure:
       z.object({
         token: z.string().min(1),
         draftPicked: z.number().int().min(1).max(3).optional(),
+        draftText: z.string().max(2000).optional(),
         copied: z.boolean().optional(),
       })
     )
@@ -337,6 +356,7 @@ Return a JSON object with this exact structure:
 
       const updates: Record<string, unknown> = {};
       if (input.draftPicked !== undefined) updates.reviewDraftPicked = input.draftPicked;
+      if (input.draftText) updates.reviewDraftText = input.draftText;
       if (input.copied) updates.reviewCopied = 1;
 
       if (Object.keys(updates).length > 0) {
@@ -441,6 +461,7 @@ Return a JSON object with this exact structure:
           customerRating: cleanerJobs.customerRating,
           reviewChipsSelected: cleanerJobs.reviewChipsSelected,
           reviewDraftPicked: cleanerJobs.reviewDraftPicked,
+          reviewDraftText: cleanerJobs.reviewDraftText,
           reviewCopied: cleanerJobs.reviewCopied,
           trackerToken: cleanerJobs.trackerToken,
           jobAddress: cleanerJobs.jobAddress,

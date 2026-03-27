@@ -49,6 +49,7 @@ import {
   Eye,
   BarChart2,
   TrendingDown,
+  Star,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -213,6 +214,7 @@ function getSourceInfo(source: string | null): { label: string; icon: React.Reac
   if (source === "reactivation") return { label: "Reactivation", icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
   if (source.startsWith("always-on")) return { label: "Always-On", icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
   if (source === "command-center") return { label: "Campaign", icon: <Megaphone className="w-2.5 h-2.5" />, isCampaign: true };
+  if (source === "review_rebooking") return { label: "Review", icon: <Star className="w-2.5 h-2.5" /> };
   return { label: "form", icon: <Globe className="w-2.5 h-2.5" /> };
 }
 

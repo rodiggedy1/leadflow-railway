@@ -257,7 +257,7 @@ function ReviewFlow({
   const handlePickDraft = (index: number) => {
     setPickedIndex(index);
     setEditedDraft(drafts[index] ?? "");
-    recordAction.mutate({ token, draftPicked: index + 1 });
+    recordAction.mutate({ token, draftPicked: index + 1, draftText: drafts[index] ?? undefined });
     setStep("edit");
   };
 

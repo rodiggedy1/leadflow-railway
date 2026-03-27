@@ -231,3 +231,19 @@
 - [x] Review Tracker page: funnel table (date, customer, team, rating, chips, draft picked, copied) with sort + filter
 - [x] Review Tracker page: expandable SMS reply drawer per job row
 - [x] Review Tracker page: vitest tests for getReviewAnalytics procedure
+- [ ] Review Tracker: add reviewDraftText column to cleanerJobs, store actual draft text when picked
+- [ ] Review Tracker: show "View Draft" popup on each row with the full AI draft text
+- [ ] Review Tracker: update recordReviewAction to accept and save draftText
+- [ ] Review Tracker: update JobTracker.tsx to send draftText when recording pick
+- [ ] Review replies → Leads: add REVIEW_REBOOKING_REQUESTED/DONE stages to schema enum + db:push
+- [ ] Review replies → Leads: create conversation_session before sending post-review rebooking SMS
+- [ ] Review replies → Leads: wire webhook handler for REVIEW_REBOOKING_REQUESTED stage
+- [ ] Review replies → Leads: show review_rebooking sessions on Leads page with "Review" badge
+- [x] Review Tracker: add reviewDraftText column to cleanerJobs schema + DB
+- [x] Review Tracker: store draft text when customer picks a draft (recordReviewAction)
+- [x] Review Tracker: "View Draft" button on each row opens popup with full draft text
+- [x] Review Tracker: REVIEW_REBOOKING_REQUESTED/DONE stages added to schema enum
+- [x] Review Tracker: submitRating creates conversation_session before sending rebooking SMS
+- [x] Review Tracker: webhook handler for REVIEW_REBOOKING_REQUESTED stage
+- [x] Review Tracker: review_rebooking sessions appear on Leads page (only after customer replies) with "Review" badge
+- [x] Review Tracker: KanbanBoard getSourceInfo updated with review_rebooking badge

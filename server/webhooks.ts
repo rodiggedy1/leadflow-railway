@@ -160,6 +160,7 @@ export function registerWebhookRoutes(app: Express) {
       const reviewSession = reversedSessions.find(
         s => s.stage === "QUALITY_RATING_REQUESTED" || s.stage === "QUALITY_MISSED_FOLLOWUP"
           || s.stage === "REVIEW_REQUESTED" || s.stage === "REVIEW_DONE"
+          || s.stage === "REVIEW_REBOOKING_REQUESTED" || s.stage === "REVIEW_REBOOKING_DONE"
           || s.stage === "REACTIVATION" || s.stage === "REACTIVATION_TIME"
       );
       const activeSession = reviewSession ??
@@ -434,6 +435,40 @@ export function registerWebhookRoutes(app: Express) {
         if (!reviewSmsResult.success) {
           console.error(`[Webhook] Failed to send review reply to ${fromPhone}:`, reviewSmsResult.error);
         }
+        return;
+      }
+
+      // ── REVIEW_REBOOKING_REQUESTED: Post-review rebooking pitch reply ─────────
+      if (session.stage === "REVIEW_REBOOKING_REQUESTED" || session.stage === "REVIEW_REBOOKING_DONE") {
+        const firstName = (session.leadName ?? "there").split(" ")[0] ?? "there";
+        const lc = inboundText.trim().toLowerCase();
+        const isYes = /\b(yes|yeah|yep|sure|ok|okay|sounds good|please|definitely|absolutely|let's do it|lets do it|yes please|i'd like that|id like that)\b/i.test(lc);
+        const isNo = /\b(no|nope|not now|maybe later|not interested|no thanks|no thank you|nah|pass)\b/i.test(lc);
+        let replyMsg: string;
+        let newStage: ConversationStage = "REVIEW_REBOOKING_DONE";
+        if (isYes) {
+          replyMsg = `Amazing, ${firstName}! 🎉 I'll have someone reach out shortly to lock in your spot. Talk soon!`;
+          newStage = "REVIEW_REBOOKING_DONE";
+        } else if (isNo) {
+          replyMsg = `No worries at all, ${firstName}! If you ever need us again, just text back. 😊`;
+          newStage = "REVIEW_REBOOKING_DONE";
+        } else {
+          // Ambiguous — keep open and forward to agent
+          replyMsg = `Thanks for the reply, ${firstName}! I'll have someone from the team follow up with you. 😊`;
+          newStage = "REVIEW_REBOOKING_DONE";
+        }
+        history.push({ role: "user", content: inboundText, ts: Date.now() });
+        history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
+        if (history.length > 20) history = history.slice(-20);
+        await db
+          .update(conversationSessions)
+          .set({ stage: newStage, messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, session.id));
+        const replyResult = await sendSms({ to: fromPhone, content: replyMsg });
+        if (!replyResult.success) {
+          console.error(`[Webhook] Failed to send rebooking reply to ${fromPhone}:`, replyResult.error);
+        }
+        console.log(`[Webhook] Review rebooking reply: ${session.stage} → ${newStage}. isYes=${isYes}, isNo=${isNo}`);
         return;
       }
 

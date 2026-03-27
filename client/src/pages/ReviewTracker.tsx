@@ -55,6 +55,7 @@ type ReviewRow = {
   customerRating: number | null;
   reviewChipsSelected: string | null;
   reviewDraftPicked: number | null;
+  reviewDraftText: string | null;
   reviewCopied: number;
   trackerToken: string | null;
   jobAddress: string | null;
@@ -317,6 +318,9 @@ export default function ReviewTracker() {
 
   // ── Expanded rows ─────────────────────────────────────────────────────────
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  // ── Draft text popup ─────────────────────────────────────────────────────
+  const [draftPopup, setDraftPopup] = useState<{ text: string; draftNum: number } | null>(null);
 
   // ── Data fetch ────────────────────────────────────────────────────────────
   const { data, isLoading, refetch } = trpc.tracker.getReviewAnalytics.useQuery(
@@ -682,13 +686,23 @@ export default function ReviewTracker() {
                                 )}
                               </td>
 
-                              {/* Funnel dots */}
+                              {/* Funnel dots + view draft */}
                               <td className="px-4 py-3 text-center">
-                                <FunnelDots
-                                  chips={!!row.reviewChipsSelected}
-                                  draft={!!row.reviewDraftPicked}
-                                  copied={row.reviewCopied === 1}
-                                />
+                                <div className="flex flex-col items-center gap-1">
+                                  <FunnelDots
+                                    chips={!!row.reviewChipsSelected}
+                                    draft={!!row.reviewDraftPicked}
+                                    copied={row.reviewCopied === 1}
+                                  />
+                                  {row.reviewDraftText && (
+                                    <button
+                                      onClick={() => setDraftPopup({ text: row.reviewDraftText!, draftNum: row.reviewDraftPicked ?? 0 })}
+                                      className="text-[10px] text-[#E8735A] hover:underline font-medium mt-0.5"
+                                    >
+                                      View Draft
+                                    </button>
+                                  )}
+                                </div>
                               </td>
 
                               {/* Replies */}
@@ -741,6 +755,54 @@ export default function ReviewTracker() {
           </section>
         </div>
       </div>
+      {/* Draft text popup */}
+      {draftPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setDraftPopup(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-[#E8735A]/10 flex items-center justify-center">
+                  <Copy className="w-3.5 h-3.5 text-[#E8735A]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-800">
+                  Draft {draftPopup.draftNum} — Customer's chosen review
+                </span>
+              </div>
+              <button
+                onClick={() => setDraftPopup(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap border border-gray-100">
+              {draftPopup.text}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(draftPopup.text).catch(() => {});
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[#E8735A] hover:bg-orange-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Copy className="w-3 h-3" /> Copy text
+              </button>
+              <button
+                onClick={() => setDraftPopup(null)}
+                className="text-xs font-medium text-gray-500 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminPageGuard>
   );
 }

@@ -103,6 +103,12 @@ export const conversationStages = [
    */
   "QUALITY_RATING_DONE",
   /**
+   * REVIEW_REBOOKING_REQUESTED → Post-review rebooking pitch sent (one-time customers), waiting for reply.
+   * REVIEW_REBOOKING_DONE      → Rebooking conversation complete.
+   */
+  "REVIEW_REBOOKING_REQUESTED",
+  "REVIEW_REBOOKING_DONE",
+  /**
    * COLD → Lead received 2+ automated nudges with no reply. All automated follow-ups
    * are stopped. Surfaced in the "Dead Leads" column on the Kanban board.
    * Leads can be manually re-engaged by an agent at any time.
@@ -960,6 +966,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   reviewChipsSelected: text("reviewChipsSelected"),
   /** Review flow analytics: which AI draft the customer picked (1, 2, or 3) */
   reviewDraftPicked: int("reviewDraftPicked"),
+  /** Review flow analytics: the actual text of the AI draft the customer picked */
+  reviewDraftText: text("reviewDraftText"),
   /** Review flow analytics: whether the customer copied the review text */
   reviewCopied: int("reviewCopied").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

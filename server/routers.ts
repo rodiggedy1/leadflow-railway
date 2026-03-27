@@ -99,18 +99,18 @@ export const appRouter = router({
         //      This works regardless of stage — auto-replies being off means stage
         //      stays at REACTIVATION even after a reply, so we check the message log.
         const sourceFilter = and(
-          // Never show review-flow sessions in the lead list
+          // Never show pure review-flow sessions in the lead list
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
           or(
             // Organic / form leads — show immediately (no leadSource)
             sql`${conversationSessions.leadSource} IS NULL`,
-            // Non-campaign sources (not always-on, not reactivation, not command-center, not campaign:*)
+            // Non-campaign sources (not always-on, not reactivation, not command-center, not campaign:*, not review_rebooking)
             // — show immediately
             sql`(
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking')
             )`,
             // Campaign sessions — show ONLY if customer has replied
             // Check messageHistory JSON for any role:"user" entry
@@ -120,6 +120,11 @@ export const appRouter = router({
                 ${conversationSessions.leadSource} LIKE 'campaign:%' OR
                 ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
               ) AND
+              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+            )`,
+            // Review rebooking sessions — show ONLY if customer has replied
+            sql`(
+              ${conversationSessions.leadSource} = 'review_rebooking' AND
               JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
             )`
           )
@@ -314,7 +319,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review')
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking')
             )`
           )
         );
@@ -327,10 +332,15 @@ export const appRouter = router({
           ),
           sql`JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL`
         );
+        // Review rebooking: show only if customer replied
+        const reviewRebookingFilter = and(
+          sql`${conversationSessions.leadSource} = 'review_rebooking'`,
+          sql`JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL`
+        );
         // Combined (what the leads list shows)
         const listVisibilityFilter = and(
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
-          or(organicFilter, campaignFilter)
+          or(organicFilter, campaignFilter, reviewRebookingFilter)
         );
 
         // Helper: run stage-count query for a given filter
