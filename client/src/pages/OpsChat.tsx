@@ -27,6 +27,8 @@ import {
   Clock,
   CheckCircle2,
   Zap,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -190,6 +192,13 @@ export default function OpsChat() {
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollTimeline = (dir: "left" | "right") => {
+    const el = timelineScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "right" ? 240 : -240, behavior: "smooth" });
+  };
 
   const utils = trpc.useUtils();
 
@@ -459,14 +468,34 @@ export default function OpsChat() {
                 <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading…</div>
               ) : jobDetail ? (
                 <>
-                  {/* Live Activity Timeline — horizontal, oldest left, scrollable */}
+                  {/* Live Activity Timeline — horizontal with arrow navigation */}
                   <div className="px-6 pt-4 pb-3 border-b border-slate-100 bg-white">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Live Activity Timeline</p>
                     {jobDetail.timeline.length === 0 ? (
                       <p className="text-sm text-slate-400">No activity yet</p>
                     ) : (
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                        {jobDetail.timeline.map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
+                      <div className="relative flex items-center gap-1">
+                        <button
+                          onClick={() => scrollTimeline("left")}
+                          className="shrink-0 h-7 w-7 rounded-full border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition shadow-sm"
+                          aria-label="Scroll left"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <div
+                          ref={timelineScrollRef}
+                          className="flex items-center gap-2 overflow-x-auto flex-1"
+                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                        >
+                          {jobDetail.timeline.map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
+                        </div>
+                        <button
+                          onClick={() => scrollTimeline("right")}
+                          className="shrink-0 h-7 w-7 rounded-full border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition shadow-sm"
+                          aria-label="Scroll right"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     )}
                   </div>

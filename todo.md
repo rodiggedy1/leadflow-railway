@@ -285,3 +285,4 @@
 - [x] OpsChat: redesign center panel — job header with status badge, timeline as colored pill chips (last 3 visible, scrollable), thread below, quick-action chips + composer at bottom
 - [x] OpsChat: make Live Activity Timeline horizontal (left-to-right, oldest first, horizontally scrollable)
 - [x] OpsChat: update chat bubbles to match screenshot — light grey card, sender/role top, message body, timestamp bottom-left
+- [x] OpsChat: replace horizontal scrollbar on timeline with left/right arrow buttons
