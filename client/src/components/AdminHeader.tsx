@@ -40,7 +40,9 @@ import {
   BrainCircuit,
   Smartphone,
   Sparkles,
+  MessageCircle,
 } from "lucide-react";
+import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 
 // ── Widget health badge ───────────────────────────────────────────────────
 export function WidgetHealthBadge({ enabled = false }: { enabled?: boolean }) {
@@ -494,6 +496,25 @@ function CallGuideButton() {
   );
 }
 
+function OpsChatToggleButton() {
+  const { state, open, minimize } = useOpsChatWindow();
+  const isOpen = state === "open";
+  return (
+    <button
+      onClick={() => isOpen ? minimize() : open()}
+      className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors"
+      style={isOpen
+        ? { background: "#0f172a", color: "#fff", borderColor: "#0f172a" }
+        : { background: "#f8fafc", color: "#334155", borderColor: "#e2e8f0" }
+      }
+      title={isOpen ? "Minimize OpsChat" : "Open OpsChat"}
+    >
+      <MessageCircle className="w-3 h-3" />
+      OpsChat
+    </button>
+  );
+}
+
 export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, pagePermissions, isAdmin = false, followUpCount = 0, onCallGuide }: AdminHeaderProps) {
   // Determine which page IDs this agent is allowed to see.
   // null means unrestricted (admin or no restrictions set).
@@ -542,6 +563,7 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
           {onCallGuide && (
             <CallGuideButton />
           )}
+          <OpsChatToggleButton />
           {rightExtra}
           <NotificationBell onSessionOpen={onSessionOpen} enabled={isAdmin} followUpCount={followUpCount} />
           {isAdmin && <PreviewAgentButton />}

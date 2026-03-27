@@ -1,10 +1,12 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
+import OpsChatPanel from "./components/OpsChatPanel";
+import { useOpsChatWindow } from "./hooks/useOpsChatWindow";
 
 // Route-level code splitting — each page loads only when its route is visited.
 // Splits the monolithic bundle into small per-route chunks for faster deploys.
@@ -74,6 +76,29 @@ function Router() {
   );
 }
 
+function GlobalOpsChatOverlay() {
+  const [location] = useLocation();
+  const { state, open, minimize, close } = useOpsChatWindow();
+
+  // Show on all /admin/* and /agent routes, but NOT on /admin/ops-chat itself
+  // (that page is the full standalone version)
+  const isOpsChatPage = location === "/admin/ops-chat";
+  const isEligibleRoute = !isOpsChatPage && (
+    location.startsWith("/admin") || location.startsWith("/agent") || location.startsWith("/call-assist")
+  );
+
+  if (!isEligibleRoute) return null;
+
+  return (
+    <OpsChatPanel
+      state={state}
+      onOpen={open}
+      onMinimize={minimize}
+      onClose={close}
+    />
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -81,6 +106,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <GlobalOpsChatOverlay />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

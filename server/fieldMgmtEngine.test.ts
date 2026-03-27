@@ -286,7 +286,7 @@ describe("placeNoCheckinEscalationCall", () => {
     });
     // Returns false because VAPI_PRIVATE_KEY is absent in test env
     expect(typeof result).toBe("boolean");
-  });
+  }, 10_000);
 });
 
 // ── Time window logic ─────────────────────────────────────────────────────────

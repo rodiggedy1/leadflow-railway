@@ -26,6 +26,7 @@ import {
   LogIn,
   Loader2,
   MessageCircle,
+  Minus,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -264,6 +265,7 @@ export default function OpsChat() {
     retry: false,
   });
 
+  const [minimized, setMinimized] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
@@ -385,6 +387,21 @@ export default function OpsChat() {
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
+
+  // Minimized state — show floating bubble, hide the page
+  if (minimized) {
+    return (
+      <button
+        onClick={() => setMinimized(false)}
+        className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full bg-slate-900 text-white shadow-xl px-4 py-3 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+        aria-label="Open OpsChat"
+      >
+        <MessageCircle className="w-5 h-5" />
+        <span className="text-sm font-semibold">OpsChat</span>
+      </button>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
@@ -396,8 +413,18 @@ export default function OpsChat() {
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">In-App Ops Chat</p>
               <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Today</h1>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm font-medium">
-              {jobs.length} online
+            <div className="flex items-center gap-2">
+              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm font-medium">
+                {jobs.length} online
+              </div>
+              <button
+                onClick={() => setMinimized(true)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition"
+                title="Minimize"
+                aria-label="Minimize OpsChat"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
