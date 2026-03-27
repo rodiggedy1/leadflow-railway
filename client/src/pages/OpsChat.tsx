@@ -148,16 +148,14 @@ function TimelineEvent({ event }: { event: { id: string; ts: number; type: strin
   const tone = TIMELINE_TONE[event.type] ?? TIMELINE_TONE.office;
   const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false });
   return (
-    <div className="flex items-center gap-0">
-      <span className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
-        tone
-      )}>
-        <span className="font-bold tabular-nums">{timeStr}</span>
-        <span className="text-slate-300 select-none">·</span>
-        <span>{event.text}</span>
-      </span>
-    </div>
+    <span className={cn(
+      "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap shrink-0",
+      tone
+    )}>
+      <span className="font-bold tabular-nums">{timeStr}</span>
+      <span className="opacity-40 select-none">·</span>
+      <span>{event.text}</span>
+    </span>
   );
 }
 
@@ -165,17 +163,19 @@ function ThreadMessage({ msg }: { msg: { id: string; ts: number; from: string; r
   const isOffice = msg.role === "office" || msg.role === "agent";
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   return (
-    <div className={cn("flex flex-col gap-0.5", isOffice ? "items-end" : "items-start")}>
+    <div className={cn("flex", isOffice ? "justify-end" : "justify-start")}>
       <div className={cn(
-        "max-w-[80%] rounded-3xl px-4 py-3",
-        isOffice ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"
+        "max-w-[78%] rounded-2xl px-4 py-3",
+        isOffice
+          ? "bg-slate-900 text-white"
+          : "bg-slate-100 text-slate-900"
       )}>
-        <div className={cn("text-xs font-semibold mb-1", isOffice ? "text-slate-300" : "text-slate-500")}>
-          {msg.from} · {msg.role}
-        </div>
-        <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</div>
+        <p className={cn("text-xs mb-1.5", isOffice ? "text-slate-400" : "text-slate-400")}>
+          {msg.from} • {msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}
+        </p>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+        <p className={cn("text-xs mt-1.5", isOffice ? "text-slate-500" : "text-slate-400")}>{timeStr}</p>
       </div>
-      <span className="text-xs text-slate-400 px-2">{timeStr}</span>
     </div>
   );
 }
@@ -459,26 +459,14 @@ export default function OpsChat() {
                 <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading…</div>
               ) : jobDetail ? (
                 <>
-                  {/* Live Activity Timeline — last 3 visible, scrollable for earlier */}
-                  <div className="px-6 pt-5 pb-4 border-b border-slate-100 bg-white">
+                  {/* Live Activity Timeline — horizontal, oldest left, scrollable */}
+                  <div className="px-6 pt-4 pb-3 border-b border-slate-100 bg-white">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Live Activity Timeline</p>
                     {jobDetail.timeline.length === 0 ? (
                       <p className="text-sm text-slate-400">No activity yet</p>
                     ) : (
-                      <div className="space-y-2">
-                        {/* Last 3 always visible */}
-                        {jobDetail.timeline.slice(-3).map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
-                        {jobDetail.timeline.length > 3 && (
-                          <details className="group">
-                            <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none list-none flex items-center gap-1">
-                              <span className="group-open:hidden">▸ {jobDetail.timeline.length - 3} earlier events</span>
-                              <span className="hidden group-open:inline">▾ Hide earlier</span>
-                            </summary>
-                            <div className="space-y-2 mt-2">
-                              {jobDetail.timeline.slice(0, -3).map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
-                            </div>
-                          </details>
-                        )}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                        {jobDetail.timeline.map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
                       </div>
                     )}
                   </div>
