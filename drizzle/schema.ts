@@ -1480,3 +1480,32 @@ export const openphoneCallRecordings = mysqlTable("openphone_call_recordings", {
 }));
 export type OpenphoneCallRecording = typeof openphoneCallRecordings.$inferSelect;
 export type InsertOpenphoneCallRecording = typeof openphoneCallRecordings.$inferInsert;
+
+// ── Ops Chat Messages — internal ops team messages tied to a job or a channel ──
+// Used by the OpsChat internal communication tool. Each message belongs to
+// either a specific job thread (cleanerJobId set) or a named channel (channel set).
+// Author is identified by their user id (admin/agent) or a cleaner profile id.
+export const opsChatMessages = mysqlTable("ops_chat_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Job thread — link to cleanerJobs.id (null for channel messages) */
+  cleanerJobId: int("cleanerJobId"),
+  /** Channel name for non-job messages: "urgent" | "dispatch" | "general" | "cleaners" */
+  channel: varchar("channel", { length: 64 }),
+  /** Author display name */
+  authorName: varchar("authorName", { length: 128 }).notNull(),
+  /** Author role: "office" | "cleaner" | "agent" | "system" */
+  authorRole: varchar("authorRole", { length: 32 }).notNull().default("office"),
+  /** The message body */
+  body: text("body").notNull(),
+  /** Optional media URL (photo, voice note) */
+  mediaUrl: varchar("mediaUrl", { length: 512 }),
+  /** Quick action tag if this message was sent via a quick-action button */
+  quickAction: varchar("quickAction", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxJob: index("idx_ocm_job").on(table.cleanerJobId),
+  idxChannel: index("idx_ocm_channel").on(table.channel),
+  idxCreatedAt: index("idx_ocm_created_at").on(table.createdAt),
+}));
+export type OpsChatMessage = typeof opsChatMessages.$inferSelect;
+export type InsertOpsChatMessage = typeof opsChatMessages.$inferInsert;

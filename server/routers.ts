@@ -29,6 +29,7 @@ import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
+import { opsChatRouter } from "./opsChatRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
@@ -3093,6 +3094,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
   settings: settingsRouter,
   commandCenter: commandCenterRouter,
   fieldMgmt: fieldMgmtRouter,
+  opsChat: opsChatRouter,
 
   simulator: router({
     chat: publicProcedure

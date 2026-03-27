@@ -272,3 +272,11 @@
 - [x] maybeTriggerLateAssignmentSms: use assignment_sms step key (not pre_job_reminder) so the T-2hr cron reminder still fires independently
 - [x] Fix 3 pre-existing test failures: isWithinEscalationHours boundary tests and confirmAssignment source-check
 - [x] Vapi webhook: when call is answered, also send SMS to 302-981-6191 notifying that a call has been received
+
+## OpsChat — Internal Team Communication Tool
+- [x] OpsChat: audit existing job/cleaner/timeline data in DB schema and routers
+- [x] OpsChat: add ops_chat_messages table to DB schema (job-scoped threads + channel messages)
+- [x] OpsChat: tRPC procedures — listTodayJobs, getJobThread, sendMessage, quickAction
+- [x] OpsChat: build 3-column desktop UI matching design (priority queue, job list, timeline, thread, job details, actions)
+- [x] OpsChat: wire real data from DB, add /ops-chat route, protect with auth
+- [x] OpsChat: write vitest tests for new procedures
