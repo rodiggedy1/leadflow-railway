@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -265,7 +266,7 @@ export default function OpsChat() {
     retry: false,
   });
 
-  const [minimized, setMinimized] = useState(false);
+  const { state: opsChatState, minimize: minimizeOpsChat } = useOpsChatWindow();
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
@@ -388,20 +389,6 @@ export default function OpsChat() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  // Minimized state — show floating bubble, hide the page
-  if (minimized) {
-    return (
-      <button
-        onClick={() => setMinimized(false)}
-        className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full bg-slate-900 text-white shadow-xl px-4 py-3 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
-        aria-label="Open OpsChat"
-      >
-        <MessageCircle className="w-5 h-5" />
-        <span className="text-sm font-semibold">OpsChat</span>
-      </button>
-    );
-  }
-
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
@@ -418,12 +405,13 @@ export default function OpsChat() {
                 {jobs.length} online
               </div>
               <button
-                onClick={() => setMinimized(true)}
-                className="w-8 h-8 rounded-xl flex items-center justify-center border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition"
-                title="Minimize"
+                onClick={minimizeOpsChat}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:bg-slate-50 text-xs font-medium transition"
+                title="Minimize OpsChat"
                 aria-label="Minimize OpsChat"
               >
-                <Minus className="w-4 h-4" />
+                <Minus className="w-3.5 h-3.5" />
+                Minimize
               </button>
             </div>
           </div>

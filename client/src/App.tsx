@@ -5,8 +5,8 @@ import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
-import OpsChatPanel from "./components/OpsChatPanel";
 import { useOpsChatWindow } from "./hooks/useOpsChatWindow";
+import { MessageCircle } from "lucide-react";
 
 // Route-level code splitting — each page loads only when its route is visited.
 // Splits the monolithic bundle into small per-route chunks for faster deploys.
@@ -76,26 +76,31 @@ function Router() {
   );
 }
 
-function GlobalOpsChatOverlay() {
-  const [location] = useLocation();
-  const { state, open, minimize, close } = useOpsChatWindow();
+function GlobalOpsChatBubble() {
+  const [location, navigate] = useLocation();
+  const { state, close } = useOpsChatWindow();
 
-  // Show on all /admin/* and /agent routes, but NOT on /admin/ops-chat itself
-  // (that page is the full standalone version)
-  const isOpsChatPage = location === "/admin/ops-chat";
-  const isEligibleRoute = !isOpsChatPage && (
-    location.startsWith("/admin") || location.startsWith("/agent") || location.startsWith("/call-assist")
-  );
-
-  if (!isEligibleRoute) return null;
+  // Only show the bubble when minimized AND not already on the OpsChat page
+  if (state !== "minimized" || location === "/admin/ops-chat") return null;
 
   return (
-    <OpsChatPanel
-      state={state}
-      onOpen={open}
-      onMinimize={minimize}
-      onClose={close}
-    />
+    <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2">
+      <button
+        onClick={() => { close(); navigate("/admin/ops-chat"); }}
+        className="flex items-center gap-2.5 rounded-full bg-slate-900 text-white shadow-xl px-4 py-3 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+        aria-label="Open OpsChat"
+      >
+        <MessageCircle className="w-5 h-5" />
+        <span className="text-sm font-semibold">OpsChat</span>
+      </button>
+      <button
+        onClick={close}
+        className="w-9 h-9 rounded-full bg-slate-700 text-white shadow-xl flex items-center justify-center hover:bg-slate-600 transition-all hover:scale-105 active:scale-95 text-lg leading-none"
+        aria-label="Dismiss OpsChat bubble"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
@@ -106,7 +111,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          <GlobalOpsChatOverlay />
+          <GlobalOpsChatBubble />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

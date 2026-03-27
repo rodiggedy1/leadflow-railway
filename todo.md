@@ -297,3 +297,4 @@
 - [ ] OpsChat: all logged-in users (agents) share same OpsChat — add to sidebar nav
 - [x] OpsChat agent access — agents can log in at /admin/ops-chat using their existing email+password; opsChatProcedure accepts both owner OAuth and agent sessions; callerName resolves to agent name in messages; OpsChat link added to Agent Dashboard header
 - [x] OpsChat maximize/minimize — minimize button in OpsChat header collapses to floating bubble; clicking bubble restores full-screen; works for both agents and admins
+- [x] OpsChat global bubble — visible minimize button in OpsChat top bar; floating bubble persists across ALL pages via localStorage; clicking bubble navigates back to /admin/ops-chat
