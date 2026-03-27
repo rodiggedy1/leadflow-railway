@@ -497,17 +497,13 @@ function CallGuideButton() {
 }
 
 function OpsChatToggleButton() {
-  const { state, open, minimize } = useOpsChatWindow();
-  const isOpen = state === "open";
+  const [, navigate] = useLocation();
   return (
     <button
-      onClick={() => isOpen ? minimize() : open()}
+      onClick={() => navigate("/admin/ops-chat")}
       className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors"
-      style={isOpen
-        ? { background: "#0f172a", color: "#fff", borderColor: "#0f172a" }
-        : { background: "#f8fafc", color: "#334155", borderColor: "#e2e8f0" }
-      }
-      title={isOpen ? "Minimize OpsChat" : "Open OpsChat"}
+      style={{ background: "#f8fafc", color: "#334155", borderColor: "#e2e8f0" }}
+      title="Open OpsChat"
     >
       <MessageCircle className="w-3 h-3" />
       OpsChat

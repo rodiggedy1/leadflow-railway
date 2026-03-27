@@ -80,27 +80,44 @@ function GlobalOpsChatBubble() {
   const [location, navigate] = useLocation();
   const { state, close } = useOpsChatWindow();
 
-  // Only show the bubble when minimized AND not already on the OpsChat page
-  if (state !== "minimized" || location === "/admin/ops-chat") return null;
+  // Don't show on the OpsChat page itself, or on public-facing pages
+  const isOpsChatPage = location === "/admin/ops-chat";
+  const isAdminOrAgent = location.startsWith("/admin") || location.startsWith("/agent") || location.startsWith("/call-assist");
+  if (isOpsChatPage || !isAdminOrAgent) return null;
 
+  // When minimized: show bubble with dismiss option
+  if (state === "minimized") {
+    return (
+      <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2">
+        <button
+          onClick={() => { close(); navigate("/admin/ops-chat"); }}
+          className="flex items-center gap-2.5 rounded-full bg-slate-900 text-white shadow-xl px-4 py-3 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+          aria-label="Open OpsChat"
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span className="text-sm font-semibold">OpsChat</span>
+        </button>
+        <button
+          onClick={close}
+          className="w-9 h-9 rounded-full bg-slate-700 text-white shadow-xl flex items-center justify-center hover:bg-slate-600 transition-all hover:scale-105 active:scale-95 text-lg leading-none"
+          aria-label="Dismiss OpsChat bubble"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  // Default: always show a small floating OpsChat icon button bottom-right
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2">
-      <button
-        onClick={() => { close(); navigate("/admin/ops-chat"); }}
-        className="flex items-center gap-2.5 rounded-full bg-slate-900 text-white shadow-xl px-4 py-3 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
-        aria-label="Open OpsChat"
-      >
-        <MessageCircle className="w-5 h-5" />
-        <span className="text-sm font-semibold">OpsChat</span>
-      </button>
-      <button
-        onClick={close}
-        className="w-9 h-9 rounded-full bg-slate-700 text-white shadow-xl flex items-center justify-center hover:bg-slate-600 transition-all hover:scale-105 active:scale-95 text-lg leading-none"
-        aria-label="Dismiss OpsChat bubble"
-      >
-        ×
-      </button>
-    </div>
+    <button
+      onClick={() => navigate("/admin/ops-chat")}
+      className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-slate-900 text-white shadow-lg px-4 py-2.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+      aria-label="Open OpsChat"
+    >
+      <MessageCircle className="w-4 h-4" />
+      <span className="text-xs font-semibold">OpsChat</span>
+    </button>
   );
 }
 
