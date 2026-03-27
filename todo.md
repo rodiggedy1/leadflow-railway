@@ -261,4 +261,3 @@
 - [x] Outbound Call Assist: "Call Assist" button in ConversationDrawer Quick Controls navigates to /call-assist with lead context params
 - [x] Outbound Call Assist: remove top-of-page violet banner — replace inbound opener script inline with outbound opener in center column
 - [x] Outbound Call Assist: add Call Assist button directly on leads table row (not just inside the drawer)
-- [x] DayBoard: fix concurrent jobs — fixed-height 72px lane, overlapping blocks split top/bottom vertically within same row

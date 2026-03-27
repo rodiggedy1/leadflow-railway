@@ -308,15 +308,11 @@ function JobBlock({
   onClick,
   isSelected,
   hasUnread,
-  slotIndex = 0,
-  totalSlots = 1,
 }: {
   job: Job;
   onClick: (job: Job) => void;
   isSelected: boolean;
   hasUnread?: boolean;
-  slotIndex?: number;
-  totalSlots?: number;
 }) {
   const startMin = parseToMinutes(job.serviceDateTime);
   if (startMin === null || startMin > BOARD_MINUTES || startMin < -30) return null;
@@ -326,12 +322,6 @@ function JobBlock({
   const clampedEnd   = Math.min(BOARD_MINUTES, startMin + duration);
   const widthPct  = toPercent(clampedEnd - clampedStart);
   const leftPct   = toPercent(clampedStart);
-
-  // Vertical slot: split the 72px lane into equal strips
-  const LANE_H = 72;
-  const slotH = Math.floor(LANE_H / totalSlots);
-  const topPx = slotIndex * slotH + 3;
-  const heightPx = slotH - 6;
 
   const sc = getStatusConfig(job.jobStatus);
   const hasIssue = job.jobStatus === "issue_at_property" || job.jobStatus === "no_show";
@@ -347,14 +337,14 @@ function JobBlock({
     <button
       onClick={() => onClick(job)}
       className={`
-        absolute rounded-lg border transition-all duration-150 text-left overflow-hidden
+        absolute top-1 bottom-1 rounded-lg border transition-all duration-150 text-left overflow-hidden
         focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500
         ${sc.bg} ${sc.border} ${sc.text}
         ${isSelected ? "ring-2 ring-blue-500 ring-offset-1 shadow-md z-10" : "hover:shadow-md hover:z-10 hover:-translate-y-px"}
         ${isActive && sc.pulse ? "shadow-sm" : ""}
         ${hasIssue ? "animate-pulse-slow" : ""}
       `}
-      style={{ left: `${leftPct}%`, width: `calc(${widthPct}% - 4px)`, minWidth: "48px", top: `${topPx}px`, height: `${heightPx}px` }}
+      style={{ left: `${leftPct}%`, width: `calc(${widthPct}% - 4px)`, minWidth: "48px" }}
       title={`${job.customerName} — ${job.jobAddress}`}
     >
       {/* Active pulse ring */}
@@ -423,39 +413,6 @@ function SwimLane({
   unreadJobIds?: Set<number>;
   nowPos?: number | null;
 }) {
-  // Compute slot assignments: overlapping jobs share the lane split top/bottom.
-  // We use a greedy interval approach — each job gets the first free slot.
-  // Then we patch totalSlots so every job in an overlap group knows the group size.
-  const slotMap = new Map<number, { slotIndex: number; totalSlots: number }>();
-  const sorted = [...jobs].sort((a, b) =>
-    (parseToMinutes(a.serviceDateTime) ?? 0) - (parseToMinutes(b.serviceDateTime) ?? 0)
-  );
-  // slotEnd[s] = end minute of the last job placed in slot s
-  const slotEnd: number[] = [];
-  for (const job of sorted) {
-    const start = parseToMinutes(job.serviceDateTime) ?? 0;
-    const end = start + estimateDuration(job.serviceType, job.bedrooms);
-    let s = slotEnd.findIndex(e => start >= e);
-    if (s === -1) { s = slotEnd.length; slotEnd.push(end); }
-    else slotEnd[s] = end;
-    slotMap.set(job.id, { slotIndex: s, totalSlots: 1 });
-  }
-  // Patch totalSlots: for each job, find all jobs that overlap it and take max slot+1
-  for (const job of sorted) {
-    const aStart = parseToMinutes(job.serviceDateTime) ?? 0;
-    const aEnd = aStart + estimateDuration(job.serviceType, job.bedrooms);
-    let maxSlot = slotMap.get(job.id)!.slotIndex;
-    for (const other of sorted) {
-      if (other.id === job.id) continue;
-      const bStart = parseToMinutes(other.serviceDateTime) ?? 0;
-      const bEnd = bStart + estimateDuration(other.serviceType, other.bedrooms);
-      if (aStart < bEnd && aEnd > bStart) {
-        maxSlot = Math.max(maxSlot, slotMap.get(other.id)!.slotIndex);
-      }
-    }
-    slotMap.get(job.id)!.totalSlots = maxSlot + 1;
-  }
-
   return (
     <div className="flex items-stretch border-b border-slate-100 last:border-b-0 group">
       {/* Lane label */}
@@ -466,7 +423,7 @@ function SwimLane({
         </div>
       </div>
 
-      {/* Timeline area — always 72px tall */}
+      {/* Timeline area */}
       <div className="flex-1 relative" style={{ height: "72px" }}>
         {/* Hour grid lines */}
         {HOUR_LABELS.map((_, i) => (
@@ -477,7 +434,7 @@ function SwimLane({
           />
         ))}
 
-        {/* Now line */}
+        {/* Now line — rendered here so it's scoped to the timeline area, not the label column */}
         {nowPos != null && (
           <div
             className="absolute top-0 bottom-0 z-20 pointer-events-none w-px bg-rose-500 opacity-80"
@@ -485,20 +442,15 @@ function SwimLane({
           />
         )}
 
-        {jobs.map((job) => {
-          const { slotIndex, totalSlots } = slotMap.get(job.id) ?? { slotIndex: 0, totalSlots: 1 };
-          return (
-            <JobBlock
-              key={job.id}
-              job={job}
-              onClick={onJobClick}
-              isSelected={selectedJobId === job.id}
-              hasUnread={unreadJobIds?.has(job.id)}
-              slotIndex={slotIndex}
-              totalSlots={totalSlots}
-            />
-          );
-        })}
+        {jobs.map((job) => (
+          <JobBlock
+            key={job.id}
+            job={job}
+            onClick={onJobClick}
+            isSelected={selectedJobId === job.id}
+            hasUnread={unreadJobIds?.has(job.id)}
+          />
+        ))}
       </div>
     </div>
   );
