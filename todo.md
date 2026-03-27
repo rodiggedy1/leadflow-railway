@@ -247,3 +247,7 @@
 - [x] Review Tracker: webhook handler for REVIEW_REBOOKING_REQUESTED stage
 - [x] Review Tracker: review_rebooking sessions appear on Leads page (only after customer replies) with "Review" badge
 - [x] Review Tracker: KanbanBoard getSourceInfo updated with review_rebooking badge
+- [x] Backfill reviewDraftText for March 26 "riz gamela" review (job 180002, draftPicked=3)
+- [x] Review Tracker: highlight 1-3 star rows in red in the funnel table
+- [x] Rebooking reply intent: detect "yes" reply → stage set to CONFIRMATION (surfaces in New Leads pipeline)
+- [x] Leads pipeline: new SMS replies always surface at the top (sort by lastCustomerReplyAt desc — already implemented, confirmed working)

@@ -631,10 +631,20 @@ export default function ReviewTracker() {
                           ? row.reviewChipsSelected.split(",").map((c) => c.trim()).filter(Boolean)
                           : [];
 
+                        const isLowRating = row.customerRating !== null && row.customerRating <= 3;
+
                         return (
                           <React.Fragment key={row.id}>
                             <tr
-                              className={`hover:bg-gray-50/70 transition-colors ${isExpanded ? "bg-orange-50/30" : ""}`}
+                              className={`transition-colors ${
+                                isLowRating
+                                  ? isExpanded
+                                    ? "bg-red-100/60 hover:bg-red-100/80"
+                                    : "bg-red-50/60 hover:bg-red-50/80 border-l-2 border-red-400"
+                                  : isExpanded
+                                  ? "bg-orange-50/30 hover:bg-orange-50/50"
+                                  : "hover:bg-gray-50/70"
+                              }`}
                             >
                               {/* Date */}
                               <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">

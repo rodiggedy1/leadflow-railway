@@ -445,10 +445,13 @@ export function registerWebhookRoutes(app: Express) {
         const isYes = /\b(yes|yeah|yep|sure|ok|okay|sounds good|please|definitely|absolutely|let's do it|lets do it|yes please|i'd like that|id like that)\b/i.test(lc);
         const isNo = /\b(no|nope|not now|maybe later|not interested|no thanks|no thank you|nah|pass)\b/i.test(lc);
         let replyMsg: string;
+        // isYes → move to CONFIRMATION so it surfaces in the active leads pipeline
+        // ("New Leads" column) and sorts to the top by lastCustomerReplyAt.
+        // isNo / ambiguous → close out as REVIEW_REBOOKING_DONE.
         let newStage: ConversationStage = "REVIEW_REBOOKING_DONE";
         if (isYes) {
           replyMsg = `Amazing, ${firstName}! 🎉 I'll have someone reach out shortly to lock in your spot. Talk soon!`;
-          newStage = "REVIEW_REBOOKING_DONE";
+          newStage = "CONFIRMATION"; // surfaces in pipeline → agent follows up to book
         } else if (isNo) {
           replyMsg = `No worries at all, ${firstName}! If you ever need us again, just text back. 😊`;
           newStage = "REVIEW_REBOOKING_DONE";
