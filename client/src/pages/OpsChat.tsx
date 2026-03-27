@@ -148,10 +148,14 @@ function TimelineEvent({ event }: { event: { id: string; ts: number; type: strin
   const tone = TIMELINE_TONE[event.type] ?? TIMELINE_TONE.office;
   const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false });
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs font-mono text-slate-400 w-10 shrink-0">{timeStr}</span>
-      <span className={cn("rounded-full border px-3 py-1 text-xs font-medium", tone)}>
-        {event.text}
+    <div className="flex items-center gap-0">
+      <span className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
+        tone
+      )}>
+        <span className="font-bold tabular-nums">{timeStr}</span>
+        <span className="text-slate-300 select-none">·</span>
+        <span>{event.text}</span>
       </span>
     </div>
   );
@@ -455,16 +459,28 @@ export default function OpsChat() {
                 <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading…</div>
               ) : jobDetail ? (
                 <>
-                  {/* Live Activity Timeline */}
-                  <div className="px-6 py-4 border-b border-slate-100 bg-white">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Live Activity Timeline</p>
-                    <div className="space-y-2">
-                      {jobDetail.timeline.length === 0 ? (
-                        <p className="text-sm text-slate-400">No activity yet</p>
-                      ) : (
-                        jobDetail.timeline.map((ev) => <TimelineEvent key={ev.id} event={ev} />)
-                      )}
-                    </div>
+                  {/* Live Activity Timeline — last 3 visible, scrollable for earlier */}
+                  <div className="px-6 pt-5 pb-4 border-b border-slate-100 bg-white">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Live Activity Timeline</p>
+                    {jobDetail.timeline.length === 0 ? (
+                      <p className="text-sm text-slate-400">No activity yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Last 3 always visible */}
+                        {jobDetail.timeline.slice(-3).map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
+                        {jobDetail.timeline.length > 3 && (
+                          <details className="group">
+                            <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none list-none flex items-center gap-1">
+                              <span className="group-open:hidden">▸ {jobDetail.timeline.length - 3} earlier events</span>
+                              <span className="hidden group-open:inline">▾ Hide earlier</span>
+                            </summary>
+                            <div className="space-y-2 mt-2">
+                              {jobDetail.timeline.slice(0, -3).map((ev) => <TimelineEvent key={ev.id} event={ev} />)}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Thread */}

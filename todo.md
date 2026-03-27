@@ -282,3 +282,4 @@
 - [x] OpsChat: write vitest tests for new procedures
 - [x] OpsChat: redesign left panel to match screenshot — narrower, scrollable, full-width conversation rows, dark job cards
 - [x] OpsChat: redesign right panel to match screenshot — 300px wide, JOB DETAILS label/value grid, Notes box, ACTIONS 2-col grid
+- [x] OpsChat: redesign center panel — job header with status badge, timeline as colored pill chips (last 3 visible, scrollable), thread below, quick-action chips + composer at bottom
