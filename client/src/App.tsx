@@ -133,14 +133,18 @@ function GlobalOpsChat() {
 
       {/* Floating bubble — visible when closed or minimized */}
       {state !== "open" && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
           <button
             onClick={open}
-            className="relative flex items-center gap-2 rounded-full bg-slate-900 text-white shadow-lg px-4 py-2.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
-            aria-label="Open OpsChat"
+            className="relative flex items-center gap-3 rounded-full bg-slate-900 text-white shadow-2xl px-5 py-3.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+            aria-label="Open MIB Chat"
           >
-            <MessageCircle className="w-4 h-4" />
-            <span className="text-xs font-semibold">OpsChat</span>
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/MIB_logo_final_138df3e8.png"
+              alt="MIB"
+              className="w-7 h-7 rounded-full object-cover"
+            />
+            <span className="text-sm font-bold tracking-wide">MIB Chat</span>
             {/* Unread badge */}
             {totalUnread > 0 && (
               <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 shadow">
@@ -152,7 +156,7 @@ function GlobalOpsChat() {
             <button
               onClick={close}
               className="w-8 h-8 rounded-full bg-slate-700 text-white shadow-lg flex items-center justify-center hover:bg-slate-600 transition-all hover:scale-105 active:scale-95 text-base leading-none"
-              aria-label="Dismiss OpsChat"
+              aria-label="Dismiss MIB Chat"
             >
               ×
             </button>
