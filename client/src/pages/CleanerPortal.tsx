@@ -321,7 +321,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
   onStatusUpdated: () => void;
-  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number; googleReviewUrl?: string; googleReviewBonus?: number } | null;
+  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number; googleReviewBonus?: number } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
   cleanerName?: string;
@@ -1240,18 +1240,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <span className="text-lg">⭐</span>
                 Earn an extra $${payRules?.googleReviewBonus ?? 50} — Ask for a 5-star Google review
               </p>
-              <p className="text-amber-400/80 text-xs mb-3">
+              <p className="text-amber-400/80 text-xs">
                 Before you leave, ask the client: <span className="italic text-amber-200">"We'd really appreciate it if you could leave us a quick Google review — it only takes 30 seconds!"</span>
               </p>
-              <a
-                href={payRules?.googleReviewUrl ?? "https://share.google/Tm468dywmXkUnBQBL"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm transition-colors"
-                onClick={() => setShowPostComplete(false)}
-              >
-                Open Google Review Link
-              </a>
             </div>
 
             {/* Next job CTA — only shown if there are remaining non-completed jobs */}
