@@ -253,3 +253,9 @@
 - [x] Leads pipeline: new SMS replies always surface at the top (sort by lastCustomerReplyAt desc — already implemented, confirmed working)
 - [x] Review rebooking: surface ALL replies (yes/no/ambiguous) in the leads pipeline
 - [x] Kanban card: add "Review Reply" badge for review_rebooking leadSource
+- [x] Outbound Call Assist: appendCallToSession procedure (update existing session with transcript + outcome, no new lead created)
+- [x] Outbound Call Assist: LiveCallAssist reads URL params (name, phone, bedrooms, bathrooms, serviceType, address, sessionId) and enters outbound mode
+- [x] Outbound Call Assist: personalized opener line shown immediately ("Hi [name], this is [agent] from Maids in Black — we saw your request for X bed/bath...")
+- [x] Outbound Call Assist: discovery stage skips re-asking known home details (pre-filled in context)
+- [x] Outbound Call Assist: on clear call, appends transcript to existing session instead of creating new lead
+- [x] Outbound Call Assist: "Call Assist" button in ConversationDrawer Quick Controls navigates to /call-assist with lead context params

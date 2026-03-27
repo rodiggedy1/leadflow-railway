@@ -728,6 +728,8 @@ type DrawerSession = {
   quotedPrice: string | null;
   serviceType: string | null;
   extras: string | null;
+  bedrooms: string | null;
+  bathrooms: string | null;
   assignedAgentId: number | null;
   assignedAgentName: string | null;
   bookedAmount: number | null;
@@ -2102,6 +2104,22 @@ function ConversationDrawer({
                 className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors"
               >
                 <span>&#128222;</span> Call lead
+              </button>
+              <button
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  params.set("sessionId", String(session.id));
+                  if (session.leadName)    params.set("name",        encodeURIComponent(session.leadName));
+                  if (session.leadPhone)   params.set("phone",       encodeURIComponent(session.leadPhone));
+                  if (session.bedrooms)    params.set("bedrooms",    encodeURIComponent(String(session.bedrooms)));
+                  if (session.bathrooms)   params.set("bathrooms",   encodeURIComponent(String(session.bathrooms)));
+                  if (session.serviceType) params.set("serviceType", encodeURIComponent(session.serviceType));
+                  if (session.address)     params.set("address",     encodeURIComponent(session.address));
+                  window.open(`/call-assist?${params.toString()}`, "_blank");
+                }}
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-100 transition-colors"
+              >
+                <span>&#127381;</span> Call Assist
               </button>
               <button
                 onClick={() => applySuggestion(-1)}

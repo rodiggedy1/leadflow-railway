@@ -10,7 +10,7 @@
  * That's it. No complexity. Same pattern as the SMS flow.
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw, X,
@@ -90,13 +90,31 @@ export default function LiveCallAssist() {
   const [, navigate] = useLocation();
   const { agentId, agentName, isAdmin } = useAgentPermissions();
 
+  // ── Outbound mode: read URL params ──────────────────────────────────────────
+  const urlParams = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const p = new URLSearchParams(window.location.search);
+    const sessionId = p.get("sessionId") ? parseInt(p.get("sessionId")!, 10) : null;
+    if (!sessionId) return null;
+    return {
+      sessionId,
+      name:        decodeURIComponent(p.get("name") ?? ""),
+      phone:       decodeURIComponent(p.get("phone") ?? ""),
+      bedrooms:    decodeURIComponent(p.get("bedrooms") ?? ""),
+      bathrooms:   decodeURIComponent(p.get("bathrooms") ?? ""),
+      serviceType: decodeURIComponent(p.get("serviceType") ?? ""),
+      address:     decodeURIComponent(p.get("address") ?? ""),
+    };
+  }, []);
+  const isOutbound = !!urlParams;
+
   // Context fields (filled in as agent learns them during the call)
-  const [leadName, setLeadName]       = useState("");
-  const [phone, setPhone]             = useState("");
-  const [address, setAddress]         = useState("");
-  const [bedrooms, setBedrooms]       = useState("");
-  const [bathrooms, setBathrooms]     = useState("");
-  const [serviceType, setServiceType] = useState("");
+  const [leadName, setLeadName]       = useState(urlParams?.name ?? "");
+  const [phone, setPhone]             = useState(urlParams?.phone ?? "");
+  const [address, setAddress]         = useState(urlParams?.address ?? "");
+  const [bedrooms, setBedrooms]       = useState(urlParams?.bedrooms ?? "");
+  const [bathrooms, setBathrooms]     = useState(urlParams?.bathrooms ?? "");
+  const [serviceType, setServiceType] = useState(urlParams?.serviceType ?? "");
   const [preferredDate, setPreferredDate] = useState("");
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
 
@@ -241,6 +259,15 @@ export default function LiveCallAssist() {
       extrasLabels ? `Add-ons selected: ${extrasLabels}` : null,
     ].filter(Boolean).join("\n");
 
+    // Build known fields string for outbound mode
+    const knownFields = isOutbound && urlParams ? [
+      urlParams.name      ? `name: ${urlParams.name}` : null,
+      urlParams.bedrooms  ? `bedrooms: ${urlParams.bedrooms}` : null,
+      urlParams.bathrooms ? `bathrooms: ${urlParams.bathrooms}` : null,
+      urlParams.serviceType ? `service type: ${urlParams.serviceType}` : null,
+      urlParams.address   ? `address: ${urlParams.address}` : null,
+    ].filter(Boolean).join(", ") : undefined;
+
     mutation.mutate({
       stage: activeStage,
       transcript,
@@ -249,6 +276,8 @@ export default function LiveCallAssist() {
       quotedPrice: quotedPrice || undefined,
       lastCustomerLine: text,
       context: context || undefined,
+      isOutbound: isOutbound || undefined,
+      knownFields: knownFields || undefined,
     });
   }, [customerInput, conversation, mutation, activeStage, leadName, address, bedrooms, bathrooms, serviceType, preferredDate, quotedPrice]);
 
@@ -261,6 +290,8 @@ export default function LiveCallAssist() {
 
   // ── Save call lead mutation ──────────────────────────────────────────────────
   const saveCallLead = trpc.leads.saveCallLead.useMutation();
+  // ── Append call to existing session (outbound mode) ──────────────────────────
+  const appendCallToSession = trpc.leads.appendCallToSession.useMutation();
 
   // ── Clear call confirm dialog ────────────────────────────────────────────────
   // outcome modal: null | 'booked' | 'followup' | 'notinterested'
@@ -293,6 +324,38 @@ export default function LiveCallAssist() {
       const transcript = conversation
         .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
         .join("\n");
+
+      // Outbound mode: append to existing session instead of creating a new lead
+      if (isOutbound && urlParams?.sessionId) {
+        appendCallToSession.mutate({
+          sessionId:   urlParams.sessionId,
+          transcript:  transcript.slice(0, 8000),
+          quotedPrice: quotedPrice || undefined,
+          extras:      selectedExtras.length > 0 ? selectedExtras : undefined,
+          isBooked:    bookedFlag,
+          notInterested,
+          isFollowUp,
+          followUpDate: fDate || undefined,
+          agentId:     agentId ?? undefined,
+          agentName:   agentName ?? undefined,
+        }, {
+          onSuccess: () => {
+            toast.success(
+              notInterested ? "🚫 Lead updated — not interested" :
+              isFollowUp    ? `📅 Follow-up set${fDate ? ` for ${fDate}` : ""}` :
+              bookedFlag    ? "✅ Booking saved to lead" :
+                              "✅ Call notes saved to lead"
+            );
+          },
+          onError: (e) => {
+            console.error("[OutboundCallAssist] Failed to append call:", e.message);
+            toast.error("Could not save call notes — cleared anyway");
+          },
+        });
+        doReset();
+        return;
+      }
+
       saveCallLead.mutate({
         name:          leadName.trim() || "Unknown",
         phone:         phone || undefined,
@@ -501,6 +564,30 @@ export default function LiveCallAssist() {
           </button>
         </div>
       </div>
+
+      {/* ── Outbound opener banner ── */}
+      {isOutbound && urlParams && (
+        <div className="bg-violet-50 border-b border-violet-200 px-4 py-2.5 flex items-start gap-3 shrink-0">
+          <div className="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center shrink-0 mt-0.5">
+            <Phone className="w-3 h-3 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-violet-700 uppercase tracking-wide mb-0.5">Outbound Call — Suggested Opener</p>
+            <p className="text-sm text-violet-900 leading-snug">
+              &ldquo;Hi {urlParams.name ? urlParams.name.split(" ")[0] : "there"}, this is {agentName ?? "your agent"} from Maids in Black
+              {urlParams.bedrooms || urlParams.bathrooms || urlParams.serviceType ? (
+                <> — we saw your request for
+                  {urlParams.bedrooms ? ` a ${urlParams.bedrooms}-bedroom` : ""}
+                  {urlParams.bathrooms ? `, ${urlParams.bathrooms}-bathroom` : ""}
+                  {urlParams.serviceType ? ` ${urlParams.serviceType}` : " home cleaning"}
+                </>
+              ) : " — we saw your cleaning request"}
+              . Is now a good time?&rdquo;
+            </p>
+          </div>
+          <span className="text-[10px] font-semibold bg-violet-200 text-violet-700 px-2 py-0.5 rounded-full shrink-0 mt-0.5">OUTBOUND</span>
+        </div>
+      )}
 
       {/* ── 3-column body ── */}
       <div className="flex-1 flex overflow-hidden">

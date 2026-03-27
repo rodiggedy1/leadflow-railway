@@ -1753,6 +1753,8 @@ Analyze this conversation and return a JSON object with exactly these fields:
         quotedPrice: z.string().optional(),
         lastCustomerLine: z.string().max(1000).optional(),
         context: z.string().max(500).optional(),
+        isOutbound: z.boolean().optional(),
+        knownFields: z.string().max(300).optional(),
       }))
       .mutation(async ({ input }) => {
 
@@ -1909,6 +1911,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
 - objection: customer expressed hesitation or concern`;
 
         const contextBlock = [
+          input.isOutbound  ? `OUTBOUND CALL: The agent is calling the customer. Do NOT ask for any fields already known. Confirm them naturally if relevant.` : null,
+          input.knownFields ? `ALREADY KNOWN (do not re-ask): ${input.knownFields}` : null,
           input.leadName    ? `Customer name: ${input.leadName}` : null,
           input.context     ? input.context : null,
           input.quotedPrice ? `Price to quote: $${input.quotedPrice}` : null,
@@ -2100,6 +2104,90 @@ STAGE DETECTION — return the stage the conversation is currently in:
 
         console.log(`[CallAssist] Lead saved: sessionId=${sessionId}, name=${input.name}, booked=${input.isBooked}`);
         return { success: true as const, leadId, sessionId };
+      }),
+
+    /**
+     * leads.appendCallToSession — append an outbound call transcript to an existing lead session.
+     * Used by Outbound Call Assist when the agent calls a lead from the drawer.
+     * Does NOT create a new lead — updates the existing conversation_session in place.
+     */
+    appendCallToSession: agentProcedure
+      .input(z.object({
+        sessionId:     z.number().int().positive(),
+        transcript:    z.string().max(8000),
+        quotedPrice:   z.string().max(20).optional(),
+        preferredDate: z.string().max(100).optional(),
+        extras:        z.array(z.string()).optional(),
+        isBooked:      z.boolean().default(false),
+        notInterested: z.boolean().default(false),
+        isFollowUp:    z.boolean().default(false),
+        followUpDate:  z.string().max(20).optional(),
+        agentId:       z.number().optional(),
+        agentName:     z.string().max(255).optional(),
+        bedrooms:      z.string().max(50).optional(),
+        bathrooms:     z.string().max(50).optional(),
+        address:       z.string().max(500).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+        const [existing] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+        // Append call transcript as a system message in the message history
+        let messages: { role: string; content: string; ts?: number }[] = [];
+        try { messages = JSON.parse(existing.messageHistory || "[]"); } catch { messages = []; }
+        messages.push({
+          role: "system",
+          content: `[OUTBOUND CALL${input.agentName ? ` by ${input.agentName}` : ""}]\n${input.transcript}`,
+          ts: Date.now(),
+        });
+
+        // Determine new stage from outcome
+        const newStage = input.isBooked
+          ? "BOOKED"
+          : input.notInterested
+          ? "NOT_INTERESTED"
+          : input.isFollowUp
+          ? "FOLLOW_UP_SCHEDULED"
+          : existing.stage;
+
+        const extrasJson = input.extras && input.extras.length > 0
+          ? JSON.stringify(input.extras)
+          : (existing.extras ?? null);
+
+        await db
+          .update(conversationSessions)
+          .set({
+            messageHistory:    JSON.stringify(messages),
+            stage:             newStage as typeof existing.stage,
+            quotedPrice:       input.quotedPrice ?? existing.quotedPrice,
+            selectedSlot:      input.preferredDate ?? existing.selectedSlot,
+            extras:            extrasJson,
+            bedrooms:          input.bedrooms ?? existing.bedrooms,
+            bathrooms:         input.bathrooms ?? existing.bathrooms,
+            address:           input.address ?? existing.address,
+            lastCalledAt:      new Date(), // surface in pipeline (sort key)
+            assignedAgentId:   input.agentId ?? existing.assignedAgentId,
+            assignedAgentName: input.agentName ?? existing.assignedAgentName,
+            ...(input.isFollowUp && input.followUpDate ? { followUpDate: input.followUpDate } : {}),
+            ...(input.isBooked ? {
+              isBooked:          1,
+              bookedAt:          new Date(),
+              bookedByAgentId:   input.agentId ?? existing.bookedByAgentId,
+              bookedByAgentName: input.agentName ?? existing.bookedByAgentName,
+              bookedAmount:      input.quotedPrice ? Math.round(parseFloat(input.quotedPrice)) : existing.bookedAmount,
+            } : {}),
+          })
+          .where(eq(conversationSessions.id, input.sessionId));
+
+        console.log(`[OutboundCallAssist] Appended call to sessionId=${input.sessionId}, stage=${newStage}`);
+        return { success: true as const, sessionId: input.sessionId };
       }),
   }),
   /**
