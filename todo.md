@@ -263,3 +263,4 @@
 - [x] Outbound Call Assist: add Call Assist button directly on leads table row (not just inside the drawer)
 - [x] AdminDashboard: fix Call Assist button not visible on lead table rows
 - [x] LiveCallAssist: rewrite outbound opener with world-class high-converting sales script
+- [x] Leads page: add persistent Call Assist icon next to phone icon on lead table rows

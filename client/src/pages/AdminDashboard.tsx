@@ -80,6 +80,7 @@ import {
   Sparkles,
   BarChart2,
   ChevronRight,
+  Headphones,
 } from "lucide-react";
 import {
   Dialog,
@@ -3675,16 +3676,35 @@ export default function AdminDashboard() {
                               </div>
                             )}
                           </div>
-                          {/* Click-to-call — only visible on row hover */}
-                          <a
-                            href={`tel:${session.leadPhone}`}
-                            onClick={e => e.stopPropagation()}
-                            title={`Call ${formatPhone(session.leadPhone)}`}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0 p-1.5 rounded-full text-gray-500"
-                            style={{ '--tw-ring-color': '#AAFF00' } as React.CSSProperties}
-                          >
-                            <PhoneCall className="w-3.5 h-3.5" />
-                          </a>
+                          {/* Click-to-call + Call Assist — always visible */}
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <a
+                              href={`tel:${session.leadPhone}`}
+                              onClick={e => e.stopPropagation()}
+                              title={`Call ${formatPhone(session.leadPhone)}`}
+                              className="flex-shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                            >
+                              <PhoneCall className="w-3.5 h-3.5" />
+                            </a>
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                const params = new URLSearchParams();
+                                if (session.id) params.set('sessionId', String(session.id));
+                                if (session.leadName) params.set('name', session.leadName);
+                                if (session.leadPhone) params.set('phone', session.leadPhone);
+                                if (session.bedrooms) params.set('bedrooms', String(session.bedrooms));
+                                if (session.bathrooms) params.set('bathrooms', String(session.bathrooms));
+                                if (session.serviceType) params.set('serviceType', session.serviceType);
+                                if (session.address) params.set('address', session.address);
+                                window.open(`/call-assist?${params.toString()}`, '_blank');
+                              }}
+                              title="Open Call Assist for this lead"
+                              className="flex-shrink-0 p-1.5 rounded-full text-violet-400 hover:text-violet-700 hover:bg-violet-50 transition-colors"
+                            >
+                              <Headphones className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </TableCell>
 
