@@ -270,3 +270,4 @@
 - [x] CleanerPortal: remove Google review URL from post-completion modal — cleaners should verbally ask client for review, not share a link (client already gets it via SMS)
 - [x] maybeTriggerLateAssignmentSms: remove 2-hour window restriction — fire for any new/re-assigned job regardless of start time
 - [x] maybeTriggerLateAssignmentSms: use assignment_sms step key (not pre_job_reminder) so the T-2hr cron reminder still fires independently
+- [x] Fix 3 pre-existing test failures: isWithinEscalationHours boundary tests and confirmAssignment source-check

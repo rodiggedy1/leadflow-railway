@@ -517,20 +517,28 @@ describe("isWithinEscalationHours", () => {
     expect(isWithinEscalationHours(makeEtDate(12))).toBe(true);
   });
 
-  it("returns true at 4:00 PM ET (last full hour inside window)", () => {
+  it("returns true at 4:00 PM ET (inside window)", () => {
     expect(isWithinEscalationHours(makeEtDate(16))).toBe(true);
   });
 
-  it("returns false at 5:00 PM ET (first hour outside window)", () => {
-    expect(isWithinEscalationHours(makeEtDate(17))).toBe(false);
+  it("returns true at 5:00 PM ET (inside window — window closes at 6 PM)", () => {
+    expect(isWithinEscalationHours(makeEtDate(17))).toBe(true);
+  });
+
+  it("returns false at 6:00 PM ET (first hour outside window)", () => {
+    expect(isWithinEscalationHours(makeEtDate(18))).toBe(false);
   });
 
   it("returns false at 9:00 PM ET (evening)", () => {
     expect(isWithinEscalationHours(makeEtDate(21))).toBe(false);
   });
 
-  it("returns false at 7:00 AM ET (before window opens)", () => {
-    expect(isWithinEscalationHours(makeEtDate(7))).toBe(false);
+  it("returns true at 7:00 AM ET (window opens at 7 AM)", () => {
+    expect(isWithinEscalationHours(makeEtDate(7))).toBe(true);
+  });
+
+  it("returns false at 6:00 AM ET (before window opens)", () => {
+    expect(isWithinEscalationHours(makeEtDate(6))).toBe(false);
   });
 
   it("returns false at midnight ET", () => {
@@ -809,7 +817,8 @@ describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
       path.resolve(__dirname, "fieldMgmtRouter.ts"),
       "utf8"
     );
-    const fnStart = src.indexOf("confirmAssignment: adminProcedure");
+    // confirmAssignment is declared as agentProcedure (not adminProcedure)
+    const fnStart = src.indexOf("confirmAssignment: agentProcedure");
     const fnEnd = src.indexOf("}),", fnStart + 10);
     const fnBody = src.slice(fnStart, fnEnd);
     expect(fnBody).toContain("maybeTriggerLateAssignmentSms");
