@@ -281,3 +281,4 @@
 - [x] OpsChat: wire real data from DB, add /ops-chat route, protect with auth
 - [x] OpsChat: write vitest tests for new procedures
 - [x] OpsChat: redesign left panel to match screenshot — narrower, scrollable, full-width conversation rows, dark job cards
+- [x] OpsChat: redesign right panel to match screenshot — 300px wide, JOB DETAILS label/value grid, Notes box, ACTIONS 2-col grid

@@ -604,120 +604,115 @@ export default function OpsChat() {
         )}
       </div>
 
-      {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
+           {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────── */}
       {activeTab === "today" && jobDetail && (
-        <div className="w-[280px] shrink-0 border-l border-slate-200 bg-white overflow-y-auto">
-          <div className="p-4 space-y-4">
-            {/* Job Details */}
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Job Details</p>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <p className="text-xs text-slate-400">Client</p>
-                  <p className="font-semibold text-slate-900">{jobDetail.job.client}</p>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-slate-400">Service</p>
-                    <p className="text-slate-700 text-xs leading-relaxed">{jobDetail.job.serviceType || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Price</p>
-                    <p className="text-slate-700 font-medium">{jobDetail.job.price || "—"}</p>
-                  </div>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-slate-400">Window</p>
-                    <p className="text-slate-700 text-xs">{jobDetail.job.time || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Team</p>
-                    <p className="text-slate-700 text-xs">{jobDetail.job.teamName ?? jobDetail.job.cleanerName}</p>
-                  </div>
-                </div>
-                <Separator />
-                <div>
-                  <p className="text-xs text-slate-400">Address</p>
-                  <p className="text-slate-700 text-xs">{jobDetail.job.address}</p>
-                </div>
-                {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
-                  <>
-                    <Separator />
-                    <div>
-                      <p className="text-xs text-slate-400">Notes</p>
-                      <p className="text-slate-600 text-xs leading-relaxed">
-                        {jobDetail.job.customerNotes ?? jobDetail.job.staffNotes}
-                      </p>
-                    </div>
-                  </>
-                )}
+        <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto">
+          <div className="p-4 space-y-3">
+
+            {/* Job Details card */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Job Details</p>
+
+              {/* Client */}
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-0.5">Client</p>
+                <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
               </div>
+
+              {/* Service + Price */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Service</p>
+                  <p className="text-sm font-semibold text-slate-900 leading-snug">{jobDetail.job.serviceType || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Price</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.price || "—"}</p>
+                </div>
+              </div>
+
+              {/* Window + Team */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Window</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.time || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Team</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.teamName ?? jobDetail.job.cleanerName}</p>
+                </div>
+              </div>
+
+              {/* Address */}
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-0.5">Address</p>
+                <p className="text-sm font-semibold text-slate-900">{jobDetail.job.address}</p>
+              </div>
+
+              {/* Notes */}
+              {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1.5">Notes</p>
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      {jobDetail.job.customerNotes ?? jobDetail.job.staffNotes}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Actions */}
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Actions</p>
-              <div className="grid grid-cols-2 gap-2">
-                {jobDetail.job.customerPhone && (
-                  <Button variant="outline" size="sm" className="text-xs h-9" asChild>
-                    <a href={`tel:${jobDetail.job.customerPhone}`}>
-                      <Phone className="h-3.5 w-3.5 mr-1" />
-                      Call Client
-                    </a>
+            {/* Actions card */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Actions</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {jobDetail.job.customerPhone ? (
+                  <Button variant="outline" className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50" asChild>
+                    <a href={`tel:${jobDetail.job.customerPhone}`}>Call Client</a>
+                  </Button>
+                ) : (
+                  <Button variant="outline" className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50">
+                    Call Client
                   </Button>
                 )}
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="text-xs h-9"
-                  onClick={() => {
-                    handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Message Client")!);
-                  }}
+                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
+                  onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Message Client")!)}
                 >
-                  <MessageSquare className="h-3.5 w-3.5 mr-1" />
-                  Msg Client
+                  Message Client
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="text-xs h-9"
+                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Late")!)}
                 >
-                  <Clock className="h-3.5 w-3.5 mr-1" />
-                  Approve Late
+                  Approve Extra Time
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="text-xs h-9"
+                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Complete")!)}
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                   Mark Complete
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="text-xs h-9"
+                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Review + Rebook")!)}
                 >
-                  <Zap className="h-3.5 w-3.5 mr-1" />
-                  Review Link
+                  Send Review Link
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="text-xs h-9"
+                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Review + Rebook")!)}
                 >
-                  <RefreshCw className="h-3.5 w-3.5 mr-1" />
                   Offer Rebook
                 </Button>
               </div>
             </div>
+
           </div>
         </div>
       )}
