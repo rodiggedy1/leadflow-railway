@@ -14,7 +14,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, agentProcedure } from "./_core/trpc";
+import { router, publicProcedure, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs } from "../drizzle/schema";
@@ -408,7 +408,7 @@ Return a JSON object with this exact structure:
    *   - rows: all cleaner_jobs with customerRating set (joined with SMS replies)
    *   - teamStats: per-team aggregated leaderboard data
    */
-  getReviewAnalytics: agentProcedure
+  getReviewAnalytics: protectedProcedure
     .input(
       z.object({
         from: z.string().optional(), // YYYY-MM-DD
