@@ -316,9 +316,10 @@ export const cleanerRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
       }
 
+      const now = new Date();
       await db
         .update(cleanerJobs)
-        .set({ bookingStatus: "completed", jobStatus: "completed" })
+        .set({ bookingStatus: "completed", jobStatus: "completed", completedAt: now })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
       // ── Field Management: Completion Flow ───────────────────────────────────────

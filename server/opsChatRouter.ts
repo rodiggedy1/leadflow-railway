@@ -240,6 +240,23 @@ export const opsChatRouter = router({
         });
       }
 
+      // Synthetic "completed" event — if the job is marked complete but no history
+      // row exists for it (e.g. completed via markComplete which doesn't write history),
+      // append one using completedAt (precise) or updatedAt (fallback).
+      const alreadyHasCompleted = timeline.some(e => e.type === "complete");
+      if (!alreadyHasCompleted && (job.jobStatus === "completed" || job.bookingStatus === "completed")) {
+        const completedTs = job.completedAt
+          ? job.completedAt.getTime()
+          : job.updatedAt.getTime();
+        const cleanerFirstNameFinal = job.cleanerName?.split(" ")[0] ?? "Team";
+        timeline.push({
+          id: "synthetic-complete",
+          ts: completedTs,
+          type: "complete",
+          text: `${cleanerFirstNameFinal} marked job complete`,
+        });
+      }
+
       timeline.sort((a, b) => a.ts - b.ts);
 
       // Merge thread messages

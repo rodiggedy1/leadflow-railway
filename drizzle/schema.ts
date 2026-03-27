@@ -962,6 +962,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   trackerSmsSentAt: timestamp("trackerSmsSentAt"),
   /** How many minutes late the cleaner is running (set when jobStatus = running_late) */
   delayMinutes: int("delayMinutes"),
+  /** When the cleaner marked the job complete (set by markComplete) */
+  completedAt: timestamp("completedAt"),
   /** Review flow analytics: comma-separated chip labels the customer selected (e.g. "On time,Super thorough") */
   reviewChipsSelected: text("reviewChipsSelected"),
   /** Review flow analytics: which AI draft the customer picked (1, 2, or 3) */
