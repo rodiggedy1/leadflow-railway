@@ -665,47 +665,47 @@ export default function OpsChat() {
             {/* Actions card */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Actions</p>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 {jobDetail.job.customerPhone ? (
-                  <Button variant="outline" className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50" asChild>
+                  <Button variant="outline" className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap" asChild>
                     <a href={`tel:${jobDetail.job.customerPhone}`}>Call Client</a>
                   </Button>
                 ) : (
-                  <Button variant="outline" className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50">
+                  <Button variant="outline" className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap">
                     Call Client
                   </Button>
                 )}
                 <Button
                   variant="outline"
-                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
+                  className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Message Client")!)}
                 >
                   Message Client
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
+                  className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Late")!)}
                 >
                   Approve Extra Time
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
+                  className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Complete")!)}
                 >
                   Mark Complete
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
+                  className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Review + Rebook")!)}
                 >
                   Send Review Link
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-12 rounded-2xl text-sm font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
+                  className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap"
                   onClick={() => handleQuickAction(QUICK_ACTIONS.find(q => q.key === "Review + Rebook")!)}
                 >
                   Offer Rebook
