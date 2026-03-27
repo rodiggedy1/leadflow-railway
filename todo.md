@@ -265,3 +265,4 @@
 - [x] LiveCallAssist: rewrite outbound opener with world-class high-converting sales script
 - [x] Leads page: add persistent Call Assist icon next to phone icon on lead table rows
 - [x] CleanerPortal: post-completion modal after marking job done — earn $50 review ask + set next job on the way
+- [x] CleanerPortal: separate Google Review bonus ($50) from in-app 5-star rating bonus — add pay_googleReviewBonus setting, revert fiveStarBonus to $10

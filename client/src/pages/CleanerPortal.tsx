@@ -321,7 +321,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
   onStatusUpdated: () => void;
-  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number; googleReviewUrl?: string } | null;
+  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number; googleReviewUrl?: string; googleReviewBonus?: number } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
   cleanerName?: string;
@@ -1238,7 +1238,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <div className="p-4 bg-amber-950/60 border border-amber-500/40 rounded-xl">
               <p className="text-amber-300 font-bold text-sm flex items-center gap-2 mb-1">
                 <span className="text-lg">⭐</span>
-                Earn an extra ${payRules?.fiveStarBonus ?? 10} — Ask for a 5-star review
+                Earn an extra $${payRules?.googleReviewBonus ?? 50} — Ask for a 5-star Google review
               </p>
               <p className="text-amber-400/80 text-xs mb-3">
                 Before you leave, ask the client: <span className="italic text-amber-200">"We'd really appreciate it if you could leave us a quick Google review — it only takes 30 seconds!"</span>
