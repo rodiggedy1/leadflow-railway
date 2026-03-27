@@ -770,7 +770,7 @@ describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
     expect(fnBody).toContain("FIELD_MGMT_ENABLED is false");
   });
 
-  it("only fires if job starts within 2 hours (source check)", () => {
+  it("fires for any future assigned job regardless of start time (source check)", () => {
     const fs = require("fs");
     const path = require("path");
     const src = fs.readFileSync(
@@ -780,10 +780,10 @@ describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
     const fnStart = src.indexOf("export async function maybeTriggerLateAssignmentSms");
     const fnEnd = src.indexOf("export async function sendCleanerPreJobSmsForJob");
     const fnBody = src.slice(fnStart, fnEnd);
-    // Must check 2-hour window
-    expect(fnBody).toContain("twoHoursMs");
-    expect(fnBody).toContain("msUntilJob > twoHoursMs");
-    // Must skip past-start jobs
+    // Must NOT have a 2-hour window restriction
+    expect(fnBody).not.toContain("twoHoursMs");
+    expect(fnBody).not.toContain("msUntilJob > twoHoursMs");
+    // Must still skip past-start jobs
     expect(fnBody).toContain("msUntilJob < 0");
   });
 

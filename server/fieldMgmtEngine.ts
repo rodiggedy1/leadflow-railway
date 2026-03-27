@@ -1466,15 +1466,6 @@ export async function maybeTriggerLateAssignmentSms(
 
   const now = Date.now();
   const msUntilJob = serviceTime.getTime() - now;
-  const twoHoursMs = 2 * 60 * 60 * 1000;
-
-  // Only trigger if the job starts within 2 hours (the cron window has passed)
-  if (msUntilJob > twoHoursMs) {
-    return {
-      triggered: false,
-      reason: `Job starts in ${Math.round(msUntilJob / 60_000)} min — cron will handle it`,
-    };
-  }
 
   // Job is in the past — nothing to do
   if (msUntilJob < 0) {
@@ -1482,9 +1473,9 @@ export async function maybeTriggerLateAssignmentSms(
   }
 
   console.log(
-    `[FieldMgmt] Late assignment detected for job ${cleanerJobId} (${job.cleanerName}) — ` +
-    `was '${previousStatus ?? "unknown"}', now 'assigned', starts in ${Math.round(msUntilJob / 60_000)} min. ` +
-    `Firing immediate pre-job SMS.`
+    `[FieldMgmt] Assignment SMS triggered for job ${cleanerJobId} (${job.cleanerName}) — ` +
+    `was '${previousStatus ?? "new"}', now 'assigned', starts in ${Math.round(msUntilJob / 60_000)} min. ` +
+    `Firing pre-job SMS immediately.`
   );
 
   // Fire cleaner pre-job reminder immediately (non-blocking)
@@ -1505,7 +1496,7 @@ export async function maybeTriggerLateAssignmentSms(
 
   return {
     triggered: true,
-    reason: `Job starts in ${Math.round(msUntilJob / 60_000)} min — fired client + cleaner pre-job SMS immediately`,
+    reason: `Job starts in ${Math.round(msUntilJob / 60_000)} min — fired assignment SMS immediately`,
   };
 }
 
