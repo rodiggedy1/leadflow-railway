@@ -1135,6 +1135,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         rows={3}
                         className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                         onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
                           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
                         }}
                       />
@@ -1291,6 +1292,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   rows={3}
                   className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                   onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
                   }}
                 />
