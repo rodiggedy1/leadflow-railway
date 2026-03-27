@@ -1372,55 +1372,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="p-4 space-y-3">
 
-            {/* Job Details card */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Job Details</p>
-
-              <div className="mb-4">
-                <p className="text-xs text-slate-400 mb-0.5">Client</p>
-                <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Service</p>
-                  <p className="text-sm font-semibold text-slate-900 leading-snug">{jobDetail.job.serviceType || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Price</p>
-                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.price || "—"}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Window</p>
-                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.time || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Team</p>
-                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.teamName ?? jobDetail.job.cleanerName}</p>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <p className="text-xs text-slate-400 mb-0.5">Address</p>
-                <p className="text-sm font-semibold text-slate-900">{jobDetail.job.address}</p>
-              </div>
-
-              {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1.5">Notes</p>
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      {jobDetail.job.customerNotes ?? jobDetail.job.staffNotes}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Actions card */}
+            {/* Actions card — TOP so flag/resolve is always immediately visible */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Actions</p>
               <div className="grid grid-cols-2 gap-2">
@@ -1504,6 +1456,54 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   </Button>
                 )}
               </div>
+            </div>
+
+            {/* Job Details card — below Actions */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Job Details</p>
+
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-0.5">Client</p>
+                <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Service</p>
+                  <p className="text-sm font-semibold text-slate-900 leading-snug">{jobDetail.job.serviceType || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Price</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.price || "—"}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Window</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.time || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Team</p>
+                  <p className="text-sm font-semibold text-slate-900">{jobDetail.job.teamName ?? jobDetail.job.cleanerName}</p>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-0.5">Address</p>
+                <p className="text-sm font-semibold text-slate-900">{jobDetail.job.address}</p>
+              </div>
+
+              {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1.5">Notes</p>
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      {jobDetail.job.customerNotes ?? jobDetail.job.staffNotes}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>

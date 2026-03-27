@@ -314,3 +314,4 @@
 - [x] Fix toPriorityStatus: flagged=1 jobs always appear in issue bucket regardless of jobStatus
 - [x] Resolve Issue: button in right panel clears flag, logs resolution note, moves job back to normal status bucket
 - [x] Channel composer parity: photos (drag-drop + preview strip + S3 upload), emoji picker, voice recording now in channel composer
+- [x] Move Actions card to top of right panel (above Job Details) so flag/resolve buttons are immediately visible without scrolling
