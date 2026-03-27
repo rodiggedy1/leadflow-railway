@@ -308,15 +308,11 @@ function JobBlock({
   onClick,
   isSelected,
   hasUnread,
-  extraJobs = [],
-  onExtraClick,
 }: {
   job: Job;
   onClick: (job: Job) => void;
   isSelected: boolean;
   hasUnread?: boolean;
-  extraJobs?: Job[];
-  onExtraClick?: (job: Job) => void;
 }) {
   const startMin = parseToMinutes(job.serviceDateTime);
   if (startMin === null || startMin > BOARD_MINUTES || startMin < -30) return null;
@@ -349,9 +345,7 @@ function JobBlock({
         ${hasIssue ? "animate-pulse-slow" : ""}
       `}
       style={{ left: `${leftPct}%`, width: `calc(${widthPct}% - 4px)`, minWidth: "48px" }}
-      title={extraJobs.length > 0
-        ? `${job.customerName} — ${job.jobAddress}\n` + extraJobs.map(j => `+ ${j.customerName} — ${j.jobAddress}`).join("\n")
-        : `${job.customerName} — ${job.jobAddress}`}
+      title={`${job.customerName} — ${job.jobAddress}`}
     >
       {/* Active pulse ring */}
       {isActive && (
@@ -372,15 +366,10 @@ function JobBlock({
 
       {/* Three-zone layout: name (top) → address (middle) → badge (bottom-pinned) */}
       <div className="absolute inset-0 flex flex-col px-2 pt-1.5 pb-1 overflow-hidden">
-        {/* Zone 1: Customer name + status icon + overlap badge */}
+        {/* Zone 1: Customer name + status icon */}
         <div className="flex items-center gap-1 min-w-0 shrink-0">
           <span className="shrink-0 opacity-60">{sc.icon}</span>
           <span className="text-xs font-semibold truncate leading-tight">{shortName}</span>
-          {extraJobs.length > 0 && (
-            <span className="shrink-0 text-[9px] font-bold bg-black/15 rounded-full px-1 py-0.5 leading-none">
-              +{extraJobs.length}
-            </span>
-          )}
         </div>
         {/* Zone 2: Address — only when block is wide enough, fills remaining space */}
         {widthPct > 8 && (
@@ -453,48 +442,15 @@ function SwimLane({
           />
         )}
 
-        {(() => {
-          // Group overlapping jobs into clusters. Each cluster shares the same
-          // time slot on the board; we show only the first job's card with a
-          // "(+N more)" badge and a hover tooltip listing all jobs.
-          const used = new Set<number>();
-          const clusters: Job[][] = [];
-          const sorted = [...jobs].sort(
-            (a, b) => (parseToMinutes(a.serviceDateTime) ?? 0) - (parseToMinutes(b.serviceDateTime) ?? 0)
-          );
-          for (const job of sorted) {
-            if (used.has(job.id)) continue;
-            const aStart = parseToMinutes(job.serviceDateTime) ?? 0;
-            const aEnd = aStart + estimateDuration(job.serviceType, job.bedrooms);
-            const cluster: Job[] = [job];
-            used.add(job.id);
-            for (const other of sorted) {
-              if (used.has(other.id)) continue;
-              const bStart = parseToMinutes(other.serviceDateTime) ?? 0;
-              const bEnd = bStart + estimateDuration(other.serviceType, other.bedrooms);
-              if (aStart < bEnd && aEnd > bStart) {
-                cluster.push(other);
-                used.add(other.id);
-              }
-            }
-            clusters.push(cluster);
-          }
-          return clusters.map((cluster) => {
-            const primary = cluster[0];
-            const extras = cluster.slice(1);
-            return (
-              <JobBlock
-                key={primary.id}
-                job={primary}
-                onClick={onJobClick}
-                isSelected={selectedJobId === primary.id || extras.some(j => j.id === selectedJobId)}
-                hasUnread={cluster.some(j => unreadJobIds?.has(j.id))}
-                extraJobs={extras}
-                onExtraClick={onJobClick}
-              />
-            );
-          });
-        })()}
+        {jobs.map((job) => (
+          <JobBlock
+            key={job.id}
+            job={job}
+            onClick={onJobClick}
+            isSelected={selectedJobId === job.id}
+            hasUnread={unreadJobIds?.has(job.id)}
+          />
+        ))}
       </div>
     </div>
   );
