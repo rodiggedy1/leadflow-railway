@@ -17,8 +17,8 @@ import { z } from "zod";
 import { router, publicProcedure, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, appSettings } from "../drizzle/schema";
-import { eq, and, isNull, inArray } from "drizzle-orm";
+import { cleanerJobs } from "../drizzle/schema";
+import { eq, and, isNull } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
@@ -35,6 +35,26 @@ function generateToken(): string {
 /** Get today's date in ET as YYYY-MM-DD */
 function getTodayET(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+/**
+ * Returns true if the serviceType string indicates a recurring booking.
+ * Recurring types contain keywords like "monthly", "biweekly", "weekly", "bi-weekly", etc.
+ * One-time jobs (standard cleans, deep cleans, move-in/out, hourly) return false.
+ */
+export function isRecurringServiceType(serviceType: string | null | undefined): boolean {
+  if (!serviceType) return false;
+  const s = serviceType.toLowerCase();
+  return (
+    s.includes("monthly") ||
+    s.includes("biweekly") ||
+    s.includes("bi-weekly") ||
+    s.includes("bi weekly") ||
+    s.includes("weekly") ||
+    s.includes("recurring") ||
+    s.includes("tri-weekly") ||
+    s.includes("triweekly")
+  );
 }
 
 export const trackerRouter = router({
@@ -103,6 +123,7 @@ export const trackerRouter = router({
           customerPhone: cleanerJobs.customerPhone,
           jobDate: cleanerJobs.jobDate,
           jobAddress: cleanerJobs.jobAddress,
+          serviceType: cleanerJobs.serviceType,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.trackerToken, input.token))
@@ -117,52 +138,58 @@ export const trackerRouter = router({
         .set({ customerRating: input.rating })
         .where(eq(cleanerJobs.id, job.id));
 
-      // ── Low-rating owner alert (1-3 stars) ────────────────────────────────
+      const firstName = (job.customerName ?? "there").split(" ")[0] ?? "there";
+
+      // ── Low-rating owner alert + customer apology (1-3 stars) ──────────────
       if (input.rating <= 3) {
         try {
           const stars = "★".repeat(input.rating) + "☆".repeat(5 - input.rating);
-          const firstName = (job.customerName ?? "Customer").split(" ")[0] ?? "Customer";
           const alertMsg =
             `⚠️ Low rating alert: ${firstName} left ${input.rating} star${input.rating === 1 ? "" : "s"} ${stars}` +
             (input.comment ? `\nComment: "${input.comment}"` : "") +
             `\nJob: ${job.jobDate ?? "unknown date"} — ${job.jobAddress ?? "no address"}` +
             `\nPhone: ${job.customerPhone ?? "N/A"}`;
 
+          // Owner alert (in-app + SMS to support line)
           await Promise.all([
-            // In-app push notification to owner
             notifyOwner({ title: `⚠️ ${input.rating}★ rating — ${firstName}`, content: alertMsg }),
-            // SMS alert to support line
             sendSms({ to: OWNER_ALERT_NUMBER, content: alertMsg }),
           ]);
+
+          // Customer apology SMS
+          if (job.customerPhone) {
+            const apologyMsg =
+              `Hi ${firstName}, we're really sorry your experience didn't meet expectations. ` +
+              `Our manager will be reaching out to you shortly to make it right. 🙏`;
+            await sendSms({ to: job.customerPhone, content: apologyMsg });
+          }
         } catch (err) {
-          console.error("[Tracker] Failed to send low-rating alert:", err);
+          console.error("[Tracker] Failed to send low-rating alert/apology:", err);
         }
       }
 
-      // ── Send Google Review SMS on 5-star rating ─────────────────────────────
-      if (input.rating === 5 && job.customerPhone) {
+      // ── Post-review follow-up SMS (4-5 stars) ──────────────────────────────
+      if (input.rating >= 4 && job.customerPhone) {
         try {
-          const settingRows = await db
-            .select({ key: appSettings.key, value: appSettings.value })
-            .from(appSettings)
-            .where(inArray(appSettings.key, ["autoGoogleReviewOnFiveStar", "googleReviewUrl", "googleReviewSmsTemplate"]));
+          const isRecurring = isRecurringServiceType(job.serviceType);
+          let followUpMsg: string;
 
-          const settingsMap = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
-          const autoEnabled = settingsMap["autoGoogleReviewOnFiveStar"] === "true";
-          const reviewUrl = settingsMap["googleReviewUrl"] ?? "";
-          const template = settingsMap["googleReviewSmsTemplate"] ??
-            "Hi {firstName}! 🌟 Thank you for the 5-star rating! We'd love a Google review: {reviewLink}";
-
-          if (autoEnabled && reviewUrl) {
-            const firstName = (job.customerName ?? "there").split(" ")[0] ?? "there";
-            const message = template
-              .replace(/\{firstName\}/g, firstName)
-              .replace(/\{reviewLink\}/g, reviewUrl);
-            await sendSms({ to: job.customerPhone, content: message });
+          if (isRecurring) {
+            // Recurring customer — warm thank-you, see you soon
+            followUpMsg =
+              `Hey ${firstName} 🌟 — really appreciate the review. 🙏\n\n` +
+              `We'll see you at the next one!`;
+          } else {
+            // One-time customer — rebooking pitch
+            followUpMsg =
+              `Hey ${firstName} 🌟 — really appreciate the review. 🙏\n\n` +
+              `Most of our clients lock in a regular spot so they never have to think about cleaning again.\n\n` +
+              `Want me to grab you a spot in ~2 weeks?`;
           }
+
+          await sendSms({ to: job.customerPhone, content: followUpMsg });
         } catch (err) {
-          // Non-fatal — rating was already saved, just log the SMS failure
-          console.error("[Tracker] Failed to send Google Review SMS:", err);
+          console.error("[Tracker] Failed to send post-review follow-up SMS:", err);
         }
       }
 

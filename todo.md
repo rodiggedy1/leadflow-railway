@@ -221,3 +221,7 @@
 - [x] Tracker UI overhaul: improved progress stepper (larger, labeled)
 - [x] Tracker UI overhaul: warm team section with highlighted pill
 - [x] Tracker UI overhaul: overall polish (spacing, typography, micro-interactions)
+- [x] Post-review SMS: 4 & 5 star one-time customers get rebooking pitch ("Want me to grab you a spot in ~2 weeks?")
+- [x] Post-review SMS: 4 & 5 star recurring customers get warm thank-you ("We'll see you at the next one!")
+- [x] Post-review SMS: 1-3 star customers get customer-facing apology SMS + owner alert
+- [x] isRecurringServiceType helper exported from trackerRouter for reuse

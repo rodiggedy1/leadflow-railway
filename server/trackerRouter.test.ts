@@ -290,6 +290,127 @@ describe("Review Flow State Machine", () => {
   });
 });
 
+// ── isRecurringServiceType ───────────────────────────────────────────────────
+
+import { isRecurringServiceType } from "./trackerRouter";
+
+describe("isRecurringServiceType", () => {
+  it("returns true for Monthly (10%OFF)", () => {
+    expect(isRecurringServiceType("Monthly (10%OFF)")).toBe(true);
+  });
+
+  it("returns true for Bi-weekly (15%OFF)", () => {
+    expect(isRecurringServiceType("Bi-weekly (15%OFF)")).toBe(true);
+  });
+
+  it("returns true for Weekly (20%OFF)", () => {
+    expect(isRecurringServiceType("Weekly (20%OFF)")).toBe(true);
+  });
+
+  it("returns true for biweekly (lowercase)", () => {
+    expect(isRecurringServiceType("biweekly")).toBe(true);
+  });
+
+  it("returns true for tri-weekly", () => {
+    expect(isRecurringServiceType("Tri-weekly (10%OFF)")).toBe(true);
+  });
+
+  it("returns false for standard bedroom service (one-time)", () => {
+    expect(isRecurringServiceType("3 bedroom")).toBe(false);
+  });
+
+  it("returns false for hourly service (one-time)", () => {
+    expect(isRecurringServiceType("Hourly Service - $35 per hour per maid")).toBe(false);
+  });
+
+  it("returns false for flat rate service (one-time)", () => {
+    expect(isRecurringServiceType("Three Bedroom Townhome or SF Home: $159 Flat rate")).toBe(false);
+  });
+
+  it("returns false for null", () => {
+    expect(isRecurringServiceType(null)).toBe(false);
+  });
+
+  it("returns false for undefined", () => {
+    expect(isRecurringServiceType(undefined)).toBe(false);
+  });
+
+  it("returns false for empty string", () => {
+    expect(isRecurringServiceType("")).toBe(false);
+  });
+});
+
+// ── Post-Review SMS Message Branching ─────────────────────────────────────────
+
+function buildPostReviewSms(params: {
+  firstName: string;
+  isRecurring: boolean;
+}): string {
+  const { firstName, isRecurring } = params;
+  if (isRecurring) {
+    return (
+      `Hey ${firstName} \uD83C\uDF1F \u2014 really appreciate the review. \uD83D\uDE4F\n\n` +
+      `We'll see you at the next one!`
+    );
+  } else {
+    return (
+      `Hey ${firstName} \uD83C\uDF1F \u2014 really appreciate the review. \uD83D\uDE4F\n\n` +
+      `Most of our clients lock in a regular spot so they never have to think about cleaning again.\n\n` +
+      `Want me to grab you a spot in ~2 weeks?`
+    );
+  }
+}
+
+describe("Post-Review SMS Branching", () => {
+  it("one-time customer gets rebooking pitch", () => {
+    const msg = buildPostReviewSms({ firstName: "Sarah", isRecurring: false });
+    expect(msg).toContain("lock in a regular spot");
+    expect(msg).toContain("~2 weeks");
+  });
+
+  it("recurring customer gets warm thank-you only", () => {
+    const msg = buildPostReviewSms({ firstName: "Sarah", isRecurring: true });
+    expect(msg).toContain("We'll see you at the next one");
+    expect(msg).not.toContain("lock in a regular spot");
+    expect(msg).not.toContain("~2 weeks");
+  });
+
+  it("both messages include the customer name", () => {
+    expect(buildPostReviewSms({ firstName: "Marcus", isRecurring: false })).toContain("Marcus");
+    expect(buildPostReviewSms({ firstName: "Marcus", isRecurring: true })).toContain("Marcus");
+  });
+
+  it("both messages include the star emoji and appreciation", () => {
+    const oneTime = buildPostReviewSms({ firstName: "Jen", isRecurring: false });
+    const recurring = buildPostReviewSms({ firstName: "Jen", isRecurring: true });
+    expect(oneTime).toContain("appreciate the review");
+    expect(recurring).toContain("appreciate the review");
+  });
+});
+
+// ── Customer Apology SMS ──────────────────────────────────────────────────────
+
+function buildApologySms(firstName: string): string {
+  return (
+    `Hi ${firstName}, we're really sorry your experience didn't meet expectations. ` +
+    `Our manager will be reaching out to you shortly to make it right. \uD83D\uDE4F`
+  );
+}
+
+describe("Customer Apology SMS (1-3 stars)", () => {
+  it("includes the customer name", () => {
+    expect(buildApologySms("David")).toContain("David");
+  });
+
+  it("mentions manager reaching out", () => {
+    expect(buildApologySms("David")).toContain("manager will be reaching out");
+  });
+
+  it("apologizes for the experience", () => {
+    expect(buildApologySms("David")).toContain("really sorry");
+  });
+});
+
 // ── Low Rating Alert Logic ────────────────────────────────────────────────────
 
 function shouldSendLowRatingAlert(rating: number): boolean {
