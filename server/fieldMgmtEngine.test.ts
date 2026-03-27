@@ -844,6 +844,113 @@ describe("maybeTriggerLateAssignmentSms — late-assignment trigger", () => {
   });
 });
 
+// ── syncTodayJobs — mid-day assignment SMS wiring ───────────────────────────
+// These tests verify that syncTodayJobs in qualityRouter.ts correctly calls
+// maybeTriggerLateAssignmentSms for both:
+//   (a) re-assignments: existing job whose bookingStatus transitions to 'assigned'
+//   (b) new inserts: brand-new job rows that are already 'assigned' at creation time
+
+describe("syncTodayJobs — mid-day assignment SMS wiring", () => {
+  it("calls maybeTriggerLateAssignmentSms for re-assignments (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    // The existing-row branch must call maybeTriggerLateAssignmentSms
+    // when previousStatus !== 'assigned' and new status is 'assigned'
+    const updateBranch = src.slice(
+      src.indexOf("if (existing)"),
+      src.indexOf("} else {", src.indexOf("if (existing)"))
+    );
+    expect(updateBranch).toContain("maybeTriggerLateAssignmentSms");
+    expect(updateBranch).toContain("previousStatus !== \"assigned\"");
+    expect(updateBranch).toContain("booking.bookingStatus === \"assigned\"");
+  });
+
+  it("calls maybeTriggerLateAssignmentSms for brand-new assigned jobs (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    // The new-insert branch must also call maybeTriggerLateAssignmentSms
+    // when the freshly inserted job has bookingStatus === 'assigned'
+    // Anchor: from the else branch start to the Team-reassignment cleanup comment
+    const insertBranch = src.slice(
+      src.indexOf("} else {", src.indexOf("if (existing)")),
+      src.indexOf("// \u2500\u2500 Team-reassignment cleanup")
+    );
+    expect(insertBranch).toContain("maybeTriggerLateAssignmentSms");
+    expect(insertBranch).toContain("newJobId");
+    // Must pass null as previousStatus (no prior status for a brand-new row)
+    expect(insertBranch).toContain("maybeTriggerLateAssignmentSms(newJobId, null)");
+  });
+
+  it("does NOT call maybeTriggerLateAssignmentSms for non-assigned new jobs (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    // The new-insert branch must guard with bookingStatus === 'assigned'
+    // so that unassigned / pending / completed new rows don't trigger SMS
+    const insertBranch = src.slice(
+      src.indexOf("} else {", src.indexOf("if (existing)")),
+      src.indexOf("// \u2500\u2500 Team-reassignment cleanup")
+    );
+    // Guard must be present
+    expect(insertBranch).toContain("booking.bookingStatus === \"assigned\"");
+  });
+
+  it("re-assignment guard skips terminal statuses (source check)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    // Must not fire SMS when transitioning from completed/rescheduled/cancelled
+    const updateBranch = src.slice(
+      src.indexOf("if (existing)"),
+      src.indexOf("} else {", src.indexOf("if (existing)"))
+    );
+    expect(updateBranch).toContain("previousStatus !== \"completed\"");
+    expect(updateBranch).toContain("previousStatus !== \"rescheduled\"");
+    expect(updateBranch).toContain("previousStatus !== \"cancelled\"");
+  });
+
+  it("late-assignment SMS is non-blocking (fire-and-forget with .then/.catch)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    // Both call sites must use .then().catch() to avoid blocking the sync loop
+    const smsCallCount = (src.match(/maybeTriggerLateAssignmentSms\(/g) ?? []).length;
+    const thenCatchCount = (src.match(/\.then\(\(r\) =>/g) ?? []).length;
+    // At least 2 call sites (re-assign + new insert) each with .then
+    expect(smsCallCount).toBeGreaterThanOrEqual(2);
+    expect(thenCatchCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("new-insert SMS passes null as previousStatus (no prior state exists)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "qualityRouter.ts"),
+      "utf8"
+    );
+    // null previousStatus signals to maybeTriggerLateAssignmentSms that this is
+    // a brand-new assignment, not a re-assignment from a known prior state
+    expect(src).toContain("maybeTriggerLateAssignmentSms(newJobId, null)");
+  });
+});
+
 // ── computeClientPreJobSendTime ───────────────────────────────────────────────
 
 describe("computeClientPreJobSendTime", () => {

@@ -1361,14 +1361,31 @@ export const qualityRouter = router({
               }
             } else {
               // Create new cleanerJob
-              await db.insert(cleanerJobs).values({
+              const [ins] = await db.insert(cleanerJobs).values({
                 ...jobData,
                 completedJobId: 0, // placeholder — not linked to completedJobs table for quality-sync jobs
                 photoSubmitted: 0,
                 flagged: 0,
                 trackerToken: generateTrackerToken(), // generate at creation time
               });
+              const newJobId = (ins as any).insertId as number;
               created++;
+
+              // If this is a new mid-day assignment (job starts within 2 hours),
+              // fire the cleaner pre-job SMS + magic link immediately.
+              if (booking.bookingStatus === "assigned") {
+                const { maybeTriggerLateAssignmentSms } = await import("./fieldMgmtEngine");
+                maybeTriggerLateAssignmentSms(newJobId, null).then((r) => {
+                  if (r.triggered) {
+                    console.log(
+                      `[Sync] New mid-day assignment SMS triggered for job ${newJobId} ` +
+                      `(${team.title}): ${r.reason}`
+                    );
+                  }
+                }).catch((err) =>
+                  console.error(`[Sync] New assignment SMS error for job ${newJobId}:`, err)
+                );
+              }
             }
           }
         } catch (err) {
