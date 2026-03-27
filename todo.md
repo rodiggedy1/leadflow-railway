@@ -271,3 +271,4 @@
 - [x] maybeTriggerLateAssignmentSms: remove 2-hour window restriction — fire for any new/re-assigned job regardless of start time
 - [x] maybeTriggerLateAssignmentSms: use assignment_sms step key (not pre_job_reminder) so the T-2hr cron reminder still fires independently
 - [x] Fix 3 pre-existing test failures: isWithinEscalationHours boundary tests and confirmAssignment source-check
+- [x] Vapi webhook: when call is answered, also send SMS to 302-981-6191 notifying that a call has been received

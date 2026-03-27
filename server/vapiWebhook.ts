@@ -23,9 +23,12 @@ import {
   type VapiEndOfCallReport,
 } from "./vapiService";
 import { notifyOwner } from "./_core/notification";
+import { sendSms } from "./openphone";
 import { getDb } from "./db";
 import { fieldMgmtCalls } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+
+const OWNER_ALERT_NUMBER = "+13029816191";
 
 // Vapi native format
 interface VapiToolCallNative {
@@ -255,6 +258,13 @@ export function registerVapiWebhookRoute(app: Express): void {
             title: `📞 Incoming call from ${displayPhone}`,
             content: `Madison is now speaking with a caller at ${displayPhone}.`,
           }).catch(() => {});
+          // Also SMS the owner number so they know a call is being handled
+          sendSms({
+            to: OWNER_ALERT_NUMBER,
+            content: `📞 Call received from ${displayPhone} — Madison is handling it now.`,
+          }).catch((err) =>
+            console.error("[Vapi] Failed to send owner call-received SMS:", err)
+          );
         }
         return res.json({ received: true });
       }
