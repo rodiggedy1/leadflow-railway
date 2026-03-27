@@ -6,7 +6,7 @@
  *   2. Funnel Table — per-job rows with sort/filter (date, customer, team, rating, chips, draft, copied)
  *   3. SMS Reply Drawer — expandable per-row panel showing all inbound client SMS replies
  */
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
@@ -628,9 +628,8 @@ export default function ReviewTracker() {
                           : [];
 
                         return (
-                          <>
+                          <React.Fragment key={row.id}>
                             <tr
-                              key={row.id}
                               className={`hover:bg-gray-50/70 transition-colors ${isExpanded ? "bg-orange-50/30" : ""}`}
                             >
                               {/* Date */}
@@ -731,7 +730,7 @@ export default function ReviewTracker() {
                                 </td>
                               </tr>
                             )}
-                          </>
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
