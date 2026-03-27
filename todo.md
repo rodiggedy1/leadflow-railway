@@ -300,3 +300,6 @@
 - [x] OpsChat global bubble — visible minimize button in OpsChat top bar; floating bubble persists across ALL pages via localStorage; clicking bubble navigates back to /admin/ops-chat
 - [x] OpsChat inline overlay — render OpsChat as a global overlay in App.tsx (not a page route); bubble opens it full-screen over current page; Minimize button collapses back to bubble without navigation
 - [x] OpsChat thread: my messages right-aligned (slate-900 dark bubble), others left-aligned (white card with border) — iMessage-style; sender name shown only on others' messages
+- [x] OpsChat: avatar initials circle on others' messages (left side of bubble) — deterministic pastel color per name
+- [x] OpsChat: unread badge on floating bubble — red count badge shows total unread across all channels, clears when OpsChat is opened
+- [x] OpsChat: read receipts — "Seen by X" shown under your last message when another agent views the thread; ops_chat_reads table tracks per-caller last-read message

@@ -4,7 +4,7 @@
  * Layout: 3 columns — left sidebar (queue + jobs), center (timeline + thread), right (job details + actions).
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -239,11 +239,40 @@ function TimelineEvent({ event }: { event: { id: string; ts: number; type: strin
   );
 }
 
-function ThreadMessage({ msg, callerName }: { msg: { id: string; ts: number; from: string; role: string; body: string; source: string }; callerName: string }) {
+/** Deterministic pastel color from a name string */
+function avatarColor(name: string): string {
+  const palette = [
+    "bg-violet-100 text-violet-700",
+    "bg-sky-100 text-sky-700",
+    "bg-emerald-100 text-emerald-700",
+    "bg-amber-100 text-amber-700",
+    "bg-rose-100 text-rose-700",
+    "bg-teal-100 text-teal-700",
+    "bg-indigo-100 text-indigo-700",
+    "bg-orange-100 text-orange-700",
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
+
+function ThreadMessage({ msg, callerName, seenBy }: {
+  msg: { id: string; ts: number; from: string; role: string; body: string; source: string };
+  callerName: string;
+  seenBy?: string[];
+}) {
   const isMine = msg.from === callerName;
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const initials = msg.from.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+  const colorClass = avatarColor(msg.from);
   return (
-    <div className={cn("flex", isMine ? "justify-end" : "justify-start")}>
+    <div className={cn("flex items-end gap-2", isMine ? "justify-end" : "justify-start")}>
+      {/* Avatar — only on others' messages */}
+      {!isMine && (
+        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mb-0.5", colorClass)}>
+          {initials}
+        </div>
+      )}
       <div className={cn(
         "max-w-[72%] rounded-2xl px-4 py-3",
         isMine
@@ -254,7 +283,15 @@ function ThreadMessage({ msg, callerName }: { msg: { id: string; ts: number; fro
           <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
         )}
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-        <p className={cn("text-xs mt-1.5", isMine ? "text-slate-400" : "text-slate-400")}>{timeStr}</p>
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <p className="text-xs text-slate-400">{timeStr}</p>
+          {/* Read receipts — shown only on my last message */}
+          {isMine && seenBy && seenBy.length > 0 && (
+            <p className="text-[10px] text-slate-400 italic">
+              Seen by {seenBy.join(", ")}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -324,6 +361,40 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     refetchInterval: 30_000,
   });
 
+  // Unread counts (per-caller, for badge)
+  const { data: unreadCounts, refetch: refetchUnread } = trpc.opsChat.getUnreadCounts.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchInterval: 30_000,
+  });
+
+  // markRead mutation — called when opening a channel or job thread
+  const markRead = trpc.opsChat.markRead.useMutation({
+    onSuccess: () => refetchUnread(),
+  });
+
+  // seenBy for the last my-message in current channel
+  const lastMyChannelMsgId = useMemo(() => {
+    const mine = [...channelMsgs].reverse().find((m) => m.from === callerName);
+    return mine ? mine.id : null;
+  }, [channelMsgs, callerName]);
+
+  const { data: channelSeenBy } = trpc.opsChat.getSeenBy.useQuery(
+    { messageId: lastMyChannelMsgId!, channel: activeChannel },
+    { enabled: isAuthenticated && activeTab === "channels" && lastMyChannelMsgId !== null, refetchInterval: 10_000 }
+  );
+
+  // seenBy for the last my-message in current job thread
+  const lastMyThreadMsgId = useMemo(() => {
+    if (!jobDetail?.thread) return null;
+    const mine = [...jobDetail.thread].reverse().find((m) => m.from === callerName);
+    return mine ? Number(mine.id) : null;
+  }, [jobDetail?.thread, callerName]);
+
+  const { data: threadSeenBy } = trpc.opsChat.getSeenBy.useQuery(
+    { messageId: lastMyThreadMsgId!, cleanerJobId: selectedJobId! },
+    { enabled: isAuthenticated && activeTab === "today" && lastMyThreadMsgId !== null && selectedJobId !== null, refetchInterval: 10_000 }
+  );
+
   // ── Send message mutation ───────────────────────────────────────────────────
   const sendMsg = trpc.opsChat.sendMessage.useMutation({
     onSuccess: () => {
@@ -344,6 +415,22 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       setSelectedJobId(jobs[0].id);
     }
   }, [jobs, selectedJobId]);
+
+  // Mark channel as read when switching channels or opening channel tab
+  useEffect(() => {
+    if (!isAuthenticated || activeTab !== "channels" || channelMsgs.length === 0) return;
+    const lastId = channelMsgs[channelMsgs.length - 1]?.id;
+    if (lastId) markRead.mutate({ lastMessageId: lastId, channel: activeChannel });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChannel, activeTab, channelMsgs.length, isAuthenticated]);
+
+  // Mark job thread as read when opening a job
+  useEffect(() => {
+    if (!isAuthenticated || !selectedJobId || !jobDetail?.thread?.length) return;
+    const lastId = Number(jobDetail.thread[jobDetail.thread.length - 1]?.id);
+    if (lastId) markRead.mutate({ lastMessageId: lastId, cleanerJobId: selectedJobId });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJobId, jobDetail?.thread?.length, isAuthenticated]);
 
   // Scroll thread to bottom on new messages
   useEffect(() => {
@@ -645,7 +732,18 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         {jobDetail.thread.length === 0 ? (
                           <p className="text-sm text-slate-400 text-center py-8">No messages yet — start the thread below.</p>
                         ) : (
-                          jobDetail.thread.map((msg) => <ThreadMessage key={msg.id} msg={msg} callerName={callerName} />)
+                          jobDetail.thread.map((msg, idx) => {
+                            const isLast = idx === jobDetail.thread.length - 1;
+                            const isMine = msg.from === callerName;
+                            return (
+                              <ThreadMessage
+                                key={msg.id}
+                                msg={msg}
+                                callerName={callerName}
+                                seenBy={isLast && isMine ? (threadSeenBy?.seenBy ?? []) : undefined}
+                              />
+                            );
+                          })
                         )}
                         <div ref={threadBottomRef} />
                       </div>
@@ -728,9 +826,18 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 ) : channelMsgs.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-8">No messages in this channel yet.</p>
                 ) : (
-                  channelMsgs.map((msg) => (
-                    <ThreadMessage key={msg.id} msg={{ ...msg, id: String(msg.id), source: "ops" }} callerName={callerName} />
-                  ))
+                  channelMsgs.map((msg, idx) => {
+                    const isLast = idx === channelMsgs.length - 1;
+                    const isMine = msg.from === callerName;
+                    return (
+                      <ThreadMessage
+                        key={msg.id}
+                        msg={{ ...msg, id: String(msg.id), source: "ops" }}
+                        callerName={callerName}
+                        seenBy={isLast && isMine ? (channelSeenBy?.seenBy ?? []) : undefined}
+                      />
+                    );
+                  })
                 )}
                 <div ref={threadBottomRef} />
               </div>

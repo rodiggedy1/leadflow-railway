@@ -1510,6 +1510,31 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
 export type OpsChatMessage = typeof opsChatMessages.$inferSelect;
 export type InsertOpsChatMessage = typeof opsChatMessages.$inferInsert;
 
+// ── OpsChat Read Receipts ─────────────────────────────────────────────────────
+/**
+ * Tracks the last message ID each user has seen per channel or job thread.
+ * Used for unread badge counts and "Seen by X" read receipts.
+ */
+export const opsChatReads = mysqlTable("ops_chat_reads", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Caller identity key: "owner:{openId}" or "agent:{agentId}" */
+  callerId: varchar("callerId", { length: 128 }).notNull(),
+  /** Display name of the reader */
+  callerName: varchar("callerName", { length: 128 }).notNull(),
+  /** Channel name (null if job thread) */
+  channel: varchar("channel", { length: 64 }),
+  /** Job ID (null if channel) */
+  cleanerJobId: int("cleanerJobId"),
+  /** The last ops_chat_messages.id this user has seen */
+  lastReadMessageId: int("lastReadMessageId").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+}, (table) => ({
+  idxCaller: index("idx_ocr_caller").on(table.callerId),
+  idxChannel: index("idx_ocr_channel").on(table.channel),
+  idxJob: index("idx_ocr_job").on(table.cleanerJobId),
+}));
+export type OpsChatRead = typeof opsChatReads.$inferSelect;
+
 // ── Issue Flags ───────────────────────────────────────────────────────────────
 /**
  * Tracks issue flags raised on jobs (from cleaners or agents).

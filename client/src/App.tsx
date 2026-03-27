@@ -8,6 +8,8 @@ import { lazy, Suspense, useEffect } from "react";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import { MessageCircle } from "lucide-react";
 import OpsChat from "./pages/OpsChat";
+import { trpc } from "./lib/trpc";
+import { useAuth } from "./_core/hooks/useAuth";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -97,6 +99,20 @@ function Router() {
 function GlobalOpsChat() {
   const [location] = useLocation();
   const { state, open, minimize, close } = useOpsChatWindow();
+  const { user } = useAuth();
+
+  // Fetch unread counts for the badge — only when authenticated and OpsChat is not open
+  const { data: agentMe } = trpc.agents.me.useQuery(undefined, { retry: false });
+  const isAuthenticated = Boolean(user) || Boolean(agentMe);
+
+  const { data: unreadCounts } = trpc.opsChat.getUnreadCounts.useQuery(undefined, {
+    enabled: isAuthenticated && state !== "open",
+    refetchInterval: 30_000,
+  });
+
+  const totalUnread = unreadCounts
+    ? (unreadCounts.urgent + unreadCounts.dispatch + unreadCounts.general + unreadCounts.cleaners)
+    : 0;
 
   // Only show on admin / agent / call-assist routes
   const isEligible =
@@ -120,11 +136,17 @@ function GlobalOpsChat() {
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2">
           <button
             onClick={open}
-            className="flex items-center gap-2 rounded-full bg-slate-900 text-white shadow-lg px-4 py-2.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+            className="relative flex items-center gap-2 rounded-full bg-slate-900 text-white shadow-lg px-4 py-2.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
             aria-label="Open OpsChat"
           >
             <MessageCircle className="w-4 h-4" />
             <span className="text-xs font-semibold">OpsChat</span>
+            {/* Unread badge */}
+            {totalUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 shadow">
+                {totalUnread > 99 ? "99+" : totalUnread}
+              </span>
+            )}
           </button>
           {state === "minimized" && (
             <button

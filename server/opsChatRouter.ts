@@ -21,6 +21,7 @@ import {
   jobSmsReplies,
   opsChatMessages,
   issueFlags,
+  opsChatReads,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 
@@ -553,5 +554,107 @@ export const opsChatRouter = router({
       flaggedByName: f.flaggedByName ?? "",
       hasPhoto: f.hasPhoto === 1,
     }));
+  }),
+
+  /**
+   * Mark all messages up to `lastMessageId` as read for the current caller.
+   * Called when the user opens a channel or job thread.
+   */
+  markRead: opsChatProcedure
+    .input(z.object({
+      lastMessageId: z.number().int().positive(),
+      channel: z.string().optional(),
+      cleanerJobId: z.number().int().positive().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return;
+      const callerId = ctx.opsCaller.id;
+      const callerName = ctx.opsCaller.name;
+      // Upsert: update if exists, insert if not
+      const existing = await db
+        .select({ id: opsChatReads.id })
+        .from(opsChatReads)
+        .where(
+          and(
+            eq(opsChatReads.callerId, callerId),
+            input.channel ? eq(opsChatReads.channel, input.channel) : isNull(opsChatReads.channel),
+            input.cleanerJobId ? eq(opsChatReads.cleanerJobId, input.cleanerJobId) : isNull(opsChatReads.cleanerJobId),
+          )
+        )
+        .limit(1);
+      if (existing.length > 0) {
+        await db.update(opsChatReads)
+          .set({ lastReadMessageId: input.lastMessageId, callerName, updatedAt: new Date() })
+          .where(eq(opsChatReads.id, existing[0].id));
+      } else {
+        await db.insert(opsChatReads).values({
+          callerId,
+          callerName,
+          channel: input.channel ?? null,
+          cleanerJobId: input.cleanerJobId ?? null,
+          lastReadMessageId: input.lastMessageId,
+        });
+      }
+    }),
+
+  /**
+   * Get who has seen a specific message (for read receipts).
+   * Returns names of callers whose lastReadMessageId >= the given messageId.
+   */
+  getSeenBy: opsChatProcedure
+    .input(z.object({
+      messageId: z.number().int().positive(),
+      channel: z.string().optional(),
+      cleanerJobId: z.number().int().positive().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { seenBy: [] };
+      const { gte: gteOp } = await import("drizzle-orm");
+      const rows = await db
+        .select({ callerName: opsChatReads.callerName, callerId: opsChatReads.callerId })
+        .from(opsChatReads)
+        .where(
+          and(
+            gteOp(opsChatReads.lastReadMessageId, input.messageId),
+            input.channel ? eq(opsChatReads.channel, input.channel) : isNull(opsChatReads.channel),
+            input.cleanerJobId ? eq(opsChatReads.cleanerJobId, input.cleanerJobId) : isNull(opsChatReads.cleanerJobId),
+          )
+        );
+      // Exclude the current caller from their own read receipts
+      const seenBy = rows
+        .filter((r) => r.callerId !== ctx.opsCaller.id)
+        .map((r) => r.callerName);
+      return { seenBy };
+    }),
+
+  /**
+   * Get unread message counts per channel for the current caller.
+   * Returns count of messages with id > caller's lastReadMessageId.
+   */
+  getUnreadCounts: opsChatProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { urgent: 0, dispatch: 0, general: 0, cleaners: 0 };
+    const callerId = ctx.opsCaller.id;
+    const channels = ["urgent", "dispatch", "general", "cleaners"] as const;
+    const result: Record<string, number> = {};
+    const { gt: gtOp } = await import("drizzle-orm");
+    for (const ch of channels) {
+      // Get caller's last read message id for this channel
+      const readRow = await db
+        .select({ lastReadMessageId: opsChatReads.lastReadMessageId })
+        .from(opsChatReads)
+        .where(and(eq(opsChatReads.callerId, callerId), eq(opsChatReads.channel, ch)))
+        .limit(1);
+      const lastRead = readRow[0]?.lastReadMessageId ?? 0;
+      // Count messages after that
+      const rows = await db
+        .select({ id: opsChatMessages.id })
+        .from(opsChatMessages)
+        .where(and(eq(opsChatMessages.channel, ch), gtOp(opsChatMessages.id, lastRead)));
+      result[ch] = rows.length;
+    }
+    return result as { urgent: number; dispatch: number; general: number; cleaners: number };
   }),
 });
