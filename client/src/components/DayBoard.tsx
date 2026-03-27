@@ -308,17 +308,11 @@ function JobBlock({
   onClick,
   isSelected,
   hasUnread,
-  slotIndex = 0,
-  totalSlots = 1,
-  laneHeight = 72,
 }: {
   job: Job;
   onClick: (job: Job) => void;
   isSelected: boolean;
   hasUnread?: boolean;
-  slotIndex?: number;
-  totalSlots?: number;
-  laneHeight?: number;
 }) {
   const startMin = parseToMinutes(job.serviceDateTime);
   if (startMin === null || startMin > BOARD_MINUTES || startMin < -30) return null;
@@ -343,20 +337,14 @@ function JobBlock({
     <button
       onClick={() => onClick(job)}
       className={`
-        absolute rounded-lg border transition-all duration-150 text-left overflow-hidden
+        absolute top-1 bottom-1 rounded-lg border transition-all duration-150 text-left overflow-hidden
         focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500
         ${sc.bg} ${sc.border} ${sc.text}
         ${isSelected ? "ring-2 ring-blue-500 ring-offset-1 shadow-md z-10" : "hover:shadow-md hover:z-10 hover:-translate-y-px"}
         ${isActive && sc.pulse ? "shadow-sm" : ""}
         ${hasIssue ? "animate-pulse-slow" : ""}
       `}
-      style={{
-        left: `${leftPct}%`,
-        width: `calc(${widthPct}% - 4px)`,
-        minWidth: "48px",
-        top: `${Math.round((slotIndex / totalSlots) * laneHeight) + 3}px`,
-        height: `${Math.round(laneHeight / totalSlots) - 6}px`,
-      }}
+      style={{ left: `${leftPct}%`, width: `calc(${widthPct}% - 4px)`, minWidth: "48px" }}
       title={`${job.customerName} — ${job.jobAddress}`}
     >
       {/* Active pulse ring */}
@@ -409,69 +397,7 @@ function JobBlock({
   );
 }
 
-/**
- * For each job, compute its vertical slot within a fixed-height lane.
- * Non-overlapping jobs get the full height (slot 0 of 1).
- * Overlapping jobs are split: slot 0 = top half, slot 1 = bottom half.
- * Only handles up to 2 concurrent jobs per time window (covers 99% of cases).
- */
-function assignSlots(jobs: Job[]): Array<{ job: Job; slotIndex: number; totalSlots: number }> {
-  const sorted = [...jobs].sort((a, b) => {
-    const aMin = parseToMinutes(a.serviceDateTime) ?? 0;
-    const bMin = parseToMinutes(b.serviceDateTime) ?? 0;
-    return aMin - bMin;
-  });
-
-  // Build overlap groups: jobs that overlap with each other
-  // Each job gets a slotIndex within its overlap group
-  const result: Array<{ job: Job; slotIndex: number; totalSlots: number }> = [];
-  // slotEnd[i] = end minute of the job currently occupying slot i
-  const slotEnd: number[] = [];
-
-  for (const job of sorted) {
-    const startMin = parseToMinutes(job.serviceDateTime) ?? 0;
-    const duration = estimateDuration(job.serviceType, job.bedrooms);
-    const endMin = startMin + duration;
-
-    // Find a free slot
-    let assigned = -1;
-    for (let s = 0; s < slotEnd.length; s++) {
-      if (startMin >= slotEnd[s]) {
-        slotEnd[s] = endMin;
-        assigned = s;
-        break;
-      }
-    }
-    if (assigned === -1) {
-      slotEnd.push(endMin);
-      assigned = slotEnd.length - 1;
-    }
-    result.push({ job, slotIndex: assigned, totalSlots: 1 }); // totalSlots patched below
-  }
-
-  // Patch totalSlots: for each job, count how many jobs overlap with it
-  for (let i = 0; i < result.length; i++) {
-    const aStart = parseToMinutes(result[i].job.serviceDateTime) ?? 0;
-    const aDur = estimateDuration(result[i].job.serviceType, result[i].job.bedrooms);
-    const aEnd = aStart + aDur;
-    let maxSlot = result[i].slotIndex;
-    for (let j = 0; j < result.length; j++) {
-      if (i === j) continue;
-      const bStart = parseToMinutes(result[j].job.serviceDateTime) ?? 0;
-      const bDur = estimateDuration(result[j].job.serviceType, result[j].job.bedrooms);
-      const bEnd = bStart + bDur;
-      // Check overlap
-      if (aStart < bEnd && aEnd > bStart) {
-        maxSlot = Math.max(maxSlot, result[j].slotIndex);
-      }
-    }
-    result[i].totalSlots = maxSlot + 1;
-  }
-
-  return result;
-}
-
-/** One cleaner swim lane row — always fixed height */
+/** One cleaner swim lane row */
 function SwimLane({
   cleanerName,
   jobs,
@@ -487,9 +413,6 @@ function SwimLane({
   unreadJobIds?: Set<number>;
   nowPos?: number | null;
 }) {
-  const slotted = assignSlots(jobs);
-  const LANE_HEIGHT = 72;
-
   return (
     <div className="flex items-stretch border-b border-slate-100 last:border-b-0 group">
       {/* Lane label */}
@@ -500,8 +423,8 @@ function SwimLane({
         </div>
       </div>
 
-      {/* Timeline area — fixed height */}
-      <div className="flex-1 relative" style={{ height: `${LANE_HEIGHT}px` }}>
+      {/* Timeline area */}
+      <div className="flex-1 relative" style={{ height: "72px" }}>
         {/* Hour grid lines */}
         {HOUR_LABELS.map((_, i) => (
           <div
@@ -511,7 +434,7 @@ function SwimLane({
           />
         ))}
 
-        {/* Now line */}
+        {/* Now line — rendered here so it's scoped to the timeline area, not the label column */}
         {nowPos != null && (
           <div
             className="absolute top-0 bottom-0 z-20 pointer-events-none w-px bg-rose-500 opacity-80"
@@ -519,16 +442,13 @@ function SwimLane({
           />
         )}
 
-        {slotted.map(({ job, slotIndex, totalSlots }) => (
+        {jobs.map((job) => (
           <JobBlock
             key={job.id}
             job={job}
             onClick={onJobClick}
             isSelected={selectedJobId === job.id}
             hasUnread={unreadJobIds?.has(job.id)}
-            slotIndex={slotIndex}
-            totalSlots={totalSlots}
-            laneHeight={LANE_HEIGHT}
           />
         ))}
       </div>
