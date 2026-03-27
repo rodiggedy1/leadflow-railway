@@ -445,20 +445,20 @@ export function registerWebhookRoutes(app: Express) {
         const isYes = /\b(yes|yeah|yep|sure|ok|okay|sounds good|please|definitely|absolutely|let's do it|lets do it|yes please|i'd like that|id like that)\b/i.test(lc);
         const isNo = /\b(no|nope|not now|maybe later|not interested|no thanks|no thank you|nah|pass)\b/i.test(lc);
         let replyMsg: string;
-        // isYes → move to CONFIRMATION so it surfaces in the active leads pipeline
-        // ("New Leads" column) and sorts to the top by lastCustomerReplyAt.
-        // isNo / ambiguous → close out as REVIEW_REBOOKING_DONE.
-        let newStage: ConversationStage = "REVIEW_REBOOKING_DONE";
+        // ALL replies surface in the pipeline so agents can see and act on them.
+        // isYes  → CONFIRMATION ("New Leads" column — ready to book)
+        // isNo   → UNHANDLED   ("Follow Up" column — agent can decide)
+        // other  → UNHANDLED   ("Follow Up" column — agent can decide)
+        let newStage: ConversationStage;
         if (isYes) {
           replyMsg = `Amazing, ${firstName}! 🎉 I'll have someone reach out shortly to lock in your spot. Talk soon!`;
-          newStage = "CONFIRMATION"; // surfaces in pipeline → agent follows up to book
+          newStage = "CONFIRMATION";
         } else if (isNo) {
           replyMsg = `No worries at all, ${firstName}! If you ever need us again, just text back. 😊`;
-          newStage = "REVIEW_REBOOKING_DONE";
+          newStage = "UNHANDLED";
         } else {
-          // Ambiguous — keep open and forward to agent
           replyMsg = `Thanks for the reply, ${firstName}! I'll have someone from the team follow up with you. 😊`;
-          newStage = "REVIEW_REBOOKING_DONE";
+          newStage = "UNHANDLED";
         }
         history.push({ role: "user", content: inboundText, ts: Date.now() });
         history.push({ role: "assistant", content: replyMsg, ts: Date.now() });

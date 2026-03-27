@@ -251,3 +251,5 @@
 - [x] Review Tracker: highlight 1-3 star rows in red in the funnel table
 - [x] Rebooking reply intent: detect "yes" reply → stage set to CONFIRMATION (surfaces in New Leads pipeline)
 - [x] Leads pipeline: new SMS replies always surface at the top (sort by lastCustomerReplyAt desc — already implemented, confirmed working)
+- [x] Review rebooking: surface ALL replies (yes/no/ambiguous) in the leads pipeline
+- [x] Kanban card: add "Review Reply" badge for review_rebooking leadSource

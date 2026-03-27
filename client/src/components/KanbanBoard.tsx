@@ -398,18 +398,26 @@ function LeadCard({
           )}
         </div>
 
-        {/* Row 3: source badge + time ago + call icon */}
+        {/* Row 3: source badge + review rebooking badge + time ago + call icon */}
         <div className="flex items-center justify-between">
-          <span
-            className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full ${
-              isCampaign
-                ? "bg-purple-100 text-purple-600 font-semibold"
-                : "text-gray-400"
-            }`}
-          >
-            {srcIcon}
-            {srcLabel}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full ${
+                isCampaign
+                  ? "bg-purple-100 text-purple-600 font-semibold"
+                  : "text-gray-400"
+              }`}
+            >
+              {srcIcon}
+              {srcLabel}
+            </span>
+            {lead.leadSource === "review_rebooking" && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">
+                <Star className="w-2.5 h-2.5" />
+                Review Reply
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {lead.leadPhone && (
               <a
