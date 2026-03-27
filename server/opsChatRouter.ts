@@ -99,6 +99,27 @@ export const opsChatRouter = router({
       .where(and(eq(cleanerJobs.jobDate, today)))
       .orderBy(cleanerJobs.serviceDateTime);
 
+    // Fetch flaggedAt for open flags so the frontend can show escalation timers
+    const flaggedJobIds = rows.filter(r => r.flagged === 1).map(r => r.id);
+    let flaggedAtMap: Record<number, number> = {};
+    if (flaggedJobIds.length > 0) {
+      const flags = await db
+        .select({ cleanerJobId: issueFlags.cleanerJobId, flaggedAt: issueFlags.flaggedAt })
+        .from(issueFlags)
+        .where(
+          and(
+            isNull(issueFlags.resolvedAt),
+            or(...flaggedJobIds.map(id => eq(issueFlags.cleanerJobId, id)))
+          )
+        )
+        .orderBy(desc(issueFlags.flaggedAt));
+      for (const f of flags) {
+        if (f.cleanerJobId && !flaggedAtMap[f.cleanerJobId]) {
+          flaggedAtMap[f.cleanerJobId] = f.flaggedAt;
+        }
+      }
+    }
+
     // Fetch unread ops-chat message counts per job
     const jobIds = rows.map((r) => r.id);
     let msgCounts: Record<number, number> = {};
@@ -131,6 +152,7 @@ export const opsChatRouter = router({
       jobStatus: r.jobStatus,
       issueNote: r.issueNote ?? null,
       flagged: r.flagged === 1,
+      flaggedAt: r.flagged === 1 ? (flaggedAtMap[r.id] ?? null) : null,
       messageCount: msgCounts[r.id] ?? 0,
       cleanerProfileId: r.cleanerProfileId,
       photoSubmitted: r.photoSubmitted === 1,
@@ -463,6 +485,26 @@ export const opsChatRouter = router({
         authorName: input.flaggedByName,
         authorRole: "office",
         body: `⚠️ Issue flagged: ${input.issueNote}`,
+        mediaUrl: input.photoUrl ?? null,
+        quickAction: "issue",
+      });
+
+      // Auto-post a system alert into the MIB Command Chat (command channel)
+      // so the whole team sees it in real time without opening the job thread
+      const [jobRow] = await db
+        .select({ customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+      const jobLabel = jobRow?.customerName
+        ? `${jobRow.customerName.split(" ")[0]} Home`
+        : jobRow?.jobAddress ?? `Job #${input.cleanerJobId}`;
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "🚨 Dispatch Alert",
+        authorRole: "office",
+        body: `🚨 Issue raised at **${jobLabel}** (Job #${input.cleanerJobId}): ${input.issueNote}`,
         mediaUrl: input.photoUrl ?? null,
         quickAction: "issue",
       });

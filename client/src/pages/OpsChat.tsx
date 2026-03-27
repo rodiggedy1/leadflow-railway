@@ -63,8 +63,29 @@ interface JobSummary {
   jobStatus: string | null;
   issueNote: string | null;
   flagged: boolean;
+  flaggedAt: number | null;
   messageCount: number;
   photoSubmitted: boolean;
+}
+
+// ── EscalationTimer ───────────────────────────────────────────────────────────
+
+/** Live countdown showing how long a flagged issue has been open. */
+function EscalationTimer({ flaggedAt, selected }: { flaggedAt: number; selected: boolean }) {
+  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - flaggedAt) / 60_000));
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - flaggedAt) / 60_000)), 30_000);
+    return () => clearInterval(id);
+  }, [flaggedAt]);
+  const label = elapsed < 1 ? "< 1 min unresolved" : `${elapsed} min unresolved`;
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
+      selected ? "bg-red-500/30 text-red-200" : "bg-red-100 text-red-700"
+    )}>
+      ⚠️ {label}
+    </span>
+  );
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -228,8 +249,13 @@ function JobCard({ job, selected, onClick }: { job: JobSummary; selected: boolea
           </div>
         )}
       </div>
+      {job.flagged && job.flaggedAt && (
+        <div className="mt-2">
+          <EscalationTimer flaggedAt={job.flaggedAt} selected={selected} />
+        </div>
+      )}
       {job.issueNote && (
-        <div className={cn("mt-3 rounded-xl px-3 py-2 text-xs", selected ? "bg-white/10 text-slate-100" : "bg-red-50 text-red-700")}>
+        <div className={cn("mt-2 rounded-xl px-3 py-2 text-xs", selected ? "bg-white/10 text-slate-100" : "bg-red-50 text-red-700")}>
           {job.issueNote}
         </div>
       )}
