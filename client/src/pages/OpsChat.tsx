@@ -35,6 +35,13 @@ import {
   Square,
   MicOff,
   CheckCircle2,
+  Car,
+  Play,
+  CheckCheck,
+  Clock,
+  Camera as CameraIcon,
+  Flag,
+  MapPin,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -228,17 +235,42 @@ function JobCard({ job, selected, onClick }: { job: JobSummary; selected: boolea
   );
 }
 
+// Map event type → lucide icon
+const TIMELINE_ICON: Record<string, React.ElementType> = {
+  schedule:  Car,
+  arrival:   MapPin,
+  progress:  Play,
+  complete:  CheckCheck,
+  photo:     CameraIcon,
+  issue:     Flag,
+  late:      Clock,
+};
+
+// Strip leading "TeamName " or "TeamName is" etc. from event text
+function stripTeamName(text: string): string {
+  // Remove patterns like "GoGreen is on the way" → "On the way"
+  // or "GoGreen started the job" → "Started the job"
+  // or "GoGreen marked job complete" → "Marked job complete"
+  return text.replace(/^[A-Za-z0-9 ]+ (is |has |marked |started |uploaded |flagged |arrived|completed)/i, (_, verb) =>
+    verb.charAt(0).toUpperCase() + verb.slice(1)
+  ).replace(/^[A-Za-z0-9 ]+ (?=on the way|at the property|the job|job complete|photos|an issue)/i, "");
+}
+
 function TimelineEvent({ event }: { event: { id: string; ts: number; type: string; text: string } }) {
-  const tone = TIMELINE_TONE[event.type] ?? TIMELINE_TONE.office;
-  const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false });
+  const tone = TIMELINE_TONE[event.type] ?? TIMELINE_TONE.schedule;
+  // 12-hour clock, no seconds
+  const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const Icon = TIMELINE_ICON[event.type] ?? Clock;
+  const label = stripTeamName(event.text);
   return (
     <span className={cn(
       "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm whitespace-nowrap shrink-0",
       tone.bg, tone.border
     )}>
+      <Icon className={cn("w-3.5 h-3.5 shrink-0", tone.time)} />
       <span className={cn("font-bold tabular-nums", tone.time)}>{timeStr}</span>
       <span className="text-slate-300 select-none font-light">·</span>
-      <span className={cn("font-medium", tone.label)}>{event.text}</span>
+      <span className={cn("font-medium", tone.label)}>{label}</span>
     </span>
   );
 }
