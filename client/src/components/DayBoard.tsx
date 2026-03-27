@@ -308,11 +308,15 @@ function JobBlock({
   onClick,
   isSelected,
   hasUnread,
+  trackOffset = 0,
+  trackHeight = 72,
 }: {
   job: Job;
   onClick: (job: Job) => void;
   isSelected: boolean;
   hasUnread?: boolean;
+  trackOffset?: number;
+  trackHeight?: number;
 }) {
   const startMin = parseToMinutes(job.serviceDateTime);
   if (startMin === null || startMin > BOARD_MINUTES || startMin < -30) return null;
@@ -337,14 +341,20 @@ function JobBlock({
     <button
       onClick={() => onClick(job)}
       className={`
-        absolute top-1 bottom-1 rounded-lg border transition-all duration-150 text-left overflow-hidden
+        absolute rounded-lg border transition-all duration-150 text-left overflow-hidden
         focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500
         ${sc.bg} ${sc.border} ${sc.text}
         ${isSelected ? "ring-2 ring-blue-500 ring-offset-1 shadow-md z-10" : "hover:shadow-md hover:z-10 hover:-translate-y-px"}
         ${isActive && sc.pulse ? "shadow-sm" : ""}
         ${hasIssue ? "animate-pulse-slow" : ""}
       `}
-      style={{ left: `${leftPct}%`, width: `calc(${widthPct}% - 4px)`, minWidth: "48px" }}
+      style={{
+        left: `${leftPct}%`,
+        width: `calc(${widthPct}% - 4px)`,
+        minWidth: "48px",
+        top: `${trackOffset + 4}px`,
+        height: `${trackHeight - 8}px`,
+      }}
       title={`${job.customerName} — ${job.jobAddress}`}
     >
       {/* Active pulse ring */}
@@ -397,6 +407,48 @@ function JobBlock({
   );
 }
 
+/**
+ * Assign each job to a sub-row (track) so that overlapping jobs are stacked
+ * vertically instead of rendered on top of each other.
+ * Returns an array of [job, trackIndex] pairs.
+ */
+function assignTracks(jobs: Job[]): Array<{ job: Job; track: number }> {
+  // Sort by start time so earlier jobs get lower track numbers
+  const sorted = [...jobs].sort((a, b) => {
+    const aMin = parseToMinutes(a.serviceDateTime) ?? 0;
+    const bMin = parseToMinutes(b.serviceDateTime) ?? 0;
+    return aMin - bMin;
+  });
+
+  // trackEnd[i] = end minute of the last job placed in track i
+  const trackEnd: number[] = [];
+  const result: Array<{ job: Job; track: number }> = [];
+
+  for (const job of sorted) {
+    const startMin = parseToMinutes(job.serviceDateTime) ?? 0;
+    const duration = estimateDuration(job.serviceType, job.bedrooms);
+    const endMin = startMin + duration;
+
+    // Find the first track where the job fits (no overlap)
+    let placed = false;
+    for (let t = 0; t < trackEnd.length; t++) {
+      if (startMin >= trackEnd[t]) {
+        trackEnd[t] = endMin;
+        result.push({ job, track: t });
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      // Need a new track
+      trackEnd.push(endMin);
+      result.push({ job, track: trackEnd.length - 1 });
+    }
+  }
+
+  return result;
+}
+
 /** One cleaner swim lane row */
 function SwimLane({
   cleanerName,
@@ -413,6 +465,12 @@ function SwimLane({
   unreadJobIds?: Set<number>;
   nowPos?: number | null;
 }) {
+  // Assign jobs to non-overlapping tracks
+  const tracked = assignTracks(jobs);
+  const numTracks = Math.max(1, ...tracked.map(t => t.track + 1));
+  const ROW_HEIGHT = 72; // px per track
+  const totalHeight = numTracks * ROW_HEIGHT;
+
   return (
     <div className="flex items-stretch border-b border-slate-100 last:border-b-0 group">
       {/* Lane label */}
@@ -423,8 +481,8 @@ function SwimLane({
         </div>
       </div>
 
-      {/* Timeline area */}
-      <div className="flex-1 relative" style={{ height: "72px" }}>
+      {/* Timeline area — height expands to fit all tracks */}
+      <div className="flex-1 relative" style={{ height: `${totalHeight}px` }}>
         {/* Hour grid lines */}
         {HOUR_LABELS.map((_, i) => (
           <div
@@ -434,7 +492,16 @@ function SwimLane({
           />
         ))}
 
-        {/* Now line — rendered here so it's scoped to the timeline area, not the label column */}
+        {/* Track dividers (only when more than one track) */}
+        {numTracks > 1 && Array.from({ length: numTracks - 1 }, (_, i) => (
+          <div
+            key={`track-div-${i}`}
+            className="absolute left-0 right-0 border-t border-slate-100 border-dashed pointer-events-none"
+            style={{ top: `${(i + 1) * ROW_HEIGHT}px` }}
+          />
+        ))}
+
+        {/* Now line */}
         {nowPos != null && (
           <div
             className="absolute top-0 bottom-0 z-20 pointer-events-none w-px bg-rose-500 opacity-80"
@@ -442,13 +509,15 @@ function SwimLane({
           />
         )}
 
-        {jobs.map((job) => (
+        {tracked.map(({ job, track }) => (
           <JobBlock
             key={job.id}
             job={job}
             onClick={onJobClick}
             isSelected={selectedJobId === job.id}
             hasUnread={unreadJobIds?.has(job.id)}
+            trackOffset={track * ROW_HEIGHT}
+            trackHeight={ROW_HEIGHT}
           />
         ))}
       </div>
