@@ -264,3 +264,4 @@
 - [x] AdminDashboard: fix Call Assist button not visible on lead table rows
 - [x] LiveCallAssist: rewrite outbound opener with world-class high-converting sales script
 - [x] Leads page: add persistent Call Assist icon next to phone icon on lead table rows
+- [x] CleanerPortal: post-completion modal after marking job done — earn $50 review ask + set next job on the way

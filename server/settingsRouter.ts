@@ -322,6 +322,7 @@ export type PayRules = {
   streakBonus: number;
   streakTarget: number;
   recleanPenalty: number;
+  googleReviewUrl: string;
 };
 
 /** Default pay rules (used as fallback if DB is unavailable) */
@@ -333,6 +334,7 @@ export const DEFAULT_PAY_RULES: PayRules = {
   streakBonus: 50,
   streakTarget: 10,
   recleanPenalty: 30,
+  googleReviewUrl: "https://share.google/Tm468dywmXkUnBQBL",
 };
 
 /**
@@ -349,7 +351,10 @@ export async function getPayRules(): Promise<PayRules> {
     "pay_streakTarget",
     "pay_recleanPenalty",
   ];
-  const results = await Promise.all(keys.map(k => getSetting(k, "")));
+  const [results, reviewUrl] = await Promise.all([
+    Promise.all(keys.map(k => getSetting(k, ""))),
+    getSetting("googleReviewUrl", DEFAULT_PAY_RULES.googleReviewUrl),
+  ]);
   const parse = (val: string, fallback: number) => {
     const n = parseFloat(val);
     return isNaN(n) || n < 0 ? fallback : n;
@@ -362,6 +367,7 @@ export async function getPayRules(): Promise<PayRules> {
     streakBonus:         parse(results[4], DEFAULT_PAY_RULES.streakBonus),
     streakTarget:        Math.max(1, Math.round(parse(results[5], DEFAULT_PAY_RULES.streakTarget))),
     recleanPenalty:      parse(results[6], DEFAULT_PAY_RULES.recleanPenalty),
+    googleReviewUrl:     reviewUrl || DEFAULT_PAY_RULES.googleReviewUrl,
   };
 }
 

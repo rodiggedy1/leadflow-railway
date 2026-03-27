@@ -315,12 +315,13 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
   );
 }
 
-function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName }: {
+function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName }: {
   job: Job;
+  allJobs: Job[];
   onPhotoUploaded: () => void;
   onMarkedComplete: () => void;
   onStatusUpdated: () => void;
-  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
+  payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number; googleReviewUrl?: string } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
   cleanerName?: string;
@@ -348,6 +349,8 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
 
   // Confirm-complete modal state
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  // Post-complete "What's Next" modal
+  const [showPostComplete, setShowPostComplete] = useState(false);
 
   const statusMutation = trpc.cleaner.updateJobStatus.useMutation({
     onSuccess: () => { onStatusUpdated(); },
@@ -393,7 +396,9 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
   const confirmMarkComplete = () => {
     setShowCompleteConfirm(false);
     setCompleting(true);
-    completeMutation.mutate({ cleanerJobId: job.id });
+    completeMutation.mutate({ cleanerJobId: job.id }, {
+      onSuccess: () => { setShowPostComplete(true); },
+    });
   };
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1217,6 +1222,71 @@ function JobCard({ job, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payR
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Post-completion "What's Next" modal ─────────────────────────── */}
+      <Dialog open={showPostComplete} onOpenChange={setShowPostComplete}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-sm mx-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white text-lg flex items-center gap-2">
+              <span className="text-2xl">🎉</span>
+              Job Complete!
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-1">
+            {/* Review ask */}
+            <div className="p-4 bg-amber-950/60 border border-amber-500/40 rounded-xl">
+              <p className="text-amber-300 font-bold text-sm flex items-center gap-2 mb-1">
+                <span className="text-lg">⭐</span>
+                Earn an extra ${payRules?.fiveStarBonus ?? 10} — Ask for a 5-star review
+              </p>
+              <p className="text-amber-400/80 text-xs mb-3">
+                Before you leave, ask the client: <span className="italic text-amber-200">"We'd really appreciate it if you could leave us a quick Google review — it only takes 30 seconds!"</span>
+              </p>
+              <a
+                href={payRules?.googleReviewUrl ?? "https://share.google/Tm468dywmXkUnBQBL"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm transition-colors"
+                onClick={() => setShowPostComplete(false)}
+              >
+                Open Google Review Link
+              </a>
+            </div>
+
+            {/* Next job CTA — only shown if there are remaining non-completed jobs */}
+            {(() => {
+              const nextJob = allJobs.find(j => j.id !== job.id && j.bookingStatus !== "completed" && j.bookingStatus !== "cancelled" && j.bookingStatus !== "rescheduled");
+              if (!nextJob) return null;
+              return (
+                <div className="p-4 bg-slate-800 border border-slate-700 rounded-xl">
+                  <p className="text-slate-300 font-semibold text-sm mb-1">Next job: {nextJob.customerName ?? "Client"}</p>
+                  <p className="text-slate-500 text-xs mb-3">{nextJob.jobAddress ?? ""}</p>
+                  <Button
+                    size="sm"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white"
+                    onClick={() => {
+                      statusMutation.mutate({ cleanerJobId: nextJob.id, status: "on_the_way", etaLabel: "on the way" });
+                      setShowPostComplete(false);
+                    }}
+                  >
+                    Set "On the Way" for Next Job
+                  </Button>
+                </div>
+              );
+            })()}
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
+              onClick={() => setShowPostComplete(false)}
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -1630,6 +1700,7 @@ export default function CleanerPortal() {
               <JobCard
                 key={job.id}
                 job={job}
+                allJobs={jobs}
                 onPhotoUploaded={refetch}
                 onMarkedComplete={refetch}
                 onStatusUpdated={refetch}
