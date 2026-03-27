@@ -179,6 +179,14 @@ export const opsChatRouter = router({
         .where(eq(jobPhotos.cleanerJobId, input.jobId))
         .orderBy(jobPhotos.createdAt);
 
+      // Open issue flag (for resolve button)
+      const openFlags = await db
+        .select({ id: issueFlags.id, note: issueFlags.issueNote, flaggedByName: issueFlags.flaggedByName })
+        .from(issueFlags)
+        .where(and(eq(issueFlags.cleanerJobId, input.jobId), isNull(issueFlags.resolvedAt)))
+        .orderBy(desc(issueFlags.id))
+        .limit(1);
+      const openFlag = openFlags[0] ?? null;
       // Thread: ops chat messages + inbound SMS replies
       const opsMessages = await db
         .select()
@@ -319,6 +327,9 @@ export const opsChatRouter = router({
           staffNotes: job.staffNotes ?? null,
           adminNotes: job.adminNotes ?? null,
           flagged: job.flagged === 1,
+          openFlagId: openFlag?.id ?? null,
+          openFlagNote: openFlag?.note ?? null,
+          openFlaggedBy: openFlag?.flaggedByName ?? null,
           photoSubmitted: job.photoSubmitted === 1,
           customerPhone: job.customerPhone ?? null,
           cleanerPhone: profile?.phone ?? null,

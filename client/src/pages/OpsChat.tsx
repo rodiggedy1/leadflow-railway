@@ -590,6 +590,21 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     onError: (e) => toast.error(e.message),
   });
 
+  // ── Resolve Issue modal state ───────────────────────────────────────────────
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveSubmitting, setResolveSubmitting] = useState(false);
+  const resolveIssue = trpc.opsChat.resolveIssue.useMutation({
+    onSuccess: () => {
+      setShowResolveModal(false);
+      setResolveNote("");
+      toast.success("Issue resolved — job returned to normal queue");
+      utils.opsChat.listTodayJobs.invalidate();
+      if (selectedJobId) utils.opsChat.getJobDetail.invalidate({ jobId: selectedJobId });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Resolved caller name — owner name takes precedence, then agent name
   const callerName = user?.name ?? agentMe?.name ?? "Office";
 
@@ -1269,9 +1284,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
               >
                 <Textarea
+                  ref={composerRef}
                   value={composer}
                   onChange={(e) => setComposer(e.target.value)}
-                  placeholder={isDragging ? "Drop photos here…" : `Message ${CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}…`}
+                  placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : `Message ${CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}…`}
                   rows={3}
                   className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                   onKeyDown={(e) => {
@@ -1279,12 +1295,58 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   }}
                 />
                 <div className="flex items-center justify-between mt-2">
-                  <button
-                    className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Camera className="h-4 w-4" /> Photo
-                  </button>
+                  <div className="flex items-center gap-1 relative">
+                    {/* Photo */}
+                    <button
+                      className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Camera className="h-4 w-4" /> Photo
+                    </button>
+                    {/* Voice */}
+                    {isRecording ? (
+                      <button
+                        className="rounded-xl px-2.5 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium"
+                        onClick={stopRecording}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        {recordingSeconds}s — Stop
+                      </button>
+                    ) : isTranscribing ? (
+                      <button disabled className="rounded-xl px-2.5 py-1.5 text-slate-400 transition text-xs flex items-center gap-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                        onClick={startRecording}
+                      >
+                        <Mic className="h-4 w-4" /> Voice
+                      </button>
+                    )}
+                    {/* Emoji */}
+                    <div ref={emojiRef} className="relative">
+                      <button
+                        className={cn("rounded-xl p-2 transition", showEmoji ? "text-slate-900 bg-white" : "text-slate-400 hover:text-slate-700 hover:bg-white")}
+                        onClick={() => setShowEmoji(v => !v)}
+                      >
+                        <Smile className="h-4 w-4" />
+                      </button>
+                      {showEmoji && (
+                        <div className="absolute bottom-10 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">
+                          <EmojiPicker
+                            theme={Theme.LIGHT}
+                            onEmojiClick={(data) => { insertEmoji(data); setShowEmoji(false); }}
+                            height={350}
+                            width={300}
+                            searchDisabled={false}
+                            skinTonesDisabled
+                            previewConfig={{ showPreview: false }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <Button
                     onClick={handleSend}
                     disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0) || sendMsg.isPending}
@@ -1406,23 +1468,41 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 >
                   Offer Rebook
                 </Button>
-                {/* Flag as Needs Attention — full width */}
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "col-span-2 h-9 rounded-xl text-xs font-medium whitespace-nowrap transition",
-                    jobDetail.job.flagged
-                      ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                      : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  )}
-                  onClick={() => {
-                    if (!jobDetail.job.flagged) setShowFlagModal(true);
-                  }}
-                  disabled={jobDetail.job.flagged}
-                >
-                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-                  {jobDetail.job.flagged ? "⚠️ Already flagged — Needs Attention" : "Flag as Needs Attention"}
-                </Button>
+                {/* Flag / Resolve row — full width */}
+                {jobDetail.job.flagged ? (
+                  /* Flagged: show issue note + Resolve button */
+                  <div className="col-span-2 rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-600 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-red-700 uppercase tracking-wide">Needs Attention</p>
+                        {jobDetail.job.openFlagNote && (
+                          <p className="text-xs text-red-600 mt-0.5 leading-snug">{jobDetail.job.openFlagNote}</p>
+                        )}
+                        {jobDetail.job.openFlaggedBy && (
+                          <p className="text-[10px] text-red-400 mt-0.5">Flagged by {jobDetail.job.openFlaggedBy}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      className="w-full h-8 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-semibold"
+                      onClick={() => setShowResolveModal(true)}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                      Resolve Issue
+                    </Button>
+                  </div>
+                ) : (
+                  /* Not flagged: show Flag button */
+                  <Button
+                    variant="outline"
+                    className="col-span-2 h-9 rounded-xl text-xs font-medium border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap transition"
+                    onClick={() => setShowFlagModal(true)}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                    Flag as Needs Attention
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -1487,6 +1567,74 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   }}
                 >
                   {flagSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><AlertTriangle className="h-4 w-4 mr-1.5" /> Flag Job</>}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Resolve Issue Modal ───────────────────────────────────────────────────────────────── */}
+      {showResolveModal && jobDetail?.job.openFlagId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowResolveModal(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 rounded-xl bg-green-50 flex items-center justify-center">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-900">Resolve Issue</h2>
+                </div>
+                {jobDetail.job.openFlagNote && (
+                  <div className="ml-10 mt-1 rounded-xl bg-red-50 border border-red-100 px-3 py-2">
+                    <p className="text-xs text-red-600 leading-snug">⚠️ {jobDetail.job.openFlagNote}</p>
+                  </div>
+                )}
+              </div>
+              <button className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" onClick={() => setShowResolveModal(false)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-semibold text-slate-700 mb-1.5 block">How was it resolved?</Label>
+                <Textarea
+                  value={resolveNote}
+                  onChange={e => setResolveNote(e.target.value)}
+                  placeholder="e.g. Cleaner got access via lockbox, client called back, supplies restocked…"
+                  rows={3}
+                  className="resize-none rounded-xl border-slate-200 text-sm"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl border-slate-200 text-slate-700"
+                  onClick={() => setShowResolveModal(false)}
+                  disabled={resolveSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white"
+                  disabled={!resolveNote.trim() || resolveSubmitting}
+                  onClick={async () => {
+                    if (!resolveNote.trim() || !jobDetail.job.openFlagId) return;
+                    setResolveSubmitting(true);
+                    try {
+                      await resolveIssue.mutateAsync({
+                        flagId: jobDetail.job.openFlagId,
+                        resolutionNote: resolveNote.trim(),
+                        resolvedByName: callerName,
+                      });
+                    } finally {
+                      setResolveSubmitting(false);
+                    }
+                  }}
+                >
+                  {resolveSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark Resolved</>}
                 </Button>
               </div>
             </div>
