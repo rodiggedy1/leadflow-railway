@@ -319,3 +319,8 @@
 - [x] Floating chat widget: make bigger, rename to "MIB Chat", add MIB logo to header
 - [x] Timeline pills: 12-hour time, strip team name, add contextual icon per event type (car, play, checkmark, etc.)
 - [x] Priority queue rows clickable: tap a bucket to filter job list to only that status, tap again to clear
+- [x] MIB Command Chat: rename General → MIB Command Chat, move to top of Conversations
+- [x] MIB Command Chat: custom 3-column layout (Ops Snapshot + Live Alerts | Pinned Day Status + Chat thread | Auto-Raised Issues + Command Center Rules)
+- [x] MIB Command Chat: auto-post alert message + card when any job is flagged
+- [x] MIB Command Chat: Auto-Raised Issues panel with "Jump to Job Thread" that switches to Today tab and selects the job
+- [x] MIB Command Chat: Broadcast Update chip sends SMS to all cleaners via OpenPhone

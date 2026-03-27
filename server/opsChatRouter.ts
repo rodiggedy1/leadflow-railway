@@ -27,6 +27,7 @@ import {
 } from "../drizzle/schema";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
+import { sendSms } from "./openphone";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -699,6 +700,143 @@ export const opsChatRouter = router({
     }
     return result as { urgent: number; dispatch: number; general: number; cleaners: number };
   }),
+
+  /**
+   * Get all data needed for the MIB Command Chat view.
+   */
+  getCommandChatData: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { snapshot: { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 }, alerts: [], pinnedJobs: [], autoRaised: [] };
+
+    const today = todayDateString();
+    const jobs = await db
+      .select({
+        id: cleanerJobs.id,
+        customerName: cleanerJobs.customerName,
+        jobAddress: cleanerJobs.jobAddress,
+        serviceType: cleanerJobs.serviceType,
+        jobStatus: cleanerJobs.jobStatus,
+        flagged: cleanerJobs.flagged,
+        issueNote: cleanerJobs.issueNote,
+        serviceDateTime: cleanerJobs.serviceDateTime,
+        teamName: cleanerJobs.teamName,
+        cleanerProfileId: cleanerJobs.cleanerProfileId,
+      })
+      .from(cleanerJobs)
+      .where(eq(cleanerJobs.jobDate, today))
+      .orderBy(cleanerJobs.serviceDateTime);
+
+    // Open issue flags for auto-raised issues panel
+    const jobIds = jobs.map((j) => j.id);
+    const openFlags = jobIds.length > 0
+      ? await db
+          .select({
+            id: issueFlags.id,
+            cleanerJobId: issueFlags.cleanerJobId,
+            note: issueFlags.issueNote,
+            raisedBy: issueFlags.flaggedByName,
+            createdAt: issueFlags.flaggedAt,
+          })
+          .from(issueFlags)
+          .where(and(isNull(issueFlags.resolvedAt), or(...jobIds.map((id) => eq(issueFlags.cleanerJobId, id)))))
+          .orderBy(desc(issueFlags.flaggedAt))
+      : [];
+
+    // Build snapshot counts
+    const snapshot = { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
+    for (const j of jobs) {
+      const s = toPriorityStatus(j.jobStatus, j.flagged);
+      snapshot[s] = (snapshot[s] ?? 0) + 1;
+    }
+
+    // Live alerts: flagged jobs + starting-soon jobs (within 90 min)
+    const now = Date.now();
+    const alerts: Array<{
+      type: "issue" | "soon";
+      jobId: number;
+      title: string;
+      body: string;
+      source: string;
+      ts: number;
+    }> = [];
+
+    for (const j of jobs) {
+      const status = toPriorityStatus(j.jobStatus, j.flagged);
+      if (status === "issue") {
+        alerts.push({
+          type: "issue",
+          jobId: j.id,
+          title: `Issue raised in ${j.customerName ?? j.jobAddress}`,
+          body: j.issueNote ?? "Issue flagged — check job thread.",
+          source: j.customerName ?? j.jobAddress ?? "Unknown",
+          ts: now,
+        });
+      } else if (status === "soon") {
+        const jobMs = j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0;
+        const minutesUntil = Math.round((jobMs - now) / 60_000);
+        alerts.push({
+          type: "soon",
+          jobId: j.id,
+          title: `${j.customerName ?? j.jobAddress} starts in ${minutesUntil > 0 ? minutesUntil + " min" : "soon"}`,
+          body: j.serviceType ?? "Cleaning service",
+          source: "Dispatch",
+          ts: jobMs || now,
+        });
+      }
+    }
+
+    // Pinned day status cards
+    const pinnedJobs = jobs.map((j) => ({
+      id: j.id,
+      name: j.customerName ?? j.jobAddress ?? "Job",
+      time: j.serviceDateTime
+        ? new Date(j.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+        : "--",
+      status: toPriorityStatus(j.jobStatus, j.flagged),
+      address: j.jobAddress ?? "",
+    }));
+
+    // Auto-raised issues with job info
+    const autoRaised = openFlags.map((f) => {
+      const job = jobs.find((j) => j.id === f.cleanerJobId);
+      return {
+        flagId: f.id,
+        jobId: f.cleanerJobId,
+        jobName: job?.customerName ?? job?.jobAddress ?? "Unknown Job",
+        note: f.note ?? "Issue flagged",
+        raisedBy: f.raisedBy ?? "Team",
+        ts: f.createdAt ? new Date(f.createdAt).getTime() : now,
+      };
+    });
+
+    return { snapshot, alerts, pinnedJobs, autoRaised };
+  }),
+
+  /**
+   * Broadcast an SMS message to all active cleaners with a phone number.
+   */
+  broadcastSmsToCleaners: opsChatProcedure
+    .input(z.object({ message: z.string().min(1).max(1000) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { sent: 0, failed: 0, results: [] };
+      const profiles = await db
+        .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
+        .from(cleanerProfiles)
+        .where(eq(cleanerProfiles.isActive, 1));
+
+      const results: Array<{ name: string; phone: string; ok: boolean }> = [];
+      for (const p of profiles) {
+        if (!p.phone) continue;
+        try {
+          await sendSms({ to: p.phone, content: input.message });
+          results.push({ name: p.name ?? "Cleaner", phone: p.phone, ok: true });
+        } catch {
+          results.push({ name: p.name ?? "Cleaner", phone: p.phone, ok: false });
+        }
+      }
+      return { sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+    }),
 
   /**
    * Transcribe a voice note recorded in the browser.

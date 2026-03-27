@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import CommandChat from "@/components/CommandChat";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
@@ -94,9 +95,9 @@ const QUICK_ACTIONS = [
 ];
 
 const CHANNELS = [
+  { key: "command",  label: "MIB Command Chat", isCommand: true },
   { key: "urgent",   label: "Urgent" },
   { key: "dispatch", label: "Dispatch / Today" },
-  { key: "general",  label: "General" },
   { key: "cleaners", label: "Cleaners" },
 ];
 
@@ -1257,8 +1258,22 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               )}
             </div>
           </>
+        ) : activeTab === "channels" && activeChannel === "command" ? (
+          /* MIB Command Chat — special 3-column ops view */
+          <CommandChat
+            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, createdAt: new Date(m.ts) }))}
+            channelLoading={channelLoading}
+            callerName={callerName}
+            onSendMessage={(body) => {
+              sendMsg.mutate({ body, channel: "command", authorName: callerName });
+            }}
+            onJumpToJob={(jobId) => {
+              setActiveTab("today");
+              setSelectedJobId(jobId);
+            }}
+          />
         ) : activeTab === "channels" ? (
-          /* Channel view */
+          /* Regular channel view */
           <>
             <div className="px-6 py-4 border-b border-slate-200 bg-white">
               <h2 className="text-xl font-semibold text-slate-900">
