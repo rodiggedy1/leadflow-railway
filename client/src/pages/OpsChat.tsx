@@ -11,7 +11,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -532,7 +531,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {activeTab === "today" ? (
             <div className="px-3 pb-4 space-y-4">
               {/* Priority Queue */}
@@ -727,7 +726,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <span className="text-xs font-semibold text-red-600">Requires response</span>
                       )}
                     </div>
-                    <ScrollArea className="flex-1 px-6 py-4">
+                    <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                       <div className="space-y-4">
                         {jobDetail.thread.length === 0 ? (
                           <p className="text-sm text-slate-400 text-center py-8">No messages yet — start the thread below.</p>
@@ -747,7 +746,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         )}
                         <div ref={threadBottomRef} />
                       </div>
-                    </ScrollArea>
+                    </div>
                   </div>
 
                   {/* Quick actions + Composer */}
@@ -819,7 +818,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">Internal team channel</p>
             </div>
-            <ScrollArea className="flex-1 px-6 py-4">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <div className="space-y-4">
                 {channelLoading ? (
                   <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
@@ -841,7 +840,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 )}
                 <div ref={threadBottomRef} />
               </div>
-            </ScrollArea>
+            </div>
             <div className="px-6 py-3 border-t border-slate-100 bg-white">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <Textarea
@@ -877,7 +876,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
       {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
       {activeTab === "today" && jobDetail && (
-        <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto">
+        <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="p-4 space-y-3">
 
             {/* Job Details card */}

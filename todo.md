@@ -303,3 +303,4 @@
 - [x] OpsChat: avatar initials circle on others' messages (left side of bubble) — deterministic pastel color per name
 - [x] OpsChat: unread badge on floating bubble — red count badge shows total unread across all channels, clears when OpsChat is opened
 - [x] OpsChat: read receipts — "Seen by X" shown under your last message when another agent views the thread; ops_chat_reads table tracks per-caller last-read message
+- [x] OpsChat scroll fix: thread/channel area scrollable via overflow-y-auto; duplicate scrollbars on left sidebar and right panel hidden with scrollbarWidth:none
