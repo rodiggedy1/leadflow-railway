@@ -11,9 +11,15 @@ vi.mock("./db", () => ({
 import { getDb } from "./db";
 import { opsChatRouter } from "./opsChatRouter";
 
-// Helper to call a procedure directly (bypasses tRPC HTTP layer)
-async function callQuery(procedure: any, input?: any) {
-  const ctx = { user: { id: 1, name: "Test User", role: "admin" as const, openId: "test" } };
+// Helper to call a procedure directly (bypasses tRPC HTTP layer).
+// opsChatProcedure injects ctx.opsCaller — works for both owner and agent sessions.
+async function callQuery(procedure: any, input?: any, callerOverride?: { id: string; name: string }) {
+  const ctx = {
+    // Legacy owner ctx (still present for other routers)
+    user: { id: 1, name: "Test User", role: "admin" as const, openId: "test" },
+    // opsChatProcedure-injected caller
+    opsCaller: callerOverride ?? { id: "test", name: "Test User" },
+  };
   return procedure({ ctx, input });
 }
 
@@ -190,6 +196,34 @@ describe("opsChatRouter", () => {
       vi.mocked(getDb).mockResolvedValue(null as any);
       const result = await callQuery(opsChatRouter._def.procedures.getChannelCounts._def.resolver);
       expect(result).toEqual({ urgent: 0, dispatch: 0, general: 0, cleaners: 0 });
+    });
+  });
+
+  describe("opsChatProcedure — unified access", () => {
+    it("sendMessage uses opsCaller.id for flaggedBy when called as owner", async () => {
+      const insertValues = vi.fn().mockResolvedValue(undefined);
+      const mockDb = { insert: vi.fn().mockReturnValue({ values: insertValues }) };
+      vi.mocked(getDb).mockResolvedValue(mockDb as any);
+
+      const result = await callQuery(
+        opsChatRouter._def.procedures.sendMessage._def.resolver,
+        { cleanerJobId: 1, body: "Owner msg", authorName: "Owner", authorRole: "office" },
+        { id: "owner-open-id", name: "Owner" }
+      );
+      expect(result).toEqual({ success: true });
+    });
+
+    it("sendMessage uses opsCaller.id for flaggedBy when called as agent", async () => {
+      const insertValues = vi.fn().mockResolvedValue(undefined);
+      const mockDb = { insert: vi.fn().mockReturnValue({ values: insertValues }) };
+      vi.mocked(getDb).mockResolvedValue(mockDb as any);
+
+      const result = await callQuery(
+        opsChatRouter._def.procedures.sendMessage._def.resolver,
+        { cleanerJobId: 2, body: "Agent msg", authorName: "Sarah", authorRole: "office" },
+        { id: "agent-uuid-123", name: "Sarah" }
+      );
+      expect(result).toEqual({ success: true });
     });
   });
 });

@@ -1699,6 +1699,14 @@ export default function AgentDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <CallAssistButton />
+            <a
+              href="/admin/ops-chat"
+              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-gray-50"
+              style={{ borderColor: "#F0D8D0", color: "#E8603C" }}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              OpsChat
+            </a>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
             </Button>

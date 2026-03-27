@@ -286,3 +286,13 @@
 - [x] OpsChat: make Live Activity Timeline horizontal (left-to-right, oldest first, horizontally scrollable)
 - [x] OpsChat: update chat bubbles to match screenshot — light grey card, sender/role top, message body, timestamp bottom-left
 - [x] OpsChat: replace horizontal scrollbar on timeline with left/right arrow buttons
+
+## OpsChat Improvements — Batch 2
+- [ ] OpsChat: issue_flags table — flaggedAt, resolvedAt, resolvedBy, resolution note
+- [ ] OpsChat: flag issue procedure + resolve issue procedure (agent resolves, not cleaner)
+- [ ] OpsChat: escalation countdown timer on job cards in left panel (⚠️ X min unresolved)
+- [ ] OpsChat: unread/unanswered red dot on job cards when last message is from cleaner/client
+- [ ] OpsChat: issue photo requirement in CleanerPortal before flag is accepted
+- [ ] OpsChat: resolve button in thread with resolution note input
+- [ ] OpsChat: all logged-in users (agents) share same OpsChat — add to sidebar nav
+- [x] OpsChat agent access — agents can log in at /admin/ops-chat using their existing email+password; opsChatProcedure accepts both owner OAuth and agent sessions; callerName resolves to agent name in messages; OpsChat link added to Agent Dashboard header

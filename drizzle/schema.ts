@@ -1509,3 +1509,39 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
 }));
 export type OpsChatMessage = typeof opsChatMessages.$inferSelect;
 export type InsertOpsChatMessage = typeof opsChatMessages.$inferInsert;
+
+// ── Issue Flags ───────────────────────────────────────────────────────────────
+/**
+ * Tracks issue flags raised on jobs (from cleaners or agents).
+ * An open flag (resolvedAt IS NULL) drives the escalation countdown in OpsChat.
+ * Agents resolve flags with a note; this feeds into cleaner performance scoring.
+ */
+export const issueFlags = mysqlTable("issue_flags", {
+  id: int("id").primaryKey().autoincrement(),
+  /** The job this issue is attached to */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Short description of the issue (from cleaner or agent) */
+  issueNote: text("issueNote").notNull(),
+  /** When the flag was raised (UTC ms) */
+  flaggedAt: bigint("flaggedAt", { mode: "number" }).notNull(),
+  /** openId of the user who flagged it (cleaner magic-link user or agent) */
+  flaggedBy: varchar("flaggedBy", { length: 64 }).notNull(),
+  /** Display name of who flagged it */
+  flaggedByName: varchar("flaggedByName", { length: 255 }),
+  /** When the flag was resolved (UTC ms); NULL = still open */
+  resolvedAt: bigint("resolvedAt", { mode: "number" }),
+  /** openId of the agent who resolved it */
+  resolvedBy: varchar("resolvedBy", { length: 64 }),
+  /** Display name of resolver */
+  resolvedByName: varchar("resolvedByName", { length: 255 }),
+  /** Agent's resolution note */
+  resolutionNote: text("resolutionNote"),
+  /** Whether at least one photo was attached when flagging */
+  hasPhoto: int("hasPhoto").default(0).notNull(),
+}, (table) => ({
+  idxJob: index("idx_if_job").on(table.cleanerJobId),
+  idxOpen: index("idx_if_open").on(table.resolvedAt),
+}));
+
+export type IssueFlag = typeof issueFlags.$inferSelect;
+export type InsertIssueFlag = typeof issueFlags.$inferInsert;

@@ -10,7 +10,7 @@
  */
 
 import { z } from "zod";
-import { protectedProcedure, router } from "./_core/trpc";
+import { opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import {
   cleanerJobs,
@@ -20,8 +20,9 @@ import {
   jobStatusHistory,
   jobSmsReplies,
   opsChatMessages,
+  issueFlags,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ export const opsChatRouter = router({
    * List all cleaner jobs for today, grouped by priority status.
    * Returns the minimal shape needed for the left-panel job list.
    */
-  listTodayJobs: protectedProcedure.query(async () => {
+  listTodayJobs: opsChatProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
 
@@ -134,7 +135,7 @@ export const opsChatRouter = router({
   /**
    * Full job detail: job info + live timeline + thread (ops messages + SMS replies).
    */
-  getJobDetail: protectedProcedure
+  getJobDetail: opsChatProcedure
     .input(z.object({ jobId: z.number().int().positive() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -324,7 +325,7 @@ export const opsChatRouter = router({
   /**
    * Post an internal ops message to a job thread or channel.
    */
-  sendMessage: protectedProcedure
+  sendMessage: opsChatProcedure
     .input(
       z.object({
         cleanerJobId: z.number().int().positive().optional(),
@@ -356,7 +357,7 @@ export const opsChatRouter = router({
   /**
    * Fetch messages for a named channel (urgent, dispatch, general, cleaners).
    */
-  listChannelMessages: protectedProcedure
+  listChannelMessages: opsChatProcedure
     .input(z.object({ channel: z.string().min(1).max(64) }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -383,7 +384,7 @@ export const opsChatRouter = router({
   /**
    * Channel message counts for the sidebar badges.
    */
-  getChannelCounts: protectedProcedure.query(async () => {
+  getChannelCounts: opsChatProcedure.query(async () => {
     const db = await getDb();
     if (!db) return { urgent: 0, dispatch: 0, general: 0, cleaners: 0 };
 
@@ -399,5 +400,158 @@ export const opsChatRouter = router({
     }
 
     return result as { urgent: number; dispatch: number; general: number; cleaners: number };
+  }),
+
+  /**
+   * Flag an issue on a job. Requires an issueNote and at least one photo URL.
+   * Creates a row in issue_flags and updates cleanerJobs.flagged + issueNote.
+   */
+  flagIssue: opsChatProcedure
+    .input(
+      z.object({
+        cleanerJobId: z.number().int().positive(),
+        issueNote: z.string().min(1).max(2000),
+        photoUrl: z.string().url().optional(), // required in practice — validated in UI
+        flaggedByName: z.string().min(1).max(128),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const now = Date.now();
+
+      await db.insert(issueFlags).values({
+        cleanerJobId: input.cleanerJobId,
+        issueNote: input.issueNote,
+        flaggedAt: now,
+        flaggedBy: ctx.opsCaller.id,
+        flaggedByName: input.flaggedByName,
+        hasPhoto: input.photoUrl ? 1 : 0,
+      });
+
+      // Also update the job row so the priority queue reflects it immediately
+      await db
+        .update(cleanerJobs)
+        .set({ flagged: 1, issueNote: input.issueNote })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      // Post a system message into the job thread for visibility
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: input.cleanerJobId,
+        channel: null,
+        authorName: input.flaggedByName,
+        authorRole: "office",
+        body: `⚠️ Issue flagged: ${input.issueNote}`,
+        mediaUrl: input.photoUrl ?? null,
+        quickAction: "issue",
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Resolve an open issue flag. Records who resolved it, when, and the resolution note.
+   */
+  resolveIssue: opsChatProcedure
+    .input(
+      z.object({
+        flagId: z.number().int().positive(),
+        resolutionNote: z.string().min(1).max(2000),
+        resolvedByName: z.string().min(1).max(128),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const now = Date.now();
+
+      // Get the flag to find the job
+      const [flag] = await db
+        .select()
+        .from(issueFlags)
+        .where(eq(issueFlags.id, input.flagId))
+        .limit(1);
+
+      if (!flag) throw new Error("Flag not found");
+      if (flag.resolvedAt) throw new Error("Flag already resolved");
+
+      await db
+        .update(issueFlags)
+        .set({
+          resolvedAt: now,
+          resolvedBy: ctx.opsCaller.id,
+          resolvedByName: input.resolvedByName,
+          resolutionNote: input.resolutionNote,
+        })
+        .where(eq(issueFlags.id, input.flagId));
+
+      // Check if any other open flags remain for this job
+      const remaining = await db
+        .select({ id: issueFlags.id })
+        .from(issueFlags)
+        .where(and(eq(issueFlags.cleanerJobId, flag.cleanerJobId), isNull(issueFlags.resolvedAt)));
+
+      if (remaining.length === 0) {
+        // No more open flags — clear the job's flagged state
+        await db
+          .update(cleanerJobs)
+          .set({ flagged: 0 })
+          .where(eq(cleanerJobs.id, flag.cleanerJobId));
+      }
+
+      // Post resolution message into the job thread
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: flag.cleanerJobId,
+        channel: null,
+        authorName: input.resolvedByName,
+        authorRole: "office",
+        body: `✅ Issue resolved: ${input.resolutionNote}`,
+        mediaUrl: null,
+        quickAction: "resolved",
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Get all open issue flags for today's jobs (for the escalation countdown).
+   */
+  getOpenFlags: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+
+    const today = todayDateString();
+
+    // Get today's job IDs
+    const todayJobs = await db
+      .select({ id: cleanerJobs.id })
+      .from(cleanerJobs)
+      .where(eq(cleanerJobs.jobDate, today));
+
+    if (todayJobs.length === 0) return [];
+
+    const jobIds = todayJobs.map((j) => j.id);
+
+    const flags = await db
+      .select()
+      .from(issueFlags)
+      .where(
+        and(
+          isNull(issueFlags.resolvedAt),
+          or(...jobIds.map((id) => eq(issueFlags.cleanerJobId, id)))
+        )
+      )
+      .orderBy(issueFlags.flaggedAt);
+
+    return flags.map((f) => ({
+      id: f.id,
+      cleanerJobId: f.cleanerJobId,
+      issueNote: f.issueNote,
+      flaggedAt: f.flaggedAt,
+      flaggedByName: f.flaggedByName ?? "",
+      hasPhoto: f.hasPhoto === 1,
+    }));
   }),
 });

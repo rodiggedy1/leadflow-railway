@@ -1,6 +1,6 @@
 /**
  * OpsChat — Internal team communication hub.
- * WhatsApp-style interface tied to real job data.
+ * Accessible to both the owner (Manus OAuth) and all agent accounts (email + password).
  * Layout: 3 columns — left sidebar (queue + jobs), center (timeline + thread), right (job details + actions).
  */
 
@@ -9,26 +9,23 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import {
   Phone,
-  MessageSquare,
   ExternalLink,
   Send,
   Camera,
   Mic,
   Smile,
-  RefreshCw,
-  Users,
-  AlertTriangle,
-  Clock,
-  CheckCircle2,
-  Zap,
   ChevronLeft,
   ChevronRight,
+  LogIn,
+  Loader2,
+  MessageCircle,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -54,12 +51,12 @@ interface JobSummary {
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
-const STATUS_META: Record<PriorityStatus, { label: string; icon: string; bg: string; text: string; border: string }> = {
-  issue:    { label: "Needs Attention", icon: "🔥", bg: "bg-red-50",    text: "text-red-700",    border: "border-red-200" },
-  soon:     { label: "Starting Soon",   icon: "⏰", bg: "bg-amber-50",  text: "text-amber-700",  border: "border-amber-200" },
-  progress: { label: "In Progress",     icon: "🟡", bg: "bg-blue-50",   text: "text-blue-700",   border: "border-blue-200" },
-  complete: { label: "Completed",       icon: "✅", bg: "bg-emerald-50",text: "text-emerald-700",border: "border-emerald-200" },
-  assigned: { label: "Assigned",        icon: "📋", bg: "bg-slate-50",  text: "text-slate-600",  border: "border-slate-200" },
+const STATUS_META: Record<PriorityStatus, { label: string; bg: string; text: string; border: string }> = {
+  issue:    { label: "Needs Attention", bg: "bg-red-50",    text: "text-red-700",    border: "border-red-200" },
+  soon:     { label: "Starting Soon",   bg: "bg-amber-50",  text: "text-amber-700",  border: "border-amber-200" },
+  progress: { label: "In Progress",     bg: "bg-blue-50",   text: "text-blue-700",   border: "border-blue-200" },
+  complete: { label: "Completed",       bg: "bg-emerald-50",text: "text-emerald-700",border: "border-emerald-200" },
+  assigned: { label: "Assigned",        bg: "bg-slate-50",  text: "text-slate-600",  border: "border-slate-200" },
 };
 
 const TIMELINE_TONE: Record<string, string> = {
@@ -89,6 +86,85 @@ const CHANNELS = [
   { key: "general",  label: "General" },
   { key: "cleaners", label: "Cleaners" },
 ];
+
+// ── Agent Login Gate ──────────────────────────────────────────────────────────
+
+function AgentLoginGate({ onSuccess }: { onSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const loginMutation = trpc.agents.login.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Welcome, ${data.agent.name}!`);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Login failed"),
+  });
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 w-full max-w-sm mx-4">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center mx-auto mb-3">
+            <MessageCircle className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">OpsChat</h1>
+          <p className="text-sm text-slate-500 mt-1">Sign in to access the ops hub</p>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!email || !password) return;
+            loginMutation.mutate({ email: email.trim(), password });
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="ops-email">Email</Label>
+            <Input
+              id="ops-email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+              disabled={loginMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ops-password">Password</Label>
+            <Input
+              id="ops-password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loginMutation.isPending}
+            />
+          </div>
+          <Button
+            type="submit"
+            className="w-full bg-slate-900 text-white hover:bg-slate-800"
+            disabled={loginMutation.isPending || !email || !password}
+          >
+            {loginMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in…</>
+            ) : (
+              <><LogIn className="w-4 h-4 mr-2" /> Sign In</>
+            )}
+          </Button>
+        </form>
+
+        <p className="text-center text-xs text-slate-400 mt-4">
+          Contact your admin if you need access.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -180,7 +256,14 @@ function ThreadMessage({ msg }: { msg: { id: string; ts: number; from: string; r
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function OpsChat() {
-  const { user } = useAuth();
+  // Owner auth (Manus OAuth)
+  const { user, loading: ownerLoading } = useAuth();
+
+  // Agent auth (email + password)
+  const { data: agentMe, isLoading: agentLoading, refetch: refetchAgentMe } = trpc.agents.me.useQuery(undefined, {
+    retry: false,
+  });
+
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
@@ -188,6 +271,15 @@ export default function OpsChat() {
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
+
+  // Resolved caller name — owner name takes precedence, then agent name
+  const callerName = user?.name ?? agentMe?.name ?? "Office";
+
+  // Auth is still loading
+  const authLoading = ownerLoading || agentLoading;
+
+  // Neither owner nor agent is logged in
+  const isAuthenticated = Boolean(user) || Boolean(agentMe);
 
   const scrollTimeline = (dir: "left" | "right") => {
     const el = timelineScrollRef.current;
@@ -198,21 +290,23 @@ export default function OpsChat() {
   const utils = trpc.useUtils();
 
   // ── Data queries ────────────────────────────────────────────────────────────
-  const { data: jobs = [], isLoading: jobsLoading, refetch: refetchJobs } = trpc.opsChat.listTodayJobs.useQuery(undefined, {
+  const { data: jobs = [], isLoading: jobsLoading } = trpc.opsChat.listTodayJobs.useQuery(undefined, {
+    enabled: isAuthenticated,
     refetchInterval: 30_000,
   });
 
   const { data: jobDetail, isLoading: detailLoading } = trpc.opsChat.getJobDetail.useQuery(
     { jobId: selectedJobId! },
-    { enabled: selectedJobId !== null, refetchInterval: 15_000 }
+    { enabled: isAuthenticated && selectedJobId !== null, refetchInterval: 15_000 }
   );
 
   const { data: channelMsgs = [], isLoading: channelLoading } = trpc.opsChat.listChannelMessages.useQuery(
     { channel: activeChannel },
-    { enabled: activeTab === "channels", refetchInterval: 15_000 }
+    { enabled: isAuthenticated && activeTab === "channels", refetchInterval: 15_000 }
   );
 
   const { data: channelCounts } = trpc.opsChat.getChannelCounts.useQuery(undefined, {
+    enabled: isAuthenticated,
     refetchInterval: 30_000,
   });
 
@@ -254,12 +348,11 @@ export default function OpsChat() {
 
   function handleSend() {
     if (!composer.trim()) return;
-    const authorName = user?.name ?? "Office";
     if (activeTab === "today" && selectedJobId) {
       sendMsg.mutate({
         cleanerJobId: selectedJobId,
         body: composer.trim(),
-        authorName,
+        authorName: callerName,
         authorRole: "office",
         quickAction: selectedQuickAction ?? undefined,
       });
@@ -267,7 +360,7 @@ export default function OpsChat() {
       sendMsg.mutate({
         channel: activeChannel,
         body: composer.trim(),
-        authorName,
+        authorName: callerName,
         authorRole: "office",
       });
     }
@@ -276,6 +369,19 @@ export default function OpsChat() {
   function handleQuickAction(qa: typeof QUICK_ACTIONS[number]) {
     setSelectedQuickAction(qa.key);
     setComposer(qa.template);
+  }
+
+  // ── Auth gate ───────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AgentLoginGate onSuccess={() => refetchAgentMe()} />;
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -348,23 +454,22 @@ export default function OpsChat() {
                 <div className="space-y-1">
                   {CHANNELS.map((ch) => {
                     const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
-                    const isUrgentActive = activeChannel === ch.key && (activeTab as string) === "channels";
+                    const isActive = activeChannel === ch.key && (activeTab as string) === "channels";
                     return (
                       <button
                         key={ch.key}
                         onClick={() => { setActiveTab("channels"); setActiveChannel(ch.key); }}
                         className={cn(
                           "w-full flex items-center justify-between rounded-2xl border px-4 py-3.5 text-sm transition",
-                          isUrgentActive
+                          isActive
                             ? "bg-slate-900 border-slate-900 text-white"
                             : "bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:shadow-sm"
                         )}
                       >
                         <span className="font-medium">{ch.label}</span>
-                        <span className={cn(
-                          "text-sm font-semibold min-w-[20px] text-right",
-                          isUrgentActive ? "text-white" : "text-slate-500"
-                        )}>{count}</span>
+                        <span className={cn("text-sm font-semibold min-w-[20px] text-right", isActive ? "text-white" : "text-slate-500")}>
+                          {count}
+                        </span>
                       </button>
                     );
                   })}
@@ -410,15 +515,21 @@ export default function OpsChat() {
                     )}
                   >
                     <span className="font-medium">{ch.label}</span>
-                    <span className={cn(
-                      "text-sm font-semibold min-w-[20px] text-right",
-                      activeChannel === ch.key ? "text-white" : "text-slate-500"
-                    )}>{count}</span>
+                    <span className={cn("text-sm font-semibold min-w-[20px] text-right", activeChannel === ch.key ? "text-white" : "text-slate-500")}>
+                      {count}
+                    </span>
                   </button>
                 );
               })}
             </div>
           )}
+        </div>
+
+        {/* Signed-in-as footer */}
+        <div className="px-4 py-3 border-t border-slate-100 bg-white">
+          <p className="text-xs text-slate-400 truncate">
+            Signed in as <span className="font-medium text-slate-600">{callerName}</span>
+          </p>
         </div>
       </div>
 
@@ -450,7 +561,7 @@ export default function OpsChat() {
                   </Button>
                 )}
                 <Button size="sm" className="bg-slate-900 text-white hover:bg-slate-800" asChild>
-                  <a href={`/field-management`} target="_blank" rel="noopener noreferrer">
+                  <a href={`/admin/field-management`} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4 mr-1.5" />
                     Open Full Job
                   </a>
@@ -515,7 +626,7 @@ export default function OpsChat() {
                     </ScrollArea>
                   </div>
 
-                  {/* Quick actions */}
+                  {/* Quick actions + Composer */}
                   <div className="px-6 py-3 border-t border-slate-100 bg-white">
                     <div className="flex flex-wrap gap-2 mb-3">
                       {QUICK_ACTIONS.map((qa) => (
@@ -534,7 +645,6 @@ export default function OpsChat() {
                       ))}
                     </div>
 
-                    {/* Composer */}
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <Textarea
                         value={composer}
@@ -632,7 +742,7 @@ export default function OpsChat() {
         )}
       </div>
 
-           {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────── */}
+      {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
       {activeTab === "today" && jobDetail && (
         <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto">
           <div className="p-4 space-y-3">
@@ -641,13 +751,11 @@ export default function OpsChat() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Job Details</p>
 
-              {/* Client */}
               <div className="mb-4">
                 <p className="text-xs text-slate-400 mb-0.5">Client</p>
                 <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
               </div>
 
-              {/* Service + Price */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-slate-400 mb-0.5">Service</p>
@@ -659,7 +767,6 @@ export default function OpsChat() {
                 </div>
               </div>
 
-              {/* Window + Team */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-slate-400 mb-0.5">Window</p>
@@ -671,13 +778,11 @@ export default function OpsChat() {
                 </div>
               </div>
 
-              {/* Address */}
               <div className="mb-4">
                 <p className="text-xs text-slate-400 mb-0.5">Address</p>
                 <p className="text-sm font-semibold text-slate-900">{jobDetail.job.address}</p>
               </div>
 
-              {/* Notes */}
               {(jobDetail.job.customerNotes || jobDetail.job.staffNotes) && (
                 <div>
                   <p className="text-xs text-slate-400 mb-1.5">Notes</p>

@@ -90,6 +90,48 @@ export const adminAgentProcedure = t.procedure.use(
 );
 
 /**
+ * opsChatProcedure — accepts EITHER a Manus OAuth owner session OR an agent session.
+ * Use this for all OpsChat procedures so both the owner and agents can access them.
+ * Injects ctx.opsCaller = { id: string; name: string; isOwner: boolean }
+ */
+export const opsChatProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+
+    // First try Manus OAuth (owner)
+    if (ctx.user) {
+      return next({
+        ctx: {
+          ...ctx,
+          opsCaller: {
+            id: ctx.user.openId,
+            name: ctx.user.name ?? "Owner",
+            isOwner: true,
+          },
+        },
+      });
+    }
+
+    // Fallback: try agent session cookie
+    const agent = await getAgentFromRequest(ctx.req);
+    if (agent) {
+      return next({
+        ctx: {
+          ...ctx,
+          opsCaller: {
+            id: String(agent.agentId),
+            name: agent.agentName,
+            isOwner: false,
+          },
+        },
+      });
+    }
+
+    throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }),
+);
+
+/**
  * cleanerProcedure — validates the cleaner cookie session.
  * Use this for all cleaner portal procedures.
  */
