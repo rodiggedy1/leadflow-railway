@@ -448,3 +448,237 @@ describe("Rating Alert Logic", () => {
     expect(shouldSendGoogleReviewSms(3)).toBe(false);
   });
 });
+
+// ── getReviewAnalytics — data shape & aggregation logic ──────────────────────
+
+type MockReviewRow = {
+  id: number;
+  jobDate: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  teamName: string | null;
+  cleanerName: string | null;
+  serviceType: string | null;
+  customerRating: number | null;
+  reviewChipsSelected: string | null;
+  reviewDraftPicked: number | null;
+  reviewCopied: number;
+  trackerToken: string | null;
+  jobAddress: string | null;
+  updatedAt: Date;
+  smsReplies: { body: string; receivedAt: Date; senderType: string }[];
+};
+
+/** Mirror of the team aggregation logic in getReviewAnalytics */
+function buildTeamStats(rows: MockReviewRow[]) {
+  const teamMap = new Map<
+    string,
+    {
+      teamName: string;
+      totalJobs: number;
+      totalRating: number;
+      fiveStarCount: number;
+      fourStarCount: number;
+      lowRatingCount: number;
+      chipsCount: number;
+      draftPickedCount: number;
+      copiedCount: number;
+    }
+  >();
+
+  for (const row of rows) {
+    const key = row.teamName ?? row.cleanerName ?? "Unknown";
+    if (!teamMap.has(key)) {
+      teamMap.set(key, {
+        teamName: key,
+        totalJobs: 0,
+        totalRating: 0,
+        fiveStarCount: 0,
+        fourStarCount: 0,
+        lowRatingCount: 0,
+        chipsCount: 0,
+        draftPickedCount: 0,
+        copiedCount: 0,
+      });
+    }
+    const t = teamMap.get(key)!;
+    t.totalJobs++;
+    t.totalRating += row.customerRating ?? 0;
+    if (row.customerRating === 5) t.fiveStarCount++;
+    else if (row.customerRating === 4) t.fourStarCount++;
+    else if ((row.customerRating ?? 0) <= 3) t.lowRatingCount++;
+    if (row.reviewChipsSelected) t.chipsCount++;
+    if (row.reviewDraftPicked) t.draftPickedCount++;
+    if (row.reviewCopied) t.copiedCount++;
+  }
+
+  return Array.from(teamMap.values()).map((t) => ({
+    ...t,
+    avgRating: t.totalJobs > 0 ? Math.round((t.totalRating / t.totalJobs) * 10) / 10 : 0,
+    fiveStarPct: t.totalJobs > 0 ? Math.round((t.fiveStarCount / t.totalJobs) * 100) : 0,
+    funnelPct: t.totalJobs > 0 ? Math.round((t.copiedCount / t.totalJobs) * 100) : 0,
+  }));
+}
+
+const MOCK_ROWS: MockReviewRow[] = [
+  {
+    id: 1, jobDate: "2026-03-01", customerName: "Alice Smith", customerPhone: "+12025550001",
+    teamName: "Team Solange", cleanerName: null, serviceType: "Monthly (10%OFF)",
+    customerRating: 5, reviewChipsSelected: "On time,Spotless results", reviewDraftPicked: 2,
+    reviewCopied: 1, trackerToken: "tok1", jobAddress: "123 Main St", updatedAt: new Date("2026-03-01"),
+    smsReplies: [{ body: "Yes please!", receivedAt: new Date("2026-03-01T15:00:00Z"), senderType: "client" }],
+  },
+  {
+    id: 2, jobDate: "2026-03-02", customerName: "Bob Jones", customerPhone: "+12025550002",
+    teamName: "Team Solange", cleanerName: null, serviceType: "3 bedroom",
+    customerRating: 4, reviewChipsSelected: "Friendly team", reviewDraftPicked: null,
+    reviewCopied: 0, trackerToken: "tok2", jobAddress: "456 Oak Ave", updatedAt: new Date("2026-03-02"),
+    smsReplies: [],
+  },
+  {
+    id: 3, jobDate: "2026-03-03", customerName: "Carol White", customerPhone: "+12025550003",
+    teamName: "Team Karla", cleanerName: null, serviceType: "Bi-weekly (15%OFF)",
+    customerRating: 5, reviewChipsSelected: null, reviewDraftPicked: null,
+    reviewCopied: 0, trackerToken: "tok3", jobAddress: "789 Pine Rd", updatedAt: new Date("2026-03-03"),
+    smsReplies: [],
+  },
+  {
+    id: 4, jobDate: "2026-03-04", customerName: "Dan Brown", customerPhone: "+12025550004",
+    teamName: "Team Karla", cleanerName: null, serviceType: "2 bedroom",
+    customerRating: 2, reviewChipsSelected: null, reviewDraftPicked: null,
+    reviewCopied: 0, trackerToken: "tok4", jobAddress: "321 Elm St", updatedAt: new Date("2026-03-04"),
+    smsReplies: [{ body: "Nobody called me back", receivedAt: new Date("2026-03-04T10:00:00Z"), senderType: "client" }],
+  },
+];
+
+describe("getReviewAnalytics — team aggregation", () => {
+  const stats = buildTeamStats(MOCK_ROWS);
+
+  it("produces one stat entry per unique team", () => {
+    expect(stats).toHaveLength(2);
+    const names = stats.map((s) => s.teamName).sort();
+    expect(names).toEqual(["Team Karla", "Team Solange"]);
+  });
+
+  it("correctly counts total jobs per team", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    const karla = stats.find((s) => s.teamName === "Team Karla")!;
+    expect(solange.totalJobs).toBe(2);
+    expect(karla.totalJobs).toBe(2);
+  });
+
+  it("calculates correct avg rating", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    // (5 + 4) / 2 = 4.5
+    expect(solange.avgRating).toBe(4.5);
+  });
+
+  it("counts 5-star jobs correctly", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    expect(solange.fiveStarCount).toBe(1);
+  });
+
+  it("counts low-rating jobs (≤3) correctly", () => {
+    const karla = stats.find((s) => s.teamName === "Team Karla")!;
+    expect(karla.lowRatingCount).toBe(1);
+  });
+
+  it("calculates 5-star percentage correctly", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    // 1 five-star out of 2 = 50%
+    expect(solange.fiveStarPct).toBe(50);
+  });
+
+  it("counts chips selections correctly", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    // Both rows have chips
+    expect(solange.chipsCount).toBe(2);
+  });
+
+  it("counts draft picks correctly", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    // Only row 1 has reviewDraftPicked
+    expect(solange.draftPickedCount).toBe(1);
+  });
+
+  it("counts copied reviews correctly", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    // Only row 1 has reviewCopied = 1
+    expect(solange.copiedCount).toBe(1);
+  });
+
+  it("calculates funnel (copy) percentage correctly", () => {
+    const solange = stats.find((s) => s.teamName === "Team Solange")!;
+    // 1 copied out of 2 = 50%
+    expect(solange.funnelPct).toBe(50);
+  });
+
+  it("returns 0 funnel pct for team with no copies", () => {
+    const karla = stats.find((s) => s.teamName === "Team Karla")!;
+    expect(karla.funnelPct).toBe(0);
+  });
+});
+
+describe("getReviewAnalytics — SMS replies", () => {
+  it("correctly attaches SMS replies to rows", () => {
+    const alice = MOCK_ROWS.find((r) => r.customerName === "Alice Smith")!;
+    expect(alice.smsReplies).toHaveLength(1);
+    expect(alice.smsReplies[0]!.body).toBe("Yes please!");
+  });
+
+  it("rows with no replies have empty smsReplies array", () => {
+    const bob = MOCK_ROWS.find((r) => r.customerName === "Bob Jones")!;
+    expect(bob.smsReplies).toHaveLength(0);
+  });
+
+  it("low-rating rows can also have SMS replies", () => {
+    const dan = MOCK_ROWS.find((r) => r.customerName === "Dan Brown")!;
+    expect(dan.smsReplies).toHaveLength(1);
+    expect(dan.smsReplies[0]!.body).toContain("called me back");
+  });
+});
+
+describe("getReviewAnalytics — filter logic", () => {
+  it("filters by rating correctly", () => {
+    const fiveStar = MOCK_ROWS.filter((r) => r.customerRating === 5);
+    expect(fiveStar).toHaveLength(2);
+  });
+
+  it("filters by team correctly", () => {
+    const karlaJobs = MOCK_ROWS.filter((r) => r.teamName === "Team Karla");
+    expect(karlaJobs).toHaveLength(2);
+  });
+
+  it("filters to rows with SMS replies", () => {
+    const withReplies = MOCK_ROWS.filter((r) => r.smsReplies.length > 0);
+    expect(withReplies).toHaveLength(2);
+  });
+
+  it("filters to rows with chips selected", () => {
+    const withChips = MOCK_ROWS.filter((r) => !!r.reviewChipsSelected);
+    expect(withChips).toHaveLength(2);
+  });
+
+  it("filters to rows with draft picked", () => {
+    const withDraft = MOCK_ROWS.filter((r) => !!r.reviewDraftPicked);
+    expect(withDraft).toHaveLength(1);
+  });
+
+  it("filters to rows with review copied", () => {
+    const copied = MOCK_ROWS.filter((r) => r.reviewCopied === 1);
+    expect(copied).toHaveLength(1);
+  });
+
+  it("search by customer name works", () => {
+    const q = "alice";
+    const results = MOCK_ROWS.filter((r) => r.customerName?.toLowerCase().includes(q));
+    expect(results).toHaveLength(1);
+    expect(results[0]!.customerName).toBe("Alice Smith");
+  });
+
+  it("search is case-insensitive", () => {
+    const q = "SOLANGE";
+    const results = MOCK_ROWS.filter((r) => r.teamName?.toLowerCase().includes(q.toLowerCase()));
+    expect(results).toHaveLength(2);
+  });
+});

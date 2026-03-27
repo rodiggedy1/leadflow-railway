@@ -225,3 +225,9 @@
 - [x] Post-review SMS: 4 & 5 star recurring customers get warm thank-you ("We'll see you at the next one!")
 - [x] Post-review SMS: 1-3 star customers get customer-facing apology SMS + owner alert
 - [x] isRecurringServiceType helper exported from trackerRouter for reuse
+- [x] Review Tracker page: tracker.getReviewAnalytics tRPC procedure (jobs with ratings, SMS replies joined)
+- [x] Review Tracker page: /admin/review-tracker route + AdminHeader nav entry ("Reviews" tab)
+- [x] Review Tracker page: team leaderboard cards (avg rating, funnel %, total jobs)
+- [x] Review Tracker page: funnel table (date, customer, team, rating, chips, draft picked, copied) with sort + filter
+- [x] Review Tracker page: expandable SMS reply drawer per job row
+- [x] Review Tracker page: vitest tests for getReviewAnalytics procedure

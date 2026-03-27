@@ -257,7 +257,8 @@ export type AdminTab =
   | "command-center"
   | "settings"
   | "field-management"
-  | "reactivation";
+  | "reactivation"
+  | "review-tracker";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -351,6 +352,13 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: <Smartphone className="w-3.5 h-3.5" />,
     href: "/admin/tracker-flow",
     tabId: "tracker-flow",
+  },
+  {
+    id: "review-tracker",
+    label: "Reviews",
+    icon: <Star className="w-3.5 h-3.5" />,
+    href: "/admin/review-tracker",
+    tabId: "review-tracker",
   },
   {
     id: "settings",

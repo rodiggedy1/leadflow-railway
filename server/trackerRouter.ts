@@ -18,7 +18,8 @@ import { router, publicProcedure, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs } from "../drizzle/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
+import { jobSmsReplies } from "../drizzle/schema";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
@@ -399,6 +400,154 @@ Return a JSON object with this exact structure:
         }
       }
       return { sent, skipped, errors, date: targetDate };
+    }),
+
+  /**
+   * Protected (admin): fetch review analytics for the Review Tracker page.
+   * Returns:
+   *   - rows: all cleaner_jobs with customerRating set (joined with SMS replies)
+   *   - teamStats: per-team aggregated leaderboard data
+   */
+  getReviewAnalytics: agentProcedure
+    .input(
+      z.object({
+        from: z.string().optional(), // YYYY-MM-DD
+        to: z.string().optional(),   // YYYY-MM-DD
+        teamName: z.string().optional(),
+        rating: z.number().int().min(1).max(5).optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // Build WHERE conditions
+      const conditions = [isNotNull(cleanerJobs.customerRating)];
+      if (input.from) conditions.push(gte(cleanerJobs.jobDate, input.from));
+      if (input.to) conditions.push(lte(cleanerJobs.jobDate, input.to));
+      if (input.teamName) conditions.push(eq(cleanerJobs.teamName, input.teamName));
+      if (input.rating) conditions.push(eq(cleanerJobs.customerRating, input.rating));
+
+      // Fetch all rated jobs
+      const rows = await db
+        .select({
+          id: cleanerJobs.id,
+          jobDate: cleanerJobs.jobDate,
+          customerName: cleanerJobs.customerName,
+          customerPhone: cleanerJobs.customerPhone,
+          teamName: cleanerJobs.teamName,
+          cleanerName: cleanerJobs.cleanerName,
+          serviceType: cleanerJobs.serviceType,
+          customerRating: cleanerJobs.customerRating,
+          reviewChipsSelected: cleanerJobs.reviewChipsSelected,
+          reviewDraftPicked: cleanerJobs.reviewDraftPicked,
+          reviewCopied: cleanerJobs.reviewCopied,
+          trackerToken: cleanerJobs.trackerToken,
+          jobAddress: cleanerJobs.jobAddress,
+          updatedAt: cleanerJobs.updatedAt,
+        })
+        .from(cleanerJobs)
+        .where(and(...conditions))
+        .orderBy(desc(cleanerJobs.updatedAt))
+        .limit(500);
+
+      // For each job, fetch SMS replies from jobSmsReplies (client messages only)
+      const jobIds = rows.map((r) => r.id);
+      let repliesByJobId: Record<number, { body: string; receivedAt: Date; senderType: string }[]> = {};
+
+      if (jobIds.length > 0) {
+        // Fetch all relevant SMS replies in one query
+        const allReplies = await db
+          .select({
+            cleanerJobId: jobSmsReplies.cleanerJobId,
+            body: jobSmsReplies.body,
+            receivedAt: jobSmsReplies.receivedAt,
+            senderType: jobSmsReplies.senderType,
+          })
+          .from(jobSmsReplies)
+          .where(
+            and(
+              eq(jobSmsReplies.senderType, "client"),
+              // Only fetch replies for jobs in our result set
+              // Use a subquery-style filter: cleanerJobId must be in our list
+              // Drizzle doesn't have inArray with dynamic arrays cleanly, so we filter post-fetch
+              // (max 500 jobs, so this is fine)
+            )
+          )
+          .orderBy(desc(jobSmsReplies.receivedAt));
+
+        // Group by cleanerJobId, filtering to only our job IDs
+        const jobIdSet = new Set(jobIds);
+        for (const reply of allReplies) {
+          if (!jobIdSet.has(reply.cleanerJobId)) continue;
+          if (!repliesByJobId[reply.cleanerJobId]) repliesByJobId[reply.cleanerJobId] = [];
+          repliesByJobId[reply.cleanerJobId]!.push({
+            body: reply.body,
+            receivedAt: reply.receivedAt,
+            senderType: reply.senderType,
+          });
+        }
+      }
+
+      // Attach replies to each row
+      const rowsWithReplies = rows.map((row) => ({
+        ...row,
+        smsReplies: repliesByJobId[row.id] ?? [],
+      }));
+
+      // Build per-team leaderboard stats
+      const teamMap = new Map<
+        string,
+        {
+          teamName: string;
+          totalJobs: number;
+          totalRating: number;
+          fiveStarCount: number;
+          fourStarCount: number;
+          lowRatingCount: number;
+          chipsCount: number;
+          draftPickedCount: number;
+          copiedCount: number;
+        }
+      >();
+
+      for (const row of rows) {
+        const key = row.teamName ?? row.cleanerName ?? "Unknown";
+        if (!teamMap.has(key)) {
+          teamMap.set(key, {
+            teamName: key,
+            totalJobs: 0,
+            totalRating: 0,
+            fiveStarCount: 0,
+            fourStarCount: 0,
+            lowRatingCount: 0,
+            chipsCount: 0,
+            draftPickedCount: 0,
+            copiedCount: 0,
+          });
+        }
+        const t = teamMap.get(key)!;
+        t.totalJobs++;
+        t.totalRating += row.customerRating ?? 0;
+        if (row.customerRating === 5) t.fiveStarCount++;
+        else if (row.customerRating === 4) t.fourStarCount++;
+        else if ((row.customerRating ?? 0) <= 3) t.lowRatingCount++;
+        if (row.reviewChipsSelected) t.chipsCount++;
+        if (row.reviewDraftPicked) t.draftPickedCount++;
+        if (row.reviewCopied) t.copiedCount++;
+      }
+
+      const teamStats = Array.from(teamMap.values()).map((t) => ({
+        ...t,
+        avgRating: t.totalJobs > 0 ? Math.round((t.totalRating / t.totalJobs) * 10) / 10 : 0,
+        fiveStarPct: t.totalJobs > 0 ? Math.round((t.fiveStarCount / t.totalJobs) * 100) : 0,
+        funnelPct: t.totalJobs > 0 ? Math.round((t.copiedCount / t.totalJobs) * 100) : 0,
+      }));
+
+      // Sort teams by avg rating desc
+      teamStats.sort((a, b) => b.avgRating - a.avgRating);
+
+      return { rows: rowsWithReplies, teamStats };
     }),
 
   /**

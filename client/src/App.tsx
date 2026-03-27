@@ -28,6 +28,7 @@ const FieldManagement = lazy(() => import("./pages/FieldManagement"));
 const ReactivationEngine = lazy(() => import("./pages/ReactivationEngine"));
 const CleanerAuthCallback = lazy(() => import("./pages/CleanerAuthCallback"));
 const LiveCallAssist = lazy(() => import("./pages/LiveCallAssist"));
+const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -62,6 +63,7 @@ function Router() {
       <Route path={"/admin/tracker-flow"} component={TrackerFlow} />
       <Route path={"/admin/field-management"} component={FieldManagement} />
       <Route path={"/admin/reactivation"} component={ReactivationEngine} />
+      <Route path={"/admin/review-tracker"} component={ReviewTracker} />
       <Route path={"/call-assist"} component={LiveCallAssist} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
