@@ -262,3 +262,4 @@
 - [x] Outbound Call Assist: remove top-of-page violet banner — replace inbound opener script inline with outbound opener in center column
 - [x] Outbound Call Assist: add Call Assist button directly on leads table row (not just inside the drawer)
 - [x] DayBoard: two jobs at the same start time overlap/hide each other — stack concurrent jobs vertically in the swim lane instead
+- [x] DayBoard: fix concurrent jobs — keep single-height lane, split overlapping blocks top/bottom within the same row (no sub-rows)

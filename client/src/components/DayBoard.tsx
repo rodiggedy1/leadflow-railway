@@ -308,15 +308,17 @@ function JobBlock({
   onClick,
   isSelected,
   hasUnread,
-  trackOffset = 0,
-  trackHeight = 72,
+  slotIndex = 0,
+  totalSlots = 1,
+  laneHeight = 72,
 }: {
   job: Job;
   onClick: (job: Job) => void;
   isSelected: boolean;
   hasUnread?: boolean;
-  trackOffset?: number;
-  trackHeight?: number;
+  slotIndex?: number;
+  totalSlots?: number;
+  laneHeight?: number;
 }) {
   const startMin = parseToMinutes(job.serviceDateTime);
   if (startMin === null || startMin > BOARD_MINUTES || startMin < -30) return null;
@@ -352,8 +354,8 @@ function JobBlock({
         left: `${leftPct}%`,
         width: `calc(${widthPct}% - 4px)`,
         minWidth: "48px",
-        top: `${trackOffset + 4}px`,
-        height: `${trackHeight - 8}px`,
+        top: `${Math.round((slotIndex / totalSlots) * laneHeight) + 3}px`,
+        height: `${Math.round(laneHeight / totalSlots) - 6}px`,
       }}
       title={`${job.customerName} — ${job.jobAddress}`}
     >
@@ -408,48 +410,68 @@ function JobBlock({
 }
 
 /**
- * Assign each job to a sub-row (track) so that overlapping jobs are stacked
- * vertically instead of rendered on top of each other.
- * Returns an array of [job, trackIndex] pairs.
+ * For each job, compute its vertical slot within a fixed-height lane.
+ * Non-overlapping jobs get the full height (slot 0 of 1).
+ * Overlapping jobs are split: slot 0 = top half, slot 1 = bottom half.
+ * Only handles up to 2 concurrent jobs per time window (covers 99% of cases).
  */
-function assignTracks(jobs: Job[]): Array<{ job: Job; track: number }> {
-  // Sort by start time so earlier jobs get lower track numbers
+function assignSlots(jobs: Job[]): Array<{ job: Job; slotIndex: number; totalSlots: number }> {
   const sorted = [...jobs].sort((a, b) => {
     const aMin = parseToMinutes(a.serviceDateTime) ?? 0;
     const bMin = parseToMinutes(b.serviceDateTime) ?? 0;
     return aMin - bMin;
   });
 
-  // trackEnd[i] = end minute of the last job placed in track i
-  const trackEnd: number[] = [];
-  const result: Array<{ job: Job; track: number }> = [];
+  // Build overlap groups: jobs that overlap with each other
+  // Each job gets a slotIndex within its overlap group
+  const result: Array<{ job: Job; slotIndex: number; totalSlots: number }> = [];
+  // slotEnd[i] = end minute of the job currently occupying slot i
+  const slotEnd: number[] = [];
 
   for (const job of sorted) {
     const startMin = parseToMinutes(job.serviceDateTime) ?? 0;
     const duration = estimateDuration(job.serviceType, job.bedrooms);
     const endMin = startMin + duration;
 
-    // Find the first track where the job fits (no overlap)
-    let placed = false;
-    for (let t = 0; t < trackEnd.length; t++) {
-      if (startMin >= trackEnd[t]) {
-        trackEnd[t] = endMin;
-        result.push({ job, track: t });
-        placed = true;
+    // Find a free slot
+    let assigned = -1;
+    for (let s = 0; s < slotEnd.length; s++) {
+      if (startMin >= slotEnd[s]) {
+        slotEnd[s] = endMin;
+        assigned = s;
         break;
       }
     }
-    if (!placed) {
-      // Need a new track
-      trackEnd.push(endMin);
-      result.push({ job, track: trackEnd.length - 1 });
+    if (assigned === -1) {
+      slotEnd.push(endMin);
+      assigned = slotEnd.length - 1;
     }
+    result.push({ job, slotIndex: assigned, totalSlots: 1 }); // totalSlots patched below
+  }
+
+  // Patch totalSlots: for each job, count how many jobs overlap with it
+  for (let i = 0; i < result.length; i++) {
+    const aStart = parseToMinutes(result[i].job.serviceDateTime) ?? 0;
+    const aDur = estimateDuration(result[i].job.serviceType, result[i].job.bedrooms);
+    const aEnd = aStart + aDur;
+    let maxSlot = result[i].slotIndex;
+    for (let j = 0; j < result.length; j++) {
+      if (i === j) continue;
+      const bStart = parseToMinutes(result[j].job.serviceDateTime) ?? 0;
+      const bDur = estimateDuration(result[j].job.serviceType, result[j].job.bedrooms);
+      const bEnd = bStart + bDur;
+      // Check overlap
+      if (aStart < bEnd && aEnd > bStart) {
+        maxSlot = Math.max(maxSlot, result[j].slotIndex);
+      }
+    }
+    result[i].totalSlots = maxSlot + 1;
   }
 
   return result;
 }
 
-/** One cleaner swim lane row */
+/** One cleaner swim lane row — always fixed height */
 function SwimLane({
   cleanerName,
   jobs,
@@ -465,11 +487,8 @@ function SwimLane({
   unreadJobIds?: Set<number>;
   nowPos?: number | null;
 }) {
-  // Assign jobs to non-overlapping tracks
-  const tracked = assignTracks(jobs);
-  const numTracks = Math.max(1, ...tracked.map(t => t.track + 1));
-  const ROW_HEIGHT = 72; // px per track
-  const totalHeight = numTracks * ROW_HEIGHT;
+  const slotted = assignSlots(jobs);
+  const LANE_HEIGHT = 72;
 
   return (
     <div className="flex items-stretch border-b border-slate-100 last:border-b-0 group">
@@ -481,23 +500,14 @@ function SwimLane({
         </div>
       </div>
 
-      {/* Timeline area — height expands to fit all tracks */}
-      <div className="flex-1 relative" style={{ height: `${totalHeight}px` }}>
+      {/* Timeline area — fixed height */}
+      <div className="flex-1 relative" style={{ height: `${LANE_HEIGHT}px` }}>
         {/* Hour grid lines */}
         {HOUR_LABELS.map((_, i) => (
           <div
             key={i}
             className="absolute top-0 bottom-0 w-px bg-slate-100"
             style={{ left: `${((i + 0.5) / HOUR_LABELS.length) * 100}%` }}
-          />
-        ))}
-
-        {/* Track dividers (only when more than one track) */}
-        {numTracks > 1 && Array.from({ length: numTracks - 1 }, (_, i) => (
-          <div
-            key={`track-div-${i}`}
-            className="absolute left-0 right-0 border-t border-slate-100 border-dashed pointer-events-none"
-            style={{ top: `${(i + 1) * ROW_HEIGHT}px` }}
           />
         ))}
 
@@ -509,15 +519,16 @@ function SwimLane({
           />
         )}
 
-        {tracked.map(({ job, track }) => (
+        {slotted.map(({ job, slotIndex, totalSlots }) => (
           <JobBlock
             key={job.id}
             job={job}
             onClick={onJobClick}
             isSelected={selectedJobId === job.id}
             hasUnread={unreadJobIds?.has(job.id)}
-            trackOffset={track * ROW_HEIGHT}
-            trackHeight={ROW_HEIGHT}
+            slotIndex={slotIndex}
+            totalSlots={totalSlots}
+            laneHeight={LANE_HEIGHT}
           />
         ))}
       </div>
