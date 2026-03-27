@@ -469,6 +469,7 @@ function SmsHealthStrip({ jobs }: { jobs: Job[] }) {
       detail: string;
     }> = [];
 
+    let dotIndex = 0;
     for (const job of jobs) {
       for (const event of job.timeline) {
         if (!event.timestamp) continue;
@@ -490,7 +491,7 @@ function SmsHealthStrip({ jobs }: { jobs: Job[] }) {
         if (minutes < 0 || minutes > BOARD_MINUTES) continue;
 
         result.push({
-          id: `${job.id}-${event.step}`,
+          id: `${job.id}-${event.step}-${dotIndex++}`,
           leftPct: toPercent(minutes),
           status: event.status,
           label: event.label,
