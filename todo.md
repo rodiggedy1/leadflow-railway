@@ -324,3 +324,4 @@
 - [x] MIB Command Chat: auto-post alert message + card when any job is flagged
 - [x] MIB Command Chat: Auto-Raised Issues panel with "Jump to Job Thread" that switches to Today tab and selects the job
 - [x] MIB Command Chat: Broadcast Update chip sends SMS to all cleaners via OpenPhone
+- [x] MIB Command Chat: auto-collapse left sidebar to slim icon rail when command channel is selected; expand button to restore

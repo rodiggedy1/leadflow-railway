@@ -43,6 +43,7 @@ import {
   Camera as CameraIcon,
   Flag,
   MapPin,
+  CalendarDays,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -462,6 +463,14 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Auto-collapse sidebar when command channel is selected
+  const handleSetActiveChannel = (ch: string) => {
+    setActiveChannel(ch);
+    if (ch === "command") setSidebarCollapsed(true);
+    else setSidebarCollapsed(false);
+  };
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
@@ -826,6 +835,51 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
+      {sidebarCollapsed ? (
+        /* Slim icon rail when collapsed */
+        <div className="w-14 shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-hidden transition-all">
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+            title="Expand sidebar"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {/* Channel icons */}
+          {CHANNELS.map((ch) => {
+            const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
+            return (
+              <button
+                key={ch.key}
+                onClick={() => { setActiveTab("channels"); handleSetActiveChannel(ch.key); }}
+                className={cn(
+                  "relative w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
+                  activeChannel === ch.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+                title={ch.label}
+              >
+                {ch.label.charAt(0)}
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
+                    {count > 9 ? "9+" : count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {/* Today ops icon */}
+          <button
+            onClick={() => { setActiveTab("today"); setSidebarCollapsed(false); }}
+            className={cn(
+              "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
+              activeTab === "today" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+            title="Today Ops"
+          >
+            <CalendarDays className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
       <div className="w-[300px] shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-3">
@@ -919,7 +973,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                     return (
                       <button
                         key={ch.key}
-                        onClick={() => { setActiveTab("channels"); setActiveChannel(ch.key); }}
+                        onClick={() => { setActiveTab("channels"); handleSetActiveChannel(ch.key); }}
                         className={cn(
                           "w-full flex items-center justify-between rounded-2xl border px-4 py-3.5 text-sm transition",
                           isActive
@@ -969,7 +1023,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 return (
                   <button
                     key={ch.key}
-                    onClick={() => setActiveChannel(ch.key)}
+                    onClick={() => handleSetActiveChannel(ch.key)}
                     className={cn(
                       "w-full flex items-center justify-between rounded-2xl border px-4 py-3.5 text-sm transition",
                       activeChannel === ch.key
@@ -995,6 +1049,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           </p>
         </div>
       </div>
+      )} {/* end sidebarCollapsed ternary */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
