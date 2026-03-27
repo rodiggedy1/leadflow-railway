@@ -4,7 +4,8 @@
  * Layout: 3 columns — left sidebar (queue + jobs), center (timeline + thread), right (job details + actions).
  */
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -30,6 +31,10 @@ import {
   X,
   ImageIcon,
   ZoomIn,
+  AlertTriangle,
+  Square,
+  MicOff,
+  CheckCircle2,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -484,6 +489,107 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     });
   }
 
+  // ── Emoji picker state ─────────────────────────────────────────────────────
+  const [showEmoji, setShowEmoji] = useState(false);
+  const emojiRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmoji) return;
+    function handleClick(e: MouseEvent) {
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
+        setShowEmoji(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showEmoji]);
+
+  function insertEmoji(data: EmojiClickData) {
+    const el = composerRef.current;
+    if (!el) { setComposer(prev => prev + data.emoji); return; }
+    const start = el.selectionStart ?? composer.length;
+    const end = el.selectionEnd ?? composer.length;
+    const next = composer.slice(0, start) + data.emoji + composer.slice(end);
+    setComposer(next);
+    // Restore cursor position after state update
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + data.emoji.length, start + data.emoji.length);
+    });
+  }
+
+  // ── Voice recording state ──────────────────────────────────────────────────
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setIsTranscribing(true);
+    await new Promise<void>(resolve => {
+      mr.onstop = () => resolve();
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+    });
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text } = await transcribeVoice.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      setComposer(prev => prev ? prev + " " + text : text);
+      toast.success("Voice note transcribed");
+    } catch {
+      toast.error("Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [transcribeVoice]);
+
+  // ── Flag Issue modal state ─────────────────────────────────────────────────
+  const [showFlagModal, setShowFlagModal] = useState(false);
+  const [flagNote, setFlagNote] = useState("");
+  const [flagSubmitting, setFlagSubmitting] = useState(false);
+  const flagIssue = trpc.opsChat.flagIssue.useMutation({
+    onSuccess: () => {
+      setShowFlagModal(false);
+      setFlagNote("");
+      toast.success("Job flagged — moved to Needs Attention");
+      utils.opsChat.listTodayJobs.invalidate();
+      if (selectedJobId) utils.opsChat.getJobDetail.invalidate({ jobId: selectedJobId });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Resolved caller name — owner name takes precedence, then agent name
   const callerName = user?.name ?? agentMe?.name ?? "Office";
 
@@ -644,6 +750,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   }
 
   function handleQuickAction(qa: typeof QUICK_ACTIONS[number]) {
+    if (qa.key === "Issue") {
+      // Issue chip opens the Flag modal directly
+      setShowFlagModal(true);
+      return;
+    }
     setSelectedQuickAction(qa.key);
     setComposer(qa.template);
   }
@@ -1002,9 +1113,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                       onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
                     >
                       <Textarea
+                        ref={composerRef}
                         value={composer}
                         onChange={(e) => setComposer(e.target.value)}
-                        placeholder={isDragging ? "Drop photos here…" : "Type a message or drop photos…"}
+                        placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Type a message or drop photos…"}
                         rows={3}
                         className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                         onKeyDown={(e) => {
@@ -1012,19 +1124,57 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         }}
                       />
                       <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 relative">
+                          {/* Photo */}
                           <button
                             className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
                             onClick={() => fileInputRef.current?.click()}
                           >
                             <Camera className="h-4 w-4" /> Photo
                           </button>
-                          <button className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1">
-                            <Mic className="h-4 w-4" /> Voice
-                          </button>
-                          <button className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition">
-                            <Smile className="h-4 w-4" />
-                          </button>
+                          {/* Voice */}
+                          {isRecording ? (
+                            <button
+                              className="rounded-xl px-2.5 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium"
+                              onClick={stopRecording}
+                            >
+                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                              {recordingSeconds}s — Stop
+                            </button>
+                          ) : isTranscribing ? (
+                            <button disabled className="rounded-xl px-2.5 py-1.5 text-slate-400 transition text-xs flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
+                            </button>
+                          ) : (
+                            <button
+                              className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                              onClick={startRecording}
+                            >
+                              <Mic className="h-4 w-4" /> Voice
+                            </button>
+                          )}
+                          {/* Emoji */}
+                          <div ref={emojiRef} className="relative">
+                            <button
+                              className={cn("rounded-xl p-2 transition", showEmoji ? "text-slate-900 bg-white" : "text-slate-400 hover:text-slate-700 hover:bg-white")}
+                              onClick={() => setShowEmoji(v => !v)}
+                            >
+                              <Smile className="h-4 w-4" />
+                            </button>
+                            {showEmoji && (
+                              <div className="absolute bottom-10 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">
+                                <EmojiPicker
+                                  theme={Theme.LIGHT}
+                                  onEmojiClick={(data) => { insertEmoji(data); setShowEmoji(false); }}
+                                  height={350}
+                                  width={300}
+                                  searchDisabled={false}
+                                  skinTonesDisabled
+                                  previewConfig={{ showPreview: false }}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <Button
                           onClick={handleSend}
@@ -1256,9 +1406,90 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 >
                   Offer Rebook
                 </Button>
+                {/* Flag as Needs Attention — full width */}
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "col-span-2 h-9 rounded-xl text-xs font-medium whitespace-nowrap transition",
+                    jobDetail.job.flagged
+                      ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                      : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  )}
+                  onClick={() => {
+                    if (!jobDetail.job.flagged) setShowFlagModal(true);
+                  }}
+                  disabled={jobDetail.job.flagged}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                  {jobDetail.job.flagged ? "⚠️ Already flagged — Needs Attention" : "Flag as Needs Attention"}
+                </Button>
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── Flag Issue Modal ────────────────────────────────────────────────────────────────── */}
+      {showFlagModal && selectedJobId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowFlagModal(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-900">Flag as Needs Attention</h2>
+                </div>
+                <p className="text-sm text-slate-500 ml-10">This job will move to the top of the Priority Queue and the team will be alerted.</p>
+              </div>
+              <button className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" onClick={() => setShowFlagModal(false)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-semibold text-slate-700 mb-1.5 block">What’s the issue?</Label>
+                <Textarea
+                  value={flagNote}
+                  onChange={e => setFlagNote(e.target.value)}
+                  placeholder="e.g. Cleaner locked out, client not home, supply issue…"
+                  rows={3}
+                  className="resize-none rounded-xl border-slate-200 text-sm"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl border-slate-200 text-slate-700"
+                  onClick={() => setShowFlagModal(false)}
+                  disabled={flagSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                  disabled={!flagNote.trim() || flagSubmitting}
+                  onClick={async () => {
+                    if (!flagNote.trim() || !selectedJobId) return;
+                    setFlagSubmitting(true);
+                    try {
+                      await flagIssue.mutateAsync({
+                        cleanerJobId: selectedJobId,
+                        issueNote: flagNote.trim(),
+                        flaggedByName: callerName,
+                      });
+                    } finally {
+                      setFlagSubmitting(false);
+                    }
+                  }}
+                >
+                  {flagSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><AlertTriangle className="h-4 w-4 mr-1.5" /> Flag Job</>}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

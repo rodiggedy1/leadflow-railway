@@ -26,8 +26,8 @@ import {
   opsChatReads,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
-
-// ── helpers ──────────────────────────────────────────────────────────────────
+import { transcribeAudio } from "./_core/voiceTranscription";
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
   const now = new Date();
@@ -37,8 +37,9 @@ function todayDateString(): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Map cleanerJob.jobStatus to the UI priority bucket */
-function toPriorityStatus(jobStatus: string | null | undefined): "issue" | "soon" | "progress" | "complete" | "assigned" {
+/** Map cleanerJob.jobStatus + flagged to the UI priority bucket */
+function toPriorityStatus(jobStatus: string | null | undefined, flagged?: number | null): "issue" | "soon" | "progress" | "complete" | "assigned" {
+  if (flagged === 1) return "issue"; // manually flagged always surfaces at top
   if (!jobStatus) return "assigned";
   if (jobStatus === "issue_at_property") return "issue";
   if (jobStatus === "completed") return "complete";
@@ -125,7 +126,7 @@ export const opsChatRouter = router({
       price: r.jobRevenue ? `$${r.jobRevenue}` : "",
       time: formatTime(r.serviceDateTime),
       serviceDateTime: r.serviceDateTime,
-      status: toPriorityStatus(r.jobStatus),
+      status: toPriorityStatus(r.jobStatus, r.flagged),
       jobStatus: r.jobStatus,
       issueNote: r.issueNote ?? null,
       flagged: r.flagged === 1,
@@ -311,7 +312,7 @@ export const opsChatRouter = router({
           price: job.jobRevenue ? `$${job.jobRevenue}` : "",
           time: formatTime(job.serviceDateTime),
           serviceDateTime: job.serviceDateTime,
-          status: toPriorityStatus(job.jobStatus),
+          status: toPriorityStatus(job.jobStatus, job.flagged),
           jobStatus: job.jobStatus,
           issueNote: job.issueNote ?? null,
           customerNotes: job.customerNotes ?? null,
@@ -687,4 +688,25 @@ export const opsChatRouter = router({
     }
     return result as { urgent: number; dispatch: number; general: number; cleaners: number };
   }),
+
+  /**
+   * Transcribe a voice note recorded in the browser.
+   * Accepts base64-encoded audio (webm/mp3/wav) and returns the transcript text.
+   */
+  transcribeVoiceNote: opsChatProcedure
+    .input(
+      z.object({
+        dataBase64: z.string().min(1),
+        mimeType: z.string().default("audio/webm"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      // Upload audio to S3 first so Whisper can fetch it via URL
+      const audioBuffer = Buffer.from(input.dataBase64, "base64");
+      const key = `voice-notes/${Date.now()}-${Math.random().toString(36).slice(2)}.webm`;
+      const { url } = await storagePut(key, audioBuffer, input.mimeType);
+      const result = await transcribeAudio({ audioUrl: url });
+      if ("error" in result) throw new Error(result.error);
+      return { text: result.text ?? "" };
+    }),
 });

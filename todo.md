@@ -308,3 +308,7 @@
 - [x] OpsChat timeline: color-coded pill chips (green=check-in/complete, blue=photos, red=issues, amber=on-the-way); status history + photos only; FM log and SMS removed; cleaner first name in labels; photos grouped by minute with count
 - [ ] OpsChat timeline: fix missing check-in and completed events — only showing on_the_way and arrived for completed jobs
 - [x] OpsChat photo upload: drag-drop or click Camera, multi-image preview strip with upload progress, S3 storage, inline image rendering in thread with lightbox viewer
+- [x] OpsChat voice recording: click to start, live timer, stop to transcribe via Whisper, inserts text into composer
+- [x] OpsChat emoji picker: popover on Smile button, inserts emoji at cursor position
+- [x] OpsChat Flag as Needs Attention: modal with issue note, wired to flagIssue procedure, moves job to top of priority queue
+- [x] Fix toPriorityStatus: flagged=1 jobs always appear in issue bucket regardless of jobStatus
