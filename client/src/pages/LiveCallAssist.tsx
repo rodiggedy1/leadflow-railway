@@ -712,18 +712,26 @@ export default function LiveCallAssist() {
               <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-6">
                 {isOutbound && urlParams ? (
                   <>
-                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Outbound — Opening Line</p>
-                    <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
-                      &ldquo;Hi {urlParams.name ? urlParams.name.split(" ")[0] : "there"}, this is {agentName ? agentName.split(" ")[0] : "[Your Name]"} from Maids in Black
+                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-2">Outbound — Opening Line</p>
+                    <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic mb-4">
+                      &ldquo;Hey {urlParams.name ? urlParams.name.split(" ")[0] : "[Name]"}, this is {agentName ? agentName.split(" ")[0] : "[Your Name]"} calling from Maids in Black.
                       {urlParams.bedrooms || urlParams.bathrooms || urlParams.serviceType ? (
-                        <> — we saw your request for
-                          {urlParams.bedrooms ? ` a ${urlParams.bedrooms}-bedroom` : ""}
+                        <> You reached out about a
+                          {urlParams.bedrooms ? ` ${urlParams.bedrooms}-bedroom` : ""}
                           {urlParams.bathrooms ? `, ${urlParams.bathrooms}-bathroom` : ""}
-                          {urlParams.serviceType ? ` ${urlParams.serviceType}` : " home cleaning"}
+                          {urlParams.serviceType ? ` ${urlParams.serviceType.toLowerCase()}` : " cleaning"}
                         </>
-                      ) : " — we saw your cleaning request"}
-                      . Is now a good time?&rdquo;
+                      ) : " You reached out about a cleaning"}
+                      {" "}and I just wanted to make sure we get that taken care of for you. Do you have 60 seconds?&rdquo;
                     </p>
+                    <div className="border-t border-violet-200 pt-3 space-y-2">
+                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">If they say yes — bridge immediately</p>
+                      <p className="text-sm text-gray-700 italic">&ldquo;Perfect. So I’m looking at your request right now — {urlParams.bedrooms ? `${urlParams.bedrooms} bed` : ""}{urlParams.bathrooms ? `, ${urlParams.bathrooms} bath` : ""}. We have availability this week and I can lock in a time for you right now. What day works best?&rdquo;</p>
+                    </div>
+                    <div className="border-t border-violet-200 pt-3 space-y-2 mt-2">
+                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">If they say it’s a bad time</p>
+                      <p className="text-sm text-gray-700 italic">&ldquo;No problem at all — when’s a better time to reach you? I’ll call you back personally.&rdquo;</p>
+                    </div>
                   </>
                 ) : (
                   <>

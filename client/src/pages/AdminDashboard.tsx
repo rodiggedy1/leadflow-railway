@@ -3796,7 +3796,7 @@ export default function AdminDashboard() {
                               window.open(`/call-assist?${params.toString()}`, '_blank');
                             }}
                             title="Open Call Assist for this lead"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 shrink-0"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 shrink-0"
                           >
                             <Phone className="w-3 h-3" />
                             Assist
