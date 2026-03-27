@@ -3801,26 +3801,7 @@ export default function AdminDashboard() {
                               return display ? timeAgo(display) : '—';
                             })()}
                           </span>
-                          {/* Call Assist — only visible on row hover */}
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              const params = new URLSearchParams();
-                              if (session.id) params.set('sessionId', String(session.id));
-                              if (session.leadName) params.set('name', session.leadName);
-                              if (session.leadPhone) params.set('phone', session.leadPhone);
-                              if (session.bedrooms) params.set('bedrooms', String(session.bedrooms));
-                              if (session.bathrooms) params.set('bathrooms', String(session.bathrooms));
-                              if (session.serviceType) params.set('serviceType', session.serviceType);
-                              if (session.address) params.set('address', session.address);
-                              window.open(`/call-assist?${params.toString()}`, '_blank');
-                            }}
-                            title="Open Call Assist for this lead"
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 shrink-0"
-                          >
-                            <Phone className="w-3 h-3" />
-                            Assist
-                          </button>
+
                         </div>
                       </TableCell>
 
