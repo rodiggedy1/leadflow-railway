@@ -4,7 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import { MessageCircle } from "lucide-react";
 import OpsChat from "./pages/OpsChat";
@@ -41,6 +41,20 @@ function PageLoader() {
   );
 }
 
+/**
+ * OpsChatRedirect
+ * /admin/ops-chat is now an overlay — redirect to /admin/leads and open the overlay.
+ */
+function OpsChatRedirect() {
+  const { open } = useOpsChatWindow();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    open();
+    navigate("/admin/leads");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -48,6 +62,7 @@ function Router() {
         <Route path={"/"} component={Home} />
         <Route path={"/admin"} component={() => { window.location.replace("/admin/command-center"); return null; }} />
         <Route path={"/admin/leads"} component={AdminDashboard} />
+        <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
         <Route path={"/admin/completed-jobs"} component={CompletedJobs} />
