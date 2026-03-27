@@ -5,10 +5,12 @@
  * accessed via a unique token in the URL by the customer on their phone.
  *
  * Procedures:
- *   tracker.getJob         → fetch job details by trackerToken (public)
- *   tracker.submitRating   → submit a star rating + optional comment (public, once per token)
- *   tracker.sendTodayLinks → admin-triggered: generate tokens + send SMS for today's jobs
- *   tracker.sendSingleLink → admin-triggered: send tracker link for a single job
+ *   tracker.getJob                → fetch job details by trackerToken (public)
+ *   tracker.submitRating          → submit a star rating + optional comment (public, once per token)
+ *   tracker.generateReviewDrafts  → AI-generate 3 personalized Google review drafts (public)
+ *   tracker.recordReviewAction    → track which draft was picked / copied (public, analytics)
+ *   tracker.sendTodayLinks        → admin-triggered: generate tokens + send SMS for today's jobs
+ *   tracker.sendSingleLink        → admin-triggered: send tracker link for a single job
  */
 
 import { z } from "zod";
@@ -20,8 +22,10 @@ import { eq, and, isNull, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
+import { invokeLLM } from "./_core/llm";
 
 const OWNER_ALERT_NUMBER = "+13029816191"; // Owner's personal number for low-rating alerts
+const GOOGLE_REVIEW_URL = "https://tinyurl.com/26rjz5jn";
 
 /** Generate a URL-safe random token */
 function generateToken(): string {
@@ -60,6 +64,11 @@ export const trackerRouter = router({
           issueNote: cleanerJobs.issueNote,
           customerRating: cleanerJobs.customerRating,
           trackerToken: cleanerJobs.trackerToken,
+          bedrooms: cleanerJobs.bedrooms,
+          bathrooms: cleanerJobs.bathrooms,
+          reviewChipsSelected: cleanerJobs.reviewChipsSelected,
+          reviewDraftPicked: cleanerJobs.reviewDraftPicked,
+          reviewCopied: cleanerJobs.reviewCopied,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.trackerToken, input.token))
@@ -161,10 +170,161 @@ export const trackerRouter = router({
     }),
 
   /**
+   * Public: generate 3 personalized AI review drafts for the customer.
+   * Uses job details (bedrooms, bathrooms, serviceType, teamName) + customer-selected chips
+   * to create authentic, varied review options.
+   */
+  generateReviewDrafts: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(1),
+        chips: z.array(z.string()).max(10),
+        freeText: z.string().max(500).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // Fetch job data for personalization
+      const jobs = await db
+        .select({
+          id: cleanerJobs.id,
+          customerName: cleanerJobs.customerName,
+          teamName: cleanerJobs.teamName,
+          cleanerName: cleanerJobs.cleanerName,
+          serviceType: cleanerJobs.serviceType,
+          bedrooms: cleanerJobs.bedrooms,
+          bathrooms: cleanerJobs.bathrooms,
+          jobAddress: cleanerJobs.jobAddress,
+        })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.trackerToken, input.token))
+        .limit(1);
+
+      if (!jobs.length) throw new TRPCError({ code: "NOT_FOUND", message: "Invalid tracker token" });
+      const job = jobs[0]!;
+
+      // Save chips selection for analytics
+      if (input.chips.length > 0) {
+        await db
+          .update(cleanerJobs)
+          .set({ reviewChipsSelected: input.chips.join(",") })
+          .where(eq(cleanerJobs.id, job.id));
+      }
+
+      // Build context for the AI
+      const teamName = job.teamName ?? job.cleanerName ?? "the team";
+      const bedroomStr = job.bedrooms ? `${job.bedrooms} bedroom${job.bedrooms > 1 ? "s" : ""}` : null;
+      const bathroomStr = job.bathrooms ? `${job.bathrooms} bathroom${job.bathrooms > 1 ? "s" : ""}` : null;
+      const sizeStr = [bedroomStr, bathroomStr].filter(Boolean).join(", ");
+      const serviceStr = job.serviceType ?? "cleaning service";
+      const chipsStr = input.chips.length > 0 ? input.chips.join(", ") : "great service";
+      const extraContext = input.freeText ? `\nCustomer's own words: "${input.freeText}"` : "";
+
+      const systemPrompt = `You are a review-writing assistant for Maids in Black, a premium home cleaning company in Washington DC. 
+Your job is to write authentic, heartfelt Google reviews on behalf of satisfied customers.
+Each review should:
+- Sound natural and human, not like marketing copy
+- Be 2-4 sentences (50-100 words)
+- Mention specific details about the job when available
+- Vary in tone and structure (one enthusiastic, one matter-of-fact, one warm/personal)
+- NOT use the word "impeccable", "pristine", "meticulous", or other overused cleaning clichés
+- NOT start with "I" — vary the opening
+- End on a positive note that encourages others to book`;
+
+      const userPrompt = `Write 3 different Google review drafts for this cleaning job:
+- Team: ${teamName}
+- Service: ${serviceStr}${sizeStr ? ` (${sizeStr})` : ""}
+- What the customer highlighted: ${chipsStr}${extraContext}
+
+Return a JSON object with this exact structure:
+{
+  "drafts": ["draft1 text here", "draft2 text here", "draft3 text here"]
+}`;
+
+      try {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "review_drafts",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  drafts: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Array of exactly 3 review draft strings",
+                  },
+                },
+                required: ["drafts"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const rawContent = response.choices?.[0]?.message?.content;
+        if (!rawContent) throw new Error("Empty LLM response");
+        const content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+
+        const parsed = JSON.parse(content) as { drafts: string[] };
+        const drafts = parsed.drafts?.slice(0, 3) ?? [];
+
+        if (drafts.length < 3) throw new Error("Insufficient drafts returned");
+
+        return { drafts, googleReviewUrl: GOOGLE_REVIEW_URL };
+      } catch (err) {
+        console.error("[Tracker] generateReviewDrafts failed:", err);
+        // Fallback drafts if AI fails
+        const fallback = [
+          `${teamName} did an amazing job cleaning my ${sizeStr || "home"}! Everything was spotless and they were so professional. Highly recommend Maids in Black to anyone looking for a reliable cleaning service.`,
+          `Really happy with my ${serviceStr} from Maids in Black. ${teamName} was ${chipsStr.toLowerCase()} — exactly what I needed. Will definitely be booking again!`,
+          `Five stars for ${teamName}! My ${sizeStr || "place"} looks fantastic. The whole experience from booking to completion was seamless. Maids in Black is the real deal.`,
+        ];
+        return { drafts: fallback, googleReviewUrl: GOOGLE_REVIEW_URL };
+      }
+    }),
+
+  /**
+   * Public: record which review draft was picked and/or copied (analytics only).
+   */
+  recordReviewAction: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(1),
+        draftPicked: z.number().int().min(1).max(3).optional(),
+        copied: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { success: true }; // Non-fatal
+
+      const updates: Record<string, unknown> = {};
+      if (input.draftPicked !== undefined) updates.reviewDraftPicked = input.draftPicked;
+      if (input.copied) updates.reviewCopied = 1;
+
+      if (Object.keys(updates).length > 0) {
+        await db
+          .update(cleanerJobs)
+          .set(updates as Parameters<typeof db.update>[0] extends (table: infer T) => { set: (values: infer V) => unknown } ? V : never)
+          .where(eq(cleanerJobs.trackerToken, input.token));
+      }
+
+      return { success: true };
+    }),
+
+  /**
    * Protected (admin): generate tracker tokens for all of today's jobs that
    * don't have one yet, then send the tracker link SMS to each customer.
    * Called by the 8 AM cron and available as a manual trigger from the admin.
-   * NOTE: Currently disabled during testing — returns immediately without sending.
    */
   sendTodayLinks: agentProcedure
     .input(z.object({ date: z.string().optional() }))
@@ -217,7 +377,6 @@ export const trackerRouter = router({
   /**
    * Protected (admin): send tracker link to a single job by cleanerJobId.
    * Used by the "Send Tracker Link" button on admin job cards.
-   * NOTE: SMS is disabled during testing — returns the URL without sending.
    */
   sendSingleLink: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))

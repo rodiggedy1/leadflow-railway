@@ -956,6 +956,12 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   trackerSmsSentAt: timestamp("trackerSmsSentAt"),
   /** How many minutes late the cleaner is running (set when jobStatus = running_late) */
   delayMinutes: int("delayMinutes"),
+  /** Review flow analytics: comma-separated chip labels the customer selected (e.g. "On time,Super thorough") */
+  reviewChipsSelected: text("reviewChipsSelected"),
+  /** Review flow analytics: which AI draft the customer picked (1, 2, or 3) */
+  reviewDraftPicked: int("reviewDraftPicked"),
+  /** Review flow analytics: whether the customer copied the review text */
+  reviewCopied: int("reviewCopied").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [index("idx_cleaner_jobs_job_date").on(t.jobDate)]);

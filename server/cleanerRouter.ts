@@ -21,6 +21,7 @@ import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
+import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -324,6 +325,12 @@ export const cleanerRouter = router({
       // Fire-and-forget: don't block the response
       sendCompletionFlow(input.cleanerJobId).catch(err =>
         console.error("[FieldMgmt] sendCompletionFlow error:", err)
+      );
+
+      // ── Tracker Review SMS ────────────────────────────────────────────────────
+      // Send the tracker link again with a review incentive message
+      sendCompletionReviewSms(input.cleanerJobId).catch(err =>
+        console.error("[Tracker] sendCompletionReviewSms error:", err)
       );
 
       return { success: true };
