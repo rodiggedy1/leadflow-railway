@@ -280,3 +280,4 @@
 - [x] OpsChat: build 3-column desktop UI matching design (priority queue, job list, timeline, thread, job details, actions)
 - [x] OpsChat: wire real data from DB, add /ops-chat route, protect with auth
 - [x] OpsChat: write vitest tests for new procedures
+- [x] OpsChat: redesign left panel to match screenshot — narrower, scrollable, full-width conversation rows, dark job cards

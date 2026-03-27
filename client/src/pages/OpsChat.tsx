@@ -274,37 +274,28 @@ export default function OpsChat() {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
-      <div className="w-[340px] shrink-0 border-r border-slate-200 bg-slate-50/80 flex flex-col overflow-hidden">
+      <div className="w-[300px] shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b border-slate-200">
+        <div className="px-4 pt-4 pb-3">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">In-App Ops Chat</p>
-              <h1 className="text-2xl font-semibold text-slate-900 mt-0.5">Today</h1>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">In-App Ops Chat</p>
+              <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Today</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { refetchJobs(); }}
-                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900 transition"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm">
-                <Users className="h-3.5 w-3.5 inline mr-1" />
-                {jobs.length} jobs
-              </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm font-medium">
+              {jobs.length} online
             </div>
           </div>
 
           {/* Tab toggle */}
-          <div className="flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
             {(["today", "channels"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
                   "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition",
-                  activeTab === tab ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
+                  activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                 )}
               >
                 {tab === "today" ? "Today Ops" : "Channels"}
@@ -313,105 +304,114 @@ export default function OpsChat() {
           </div>
         </div>
 
-        <ScrollArea className="flex-1">
-          <div className="p-3 space-y-3">
-            {activeTab === "today" ? (
-              <>
-                {/* Priority Queue */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-slate-900">Priority Queue</span>
-                    <span className="text-xs text-slate-400">Live sorted</span>
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "today" ? (
+            <div className="px-3 pb-4 space-y-4">
+              {/* Priority Queue */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-sm font-bold text-slate-900">Priority Queue</span>
+                  <span className="text-xs text-slate-400 italic">Live sorted</span>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between rounded-xl bg-red-50 px-3 py-2.5">
+                    <span className="text-sm font-medium text-red-600">🔥 Needs attention</span>
+                    <span className="text-sm font-bold text-red-600">{grouped.issue.length}</span>
                   </div>
-                  <div className="space-y-1.5 text-sm">
-                    <div className="flex items-center justify-between rounded-xl bg-red-50 px-3 py-2 text-red-700">
-                      <span>🔥 Needs attention</span>
-                      <span className="font-semibold">{grouped.issue.length}</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2 text-amber-700">
-                      <span>⏰ Starting soon</span>
-                      <span className="font-semibold">{grouped.soon.length}</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-blue-700">
-                      <span>🟡 In progress</span>
-                      <span className="font-semibold">{grouped.progress.length}</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2 text-emerald-700">
-                      <span>✅ Completed</span>
-                      <span className="font-semibold">{grouped.complete.length}</span>
-                    </div>
+                  <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2.5">
+                    <span className="text-sm font-medium text-amber-600">⏰ Starting soon</span>
+                    <span className="text-sm font-bold text-amber-600">{grouped.soon.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2.5">
+                    <span className="text-sm font-medium text-blue-600">🟡 In progress</span>
+                    <span className="text-sm font-bold text-blue-600">{grouped.progress.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
+                    <span className="text-sm font-medium text-emerald-600">✅ Completed</span>
+                    <span className="text-sm font-bold text-emerald-600">{grouped.complete.length}</span>
                   </div>
                 </div>
+              </div>
 
-                {/* Conversations */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 px-1 mb-2">Conversations</p>
-                  {CHANNELS.map((ch) => (
-                    <button
-                      key={ch.key}
-                      onClick={() => { setActiveTab("channels"); setActiveChannel(ch.key); }}
-                      className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-white hover:shadow-sm transition mb-1"
-                    >
-                      <span>{ch.label}</span>
-                      {channelCounts && (channelCounts as Record<string, number>)[ch.key] > 0 && (
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          {(channelCounts as Record<string, number>)[ch.key]}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+              {/* Conversations */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Conversations</p>
+                <div className="space-y-1">
+                  {CHANNELS.map((ch) => {
+                    const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
+                    const isUrgentActive = activeChannel === ch.key && (activeTab as string) === "channels";
+                    return (
+                      <button
+                        key={ch.key}
+                        onClick={() => { setActiveTab("channels"); setActiveChannel(ch.key); }}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-2xl border px-4 py-3.5 text-sm transition",
+                          isUrgentActive
+                            ? "bg-slate-900 border-slate-900 text-white"
+                            : "bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:shadow-sm"
+                        )}
+                      >
+                        <span className="font-medium">{ch.label}</span>
+                        <span className={cn(
+                          "text-sm font-semibold min-w-[20px] text-right",
+                          isUrgentActive ? "text-white" : "text-slate-500"
+                        )}>{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
 
-                {/* Jobs list */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 px-1 mb-2">Jobs</p>
-                  {jobsLoading ? (
-                    <div className="text-sm text-slate-400 text-center py-8">Loading jobs…</div>
-                  ) : jobs.length === 0 ? (
-                    <div className="text-sm text-slate-400 text-center py-8">No jobs today</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {/* Issues first */}
-                      {[...grouped.issue, ...grouped.soon, ...grouped.progress, ...grouped.complete,
-                        ...jobs.filter(j => j.status === "assigned")].map((job) => (
-                        <JobCard
-                          key={job.id}
-                          job={job}
-                          selected={selectedJobId === job.id}
-                          onClick={() => { setSelectedJobId(job.id); setActiveTab("today"); }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              /* Channels tab */
-              <div className="space-y-1">
-                {CHANNELS.map((ch) => (
+              {/* Jobs */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Jobs</p>
+                {jobsLoading ? (
+                  <div className="text-sm text-slate-400 text-center py-8">Loading jobs…</div>
+                ) : jobs.length === 0 ? (
+                  <div className="text-sm text-slate-400 text-center py-8">No jobs today</div>
+                ) : (
+                  <div className="space-y-2">
+                    {[...grouped.issue, ...grouped.soon, ...grouped.progress, ...grouped.complete,
+                      ...jobs.filter(j => j.status === "assigned")].map((job) => (
+                      <JobCard
+                        key={job.id}
+                        job={job}
+                        selected={selectedJobId === job.id}
+                        onClick={() => { setSelectedJobId(job.id); setActiveTab("today"); }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Channels tab */
+            <div className="px-3 pb-4 pt-1 space-y-1">
+              {CHANNELS.map((ch) => {
+                const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
+                return (
                   <button
                     key={ch.key}
                     onClick={() => setActiveChannel(ch.key)}
                     className={cn(
-                      "w-full flex items-center justify-between rounded-xl px-3 py-3 text-sm transition",
-                      activeChannel === ch.key ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-white hover:shadow-sm"
+                      "w-full flex items-center justify-between rounded-2xl border px-4 py-3.5 text-sm transition",
+                      activeChannel === ch.key
+                        ? "bg-slate-900 border-slate-900 text-white"
+                        : "bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:shadow-sm"
                     )}
                   >
                     <span className="font-medium">{ch.label}</span>
-                    {channelCounts && (channelCounts as Record<string, number>)[ch.key] > 0 && (
-                      <span className={cn(
-                        "rounded-full px-2 py-0.5 text-xs font-medium",
-                        activeChannel === ch.key ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
-                      )}>
-                        {(channelCounts as Record<string, number>)[ch.key]}
-                      </span>
-                    )}
+                    <span className={cn(
+                      "text-sm font-semibold min-w-[20px] text-right",
+                      activeChannel === ch.key ? "text-white" : "text-slate-500"
+                    )}>{count}</span>
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
