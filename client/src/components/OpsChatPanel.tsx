@@ -208,16 +208,16 @@ export default function OpsChatPanel({ state, onOpen, onMinimize, onClose }: Ops
     el.scrollBy({ left: dir === "right" ? 200 : -200, behavior: "smooth" });
   };
 
-  // ── Minimized bubble ──────────────────────────────────────────────────────
+  // ── Minimized bubble ──────────────────────────────────────────────
   if (state === "minimized") {
     return (
       <button
         onClick={onOpen}
-        className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full bg-slate-900 text-white shadow-xl px-4 py-3 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
-        aria-label="Open OpsChat"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full bg-slate-900 text-white shadow-2xl px-5 py-3.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+        aria-label="Open MIB Chat"
       >
-        <MessageCircle className="w-5 h-5" />
-        <span className="text-sm font-semibold">OpsChat</span>
+        <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/MIB_logo_final_138df3e8.png" alt="MIB" className="w-7 h-7 rounded-full object-cover" />
+        <span className="text-sm font-bold tracking-wide">MIB Chat</span>
         {unreadCount > 0 && (
           <span className="flex items-center justify-center min-w-[20px] h-5 rounded-full bg-red-500 text-white text-xs font-bold px-1.5">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -233,13 +233,11 @@ export default function OpsChatPanel({ state, onOpen, onMinimize, onClose }: Ops
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white" style={{ contain: "strict" }}>
       {/* Panel header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-white shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center">
-            <MessageCircle className="w-4 h-4 text-white" />
-          </div>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white shrink-0">
+        <div className="flex items-center gap-3">
+          <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/MIB_logo_final_138df3e8.png" alt="MIB" className="w-10 h-10 rounded-full object-cover shadow-sm" />
           <div>
-            <p className="text-sm font-bold text-slate-900 leading-tight">OpsChat</p>
+            <p className="text-base font-bold text-slate-900 leading-tight">MIB Chat</p>
             {isAuthenticated && (
               <p className="text-[10px] text-slate-400 leading-tight">
                 {callerName} · {jobs.length} jobs today

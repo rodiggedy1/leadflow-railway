@@ -316,3 +316,4 @@
 - [x] Channel composer parity: photos (drag-drop + preview strip + S3 upload), emoji picker, voice recording now in channel composer
 - [x] Move Actions card to top of right panel (above Job Details) so flag/resolve buttons are immediately visible without scrolling
 - [x] Right panel: Flag/Resolve as standalone card at top, Job Details middle, other action buttons at bottom
+- [x] Floating chat widget: make bigger, rename to "MIB Chat", add MIB logo to header
