@@ -239,17 +239,22 @@ function TimelineEvent({ event }: { event: { id: string; ts: number; type: strin
   );
 }
 
-function ThreadMessage({ msg }: { msg: { id: string; ts: number; from: string; role: string; body: string; source: string } }) {
-  const isOffice = msg.role === "office" || msg.role === "agent";
+function ThreadMessage({ msg, callerName }: { msg: { id: string; ts: number; from: string; role: string; body: string; source: string }; callerName: string }) {
+  const isMine = msg.from === callerName;
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   return (
-    <div className={cn("flex", isOffice ? "justify-end" : "justify-start")}>
-      <div className="max-w-[78%] rounded-2xl px-4 py-3 bg-slate-200 text-slate-900">
-        <p className="text-xs mb-1.5 text-slate-400">
-          {msg.from} • {msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}
-        </p>
+    <div className={cn("flex", isMine ? "justify-end" : "justify-start")}>
+      <div className={cn(
+        "max-w-[72%] rounded-2xl px-4 py-3",
+        isMine
+          ? "bg-slate-900 text-white rounded-br-sm"
+          : "bg-white border border-slate-100 text-slate-900 shadow-sm rounded-bl-sm"
+      )}>
+        {!isMine && (
+          <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
+        )}
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-        <p className="text-xs mt-1.5 text-slate-400">{timeStr}</p>
+        <p className={cn("text-xs mt-1.5", isMine ? "text-slate-400" : "text-slate-400")}>{timeStr}</p>
       </div>
     </div>
   );
@@ -640,7 +645,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         {jobDetail.thread.length === 0 ? (
                           <p className="text-sm text-slate-400 text-center py-8">No messages yet — start the thread below.</p>
                         ) : (
-                          jobDetail.thread.map((msg) => <ThreadMessage key={msg.id} msg={msg} />)
+                          jobDetail.thread.map((msg) => <ThreadMessage key={msg.id} msg={msg} callerName={callerName} />)
                         )}
                         <div ref={threadBottomRef} />
                       </div>
@@ -724,7 +729,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   <p className="text-sm text-slate-400 text-center py-8">No messages in this channel yet.</p>
                 ) : (
                   channelMsgs.map((msg) => (
-                    <ThreadMessage key={msg.id} msg={{ ...msg, id: String(msg.id), source: "ops" }} />
+                    <ThreadMessage key={msg.id} msg={{ ...msg, id: String(msg.id), source: "ops" }} callerName={callerName} />
                   ))
                 )}
                 <div ref={threadBottomRef} />

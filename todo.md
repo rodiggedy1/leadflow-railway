@@ -299,3 +299,4 @@
 - [x] OpsChat maximize/minimize — minimize button in OpsChat header collapses to floating bubble; clicking bubble restores full-screen; works for both agents and admins
 - [x] OpsChat global bubble — visible minimize button in OpsChat top bar; floating bubble persists across ALL pages via localStorage; clicking bubble navigates back to /admin/ops-chat
 - [x] OpsChat inline overlay — render OpsChat as a global overlay in App.tsx (not a page route); bubble opens it full-screen over current page; Minimize button collapses back to bubble without navigation
+- [x] OpsChat thread: my messages right-aligned (slate-900 dark bubble), others left-aligned (white card with border) — iMessage-style; sender name shown only on others' messages
