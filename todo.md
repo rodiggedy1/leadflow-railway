@@ -307,3 +307,4 @@
 - [x] Fix NaN messageId error from OpsChat unread badge query when no messages exist — tightened enabled guards and added ?? 0 fallback on getSeenBy queries
 - [x] OpsChat timeline: color-coded pill chips (green=check-in/complete, blue=photos, red=issues, amber=on-the-way); status history + photos only; FM log and SMS removed; cleaner first name in labels; photos grouped by minute with count
 - [ ] OpsChat timeline: fix missing check-in and completed events — only showing on_the_way and arrived for completed jobs
+- [x] OpsChat photo upload: drag-drop or click Camera, multi-image preview strip with upload progress, S3 storage, inline image rendering in thread with lightbox viewer

@@ -10,7 +10,9 @@
  */
 
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { opsChatProcedure, router } from "./_core/trpc";
+import { storagePut } from "./storage";
 import { getDb } from "./db";
 import {
   cleanerJobs,
@@ -338,7 +340,7 @@ export const opsChatRouter = router({
         body: z.string().min(1).max(4000),
         authorName: z.string().min(1).max(128),
         authorRole: z.enum(["office", "agent", "system"]).default("office"),
-        mediaUrl: z.string().url().optional(),
+        mediaUrl: z.string().optional(), // JSON array of URLs or single URL for backwards compat
         quickAction: z.string().max(64).optional(),
       })
     )
@@ -631,6 +633,30 @@ export const opsChatRouter = router({
         .filter((r) => r.callerId !== ctx.opsCaller.id)
         .map((r) => r.callerName);
       return { seenBy };
+    }),
+
+  /**
+   * uploadOpsPhoto — upload an image from the admin/agent OpsChat composer.
+   * Accepts base64-encoded image, stores in S3, returns the public URL.
+   * The caller then includes the URL in a sendMessage call as mediaUrl.
+   */
+  uploadOpsPhoto: opsChatProcedure
+    .input(z.object({
+      filename: z.string().max(255),
+      mimeType: z.string().max(50).refine((v) => v.startsWith("image/"), { message: "Must be an image" }),
+      dataBase64: z.string().max(15 * 1024 * 1024), // 15 MB base64 limit
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const ext = input.filename.split(".").pop()?.toLowerCase() ?? "jpg";
+      const randomSuffix = Math.random().toString(36).slice(2, 10);
+      const callerId = ctx.opsCaller.id;
+      const fileKey = `ops-chat-photos/${callerId}/${Date.now()}-${randomSuffix}.${ext}`;
+      const buffer = Buffer.from(input.dataBase64, "base64");
+      if (buffer.byteLength > 12 * 1024 * 1024) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Image too large (max 12 MB)" });
+      }
+      const { url } = await storagePut(fileKey, buffer, input.mimeType);
+      return { url };
     }),
 
   /**

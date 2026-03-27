@@ -27,6 +27,9 @@ import {
   Loader2,
   MessageCircle,
   Minus,
+  X,
+  ImageIcon,
+  ZoomIn,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -235,6 +238,66 @@ function TimelineEvent({ event }: { event: { id: string; ts: number; type: strin
   );
 }
 
+// ── Lightbox ─────────────────────────────────────────────────────────────────
+
+function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: number; onClose: () => void }) {
+  const [idx, setIdx] = useState(startIndex);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setIdx(i => Math.max(0, i - 1));
+      if (e.key === "ArrowRight") setIdx(i => Math.min(urls.length - 1, i + 1));
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [urls.length, onClose]);
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      {/* Close */}
+      <button
+        className="absolute top-4 right-4 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition"
+        onClick={onClose}
+      >
+        <X className="h-5 w-5" />
+      </button>
+      {/* Prev */}
+      {urls.length > 1 && idx > 0 && (
+        <button
+          className="absolute left-4 z-10 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 transition"
+          onClick={(e) => { e.stopPropagation(); setIdx(i => i - 1); }}
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      )}
+      {/* Image */}
+      <img
+        src={urls[idx]}
+        alt={`Photo ${idx + 1}`}
+        className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+      {/* Next */}
+      {urls.length > 1 && idx < urls.length - 1 && (
+        <button
+          className="absolute right-4 z-10 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 transition"
+          onClick={(e) => { e.stopPropagation(); setIdx(i => i + 1); }}
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      )}
+      {/* Counter */}
+      {urls.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white">
+          {idx + 1} / {urls.length}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Deterministic pastel color from a name string */
 function avatarColor(name: string): string {
   const palette = [
@@ -253,43 +316,89 @@ function avatarColor(name: string): string {
 }
 
 function ThreadMessage({ msg, callerName, seenBy }: {
-  msg: { id: string; ts: number; from: string; role: string; body: string; source: string };
+  msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null };
   callerName: string;
   seenBy?: string[];
 }) {
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const isMine = msg.from === callerName;
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const initials = msg.from.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const colorClass = avatarColor(msg.from);
+
+  // Parse mediaUrl — may be a JSON array of URLs or a single URL
+  const imageUrls: string[] = (() => {
+    if (!msg.mediaUrl) return [];
+    try {
+      const parsed = JSON.parse(msg.mediaUrl);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch {}
+    return [msg.mediaUrl];
+  })();
+
   return (
-    <div className={cn("flex items-end gap-2", isMine ? "justify-end" : "justify-start")}>
-      {/* Avatar — only on others' messages */}
-      {!isMine && (
-        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mb-0.5", colorClass)}>
-          {initials}
-        </div>
+    <>
+      {lightboxIdx !== null && (
+        <Lightbox urls={imageUrls} startIndex={lightboxIdx} onClose={() => setLightboxIdx(null)} />
       )}
-      <div className={cn(
-        "max-w-[72%] rounded-2xl px-4 py-3",
-        isMine
-          ? "bg-slate-900 text-white rounded-br-sm"
-          : "bg-white border border-slate-100 text-slate-900 shadow-sm rounded-bl-sm"
-      )}>
+      <div className={cn("flex items-end gap-2", isMine ? "justify-end" : "justify-start")}>
+        {/* Avatar — only on others' messages */}
         {!isMine && (
-          <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
+          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mb-0.5", colorClass)}>
+            {initials}
+          </div>
         )}
-        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-        <div className="flex items-center justify-between gap-2 mt-1.5">
-          <p className="text-xs text-slate-400">{timeStr}</p>
-          {/* Read receipts — shown only on my last message */}
-          {isMine && seenBy && seenBy.length > 0 && (
-            <p className="text-[10px] text-slate-400 italic">
-              Seen by {seenBy.join(", ")}
-            </p>
+        <div className={cn(
+          "max-w-[72%] rounded-2xl overflow-hidden",
+          isMine
+            ? "bg-slate-900 text-white rounded-br-sm"
+            : "bg-white border border-slate-100 text-slate-900 shadow-sm rounded-bl-sm"
+        )}>
+          {/* Inline images */}
+          {imageUrls.length > 0 && (
+            <div className={cn(
+              "grid gap-0.5",
+              imageUrls.length === 1 ? "grid-cols-1" : imageUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"
+            )}>
+              {imageUrls.map((url, i) => (
+                <button
+                  key={i}
+                  className="relative group overflow-hidden aspect-square"
+                  onClick={() => setLightboxIdx(i)}
+                >
+                  <img
+                    src={url}
+                    alt={`Photo ${i + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
+                    <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
+          {/* Text body */}
+          {msg.body && (
+            <div className="px-4 py-3">
+              {!isMine && (
+                <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
+              )}
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+            </div>
+          )}
+          {/* Footer: time + read receipts */}
+          <div className={cn("flex items-center justify-between gap-2 px-4 pb-3", !msg.body && imageUrls.length > 0 ? "pt-2" : "-mt-1")}>
+            <p className="text-xs text-slate-400">{timeStr}</p>
+            {isMine && seenBy && seenBy.length > 0 && (
+              <p className="text-[10px] text-slate-400 italic">
+                Seen by {seenBy.join(", ")}
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -318,6 +427,62 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Staged photos: each has a local preview URL, upload state, and final S3 URL
+  type StagedPhoto = {
+    id: string;
+    previewUrl: string;
+    file: File;
+    status: "pending" | "uploading" | "done" | "error";
+    s3Url?: string;
+  };
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
+
+  // uploadOpsPhoto mutation
+  const uploadPhoto = trpc.opsChat.uploadOpsPhoto.useMutation();
+
+  async function stageFiles(files: FileList | File[]) {
+    const arr = Array.from(files).filter(f => f.type.startsWith("image/"));
+    if (!arr.length) return;
+    const newItems: StagedPhoto[] = arr.map(f => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      previewUrl: URL.createObjectURL(f),
+      file: f,
+      status: "pending",
+    }));
+    setStagedPhotos(prev => [...prev, ...newItems]);
+    // Upload each immediately
+    for (const item of newItems) {
+      setStagedPhotos(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading" } : p));
+      try {
+        const dataBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(item.file);
+        });
+        const { url } = await uploadPhoto.mutateAsync({
+          filename: item.file.name,
+          mimeType: item.file.type,
+          dataBase64,
+        });
+        setStagedPhotos(prev => prev.map(p => p.id === item.id ? { ...p, status: "done", s3Url: url } : p));
+      } catch {
+        setStagedPhotos(prev => prev.map(p => p.id === item.id ? { ...p, status: "error" } : p));
+        toast.error("Photo upload failed");
+      }
+    }
+  }
+
+  function removeStagedPhoto(id: string) {
+    setStagedPhotos(prev => {
+      const item = prev.find(p => p.id === id);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter(p => p.id !== id);
+    });
+  }
 
   // Resolved caller name — owner name takes precedence, then agent name
   const callerName = user?.name ?? agentMe?.name ?? "Office";
@@ -396,6 +561,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     onSuccess: () => {
       setComposer("");
       setSelectedQuickAction(null);
+      // Clear staged photos and revoke object URLs
+      setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
       if (selectedJobId) {
         utils.opsChat.getJobDetail.invalidate({ jobId: selectedJobId });
       }
@@ -444,21 +611,34 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const selectedJob = jobs.find((j) => j.id === selectedJobId) ?? null;
 
   function handleSend() {
-    if (!composer.trim()) return;
+    const hasText = composer.trim().length > 0;
+    const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
+    const uploadingPhotos = stagedPhotos.filter(p => p.status === "uploading" || p.status === "pending");
+    if (!hasText && donePhotos.length === 0) return;
+    if (uploadingPhotos.length > 0) {
+      toast.error("Please wait for photos to finish uploading");
+      return;
+    }
+    const mediaUrl = donePhotos.length > 0
+      ? JSON.stringify(donePhotos.map(p => p.s3Url!))
+      : undefined;
+    const body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
     if (activeTab === "today" && selectedJobId) {
       sendMsg.mutate({
         cleanerJobId: selectedJobId,
-        body: composer.trim(),
+        body,
         authorName: callerName,
         authorRole: "office",
         quickAction: selectedQuickAction ?? undefined,
+        mediaUrl,
       });
     } else if (activeTab === "channels") {
       sendMsg.mutate({
         channel: activeChannel,
-        body: composer.trim(),
+        body,
         authorName: callerName,
         authorRole: "office",
+        mediaUrl,
       });
     }
   }
@@ -748,6 +928,16 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
                   {/* Quick actions + Composer */}
                   <div className="px-6 py-3 border-t border-slate-100 bg-white">
+                    {/* Hidden file input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { if (e.target.files) stageFiles(e.target.files); e.target.value = ""; }}
+                    />
+
                     <div className="flex flex-wrap gap-2 mb-3">
                       {QUICK_ACTIONS.map((qa) => (
                         <button
@@ -765,11 +955,56 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                       ))}
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    {/* Staged photo preview strip */}
+                    {stagedPhotos.length > 0 && (
+                      <div className="flex gap-2 mb-3 flex-wrap">
+                        {stagedPhotos.map((p) => (
+                          <div key={p.id} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                            <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
+                            {/* Upload progress overlay */}
+                            {(p.status === "uploading" || p.status === "pending") && (
+                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                <Loader2 className="h-4 w-4 text-white animate-spin" />
+                              </div>
+                            )}
+                            {p.status === "error" && (
+                              <div className="absolute inset-0 bg-red-900/60 flex items-center justify-center">
+                                <span className="text-white text-[10px] font-bold">ERR</span>
+                              </div>
+                            )}
+                            {/* Remove button */}
+                            <button
+                              className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80 transition"
+                              onClick={() => removeStagedPhoto(p.id)}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {/* Add more */}
+                        <button
+                          className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 hover:border-slate-400 hover:text-slate-600 transition shrink-0"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <ImageIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Drag-drop composer box */}
+                    <div
+                      className={cn(
+                        "rounded-2xl border bg-slate-50 p-3 transition",
+                        isDragging ? "border-slate-900 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200"
+                      )}
+                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
+                    >
                       <Textarea
                         value={composer}
                         onChange={(e) => setComposer(e.target.value)}
-                        placeholder="Type a message or use a one-tap action…"
+                        placeholder={isDragging ? "Drop photos here…" : "Type a message or drop photos…"}
                         rows={3}
                         className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                         onKeyDown={(e) => {
@@ -778,7 +1013,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                       />
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-1">
-                          <button className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1">
+                          <button
+                            className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
                             <Camera className="h-4 w-4" /> Photo
                           </button>
                           <button className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1">
@@ -790,7 +1028,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         </div>
                         <Button
                           onClick={handleSend}
-                          disabled={!composer.trim() || sendMsg.isPending}
+                          disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0) || sendMsg.isPending}
                           className="bg-slate-900 text-white hover:bg-slate-800 rounded-xl px-4"
                           size="sm"
                         >
@@ -839,21 +1077,67 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </div>
             </div>
             <div className="px-6 py-3 border-t border-slate-100 bg-white">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {/* Staged photo preview strip */}
+              {stagedPhotos.length > 0 && (
+                <div className="flex gap-2 mb-3 flex-wrap">
+                  {stagedPhotos.map((p) => (
+                    <div key={p.id} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                      <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
+                      {(p.status === "uploading" || p.status === "pending") && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                        </div>
+                      )}
+                      {p.status === "error" && (
+                        <div className="absolute inset-0 bg-red-900/60 flex items-center justify-center">
+                          <span className="text-white text-[10px] font-bold">ERR</span>
+                        </div>
+                      )}
+                      <button
+                        className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80 transition"
+                        onClick={() => removeStagedPhoto(p.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 hover:border-slate-400 hover:text-slate-600 transition shrink-0"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImageIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+              <div
+                className={cn(
+                  "rounded-2xl border bg-slate-50 p-3 transition",
+                  isDragging ? "border-slate-900 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200"
+                )}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
+              >
                 <Textarea
                   value={composer}
                   onChange={(e) => setComposer(e.target.value)}
-                  placeholder={`Message ${CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}…`}
+                  placeholder={isDragging ? "Drop photos here…" : `Message ${CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}…`}
                   rows={3}
                   className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
                   }}
                 />
-                <div className="flex items-center justify-end mt-2">
+                <div className="flex items-center justify-between mt-2">
+                  <button
+                    className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Camera className="h-4 w-4" /> Photo
+                  </button>
                   <Button
                     onClick={handleSend}
-                    disabled={!composer.trim() || sendMsg.isPending}
+                    disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0) || sendMsg.isPending}
                     className="bg-slate-900 text-white hover:bg-slate-800 rounded-xl px-4"
                     size="sm"
                   >
