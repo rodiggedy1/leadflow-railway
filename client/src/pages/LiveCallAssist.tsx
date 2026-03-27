@@ -565,30 +565,6 @@ export default function LiveCallAssist() {
         </div>
       </div>
 
-      {/* ── Outbound opener banner ── */}
-      {isOutbound && urlParams && (
-        <div className="bg-violet-50 border-b border-violet-200 px-4 py-2.5 flex items-start gap-3 shrink-0">
-          <div className="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center shrink-0 mt-0.5">
-            <Phone className="w-3 h-3 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-bold text-violet-700 uppercase tracking-wide mb-0.5">Outbound Call — Suggested Opener</p>
-            <p className="text-sm text-violet-900 leading-snug">
-              &ldquo;Hi {urlParams.name ? urlParams.name.split(" ")[0] : "there"}, this is {agentName ?? "your agent"} from Maids in Black
-              {urlParams.bedrooms || urlParams.bathrooms || urlParams.serviceType ? (
-                <> — we saw your request for
-                  {urlParams.bedrooms ? ` a ${urlParams.bedrooms}-bedroom` : ""}
-                  {urlParams.bathrooms ? `, ${urlParams.bathrooms}-bathroom` : ""}
-                  {urlParams.serviceType ? ` ${urlParams.serviceType}` : " home cleaning"}
-                </>
-              ) : " — we saw your cleaning request"}
-              . Is now a good time?&rdquo;
-            </p>
-          </div>
-          <span className="text-[10px] font-semibold bg-violet-200 text-violet-700 px-2 py-0.5 rounded-full shrink-0 mt-0.5">OUTBOUND</span>
-        </div>
-      )}
-
       {/* ── 3-column body ── */}
       <div className="flex-1 flex overflow-hidden">
 
@@ -734,10 +710,29 @@ export default function LiveCallAssist() {
             {/* Opener intro — always visible until first customer line is submitted */}
             {conversation.length === 0 && (
               <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-6">
-                <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Opening Line — say this first</p>
-                <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
-                  {`"Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Your Name]"}! You called at the perfect time — how can I help you today?"`}
-                </p>
+                {isOutbound && urlParams ? (
+                  <>
+                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Outbound — Opening Line</p>
+                    <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
+                      &ldquo;Hi {urlParams.name ? urlParams.name.split(" ")[0] : "there"}, this is {agentName ? agentName.split(" ")[0] : "[Your Name]"} from Maids in Black
+                      {urlParams.bedrooms || urlParams.bathrooms || urlParams.serviceType ? (
+                        <> — we saw your request for
+                          {urlParams.bedrooms ? ` a ${urlParams.bedrooms}-bedroom` : ""}
+                          {urlParams.bathrooms ? `, ${urlParams.bathrooms}-bathroom` : ""}
+                          {urlParams.serviceType ? ` ${urlParams.serviceType}` : " home cleaning"}
+                        </>
+                      ) : " — we saw your cleaning request"}
+                      . Is now a good time?&rdquo;
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Opening Line — say this first</p>
+                    <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
+                      {`"Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Your Name]"}! You called at the perfect time — how can I help you today?"`}
+                    </p>
+                  </>
+                )}
               </div>
             )}
 

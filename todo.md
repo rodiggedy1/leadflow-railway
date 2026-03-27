@@ -259,3 +259,5 @@
 - [x] Outbound Call Assist: discovery stage skips re-asking known home details (pre-filled in context)
 - [x] Outbound Call Assist: on clear call, appends transcript to existing session instead of creating new lead
 - [x] Outbound Call Assist: "Call Assist" button in ConversationDrawer Quick Controls navigates to /call-assist with lead context params
+- [x] Outbound Call Assist: remove top-of-page violet banner — replace inbound opener script inline with outbound opener in center column
+- [x] Outbound Call Assist: add Call Assist button directly on leads table row (not just inside the drawer)
