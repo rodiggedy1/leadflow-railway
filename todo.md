@@ -318,3 +318,4 @@
 - [x] Right panel: Flag/Resolve as standalone card at top, Job Details middle, other action buttons at bottom
 - [x] Floating chat widget: make bigger, rename to "MIB Chat", add MIB logo to header
 - [x] Timeline pills: 12-hour time, strip team name, add contextual icon per event type (car, play, checkmark, etc.)
+- [x] Priority queue rows clickable: tap a bucket to filter job list to only that status, tap again to clear

@@ -458,6 +458,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const { minimize: minimizeFromHook } = useOpsChatWindow();
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
   const [composer, setComposer] = useState("");
@@ -873,25 +874,37 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-sm font-bold text-slate-900">Priority Queue</span>
-                  <span className="text-xs text-slate-400 italic">Live sorted</span>
+                  {activeFilter ? (
+                    <button
+                      onClick={() => setActiveFilter(null)}
+                      className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2 transition"
+                    >Clear filter</button>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">Tap to filter</span>
+                  )}
                 </div>
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between rounded-xl bg-red-50 px-3 py-2.5">
-                    <span className="text-sm font-medium text-red-600">🔥 Needs attention</span>
-                    <span className="text-sm font-bold text-red-600">{grouped.issue.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2.5">
-                    <span className="text-sm font-medium text-amber-600">⏰ Starting soon</span>
-                    <span className="text-sm font-bold text-amber-600">{grouped.soon.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2.5">
-                    <span className="text-sm font-medium text-blue-600">🟡 In progress</span>
-                    <span className="text-sm font-bold text-blue-600">{grouped.progress.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5">
-                    <span className="text-sm font-medium text-emerald-600">✅ Completed</span>
-                    <span className="text-sm font-bold text-emerald-600">{grouped.complete.length}</span>
-                  </div>
+                  {([
+                    { key: "issue" as PriorityStatus,    emoji: "🔥", label: "Needs attention", count: grouped.issue.length,    active: "bg-red-600",     inactive: "bg-red-50",     text: "text-red-600" },
+                    { key: "soon" as PriorityStatus,     emoji: "⏰", label: "Starting soon",  count: grouped.soon.length,     active: "bg-amber-500",   inactive: "bg-amber-50",   text: "text-amber-600" },
+                    { key: "progress" as PriorityStatus, emoji: "🟡", label: "In progress",    count: grouped.progress.length, active: "bg-blue-600",    inactive: "bg-blue-50",    text: "text-blue-600" },
+                    { key: "complete" as PriorityStatus, emoji: "✅", label: "Completed",       count: grouped.complete.length, active: "bg-emerald-600", inactive: "bg-emerald-50", text: "text-emerald-600" },
+                  ]).map(({ key, emoji, label, count, active, inactive, text }) => {
+                    const isActive = activeFilter === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setActiveFilter(isActive ? null : key)}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-xl px-3 py-2.5 transition-all hover:opacity-90 active:scale-[0.98]",
+                          isActive ? `${active} shadow-sm` : inactive
+                        )}
+                      >
+                        <span className={cn("text-sm font-medium", isActive ? "text-white" : text)}>{emoji} {label}</span>
+                        <span className={cn("text-sm font-bold", isActive ? "text-white" : text)}>{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -932,8 +945,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   <div className="text-sm text-slate-400 text-center py-8">No jobs today</div>
                 ) : (
                   <div className="space-y-2">
-                    {[...grouped.issue, ...grouped.soon, ...grouped.progress, ...grouped.complete,
-                      ...jobs.filter(j => j.status === "assigned")].map((job) => (
+                    {(activeFilter
+                      ? jobs.filter(j => j.status === activeFilter)
+                      : [...grouped.issue, ...grouped.soon, ...grouped.progress, ...grouped.complete, ...jobs.filter(j => j.status === "assigned")]
+                    ).map((job) => (
                       <JobCard
                         key={job.id}
                         job={job}
