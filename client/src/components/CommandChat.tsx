@@ -271,9 +271,12 @@ function HotLeadsTray({
                         <Phone className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    {sessionId && (
+                    {/* SMS — always show; use sessionId if available, else search by phone */}
+                    {(sessionId || leadPhone) && (
                       <a
-                        href={`/admin/leads?session=${sessionId}&tab=sms`}
+                        href={sessionId
+                          ? `/admin/leads?session=${sessionId}&tab=sms`
+                          : `/admin/leads?phone=${encodeURIComponent(leadPhone)}&tab=sms`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Open SMS conversation"
