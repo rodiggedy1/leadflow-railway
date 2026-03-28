@@ -1017,7 +1017,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // -- DM unread counts + sound notification --
   const prevDmUnreadRef = useRef<Record<string, number>>({});
   const { data: dmUnreadData } = trpc.opsChat.getDmUnreadCounts.useQuery(
-    { myName: callerName },
+    { myName: callerName, myKey: myDmKey !== callerName ? myDmKey : undefined },
     { enabled: Boolean(callerName && callerName !== "Office"), refetchInterval: 5_000 }
   );
   const dmUnreadMap: Record<string, number> = dmUnreadData?.unread ?? {};

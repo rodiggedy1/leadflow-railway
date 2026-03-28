@@ -1684,28 +1684,31 @@ export const opsChatRouter = router({
       const db = await getDb();
       if (!db) return { dmKey: ctx.opsCaller.id };
       if (ctx.opsCaller.isOwner) {
-        // Owner: look up their agent row by name to get email
-        const [row] = await db
-          .select({ email: agents.email })
-          .from(agents)
-          .where(eq(agents.email, (ctx.opsCaller as any).email ?? ""))
-          .limit(1);
-        if (row?.email) return { dmKey: row.email };
-        // Fallback: look up by openId via users table
+        // Step 1: look up the owner's record in users table to get their display name
         const [userRow] = await db
           .select({ name: users.name })
           .from(users)
           .where(eq(users.openId, ctx.opsCaller.id))
           .limit(1);
         const ownerName = userRow?.name ?? ctx.opsCaller.name;
-        const [agentRow] = await db
+        // Step 2: try exact name match in agents table
+        const [agentByName] = await db
           .select({ email: agents.email })
           .from(agents)
           .where(eq(agents.name, ownerName))
           .limit(1);
-        return { dmKey: agentRow?.email ?? slugify(ownerName) };
+        if (agentByName?.email) return { dmKey: agentByName.email };
+        // Step 3: try first-name partial match (handles "Rohan G" vs "Rohan Gilkes" drift)
+        const allAgents = await db.select({ name: agents.name, email: agents.email }).from(agents);
+        const firstName = ownerName.split(/\s+/)[0].toLowerCase();
+        const partialMatch = allAgents.find(
+          (a) => a.email && a.name.toLowerCase().startsWith(firstName)
+        );
+        if (partialMatch?.email) return { dmKey: partialMatch.email };
+        // Final fallback: slug the name (legacy — avoids hard crash)
+        return { dmKey: slugify(ownerName) };
       }
-      // Agent: email is directly available
+      // Agent: email is directly available on the session
       const agentEmail = (ctx.opsCaller as any).email as string | undefined;
       return { dmKey: agentEmail ?? slugify(ctx.opsCaller.name) };
     }),
