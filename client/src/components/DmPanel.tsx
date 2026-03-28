@@ -56,9 +56,13 @@ export default function DmPanel({
 
   const utils = trpc.useUtils();
 
+  // Only query once we have a real email key — prevents writing to a wrong thread
+  // if getMyDmKey hasn't resolved yet and myKey is still a display name
+  const keyReady = myKey.includes("@") && recipientKey.includes("@");
+
   const { data, isLoading } = trpc.opsChat.listDmMessages.useQuery(
     { keyA: myKey, keyB: recipientKey },
-    { refetchInterval: 3000 }
+    { refetchInterval: 3000, enabled: keyReady }
   );
 
   const sendDm = trpc.opsChat.sendDm.useMutation({
@@ -152,10 +156,13 @@ export default function DmPanel({
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-3 py-2 space-y-2 bg-muted/30"
       >
-        {isLoading && (
+        {!keyReady && (
+          <p className="text-xs text-muted-foreground text-center py-4">Connecting…</p>
+        )}
+        {keyReady && isLoading && (
           <p className="text-xs text-muted-foreground text-center py-4">Loading…</p>
         )}
-        {!isLoading && (!data?.messages?.length) && (
+        {keyReady && !isLoading && (!data?.messages?.length) && (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
             <MessageCircle size={28} className="opacity-30" />
             <p className="text-xs">No messages yet. Say hi!</p>
@@ -197,7 +204,7 @@ export default function DmPanel({
         />
         <button
           onClick={handleSend}
-          disabled={!draft.trim() || sending}
+          disabled={!draft.trim() || sending || !keyReady}
           className="shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-40 hover:bg-primary/90 transition-colors"
           aria-label="Send"
         >
