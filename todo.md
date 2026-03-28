@@ -497,3 +497,4 @@
 - [x] Fix TS errors: moved DM unread query/effect after callerName and playNotification declarations
 - [x] Fix notification sound not playing for regular chats (job threads + command channel)
 - [x] Swap chat bubble colors: my messages = dark navy, others = light grey (OpsChat, CommandChat, DmPanel)
+- [x] Fix DM send/receive not working between users — email-based thread keys, no more name slug mismatch

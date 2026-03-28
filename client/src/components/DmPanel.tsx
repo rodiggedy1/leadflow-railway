@@ -1,16 +1,18 @@
 /**
  * DmPanel — floating 1-on-1 DM overlay panel.
  *
+ * Uses stable email keys (myKey / recipientKey) to build the dmThread,
+ * so DMs work regardless of display name mismatches between tables.
+ *
  * Usage:
  *   <DmPanel
  *     myName="Rohan G"
- *     recipientName="Ianique"
+ *     myKey="rohangilkes@hey.com"
+ *     recipientName="Rizalina"
+ *     recipientKey="rizalina@rizalina.com"
  *     recipientPhotoUrl={null}
  *     onClose={() => setOpenDm(null)}
  *   />
- *
- * The panel floats anchored to the bottom-right of the viewport,
- * above the status sidebar. Multiple panels stack left.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -19,7 +21,11 @@ import { X, Send, MessageCircle } from "lucide-react";
 
 interface DmPanelProps {
   myName: string;
+  /** Stable email key for the current user — used to build the thread ID */
+  myKey: string;
   recipientName: string;
+  /** Stable email key for the recipient — used to build the thread ID */
+  recipientKey: string;
   recipientPhotoUrl?: string | null;
   /** Horizontal slot index (0 = rightmost, 1 = next left, etc.) */
   slotIndex?: number;
@@ -36,7 +42,9 @@ function getInitials(name: string): string {
 
 export default function DmPanel({
   myName,
+  myKey,
   recipientName,
+  recipientKey,
   recipientPhotoUrl,
   slotIndex = 0,
   onClose,
@@ -49,13 +57,13 @@ export default function DmPanel({
   const utils = trpc.useUtils();
 
   const { data, isLoading } = trpc.opsChat.listDmMessages.useQuery(
-    { participantA: myName, participantB: recipientName },
+    { keyA: myKey, keyB: recipientKey },
     { refetchInterval: 3000 }
   );
 
   const sendDm = trpc.opsChat.sendDm.useMutation({
     onSuccess: () => {
-      utils.opsChat.listDmMessages.invalidate({ participantA: myName, participantB: recipientName });
+      utils.opsChat.listDmMessages.invalidate({ keyA: myKey, keyB: recipientKey });
       utils.opsChat.getDmUnreadCounts.invalidate();
     },
   });
@@ -83,7 +91,13 @@ export default function DmPanel({
     setSending(true);
     setDraft("");
     try {
-      await sendDm.mutateAsync({ senderName: myName, recipientName, body });
+      await sendDm.mutateAsync({
+        senderName: myName,
+        senderKey: myKey,
+        recipientName,
+        recipientKey,
+        body,
+      });
     } finally {
       setSending(false);
       inputRef.current?.focus();

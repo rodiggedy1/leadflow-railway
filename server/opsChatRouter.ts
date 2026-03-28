@@ -1676,22 +1676,59 @@ export const opsChatRouter = router({
   // ── Direct Messages ──────────────────────────────────────────────────────────
 
   /**
+   * Returns the current caller's stable DM key (agent email).
+   * Used by the frontend to identify itself when opening DM threads.
+   */
+  getMyDmKey: opsChatProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { dmKey: ctx.opsCaller.id };
+      if (ctx.opsCaller.isOwner) {
+        // Owner: look up their agent row by name to get email
+        const [row] = await db
+          .select({ email: agents.email })
+          .from(agents)
+          .where(eq(agents.email, (ctx.opsCaller as any).email ?? ""))
+          .limit(1);
+        if (row?.email) return { dmKey: row.email };
+        // Fallback: look up by openId via users table
+        const [userRow] = await db
+          .select({ name: users.name })
+          .from(users)
+          .where(eq(users.openId, ctx.opsCaller.id))
+          .limit(1);
+        const ownerName = userRow?.name ?? ctx.opsCaller.name;
+        const [agentRow] = await db
+          .select({ email: agents.email })
+          .from(agents)
+          .where(eq(agents.name, ownerName))
+          .limit(1);
+        return { dmKey: agentRow?.email ?? slugify(ownerName) };
+      }
+      // Agent: email is directly available
+      const agentEmail = (ctx.opsCaller as any).email as string | undefined;
+      return { dmKey: agentEmail ?? slugify(ctx.opsCaller.name) };
+    }),
+
+  /**
    * Send a private DM to another agent/cleaner.
-   * dmThread key is "<senderSlug>::<recipientSlug>" sorted alphabetically.
+   * dmThread key is built from stable email keys (sorted), NOT display name slugs.
+   * senderKey and recipientKey should be agent emails (or cleaner:{id} for cleaners).
    */
   sendDm: opsChatProcedure
     .input(
       z.object({
         senderName: z.string().min(1),
+        senderKey: z.string().min(1),
         recipientName: z.string().min(1),
+        recipientKey: z.string().min(1),
         body: z.string().min(1).max(4000),
       })
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      const slugs = [slugify(input.senderName), slugify(input.recipientName)].sort();
-      const dmThread = slugs.join("::");
+      const dmThread = buildDmThread(input.senderKey, input.recipientKey);
       const [result] = await db.insert(opsChatMessages).values({
         cleanerJobId: null,
         channel: null,
@@ -1702,24 +1739,25 @@ export const opsChatRouter = router({
       });
       return { id: (result as any).insertId as number, dmThread };
     }),
-
   /**
    * Fetch messages for a DM thread between two participants.
-   * Returns newest-first, limited to 100.
+   * keyA and keyB are stable email keys (NOT display names).
    */
   listDmMessages: opsChatProcedure
     .input(
       z.object({
-        participantA: z.string().min(1),
-        participantB: z.string().min(1),
+        keyA: z.string().min(1),
+        keyB: z.string().min(1),
+        // Legacy display-name params kept for backward compat (ignored if keys provided)
+        participantA: z.string().min(1).optional(),
+        participantB: z.string().min(1).optional(),
         limit: z.number().int().min(1).max(200).default(100),
       })
     )
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return { messages: [] };
-      const slugs = [slugify(input.participantA), slugify(input.participantB)].sort();
-      const dmThread = slugs.join("::");
+      const dmThread = buildDmThread(input.keyA, input.keyB);
       const rows = await db
         .select()
         .from(opsChatMessages)
@@ -1736,7 +1774,6 @@ export const opsChatRouter = router({
         })),
       };
     }),
-
   /**
    * Get the full cleaner/agent roster for the DM picker.
    * Returns all active agents + cleaner profiles.
@@ -1776,11 +1813,13 @@ export const opsChatRouter = router({
    * the user's last read timestamp for that thread.
    */
   getDmUnreadCounts: opsChatProcedure
-    .input(z.object({ myName: z.string().min(1) }))
+    .input(z.object({ myName: z.string().min(1), myKey: z.string().min(1).optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return { unread: {} };
+      // Support both new email-key and legacy name-slug matching
       const mySlug = slugify(input.myName);
+      const myKey = input.myKey;
       // Get all DM threads involving this user
       const rows = await db
         .select({
@@ -1798,8 +1837,12 @@ export const opsChatRouter = router({
         )
         .orderBy(desc(opsChatMessages.id))
         .limit(500);
-      // Filter to threads involving mySlug
-      const myThreadRows = rows.filter((r) => r.dmThread?.split("::").includes(mySlug));
+      // Filter to threads involving myKey (email) OR legacy mySlug
+      const myThreadRows = rows.filter((r) => {
+        if (!r.dmThread) return false;
+        const parts = r.dmThread.split("::");
+        return (myKey && parts.includes(myKey)) || parts.includes(mySlug);
+      });
       // Get last-read per thread from opsChatReads using dmThread as the channel key
       const threadKeySet = new Set(myThreadRows.map((r) => r.dmThread!).filter(Boolean));
       const threadKeys = Array.from(threadKeySet);
@@ -1852,7 +1895,15 @@ export const opsChatRouter = router({
     }),
 });
 
-/** Convert a display name to a URL-safe slug for dmThread keys */
+/** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+/**
+ * Build a stable DM thread key from two participant keys (emails or slugs).
+ * Keys are sorted so A::B and B::A always produce the same thread.
+ */
+function buildDmThread(keyA: string, keyB: string): string {
+  return [keyA, keyB].sort().join("::");
 }

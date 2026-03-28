@@ -943,15 +943,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
-  // DM panels: list of open DM recipients (name + photoUrl)
-  const [openDms, setOpenDms] = useState<Array<{ name: string; photoUrl: string | null }>>([]); 
-  const openDm = (name: string, photoUrl: string | null) => {
+  // DM panels: list of open DM recipients (name + email key + photoUrl)
+  const [openDms, setOpenDms] = useState<Array<{ name: string; key: string; photoUrl: string | null }>>([]); 
+  const openDm = (name: string, key: string, photoUrl: string | null) => {
     setOpenDms((prev) => {
-      if (prev.some((d) => d.name === name)) return prev; // already open
-      return [...prev, { name, photoUrl }];
+      if (prev.some((d) => d.key === key)) return prev; // already open
+      return [...prev, { name, key, photoUrl }];
     });
   };
-  const closeDm = (name: string) => setOpenDms((prev) => prev.filter((d) => d.name !== name));
+  const closeDm = (key: string) => setOpenDms((prev) => prev.filter((d) => d.key !== key));
 
    // Load my profile photo on mount (only when authenticated)
   const { data: myProfile } = trpc.opsChat.getMyProfile.useQuery(undefined, {
@@ -979,6 +979,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     return s;
   }, [myProfile?.name, agentMe?.name, user?.name]);
   // Agent status list — always polled every 60s so data is ready when panel opens
+  // Stable DM key for the current user (agent email)
+  const { data: myDmKeyData } = trpc.opsChat.getMyDmKey.useQuery(undefined, {
+    enabled: Boolean(user) || Boolean(agentMe),
+    staleTime: 5 * 60 * 1000,
+  });
+  const myDmKey = myDmKeyData?.dmKey ?? callerName;
+
   const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
     refetchInterval: 60_000,
     enabled: Boolean(user) || Boolean(agentMe),
@@ -1536,7 +1543,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                           )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
                         </div>
                         <button
-                          onClick={() => { openDm(ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
+                          onClick={() => { openDm(ag.name, ag.email ?? ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
                           className="ml-1 p-1 rounded-full hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors"
                           title={`DM ${ag.name}`}
                         >
@@ -2610,12 +2617,14 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       {/* ── Floating DM Panels ─────────────────────────────────────────────────── */}
       {openDms.map((dm, idx) => (
         <DmPanel
-          key={dm.name}
+          key={dm.key}
           myName={callerName}
+          myKey={myDmKey}
           recipientName={dm.name}
+          recipientKey={dm.key}
           recipientPhotoUrl={dm.photoUrl}
           slotIndex={idx}
-          onClose={() => closeDm(dm.name)}
+          onClose={() => closeDm(dm.key)}
         />
       ))}
       </div>{/* end flex-1 wrapper */}
