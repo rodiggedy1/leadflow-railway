@@ -329,6 +329,7 @@ export const agents = mysqlTable("agents", {
    * Example: '["leads","pipeline","field-management"]'
    */
   pagePermissions: text("pagePermissions"), // JSON string | null — null = no restrictions
+  profilePhotoUrl: varchar("profilePhotoUrl", { length: 1024 }), // S3 CDN URL for profile photo
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1643,8 +1644,14 @@ export const opsReminders = mysqlTable("ops_reminders", {
   authorName: varchar("authorName", { length: 128 }).notNull(),
   /** When to fire (UTC epoch ms) */
   triggerAt: bigint("triggerAt", { mode: "number" }).notNull(),
+  /** Who set the reminder (agent email or owner openId) */
+  callerId: varchar("callerId", { length: 128 }),
   /** When it was actually posted (NULL = not yet fired) */
   firedAt: bigint("firedAt", { mode: "number" }),
+  /** When the user dismissed the popup (NULL = not dismissed) */
+  dismissedAt: bigint("dismissedAt", { mode: "number" }),
+  /** When snoozed until (NULL = not snoozed) */
+  snoozedUntil: bigint("snoozedUntil", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxTrigger: index("idx_or_trigger").on(table.triggerAt),

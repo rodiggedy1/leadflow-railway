@@ -28,6 +28,7 @@ import {
   opsChatReactions,
   channelPins,
   opsReminders,
+  agents,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -1138,7 +1139,7 @@ export const opsChatRouter = router({
       authorName: z.string().min(1).max(128),
       triggerAt: z.number().int().positive(), // UTC epoch ms
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
@@ -1147,6 +1148,7 @@ export const opsChatRouter = router({
         body: input.body,
         authorName: input.authorName,
         triggerAt: input.triggerAt,
+        callerId: ctx.opsCaller.id,
       });
 
       return { success: true };
@@ -1406,5 +1408,159 @@ export const opsChatRouter = router({
         if (id !== callerId) typers.push(name);
       }
       return { typers };
+    }),
+
+  /**
+   * updateIssueNote — add or edit the note on an issue flag (visible on the card).
+   */
+  updateIssueNote: opsChatProcedure
+    .input(z.object({
+      flagId: z.number().int().positive(),
+      note: z.string().max(2000),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.update(issueFlags).set({ issueNote: input.note }).where(eq(issueFlags.id, input.flagId));
+      return { success: true };
+    }),
+
+  /**
+   * setReminderWithCaller — schedule a reminder and store the callerId so we can
+   * deliver the popup to the right person.
+   */
+  setReminderWithCaller: opsChatProcedure
+    .input(z.object({
+      channel: z.string().default("command"),
+      body: z.string().min(1).max(1000),
+      authorName: z.string().min(1).max(128),
+      triggerAt: z.number().int().positive(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.insert(opsReminders).values({
+        channel: input.channel,
+        body: input.body,
+        authorName: input.authorName,
+        triggerAt: input.triggerAt,
+        callerId: ctx.opsCaller.id,
+      });
+      return { success: true };
+    }),
+
+  /**
+   * getDueReminders — returns reminders that have fired but not been dismissed/snoozed
+   * for the current caller. Polled every 30s by the client.
+   */
+  getDueReminders: opsChatProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { reminders: [] };
+      const callerId = ctx.opsCaller.id;
+      const now = Date.now();
+      const rows = await db
+        .select()
+        .from(opsReminders)
+        .where(
+          and(
+            eq(opsReminders.callerId, callerId),
+            lte(opsReminders.triggerAt, now),
+            isNull(opsReminders.dismissedAt),
+            // not snoozed or snooze has expired
+            or(isNull(opsReminders.snoozedUntil), lte(opsReminders.snoozedUntil, now))
+          )
+        );
+      return { reminders: rows };
+    }),
+
+  /**
+   * dismissReminder — mark a reminder as dismissed.
+   */
+  dismissReminder: opsChatProcedure
+    .input(z.object({ reminderId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.update(opsReminders).set({ dismissedAt: Date.now() }).where(eq(opsReminders.id, input.reminderId));
+      return { success: true };
+    }),
+
+  /**
+   * snoozeReminder — snooze a reminder by N minutes.
+   */
+  snoozeReminder: opsChatProcedure
+    .input(z.object({
+      reminderId: z.number().int().positive(),
+      minutes: z.number().int().min(1).max(60),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const snoozedUntil = Date.now() + input.minutes * 60 * 1000;
+      // Reset firedAt so it re-fires after snooze, clear dismissedAt
+      await db.update(opsReminders).set({ snoozedUntil, firedAt: null, dismissedAt: null }).where(eq(opsReminders.id, input.reminderId));
+      return { success: true };
+    }),
+
+  /**
+   * uploadProfilePhoto — upload a profile photo to S3 and save the URL to the agent's profile.
+   * Accepts base64-encoded image data.
+   */
+  uploadProfilePhoto: opsChatProcedure
+    .input(z.object({
+      base64Data: z.string().min(1), // base64 encoded image
+      mimeType: z.string().default("image/jpeg"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const callerId = ctx.opsCaller.id;
+      const suffix = Date.now().toString(36);
+      const ext = input.mimeType.includes("png") ? "png" : input.mimeType.includes("webp") ? "webp" : "jpg";
+      const key = `profile-photos/${callerId}-${suffix}.${ext}`;
+
+      const buffer = Buffer.from(input.base64Data, "base64");
+      const { url } = await storagePut(key, buffer, input.mimeType);
+
+      // Save to agents table if this is an agent, otherwise save to users table
+      await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, callerId));
+
+      return { url };
+    }),
+
+  /**
+   * getMyProfile — return the current caller's profile including photo URL.
+   */
+  getMyProfile: opsChatProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { name: ctx.opsCaller.name, photoUrl: null };
+      const callerId = ctx.opsCaller.id;
+      const [agent] = await db.select({ profilePhotoUrl: agents.profilePhotoUrl, name: agents.name }).from(agents).where(eq(agents.email, callerId)).limit(1);
+      return {
+        name: agent?.name ?? ctx.opsCaller.name,
+        photoUrl: agent?.profilePhotoUrl ?? null,
+      };
+    }),
+
+  /**
+   * getCallerProfiles — return photo URLs for a list of caller IDs (for rendering avatars).
+   */
+  getCallerProfiles: opsChatProcedure
+    .input(z.object({ callerIds: z.array(z.string()).max(50) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db || input.callerIds.length === 0) return { profiles: {} };
+      const rows = await db
+        .select({ email: agents.email, name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
+        .from(agents)
+        .where(or(...input.callerIds.map(id => eq(agents.email, id))));
+      const profiles: Record<string, { name: string; photoUrl: string | null }> = {};
+      for (const row of rows) {
+        profiles[row.email] = { name: row.name, photoUrl: row.profilePhotoUrl ?? null };
+      }
+      return { profiles };
     }),
 });

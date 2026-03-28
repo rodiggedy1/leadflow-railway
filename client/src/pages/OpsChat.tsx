@@ -10,6 +10,8 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
+import ReminderPopup from "@/components/ReminderPopup";
+import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
@@ -845,6 +847,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // Resolved caller name — owner name takes precedence, then agent name
   const callerName = user?.name ?? agentMe?.name ?? "Office";
 
+  // Profile photo state
+  const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+
   // ── Notification sound ──────────────────────────────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
   const prevJobMsgCountRef = useRef(0);
@@ -1088,11 +1094,12 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     return <AgentLoginGate onSuccess={() => refetchAgentMe()} />;
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
+      {/* ── Reminder popup (fires when a due reminder is detected) ── */}
+      <ReminderPopup />
+      {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
         <div className="w-14 shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-hidden transition-all">
@@ -1300,12 +1307,30 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           )}
         </div>
 
-        {/* Signed-in-as footer */}
-        <div className="px-4 py-3 border-t border-slate-100 bg-white">
+        {/* Signed-in-as footer with profile photo */}
+        <button
+          onClick={() => setProfilePhotoOpen(true)}
+          className="px-4 py-3 border-t border-slate-100 bg-white flex items-center gap-2.5 hover:bg-slate-50 transition w-full text-left"
+          title="View/edit profile photo"
+        >
+          {profilePhotoUrl ? (
+            <img
+              src={profilePhotoUrl}
+              alt={callerName}
+              className="w-7 h-7 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0"
+            />
+          ) : (
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+              style={{ backgroundColor: senderHex(callerName) }}
+            >
+              {(callerName ?? "?")[0].toUpperCase()}
+            </div>
+          )}
           <p className="text-xs text-slate-400 truncate">
-            Signed in as <span className="font-medium text-slate-600">{callerName}</span>
+            <span className="font-medium text-slate-600">{callerName}</span>
           </p>
-        </div>
+        </button>
       </div>
       )} {/* end sidebarCollapsed ternary */}
 
@@ -2005,7 +2030,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         </div>
       )}
 
-      {/* ── Resolve Issue Modal ───────────────────────────────────────────────────────────────── */}
+      {/* ── Resolve Issue Modal ─────────────────────────────────────────────────────────────────────────────────────── */}
       {showResolveModal && jobDetail?.job.openFlagId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowResolveModal(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
@@ -2072,6 +2097,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           </div>
         </div>
       )}
+
+      {/* ── Profile Photo Drawer ─────────────────────────────────────────────────────────────────────────────────────── */}
+      <ProfilePhotoDrawer
+        open={profilePhotoOpen}
+        onClose={() => setProfilePhotoOpen(false)}
+        callerName={callerName}
+        currentPhotoUrl={profilePhotoUrl}
+        onPhotoUpdated={(url) => setProfilePhotoUrl(url || null)}
+      />
     </div>
   );
 }

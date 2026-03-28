@@ -415,3 +415,17 @@
 - [ ] Typing indicator: show animated "X is typing..." bubble at bottom of thread (WhatsApp style)
 - [ ] Typing indicator: show multiple names when >1 person typing
 - [ ] Typing indicator: auto-clear after 3s of no keypress
+
+## Feature Batch 3: Issue Notes, Reminder Popups, Profile Photos
+
+- [x] Issue cards: add/edit note inline on left-panel issue cards (both Command Center alerts and Job thread issues)
+- [x] Issue cards: note persists in DB and shows on the card with pencil-edit icon
+- [x] Resolve flow: styled issue_resolved card posted to thread showing original issue + resolution note + resolver name
+- [x] Reminder popup: server cron checks due reminders every minute, marks them as fired
+- [x] Reminder popup: client polls for due reminders, shows modal with snooze (5/15/30 min) and dismiss
+- [x] Reminder popup: works for both owner (Manus OAuth) and agents (email/password)
+- [x] Profile photo: add profilePhotoUrl column to agents table and users table
+- [x] Profile photo: S3 upload endpoint for agents and owner
+- [x] Profile photo: profile settings page / modal for agents to upload their photo
+- [ ] Profile photo: show profile photos in all avatar circles in CommandChat and OpsChat job thread (partial — sidebar avatar done)
+- [x] Profile photo: fallback to colored initial circle when no photo is set
