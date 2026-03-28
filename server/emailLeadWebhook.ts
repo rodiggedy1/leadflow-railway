@@ -683,6 +683,32 @@ export async function handleCallNotificationEmail(
     title: `Received Call: ${normalizedPhone}`,
     content: `Caller: ${normalizedPhone}${callTime ? `\nTime: ${callTime}` : ""}\n\nIntro SMS sent automatically.`,
   }).catch(() => {});
+
+  // ── Post call lead card to MIB Command Chat ──────────────────────────────
+  try {
+    const callTimeDisplay = callTime ? ` at ${callTime}` : "";
+    const leadBody = `📞 **Missed Call Lead** · ${normalizedPhone}${callTimeDisplay}\n🤖 Intro SMS sent automatically via Madison`;
+    const metadata = JSON.stringify({
+      leadPhone: normalizedPhone,
+      leadName: "Anonymous (Google Ads Call)",
+      serviceType: "Voice",
+      utmSource: "voice",
+      callTime: callTime ?? null,
+      arrivedAt: Date.now(),
+    });
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "🎯 New Lead",
+      authorRole: "system",
+      body: leadBody,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+  } catch (err) {
+    console.error("[EmailLead] Failed to post call lead card to command channel:", err);
+  }
 }
 
 // ── Main dispatcher ───────────────────────────────────────────────────────────
