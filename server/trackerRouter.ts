@@ -125,6 +125,8 @@ export const trackerRouter = router({
           jobDate: cleanerJobs.jobDate,
           jobAddress: cleanerJobs.jobAddress,
           serviceType: cleanerJobs.serviceType,
+          cleanerName: cleanerJobs.cleanerName,
+          completedJobId: cleanerJobs.completedJobId,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.trackerToken, input.token))
@@ -220,11 +222,14 @@ export const trackerRouter = router({
           input.rating === 3 ? `😐 **${input.rating}-star rating ${starsStr}**` :
           input.rating === 4 ? `👍 **${input.rating}-star rating ${starsStr}**` :
                                `🌟 **5-star rating ${starsStr}**`;
+        const qualityLink = `/admin/quality${job.completedJobId ? `?jobId=${job.completedJobId}` : ""}`;
         const chatBody = [
           ratingLabel,
           `👤 Customer: ${firstName}${job.customerPhone ? ` · ${job.customerPhone}` : ""}`,
+          `🧹 Cleaner: ${job.cleanerName ?? "Unassigned"}`,
           `📍 Job: ${job.jobDate ?? "unknown date"} — ${job.jobAddress ?? "no address"}`,
           input.comment ? `💬 Comment: "${input.comment}"` : null,
+          `🔗 [View in Quality Dashboard](${qualityLink})`,
         ].filter(Boolean).join("\n");
         await db.insert(opsChatMessages).values({
           cleanerJobId: null,
@@ -232,7 +237,7 @@ export const trackerRouter = router({
           authorName: "⭐ Rating Alert",
           authorRole: "system",
           body: chatBody,
-          metadata: JSON.stringify({ rating: input.rating, customerPhone: job.customerPhone, jobAddress: job.jobAddress }),
+          metadata: JSON.stringify({ rating: input.rating, customerPhone: job.customerPhone, jobAddress: job.jobAddress, link: qualityLink }),
         });
       } catch (chatErr) {
         console.error("[Tracker] Failed to post rating to command chat:", chatErr);

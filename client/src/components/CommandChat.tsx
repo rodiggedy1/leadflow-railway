@@ -1341,7 +1341,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               </div>
                             </button>
                           )}
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {msg.body.split(/(\[([^\]]+)\]\((https?:\/\/[^)]+|\/?[^)]+)\))/g).reduce<React.ReactNode[]>((acc, part, i) => {
+                              // Every 4th chunk starting at index 1 is a full match like [text](url)
+                              if (i % 4 === 1) {
+                                const text = msg.body.split(/(\[([^\]]+)\]\((https?:\/\/[^)]+|\/?[^)]+)\))/g)[i + 1] ?? part;
+                                const url = msg.body.split(/(\[([^\]]+)\]\((https?:\/\/[^)]+|\/?[^)]+)\))/g)[i + 2] ?? "#";
+                                acc.push(<a key={i} href={url} target="_blank" rel="noopener noreferrer" className="underline text-blue-600 hover:text-blue-800">{text}</a>);
+                              } else if (i % 4 === 0) {
+                                // Plain text — render **bold** inline
+                                const boldParts = part.split(/(\*\*[^*]+\*\*)/);
+                                boldParts.forEach((bp, bi) => {
+                                  if (bp.startsWith("**") && bp.endsWith("**")) {
+                                    acc.push(<strong key={`${i}-${bi}`}>{bp.slice(2, -2)}</strong>);
+                                  } else {
+                                    acc.push(<span key={`${i}-${bi}`}>{bp}</span>);
+                                  }
+                                });
+                              }
+                              return acc;
+                            }, [])}
+                          </p>
                           {mediaUrls.length > 0 && (
                             <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
                               {mediaUrls.map((url, idx) => (
