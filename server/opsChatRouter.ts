@@ -758,9 +758,9 @@ export const opsChatRouter = router({
 
   /**
    * getSeenByBulk — batch version of getSeenBy.
-   * Given an array of messageIds, returns a map of messageId -> seenBy[] (names).
+   * Returns a FLAT array of { messageId, callerName } pairs to avoid superjson
+   * depth-limit issues with Record<number, string[]>. Client groups by messageId.
    * A caller has "seen" message N if their lastReadMessageId >= N.
-   * Used to show per-message read receipts without N individual queries.
    */
   getSeenByBulk: opsChatProcedure
     .input(z.object({
@@ -770,7 +770,7 @@ export const opsChatRouter = router({
     }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db || input.messageIds.length === 0) return { seenByMap: {} as Record<number, string[]> };
+      if (!db || input.messageIds.length === 0) return { reads: [] as { messageId: number; callerName: string }[] };
       // Fetch all read rows for this channel/thread in one query
       const rows = await db
         .select({
@@ -785,15 +785,18 @@ export const opsChatRouter = router({
             input.cleanerJobId ? eq(opsChatReads.cleanerJobId, input.cleanerJobId) : isNull(opsChatReads.cleanerJobId),
           )
         );
-      // Build map: messageId -> names of readers whose lastRead >= messageId (excluding self)
+      // Return flat list: (msgId, readerName) for every reader whose lastRead >= msgId
+      // Excludes self. Client builds the map.
       const myCallerId = ctx.opsCaller.id;
-      const seenByMap: Record<number, string[]> = {};
+      const reads: { messageId: number; callerName: string }[] = [];
       for (const msgId of input.messageIds) {
-        seenByMap[msgId] = rows
-          .filter((r) => r.callerId !== myCallerId && r.lastReadMessageId >= msgId)
-          .map((r) => r.callerName);
+        for (const r of rows) {
+          if (r.callerId !== myCallerId && r.lastReadMessageId >= msgId) {
+            reads.push({ messageId: msgId, callerName: r.callerName });
+          }
+        }
       }
-      return { seenByMap };
+      return { reads };
     }),
 
   /**

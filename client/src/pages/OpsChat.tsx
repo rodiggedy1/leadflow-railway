@@ -1009,20 +1009,24 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       .filter((id) => id > 0);
   }, [channelMsgs, callerName]);
 
-  const { data: threadSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
+   const { data: threadSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
     { messageIds: myThreadMsgIds, cleanerJobId: selectedJobId ?? 0 },
     { enabled: isAuthenticated && activeTab === "today" && myThreadMsgIds.length > 0 && !!selectedJobId, refetchInterval: 10_000 }
   );
-
   const { data: channelSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
     { messageIds: myChannelMsgIds, channel: activeChannel },
     { enabled: isAuthenticated && activeTab === "channels" && myChannelMsgIds.length > 0, refetchInterval: 10_000 }
   );
-
-  // seenByMap: messageId -> seenBy[] for current view
-  const activeSeenByMap = activeTab === "today"
-    ? (threadSeenByBulk?.seenByMap ?? {})
-    : (channelSeenByBulk?.seenByMap ?? {});
+  // Build seenByMap from flat reads array (server returns flat to avoid superjson depth issues)
+  const activeSeenByMap = useMemo(() => {
+    const bulkData = activeTab === "today" ? threadSeenByBulk : channelSeenByBulk;
+    const map: Record<number, string[]> = {};
+    for (const entry of bulkData?.reads ?? []) {
+      if (!map[entry.messageId]) map[entry.messageId] = [];
+      map[entry.messageId].push(entry.callerName);
+    }
+    return map;
+  }, [activeTab, threadSeenByBulk, channelSeenByBulk]);
 
   // ── Sender status map ─────────────────────────────────────────────────────────
   // Derived from agentStatusList: name -> "online" | "away" | "offline"
