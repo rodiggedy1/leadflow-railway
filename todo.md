@@ -495,3 +495,4 @@
 - [x] DM unread badge on agent status button (red count badge when unread DMs exist)
 - [x] DM notification sound — plays chime when new DM arrives in closed panel
 - [x] Fix TS errors: moved DM unread query/effect after callerName and playNotification declarations
+- [x] Fix notification sound not playing for regular chats (job threads + command channel)

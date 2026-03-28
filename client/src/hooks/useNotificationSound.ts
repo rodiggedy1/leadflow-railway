@@ -38,8 +38,9 @@ export function useNotificationSound() {
       const res = await fetch(CHIME_URL);
       const arrayBuffer = await res.arrayBuffer();
       bufferRef.current = await ctx.decodeAudioData(arrayBuffer);
+      console.log("[Sound] Audio buffer loaded OK");
     } catch (e) {
-      console.warn("[useNotificationSound] Failed to load audio buffer:", e);
+      console.warn("[Sound] Failed to load audio buffer:", e);
     }
   }, []);
 
@@ -58,7 +59,7 @@ export function useNotificationSound() {
         // Create context synchronously inside the event handler
         const ctx = new AudioContext();
         ctxRef.current = ctx;
-
+        console.log("[Sound] AudioContext created, state:", ctx.state);
         // Resume if needed (some browsers start suspended even on gesture)
         const doLoad = () => loadBuffer(ctx);
         if (ctx.state === "suspended") {
@@ -67,7 +68,7 @@ export function useNotificationSound() {
           doLoad();
         }
       } catch (e) {
-        console.warn("[useNotificationSound] AudioContext creation failed:", e);
+        console.warn("[Sound] AudioContext creation failed:", e);
       }
     };
 
@@ -83,16 +84,20 @@ export function useNotificationSound() {
   }, [loadBuffer]);
 
   const playSound = useCallback(() => {
-    if (muted) return;
+    if (muted) {
+      console.log("[Sound] Muted, skipping");
+      return;
+    }
 
     const ctx = ctxRef.current;
+    console.log("[Sound] playSound called — ctx:", ctx ? ctx.state : "null", "buffer:", !!bufferRef.current);
 
     // AudioContext not yet created (no user gesture yet) — use Audio element as fallback
     if (!ctx) {
       try {
         const audio = new Audio(CHIME_URL);
         audio.volume = 0.7;
-        audio.play().catch(() => {});
+        audio.play().catch((e) => console.warn("[Sound] Audio fallback failed:", e));
       } catch {}
       return;
     }
@@ -100,13 +105,19 @@ export function useNotificationSound() {
     const doPlay = () => {
       const buf = bufferRef.current;
       if (!buf) {
-        // Buffer still loading — schedule a retry after 500ms
+        // Buffer still loading — schedule a retry after 600ms
+        console.log("[Sound] Buffer not ready, retrying in 600ms");
         setTimeout(() => {
           if (bufferRef.current && ctxRef.current) {
-            const src = ctxRef.current.createBufferSource();
-            src.buffer = bufferRef.current;
-            src.connect(ctxRef.current.destination);
-            src.start(0);
+            try {
+              const src = ctxRef.current.createBufferSource();
+              src.buffer = bufferRef.current;
+              src.connect(ctxRef.current.destination);
+              src.start(0);
+              console.log("[Sound] Played (retry)");
+            } catch (e) {
+              console.warn("[Sound] Retry play failed:", e);
+            }
           }
         }, 600);
         return;
@@ -116,12 +127,14 @@ export function useNotificationSound() {
         source.buffer = buf;
         source.connect(ctx.destination);
         source.start(0);
+        console.log("[Sound] Played OK");
       } catch (e) {
-        console.warn("[useNotificationSound] playSound error:", e);
+        console.warn("[Sound] playSound error:", e);
       }
     };
 
     if (ctx.state === "suspended") {
+      console.log("[Sound] Resuming suspended context...");
       ctx.resume().then(doPlay).catch(doPlay);
     } else {
       doPlay();

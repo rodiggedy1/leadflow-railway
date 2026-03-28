@@ -61,6 +61,8 @@ import {
   Radio,
   UserCircle,
   ClipboardList,
+  Bell,
+  BellOff,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1002,6 +1004,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
   const prevJobMsgCountRef = useRef(0);
+  const prevChannelMsgCountRef = useRef(0);
+  const prevChannelRef = useRef("");
 
   // -- DM unread counts + sound notification --
   const prevDmUnreadRef = useRef<Record<string, number>>({});
@@ -1241,23 +1245,23 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // Track whether we have pending notifications to play when the tab becomes visible
   const pendingNotifRef = useRef(false);
-  // Play notification sound when new job thread messages arrive from others
+  // Play notification sound when new job thread messages arrive from others.
+  // Use .length as the dep (not the array object) so we only fire when count changes,
+  // not on every 15-second refetch that returns a new array reference.
+  const jobThreadLength = jobDetail?.thread?.length ?? 0;
   useEffect(() => {
     const thread = jobDetail?.thread ?? [];
     const curr = thread.length;
     const prev = prevJobMsgCountRef.current;
     if (curr > prev && prev > 0) {
       const newest = thread[thread.length - 1];
-      if (newest && newest.from !== callerName) {
+      // Use myNames set to handle OAuth name vs DB name mismatch
+      if (newest && !myNames.has(newest.from)) {
         if (!document.hidden) {
-          // Tab is visible — play immediately
           playNotification();
         } else {
-          // Tab is hidden — Web Audio is suspended by browser policy.
-          // Mark pending so we play when user returns, and fire OS notification.
           pendingNotifRef.current = true;
         }
-        // Always attempt OS notification (only fires when tab is hidden, per hook logic)
         const jobName = jobs.find((j) => j.id === selectedJobId)?.title ?? "Job Thread";
         osNotify({
           title: `${jobName} — ${newest.from}`,
@@ -1267,7 +1271,38 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       }
     }
     prevJobMsgCountRef.current = curr;
-  }, [jobDetail?.thread, callerName, playNotification, osNotify, jobs, selectedJobId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobThreadLength, selectedJobId]);
+
+  // Play notification sound when new command/channel messages arrive from others.
+  const channelMsgLength = channelMsgs.length;
+  useEffect(() => {
+    const curr = channelMsgLength;
+    const prev = prevChannelMsgCountRef.current;
+    // Reset counter when user switches channels
+    if (prevChannelRef.current !== activeChannel) {
+      prevChannelRef.current = activeChannel;
+      prevChannelMsgCountRef.current = curr;
+      return;
+    }
+    if (curr > prev && prev > 0) {
+      const newest = channelMsgs[channelMsgs.length - 1];
+      if (newest && !myNames.has(newest.from)) {
+        if (!document.hidden) {
+          playNotification();
+        } else {
+          pendingNotifRef.current = true;
+        }
+        osNotify({
+          title: `#${activeChannel} — ${newest.from}`,
+          body: newest.body?.slice(0, 100) ?? "New message",
+          tag: `leadflow-channel-${activeChannel}`,
+        });
+      }
+    }
+    prevChannelMsgCountRef.current = curr;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelMsgLength, activeChannel]);
   // Play pending sound when user returns to the tab
   useEffect(() => {
     const handleVisibility = () => {
@@ -1791,6 +1826,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 <p className="text-sm text-slate-500">{selectedJob.address}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {/* Sound mute toggle */}
+                <button
+                  onClick={toggleMute}
+                  title={notifMuted ? "Notifications muted — click to unmute" : "Notifications on — click to mute"}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center transition",
+                    notifMuted ? "bg-red-100 text-red-500 hover:bg-red-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  )}
+                >
+                  {notifMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                </button>
                 {jobDetail?.job.cleanerPhone && (
                   <Button variant="outline" size="sm" asChild>
                     <a href={`tel:${jobDetail.job.cleanerPhone}`}>
@@ -2096,11 +2142,24 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         ) : activeTab === "channels" ? (
           /* Regular channel view */
           <>
-            <div className="px-6 py-4 border-b border-slate-200 bg-white">
-              <h2 className="text-xl font-semibold text-slate-900">
-                {CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}
-              </h2>
-              <p className="text-sm text-slate-500 mt-0.5">Internal team channel</p>
+            <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">
+                  {CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}
+                </h2>
+                <p className="text-sm text-slate-500 mt-0.5">Internal team channel</p>
+              </div>
+              {/* Sound mute toggle */}
+              <button
+                onClick={toggleMute}
+                title={notifMuted ? "Notifications muted — click to unmute" : "Notifications on — click to mute"}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center transition",
+                  notifMuted ? "bg-red-100 text-red-500 hover:bg-red-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                )}
+              >
+                {notifMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+              </button>
             </div>
             <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <div className="space-y-4">
