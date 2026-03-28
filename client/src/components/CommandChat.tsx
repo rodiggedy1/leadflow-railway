@@ -403,8 +403,73 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
   }
 
+  // ── Panel resize & collapse ──────────────────────────────────────────────
+  const MIN_LEFT  = 200;
+  const MAX_LEFT  = 420;
+  const MIN_RIGHT = 180;
+  const MAX_RIGHT = 400;
+  const MIN_CENTER = 380;
+
+  const [leftWidth, setLeftWidth] = useState<number>(() => {
+    try { const v = localStorage.getItem("cmd_leftWidth"); return v ? Math.max(MIN_LEFT, Math.min(MAX_LEFT, Number(v))) : 300; } catch { return 300; }
+  });
+  const [rightWidth, setRightWidth] = useState<number>(() => {
+    try { const v = localStorage.getItem("cmd_rightWidth"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 280; } catch { return 280; }
+  });
+  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("cmd_leftCollapsed") === "true"; } catch { return false; }
+  });
+  const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("cmd_rightCollapsed") === "true"; } catch { return false; }
+  });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Persist to localStorage whenever values change
+  useEffect(() => { try { localStorage.setItem("cmd_leftWidth",  String(leftWidth));  } catch {} }, [leftWidth]);
+  useEffect(() => { try { localStorage.setItem("cmd_rightWidth", String(rightWidth)); } catch {} }, [rightWidth]);
+  useEffect(() => { try { localStorage.setItem("cmd_leftCollapsed",  String(leftCollapsed));  } catch {} }, [leftCollapsed]);
+  useEffect(() => { try { localStorage.setItem("cmd_rightCollapsed", String(rightCollapsed)); } catch {} }, [rightCollapsed]);
+
+  // Drag handler factory
+  function startDrag(side: "left" | "right") {
+    return (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startLeft  = leftWidth;
+      const startRight = rightWidth;
+      const containerWidth = containerRef.current?.offsetWidth ?? window.innerWidth;
+
+      function onMove(ev: MouseEvent) {
+        const delta = ev.clientX - startX;
+        if (side === "left") {
+          const next = Math.max(MIN_LEFT, Math.min(MAX_LEFT, startLeft + delta));
+          // Ensure center doesn't shrink below MIN_CENTER
+          const centerAvail = containerWidth - next - (rightCollapsed ? 0 : rightWidth) - 8; // 8px for handles
+          if (centerAvail >= MIN_CENTER) setLeftWidth(next);
+        } else {
+          const next = Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, startRight - delta));
+          const centerAvail = containerWidth - (leftCollapsed ? 0 : leftWidth) - next - 8;
+          if (centerAvail >= MIN_CENTER) setRightWidth(next);
+        }
+      }
+
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    };
+  }
+
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── Lightbox ── */}
@@ -449,17 +514,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       )}
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
-      <div className="w-[300px] shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
+      <div
+        className="shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden transition-[width] duration-200"
+        style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
+      >
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-200 bg-white">
-          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">General Command Chat</p>
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-slate-900">Ship Control</h2>
-            {totalAlerts > 0 && (
-              <span className="text-xs font-semibold bg-slate-100 text-slate-700 rounded-full px-3 py-1 border border-slate-200">
-                {totalAlerts} alert{totalAlerts !== 1 ? "s" : ""}
-              </span>
-            )}
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1 whitespace-nowrap">General Command Chat</p>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-2xl font-bold text-slate-900 whitespace-nowrap">Ship Control</h2>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {totalAlerts > 0 && (
+                <span className="text-xs font-semibold bg-slate-100 text-slate-700 rounded-full px-3 py-1 border border-slate-200 whitespace-nowrap">
+                  {totalAlerts} alert{totalAlerts !== 1 ? "s" : ""}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setLeftCollapsed(true)}
+                title="Collapse panel"
+                className="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -568,8 +646,28 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>
       </div>
 
+      {/* ── Left drag handle + collapse-expand toggle ── */}
+      <div
+        className="relative flex-none flex items-center justify-center group"
+        style={{ width: 8, cursor: "col-resize", zIndex: 10 }}
+        onMouseDown={leftCollapsed ? undefined : startDrag("left")}
+      >
+        {/* Drag track */}
+        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
+        {/* Expand/collapse pill button — always visible */}
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setLeftCollapsed(v => !v)}
+          title={leftCollapsed ? "Expand panel" : "Collapse panel"}
+          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all opacity-0 group-hover:opacity-100"
+        >
+          {leftCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+        </button>
+      </div>
+
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-white">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-white" style={{ minWidth: MIN_CENTER }}>
         {/* Header — compact single-line bar */}
         <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
@@ -1222,13 +1320,44 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>
       </div>
 
+      {/* ── Right drag handle + collapse-expand toggle ── */}
+      <div
+        className="relative flex-none flex items-center justify-center group"
+        style={{ width: 8, cursor: "col-resize", zIndex: 10 }}
+        onMouseDown={rightCollapsed ? undefined : startDrag("right")}
+      >
+        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setRightCollapsed(v => !v)}
+          title={rightCollapsed ? "Expand panel" : "Collapse panel"}
+          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all opacity-0 group-hover:opacity-100"
+        >
+          {rightCollapsed ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </button>
+      </div>
+
       {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
-      <div className="w-[280px] shrink-0 border-l border-slate-200 bg-slate-50 flex flex-col overflow-y-auto">
+      <div
+        className="shrink-0 border-l border-slate-200 bg-slate-50 flex flex-col overflow-y-auto transition-[width] duration-200"
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
+      >
         <div className="px-5 py-4 space-y-5">
 
           {/* Command Center Rules */}
           <div>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Command Center Rules</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Command Center Rules</p>
+              <button
+                type="button"
+                onClick={() => setRightCollapsed(true)}
+                title="Collapse panel"
+                className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <div className="space-y-3 text-sm text-slate-600 leading-relaxed">
               <p>Any issue flagged inside a job thread automatically surfaces here as an alert card.</p>
               <p>Regular team conversation still happens here, but urgent ops signals stay visible and pinned.</p>

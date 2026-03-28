@@ -367,4 +367,9 @@
 - [x] Announce Booking: play celebration chime sound effect alongside glitter burst
 - [x] Announce Booking: broadcast glitter + sound to all agents on Command Chat page simultaneously via polling
 - [x] Fix GlitterBurst: animation should stop after 6 seconds, not run indefinitely
-- [ ] Command Chat: fix photo viewer — replace full-page takeover with proper lightbox modal (close button, ESC, backdrop click)
+- [x] Command Chat: fix photo viewer — replace full-page takeover with proper lightbox modal (close button, ESC, backdrop click)
+
+- [x] Command Center: draggable resize handles between columns (left/center and center/right dividers)
+- [x] Command Center: collapse/expand chevron buttons on left and right side panels
+- [x] Command Center: persist column widths and collapse state in localStorage
+- [x] Command Center: enforce min-width guards (left ≥ 200px, right ≥ 180px, center ≥ 400px)
