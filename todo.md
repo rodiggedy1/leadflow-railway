@@ -492,3 +492,6 @@
 ## Bug: Profile photo not appearing in message avatars
 - [x] After uploadProfilePhoto succeeds, invalidate getAllAgentPhotoMap + getMyProfile cache so bubbles refresh immediately
 - [x] Also invalidate agentStatusList (it also carries photoUrl)
+- [x] DM unread badge on agent status button (red count badge when unread DMs exist)
+- [x] DM notification sound — plays chime when new DM arrives in closed panel
+- [x] Fix TS errors: moved DM unread query/effect after callerName and playNotification declarations

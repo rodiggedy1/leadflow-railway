@@ -1,15 +1,15 @@
 /**
  * useNotificationSound
- * Plays a WhatsApp-style chime when new messages arrive from other people.
+ * Plays a WhatsApp-style chime when new messages arrive.
  *
- * Uses AudioContext + AudioBuffer instead of <Audio> so the sound plays
- * even when the tab is in the background (browsers block Audio.play() on
- * hidden tabs but allow AudioContext playback that was unlocked by a prior
- * user gesture).
- *
- * Usage:
- *   const { playSound, muted, toggleMute } = useNotificationSound();
- *   // call playSound() whenever a new incoming message is detected
+ * Strategy (most reliable cross-browser approach):
+ * 1. On first user gesture (click/keydown/touchstart), create AudioContext
+ *    SYNCHRONOUSLY inside the event handler — this is the only way Chrome
+ *    guarantees the context starts in "running" state.
+ * 2. Immediately fetch + decode the audio buffer while the context is warm.
+ * 3. On playSound(), await ctx.resume() before starting the source node
+ *    so we handle the case where the browser suspended the context.
+ * 4. Fall back to new Audio() if AudioContext is not available (Safari quirks).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -21,7 +21,8 @@ const MUTE_KEY = "ops_notification_muted";
 export function useNotificationSound() {
   const ctxRef = useRef<AudioContext | null>(null);
   const bufferRef = useRef<AudioBuffer | null>(null);
-  const loadingRef = useRef(false);
+  const unlockedRef = useRef(false);
+
   const [muted, setMuted] = useState<boolean>(() => {
     try {
       return localStorage.getItem(MUTE_KEY) === "true";
@@ -30,78 +31,102 @@ export function useNotificationSound() {
     }
   });
 
-  // Create (or resume) the AudioContext — must be called from a user gesture
-  const ensureContext = useCallback((): AudioContext => {
-    if (!ctxRef.current) {
-      ctxRef.current = new AudioContext();
-    }
-    // Resume if suspended (browser pauses context when page loses focus)
-    if (ctxRef.current.state === "suspended") {
-      ctxRef.current.resume().catch(() => {});
-    }
-    return ctxRef.current;
-  }, []);
-
-  // Decode and cache the audio buffer
-  const loadBuffer = useCallback(async () => {
-    if (bufferRef.current || loadingRef.current) return;
-    loadingRef.current = true;
+  // Load the audio buffer — called after context is created
+  const loadBuffer = useCallback(async (ctx: AudioContext) => {
+    if (bufferRef.current) return; // already loaded
     try {
-      const ctx = ensureContext();
       const res = await fetch(CHIME_URL);
       const arrayBuffer = await res.arrayBuffer();
       bufferRef.current = await ctx.decodeAudioData(arrayBuffer);
-    } catch {
-      // Silently ignore — will retry on next playSound call
-    } finally {
-      loadingRef.current = false;
+    } catch (e) {
+      console.warn("[useNotificationSound] Failed to load audio buffer:", e);
     }
-  }, [ensureContext]);
+  }, []);
 
-  // Unlock AudioContext on first user interaction anywhere on the page
+  // Unlock on first user gesture — AudioContext MUST be created synchronously here
   useEffect(() => {
-    const unlock = () => {
-      ensureContext();
-      loadBuffer();
-      // Once unlocked, we don't need to listen anymore
+    const unlock = (e: Event) => {
+      if (unlockedRef.current) return;
+      unlockedRef.current = true;
+
+      // Remove listeners immediately
       document.removeEventListener("click", unlock, true);
       document.removeEventListener("keydown", unlock, true);
       document.removeEventListener("touchstart", unlock, true);
+
+      try {
+        // Create context synchronously inside the event handler
+        const ctx = new AudioContext();
+        ctxRef.current = ctx;
+
+        // Resume if needed (some browsers start suspended even on gesture)
+        const doLoad = () => loadBuffer(ctx);
+        if (ctx.state === "suspended") {
+          ctx.resume().then(doLoad).catch(doLoad);
+        } else {
+          doLoad();
+        }
+      } catch (e) {
+        console.warn("[useNotificationSound] AudioContext creation failed:", e);
+      }
     };
+
     document.addEventListener("click", unlock, true);
     document.addEventListener("keydown", unlock, true);
     document.addEventListener("touchstart", unlock, true);
+
     return () => {
       document.removeEventListener("click", unlock, true);
       document.removeEventListener("keydown", unlock, true);
       document.removeEventListener("touchstart", unlock, true);
     };
-  }, [ensureContext, loadBuffer]);
+  }, [loadBuffer]);
 
   const playSound = useCallback(() => {
     if (muted) return;
-    try {
-      const ctx = ensureContext();
-      if (!bufferRef.current) {
-        // Buffer not loaded yet — try to load and play once ready
-        loadBuffer().then(() => {
-          if (!bufferRef.current || !ctxRef.current) return;
-          const source = ctxRef.current.createBufferSource();
-          source.buffer = bufferRef.current;
-          source.connect(ctxRef.current.destination);
-          source.start(0);
-        }).catch(() => {});
+
+    const ctx = ctxRef.current;
+
+    // AudioContext not yet created (no user gesture yet) — use Audio element as fallback
+    if (!ctx) {
+      try {
+        const audio = new Audio(CHIME_URL);
+        audio.volume = 0.7;
+        audio.play().catch(() => {});
+      } catch {}
+      return;
+    }
+
+    const doPlay = () => {
+      const buf = bufferRef.current;
+      if (!buf) {
+        // Buffer still loading — schedule a retry after 500ms
+        setTimeout(() => {
+          if (bufferRef.current && ctxRef.current) {
+            const src = ctxRef.current.createBufferSource();
+            src.buffer = bufferRef.current;
+            src.connect(ctxRef.current.destination);
+            src.start(0);
+          }
+        }, 600);
         return;
       }
-      // Play immediately from the cached buffer
-      const source = ctx.createBufferSource();
-      source.buffer = bufferRef.current;
-      source.connect(ctx.destination);
-      source.start(0);
-    } catch {
-      // Ignore any audio errors
+      try {
+        const source = ctx.createBufferSource();
+        source.buffer = buf;
+        source.connect(ctx.destination);
+        source.start(0);
+      } catch (e) {
+        console.warn("[useNotificationSound] playSound error:", e);
+      }
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(doPlay).catch(doPlay);
+    } else {
+      doPlay();
     }
-  }, [muted, ensureContext, loadBuffer]);
+  }, [muted]);
 
   const toggleMute = useCallback(() => {
     setMuted((prev) => {

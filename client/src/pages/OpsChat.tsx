@@ -942,7 +942,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
   // DM panels: list of open DM recipients (name + photoUrl)
-  const [openDms, setOpenDms] = useState<Array<{ name: string; photoUrl: string | null }>>([]);
+  const [openDms, setOpenDms] = useState<Array<{ name: string; photoUrl: string | null }>>([]); 
   const openDm = (name: string, photoUrl: string | null) => {
     setOpenDms((prev) => {
       if (prev.some((d) => d.name === name)) return prev; // already open
@@ -995,13 +995,42 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     // Always include own photo (may have just been uploaded)
     if (callerName && profilePhotoUrl) return { ...base, [callerName]: profilePhotoUrl };
     return base;
-  }, [agentPhotoData?.photos, callerName, profilePhotoUrl]);;
+  }, [agentPhotoData?.photos, callerName, profilePhotoUrl]);
 
-   // ── Notification sound + OS notification ─────────────────────────────
+  // -- Notification sound + OS notification --
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
   const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
   const prevJobMsgCountRef = useRef(0);
+
+  // -- DM unread counts + sound notification --
+  const prevDmUnreadRef = useRef<Record<string, number>>({});
+  const { data: dmUnreadData } = trpc.opsChat.getDmUnreadCounts.useQuery(
+    { myName: callerName },
+    { enabled: Boolean(callerName && callerName !== "Office"), refetchInterval: 5_000 }
+  );
+  const dmUnreadMap: Record<string, number> = dmUnreadData?.unread ?? {};
+  const totalDmUnread = Object.values(dmUnreadMap).reduce((a, b) => a + b, 0);
+
+  // Play sound when any DM thread gets new unread messages (panel not open)
+  useEffect(() => {
+    const prev = prevDmUnreadRef.current;
+    const curr = dmUnreadMap;
+    const openDmNames = new Set(openDms.map((d) => d.name.toLowerCase().replace(/\s+/g, "-")));
+    for (const [thread, count] of Object.entries(curr)) {
+      const prevCount = prev[thread] ?? 0;
+      if (count > prevCount) {
+        // Only play if the DM panel for this thread is NOT open
+        const parts = thread.split("::");
+        const otherSlug = parts.find((p) => !openDmNames.has(p));
+        if (otherSlug) {
+          playNotification();
+          break; // one chime per poll cycle
+        }
+      }
+    }
+    prevDmUnreadRef.current = { ...curr };
+  }, [JSON.stringify(dmUnreadMap), openDms, playNotification]);
 
   // Request OS notification permission on first user interaction
   useEffect(() => {
@@ -1407,6 +1436,12 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             >
               <Users className="w-4 h-4" />
             </button>
+            {/* DM unread badge */}
+            {totalDmUnread > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
+                {totalDmUnread > 9 ? "9+" : totalDmUnread}
+              </span>
+            )}
             {/* Agent status popover */}
             {agentStatusOpen && (
               <>
