@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
-  X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap,
+  X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -572,30 +572,58 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           {utmSource && (
                             <p className="text-xs text-slate-400 mt-0.5">📍 {utmSource}</p>
                           )}
-                          {/* Elapsed + claim */}
+                          {/* Elapsed + actions */}
                           <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
                             <div className="flex items-center gap-1 text-xs text-slate-400">
                               <Clock className="h-3 w-3" />
                               <ElapsedTimer arrivedAt={arrivedAt} />
                             </div>
-                            {claimedBy ? (
-                              <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-                                <UserCheck className="h-3.5 w-3.5" />
-                                <span>Claimed by {claimedBy}</span>
-                                {claimedAt && (
-                                  <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
-                                )}
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-3"
-                                disabled={claimLeadMutation.isPending}
-                                onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+                            <div className="flex items-center gap-1.5">
+                              {/* Call icon — dial lead directly */}
+                              {leadPhone && (
+                                <a
+                                  href={`tel:${leadPhone}`}
+                                  title={`Call ${leadName}`}
+                                  className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors"
+                                >
+                                  <Phone className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                              {/* Call Assist icon — open call assist page pre-filled */}
+                              <button
+                                title="Open Call Assist for this lead"
+                                onClick={() => {
+                                  const params = new URLSearchParams();
+                                  if (sessionId) params.set("sessionId", String(sessionId));
+                                  if (leadName)    params.set("name",        encodeURIComponent(leadName));
+                                  if (leadPhone)   params.set("phone",       encodeURIComponent(leadPhone));
+                                  if (serviceType) params.set("serviceType", encodeURIComponent(serviceType));
+                                  window.open(`/call-assist?${params.toString()}`, "_blank");
+                                }}
+                                className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors"
                               >
-                                {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
-                              </Button>
-                            )}
+                                <Wand2 className="h-3.5 w-3.5" />
+                              </button>
+                              {/* Claim button / claimed state */}
+                              {claimedBy ? (
+                                <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                                  <UserCheck className="h-3.5 w-3.5" />
+                                  <span>Claimed by {claimedBy}</span>
+                                  {claimedAt && (
+                                    <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-3"
+                                  disabled={claimLeadMutation.isPending}
+                                  onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+                                >
+                                  {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
