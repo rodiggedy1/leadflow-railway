@@ -34,7 +34,7 @@
 import type { Express } from "express";
 import crypto from "crypto";
 import { getDb } from "./db";
-import { conversationSessions } from "../drizzle/schema";
+import { conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { getNextAvailableSlots, formatAvailabilityQuestion } from "./availability";
 import { logActivity } from "./activityLogger";
@@ -556,6 +556,33 @@ export async function handleFormSubmissionEmail(
     title: `New Form Lead: ${normalizedPhone}`,
     content: `${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}\n\nFrom: ${fromAddress}${parsed.email ? `\nEmail: ${parsed.email}` : ""}`,
   }).catch(() => {});
+
+  // ── Post new lead card to MIB Command Chat ────────────────────────────────
+  try {
+    const freqDisplay = frequency ? ` (${frequency})` : "";
+    const leadBody = `📧 **Email/Form Lead** · ${displayName} · ${normalizedPhone}\n🏠 **${serviceType}${freqDisplay}** · ${bedrooms} / ${bathrooms} · **$${price}**`;
+    const metadata = JSON.stringify({
+      leadName: displayName,
+      leadPhone: normalizedPhone,
+      serviceType,
+      size: `${bedrooms} / ${bathrooms}`,
+      price,
+      utmSource: "email",
+      arrivedAt: Date.now(),
+    });
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "🎯 New Lead",
+      authorRole: "system",
+      body: leadBody,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+  } catch (err) {
+    console.error("[EmailLead] Failed to post lead card to command channel:", err);
+  }
 }
 
 // ── Handler: Phone Call Notification ─────────────────────────────────────────
