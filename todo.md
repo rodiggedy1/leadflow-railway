@@ -351,3 +351,8 @@
 - [x] Add "View Conversation" icon to new_lead card in Command Chat (opens Admin Leads page with session pre-selected); improved icon spacing
 - [x] Unclaimed lead escalation: auto-post nudge to Command Chat if lead sits unclaimed for 5+ minutes
 - [x] Fix Today Ops: all jobs showing last name "Home" instead of actual customer last name
+- [x] Command Chat: replace Raise Alert / Ask Status / Route Reminder chips with Open Issue, Set Reminder, Pin Note, Announce Booking; keep Broadcast Update
+- [x] Command Chat: Open Issue modal — title + note + optional job tag → posts styled issue card to channel; resolvable from channel
+- [x] Command Chat: Set Reminder modal — message + time picker (5/15/30/60 min / custom) → cron posts reminder card back to channel at trigger time
+- [x] Command Chat: Pin Note — sticky note UI (amber/yellow card) pinned above thread; one active pin at a time; dismiss button
+- [x] Command Chat: Announce Booking — celebratory modal with person selector + booking amount → posts confetti/glitter card to channel

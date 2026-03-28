@@ -1574,3 +1574,52 @@ export const issueFlags = mysqlTable("issue_flags", {
 
 export type IssueFlag = typeof issueFlags.$inferSelect;
 export type InsertIssueFlag = typeof issueFlags.$inferInsert;
+
+// ── Channel Pins ──────────────────────────────────────────────────────────────
+/**
+ * One active sticky note per channel. Only one pin can be active at a time
+ * (dismissedAt IS NULL = active). Dismissed pins are kept for history.
+ */
+export const channelPins = mysqlTable("channel_pins", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Channel name (e.g. "command") */
+  channel: varchar("channel", { length: 64 }).notNull(),
+  /** The note body */
+  body: text("body").notNull(),
+  /** Who pinned it */
+  authorName: varchar("authorName", { length: 128 }).notNull(),
+  /** When it was pinned */
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** When it was dismissed (NULL = still active) */
+  dismissedAt: timestamp("dismissedAt"),
+}, (table) => ({
+  idxChannel: index("idx_cp_channel").on(table.channel),
+}));
+export type ChannelPin = typeof channelPins.$inferSelect;
+export type InsertChannelPin = typeof channelPins.$inferInsert;
+
+// ── Ops Reminders ─────────────────────────────────────────────────────────────
+/**
+ * Scheduled reminders set from Command Chat. The per-minute cron checks for
+ * rows where triggerAt <= now AND firedAt IS NULL, posts a reminder card to
+ * the channel, then marks firedAt.
+ */
+export const opsReminders = mysqlTable("ops_reminders", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Channel to post the reminder into */
+  channel: varchar("channel", { length: 64 }).notNull(),
+  /** Reminder message body */
+  body: text("body").notNull(),
+  /** Who set the reminder */
+  authorName: varchar("authorName", { length: 128 }).notNull(),
+  /** When to fire (UTC epoch ms) */
+  triggerAt: bigint("triggerAt", { mode: "number" }).notNull(),
+  /** When it was actually posted (NULL = not yet fired) */
+  firedAt: bigint("firedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxTrigger: index("idx_or_trigger").on(table.triggerAt),
+  idxFired: index("idx_or_fired").on(table.firedAt),
+}));
+export type OpsReminder = typeof opsReminders.$inferSelect;
+export type InsertOpsReminder = typeof opsReminders.$inferInsert;

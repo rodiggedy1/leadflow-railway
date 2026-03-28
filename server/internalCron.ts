@@ -34,6 +34,8 @@ import {
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
+import { opsReminders, opsChatMessages } from "../drizzle/schema";
+import { and, isNull, lte } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -330,6 +332,42 @@ export function startInternalCron(): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[InternalCron] UnclaimedLeadEscalation failed:", msg);
+    }
+  });
+
+  // ── Ops Reminder fire: every minute ────────────────────────────────────────
+  // Checks ops_reminders for rows where triggerAt <= now AND firedAt IS NULL,
+  // posts a reminder card to the channel, then stamps firedAt.
+  cron.schedule("0 * * * * *", async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      const now = Date.now();
+      const due = await db
+        .select()
+        .from(opsReminders)
+        .where(and(lte(opsReminders.triggerAt, now), isNull(opsReminders.firedAt)))
+        .limit(20);
+      for (const r of due) {
+        await db.insert(opsChatMessages).values({
+          channel: r.channel,
+          authorName: r.authorName,
+          authorRole: "system",
+          body: `⏰ Reminder from ${r.authorName}: ${r.body}`,
+          quickAction: "reminder",
+          metadata: JSON.stringify({ reminderBody: r.body, setBy: r.authorName }),
+        });
+        await db
+          .update(opsReminders)
+          .set({ firedAt: now })
+          .where(lte(opsReminders.id, r.id));
+      }
+      if (due.length > 0) {
+        console.log(`[InternalCron] OpsReminders fired: ${due.length}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] OpsReminders failed:", msg);
     }
   });
 

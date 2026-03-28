@@ -16,10 +16,12 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare,
+  Pin, Bell, TriangleAlert, PartyPopper, StickyNote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -130,6 +132,61 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onError: (err) => {
       toast.error("Broadcast failed", { description: err.message });
     },
+  });
+
+  // ── Open Issue modal state ─────────────────────────────────────────────────
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueTitle, setIssueTitle] = useState("");
+  const [issueNote, setIssueNote] = useState("");
+  const [issueJobId, setIssueJobId] = useState<number | undefined>(undefined);
+  const openIssueMutation = trpc.opsChat.openIssue.useMutation({
+    onSuccess: () => {
+      toast.success("Issue posted to Command Chat");
+      setIssueOpen(false); setIssueTitle(""); setIssueNote(""); setIssueJobId(undefined);
+    },
+    onError: (err) => toast.error("Failed to post issue", { description: err.message }),
+  });
+
+  // ── Set Reminder modal state ───────────────────────────────────────────────
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [reminderBody, setReminderBody] = useState("");
+  const [reminderMinutes, setReminderMinutes] = useState<number>(15);
+  const [reminderCustom, setReminderCustom] = useState("");
+  const setReminderMutation = trpc.opsChat.setReminder.useMutation({
+    onSuccess: () => {
+      const mins = reminderMinutes === -1 ? parseInt(reminderCustom, 10) : reminderMinutes;
+      toast.success(`Reminder set for ${mins} min from now`);
+      setReminderOpen(false); setReminderBody(""); setReminderMinutes(15); setReminderCustom("");
+    },
+    onError: (err) => toast.error("Failed to set reminder", { description: err.message }),
+  });
+
+  // ── Pin Note modal state ───────────────────────────────────────────────────
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinBody, setPinBody] = useState("");
+  const { data: activePin, refetch: refetchPin } = trpc.opsChat.getChannelPin.useQuery({ channel: "command" }, { refetchInterval: 30_000 });
+  const { data: todayJobsData } = trpc.opsChat.listTodayJobs.useQuery(undefined, { staleTime: 60_000 });
+  const pinNoteMutation = trpc.opsChat.pinNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note pinned!"); setPinOpen(false); setPinBody(""); refetchPin();
+    },
+    onError: (err) => toast.error("Failed to pin note", { description: err.message }),
+  });
+  const dismissPinMutation = trpc.opsChat.dismissPin.useMutation({
+    onSuccess: () => { toast.success("Pin dismissed"); refetchPin(); },
+  });
+
+  // ── Announce Booking modal state ───────────────────────────────────────────
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingPerson, setBookingPerson] = useState("");
+  const [bookingAmount, setBookingAmount] = useState("");
+  const [bookingNote, setBookingNote] = useState("");
+  const announceBookingMutation = trpc.opsChat.announceBooking.useMutation({
+    onSuccess: () => {
+      toast.success("Booking announced! 🎉");
+      setBookingOpen(false); setBookingPerson(""); setBookingAmount(""); setBookingNote("");
+    },
+    onError: (err) => toast.error("Failed to announce booking", { description: err.message }),
   });
 
   // ── Staged photos ──────────────────────────────────────────────────────────
@@ -415,6 +472,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
 
+        {/* Active Sticky Pin banner */}
+        {activePin && (
+          <div className="mx-6 mt-3 mb-0 rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm overflow-hidden" style={{ background: "linear-gradient(135deg, #fef9c3 0%, #fef3c7 50%, #fde68a 100%)" }}>
+            {/* Tape strip at top */}
+            <div className="h-2 w-full" style={{ background: "repeating-linear-gradient(90deg, #fbbf24 0px, #fbbf24 18px, #fde68a 18px, #fde68a 36px)" }} />
+            <div className="px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <StickyNote className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-1">Pinned Note · {activePin.authorName}</p>
+                    <p className="text-sm text-amber-900 font-medium leading-snug whitespace-pre-wrap">{activePin.body}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => dismissPinMutation.mutate({ channel: "command" })}
+                  className="shrink-0 rounded-full p-1 text-amber-600 hover:bg-amber-200 hover:text-amber-900 transition"
+                  title="Dismiss pin"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pinned Day Status */}
         <div className="px-6 py-3 border-b border-slate-100">
           <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Pinned Day Status</p>
@@ -662,6 +745,102 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   );
                 }
 
+                // ── General Issue card (red) ─────────────────────────────────────
+                if (msg.quickAction === "general_issue") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const issTitle = (meta.issueTitle as string) ?? msg.body;
+                  const issNote = (meta.issueNote as string | null) ?? null;
+                  const jobTitle = (meta.jobTitle as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-red-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
+                          <TriangleAlert className="h-3 w-3 text-red-100" />
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">Issue Raised</span>
+                          {jobTitle && <span className="ml-1.5 text-[10px] bg-red-700 text-red-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
+                          <span className="ml-auto text-[10px] text-red-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-semibold text-slate-900">{issTitle}</p>
+                          {issNote && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{issNote}</p>}
+                          <p className="text-[10px] text-slate-400 mt-2">Raised by {msg.from}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Reminder card (sky blue) ─────────────────────────────────────
+                if (msg.quickAction === "reminder") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const remBody = (meta.reminderBody as string) ?? msg.body;
+                  const setBy = (meta.setBy as string) ?? msg.from;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-sky-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600">
+                          <Bell className="h-3 w-3 text-sky-100" />
+                          <span className="text-[10px] font-semibold text-sky-100 uppercase tracking-widest">Reminder</span>
+                          <span className="ml-auto text-[10px] text-sky-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-medium text-slate-800">{remBody}</p>
+                          <p className="text-[10px] text-slate-400 mt-1.5">Set by {setBy}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Announce Booking card (celebratory) ──────────────────────────
+                if (msg.quickAction === "announce_booking") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const personName = (meta.personName as string) ?? "";
+                  const amount = (meta.amount as string | null) ?? null;
+                  const note = (meta.note as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-violet-200 shadow-md" style={{ background: "linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 50%, #ede9fe 100%)" }}>
+                        {/* Confetti header */}
+                        <div className="relative flex items-center gap-2 px-4 py-2 overflow-hidden" style={{ background: "linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)" }}>
+                          {/* Pure-CSS confetti dots */}
+                          {[...Array(12)].map((_, i) => (
+                            <span key={i} className="absolute rounded-full opacity-70 animate-bounce" style={{
+                              width: `${4 + (i % 3) * 2}px`,
+                              height: `${4 + (i % 3) * 2}px`,
+                              background: ["#fbbf24","#34d399","#f472b6","#60a5fa","#fb923c","#a3e635"][i % 6],
+                              left: `${(i * 8) % 90}%`,
+                              top: `${(i * 13) % 80}%`,
+                              animationDelay: `${(i * 0.15) % 0.9}s`,
+                              animationDuration: `${0.8 + (i % 3) * 0.3}s`,
+                            }} />
+                          ))}
+                          <PartyPopper className="h-4 w-4 text-white relative z-10" />
+                          <span className="text-[10px] font-bold text-white uppercase tracking-widest relative z-10">New Booking!</span>
+                          <span className="ml-auto text-[10px] text-purple-200 relative z-10">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-400 to-pink-400 flex items-center justify-center text-white font-bold text-base shrink-0">
+                              {personName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-base font-bold text-slate-900">Congrats to {personName}!</p>
+                              {amount && <p className="text-sm font-semibold text-violet-700 mt-0.5">{amount}</p>}
+                            </div>
+                          </div>
+                          {note && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{note}</p>}
+                          <p className="text-[10px] text-slate-400 mt-2">Announced by {msg.from}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Default bubble ───────────────────────────────────────────────
                 return (
                   <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
@@ -706,25 +885,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="px-6 py-3 border-t border-slate-100 bg-white">
           {/* Quick-action chips */}
           <div className="flex gap-2 mb-3 flex-wrap">
-            {[
-              { label: "Broadcast Update", primary: true, action: () => setBroadcastOpen(true) },
-              { label: "Raise Alert", action: () => setComposer("🚨 ALERT: ") },
-              { label: "Ask Status", action: () => setComposer("📋 Status check — can all teams confirm current status?") },
-              { label: "Route Reminder", action: () => setComposer("🗺️ Route reminder: please confirm your next stop and ETA.") },
-            ].map((chip) => (
-              <button
-                key={chip.label}
-                onClick={chip.action}
-                className={cn(
-                  "text-xs font-semibold rounded-full px-4 py-2 transition",
-                  chip.primary
-                    ? "bg-slate-900 text-white hover:bg-slate-700"
-                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                {chip.label}
-              </button>
-            ))}
+            <button
+              onClick={() => setBroadcastOpen(true)}
+              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-slate-900 text-white hover:bg-slate-700"
+            >
+              Broadcast Update
+            </button>
+            <button
+              onClick={() => setIssueOpen(true)}
+              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-red-200 text-red-700 hover:bg-red-50"
+            >
+              Open Issue
+            </button>
+            <button
+              onClick={() => setReminderOpen(true)}
+              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-sky-200 text-sky-700 hover:bg-sky-50"
+            >
+              Set Reminder
+            </button>
+            <button
+              onClick={() => setPinOpen(true)}
+              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-amber-300 text-amber-700 hover:bg-amber-50"
+            >
+              Pin Note
+            </button>
+            <button
+              onClick={() => setBookingOpen(true)}
+              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50"
+            >
+              Announce Booking
+            </button>
           </div>
 
           {/* Staged photo preview strip */}
@@ -914,6 +1104,214 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       </div>
+
+      {/* ── Open Issue Dialog ── */}
+      <Dialog open={issueOpen} onOpenChange={setIssueOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-red-600" />
+              Open Issue
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">Post a general issue to the Command Chat. Optionally tag a job.</p>
+          <div className="space-y-3">
+            <Input
+              placeholder="Issue title (required)"
+              value={issueTitle}
+              onChange={(e) => setIssueTitle(e.target.value)}
+            />
+            <Textarea
+              placeholder="Additional notes (optional)"
+              value={issueNote}
+              onChange={(e) => setIssueNote(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
+            {todayJobsData && todayJobsData.length > 0 && (
+              <select
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                value={issueJobId ?? ""}
+                onChange={(e) => setIssueJobId(e.target.value ? Number(e.target.value) : undefined)}
+              >
+                <option value="">Tag a job (optional)</option>
+                {todayJobsData.map((j) => (
+                  <option key={j.id} value={j.id}>{j.client} · {j.time}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIssueOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => openIssueMutation.mutate({ title: issueTitle, note: issueNote, jobId: issueJobId, channel: "command", authorName: callerName })}
+              disabled={!issueTitle.trim() || openIssueMutation.isPending}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {openIssueMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <TriangleAlert className="h-4 w-4 mr-2" />}
+              Post Issue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Set Reminder Dialog ── */}
+      <Dialog open={reminderOpen} onOpenChange={setReminderOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-sky-600" />
+              Set Reminder
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">A reminder card will post to Command Chat at the scheduled time.</p>
+          <Textarea
+            placeholder="Reminder message…"
+            value={reminderBody}
+            onChange={(e) => setReminderBody(e.target.value)}
+            rows={3}
+            className="resize-none"
+          />
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2">When?</p>
+            <div className="flex gap-2 flex-wrap">
+              {[5, 15, 30, 60].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setReminderMinutes(m)}
+                  className={cn(
+                    "rounded-full px-4 py-1.5 text-xs font-semibold border transition",
+                    reminderMinutes === m
+                      ? "bg-sky-600 text-white border-sky-600"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-sky-50"
+                  )}
+                >
+                  {m < 60 ? `${m} min` : "1 hr"}
+                </button>
+              ))}
+              <button
+                onClick={() => setReminderMinutes(-1)}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-xs font-semibold border transition",
+                  reminderMinutes === -1
+                    ? "bg-sky-600 text-white border-sky-600"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-sky-50"
+                )}
+              >
+                Custom
+              </button>
+            </div>
+            {reminderMinutes === -1 && (
+              <Input
+                className="mt-2 w-28"
+                type="number"
+                min={1}
+                max={480}
+                placeholder="Minutes"
+                value={reminderCustom}
+                onChange={(e) => setReminderCustom(e.target.value)}
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReminderOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const mins = reminderMinutes === -1 ? parseInt(reminderCustom, 10) : reminderMinutes;
+                if (!mins || mins < 1) return;
+                setReminderMutation.mutate({ body: reminderBody, triggerAt: Date.now() + mins * 60_000, channel: "command", authorName: callerName });
+              }}
+              disabled={!reminderBody.trim() || setReminderMutation.isPending || (reminderMinutes === -1 && (!reminderCustom || parseInt(reminderCustom, 10) < 1))}
+              className="bg-sky-600 text-white hover:bg-sky-700"
+            >
+              {setReminderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
+              Set Reminder
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Pin Note Dialog ── */}
+      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pin className="h-5 w-5 text-amber-600" />
+              Pin a Note
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">Pins a sticky note at the top of Command Chat. Only one pin at a time — pinning a new note replaces the current one.</p>
+          {/* Sticky note preview */}
+          <div
+            className="rounded-xl border-2 border-amber-300 overflow-hidden shadow-sm"
+            style={{ background: "linear-gradient(135deg, #fef9c3 0%, #fef3c7 50%, #fde68a 100%)" }}
+          >
+            <div className="h-2 w-full" style={{ background: "repeating-linear-gradient(90deg, #fbbf24 0px, #fbbf24 18px, #fde68a 18px, #fde68a 36px)" }} />
+            <Textarea
+              placeholder="Write your sticky note…"
+              value={pinBody}
+              onChange={(e) => setPinBody(e.target.value)}
+              rows={4}
+              className="resize-none border-0 bg-transparent text-amber-900 placeholder:text-amber-400 font-medium focus-visible:ring-0 px-4 py-3"
+              style={{ fontFamily: "'Caveat', 'Patrick Hand', cursive, sans-serif", fontSize: "15px", lineHeight: "1.8" }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPinOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => pinNoteMutation.mutate({ body: pinBody, channel: "command", authorName: callerName })}
+              disabled={!pinBody.trim() || pinNoteMutation.isPending}
+              className="bg-amber-500 text-white hover:bg-amber-600"
+            >
+              {pinNoteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Pin className="h-4 w-4 mr-2" />}
+              Pin Note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Announce Booking Dialog ── */}
+      <Dialog open={bookingOpen} onOpenChange={setBookingOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PartyPopper className="h-5 w-5 text-violet-600" />
+              Announce a Booking
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">Celebrate a new booking with the whole team!</p>
+          <div className="space-y-3">
+            <Input
+              placeholder="Person's name (required)"
+              value={bookingPerson}
+              onChange={(e) => setBookingPerson(e.target.value)}
+            />
+            <Input
+              placeholder="Amount (e.g. $320 recurring) — optional"
+              value={bookingAmount}
+              onChange={(e) => setBookingAmount(e.target.value)}
+            />
+            <Textarea
+              placeholder="Extra note (optional)"
+              value={bookingNote}
+              onChange={(e) => setBookingNote(e.target.value)}
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBookingOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => announceBookingMutation.mutate({ personName: bookingPerson, amount: bookingAmount, note: bookingNote, channel: "command", authorName: callerName })}
+              disabled={!bookingPerson.trim() || announceBookingMutation.isPending}
+              className="bg-gradient-to-r from-violet-600 to-pink-500 text-white hover:from-violet-700 hover:to-pink-600"
+            >
+              {announceBookingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <PartyPopper className="h-4 w-4 mr-2" />}
+              Announce!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Broadcast Dialog ── */}
       <Dialog open={broadcastOpen} onOpenChange={setBroadcastOpen}>

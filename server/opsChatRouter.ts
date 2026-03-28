@@ -25,6 +25,8 @@ import {
   opsChatMessages,
   issueFlags,
   opsChatReads,
+  channelPins,
+  opsReminders,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -952,6 +954,183 @@ export const opsChatRouter = router({
       }
 
       return { success: true, claimedBy, claimedAt };
+    }),
+
+  /**
+   * openIssue — post a general (non-job-specific) issue card to the command channel.
+   */
+  openIssue: opsChatProcedure
+    .input(z.object({
+      channel: z.string().default("command"),
+      title: z.string().min(1).max(200),
+      note: z.string().max(2000).optional(),
+      jobId: z.number().int().positive().optional(),
+      authorName: z.string().min(1).max(128),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Optionally look up job name for the tag
+      let jobTitle: string | null = null;
+      if (input.jobId) {
+        const [job] = await db
+          .select({ customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.id, input.jobId))
+          .limit(1);
+        jobTitle = job?.customerName ?? job?.jobAddress ?? null;
+      }
+
+      const meta = JSON.stringify({
+        issueTitle: input.title,
+        issueNote: input.note ?? null,
+        jobId: input.jobId ?? null,
+        jobTitle,
+      });
+
+      await db.insert(opsChatMessages).values({
+        channel: input.channel,
+        authorName: input.authorName,
+        authorRole: "office",
+        body: input.note ? `${input.title}\n${input.note}` : input.title,
+        quickAction: "general_issue",
+        metadata: meta,
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * setReminder — schedule a reminder to be posted to the channel at a future time.
+   */
+  setReminder: opsChatProcedure
+    .input(z.object({
+      channel: z.string().default("command"),
+      body: z.string().min(1).max(1000),
+      authorName: z.string().min(1).max(128),
+      triggerAt: z.number().int().positive(), // UTC epoch ms
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      await db.insert(opsReminders).values({
+        channel: input.channel,
+        body: input.body,
+        authorName: input.authorName,
+        triggerAt: input.triggerAt,
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * pinNote — upsert the active sticky note for a channel.
+   * Dismisses any existing active pin before creating the new one.
+   */
+  pinNote: opsChatProcedure
+    .input(z.object({
+      channel: z.string().default("command"),
+      body: z.string().min(1).max(2000),
+      authorName: z.string().min(1).max(128),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Dismiss any existing active pin for this channel
+      await db
+        .update(channelPins)
+        .set({ dismissedAt: new Date() })
+        .where(and(eq(channelPins.channel, input.channel), isNull(channelPins.dismissedAt)));
+
+      await db.insert(channelPins).values({
+        channel: input.channel,
+        body: input.body,
+        authorName: input.authorName,
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * dismissPin — dismiss the active sticky note for a channel.
+   */
+  dismissPin: opsChatProcedure
+    .input(z.object({ channel: z.string().default("command") }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      await db
+        .update(channelPins)
+        .set({ dismissedAt: new Date() })
+        .where(and(eq(channelPins.channel, input.channel), isNull(channelPins.dismissedAt)));
+
+      return { success: true };
+    }),
+
+  /**
+   * getChannelPin — fetch the active sticky note for a channel (null if none).
+   */
+  getChannelPin: opsChatProcedure
+    .input(z.object({ channel: z.string().default("command") }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      const [pin] = await db
+        .select()
+        .from(channelPins)
+        .where(and(eq(channelPins.channel, input.channel), isNull(channelPins.dismissedAt)))
+        .orderBy(desc(channelPins.createdAt))
+        .limit(1);
+
+      if (!pin) return null;
+      return {
+        id: pin.id,
+        body: pin.body,
+        authorName: pin.authorName,
+        createdAt: pin.createdAt.getTime(),
+      };
+    }),
+
+  /**
+   * announceBooking — post a celebratory booking announcement card to the command channel.
+   */
+  announceBooking: opsChatProcedure
+    .input(z.object({
+      channel: z.string().default("command"),
+      personName: z.string().min(1).max(128),
+      amount: z.string().max(32).optional(),
+      note: z.string().max(500).optional(),
+      authorName: z.string().min(1).max(128),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const meta = JSON.stringify({
+        personName: input.personName,
+        amount: input.amount ?? null,
+        note: input.note ?? null,
+      });
+
+      const body = input.amount
+        ? `🎉 New booking! ${input.personName} — ${input.amount}${input.note ? ` · ${input.note}` : ""}`
+        : `🎉 New booking! ${input.personName}${input.note ? ` · ${input.note}` : ""}`;
+
+      await db.insert(opsChatMessages).values({
+        channel: input.channel,
+        authorName: input.authorName,
+        authorRole: "office",
+        body,
+        quickAction: "announce_booking",
+        metadata: meta,
+      });
+
+      return { success: true };
     }),
 
   /**
