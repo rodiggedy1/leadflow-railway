@@ -17,7 +17,7 @@ import { z } from "zod";
 import { router, publicProcedure, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, conversationSessions, opsChatMessages } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
 import { jobSmsReplies } from "../drizzle/schema";
 import { randomBytes } from "crypto";
@@ -127,6 +127,7 @@ export const trackerRouter = router({
           serviceType: cleanerJobs.serviceType,
           cleanerName: cleanerJobs.cleanerName,
           completedJobId: cleanerJobs.completedJobId,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.trackerToken, input.token))
@@ -212,6 +213,34 @@ export const trackerRouter = router({
         } catch (err) {
           console.error("[Tracker] Failed to send post-review follow-up SMS:", err);
         }
+      }
+
+      // ── SMS to assigned cleaner ─────────────────────────────────────────────
+      try {
+        // Look up cleaner's phone from cleanerProfiles
+        const cleanerProfileRows = await db
+          .select({ phone: cleanerProfiles.phone, name: cleanerProfiles.name })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+          .limit(1);
+        const cleanerProfile = cleanerProfileRows[0];
+        if (cleanerProfile?.phone) {
+          const cleanerPhone = cleanerProfile.phone.replace(/\D/g, "").replace(/^1/, "");
+          const teamName = cleanerProfile.name ?? job.cleanerName ?? "Team";
+          const jobDate = job.jobDate ?? "unknown date";
+          const customerFullName = job.customerName ?? "a customer";
+          let cleanerSms: string;
+          if (input.rating === 5) {
+            cleanerSms = `Hi ${teamName} 🌟 — ${customerFullName} just left you a 5-star rating for the job on ${jobDate}. Amazing work! You've earned a $10 bonus for this one 💪`;
+          } else if (input.rating === 4) {
+            cleanerSms = `Hi ${teamName} — ${customerFullName} left you a 4-star rating for the job on ${jobDate}. Good work, keep it up!`;
+          } else {
+            cleanerSms = `Hi ${teamName} — ${customerFullName} left a ${input.rating}-star rating for the job on ${jobDate}. There is a $30 charge applied to your pay for this job and we will be following up with the client about a re-clean. Please reach out if you have any questions.`;
+          }
+          await sendSms({ to: cleanerPhone, content: cleanerSms });
+        }
+      } catch (cleanerSmsErr) {
+        console.error("[Tracker] Failed to send cleaner rating SMS:", cleanerSmsErr);
       }
 
       // ── Post ALL ratings to MIB Command Chat ────────────────────────────────

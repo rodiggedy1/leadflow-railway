@@ -572,7 +572,38 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
                     </div>
                   </div>
                 )}
-                {msg.body && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>}
+                {msg.body && (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {(() => {
+                      const tokens: React.ReactNode[] = [];
+                      const linkRe = /\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]+)\)/g;
+                      const boldRe = /\*\*([^*]+)\*\*/g;
+                      let lastIdx = 0;
+                      let match: RegExpExecArray | null;
+                      const renderBold = (text: string, keyPrefix: string) => {
+                        const parts: React.ReactNode[] = [];
+                        let bi = 0, bLast = 0;
+                        let bm: RegExpExecArray | null;
+                        boldRe.lastIndex = 0;
+                        while ((bm = boldRe.exec(text)) !== null) {
+                          if (bm.index > bLast) parts.push(<span key={`${keyPrefix}-t${bi++}`}>{text.slice(bLast, bm.index)}</span>);
+                          parts.push(<strong key={`${keyPrefix}-b${bi++}`}>{bm[1]}</strong>);
+                          bLast = bm.index + bm[0].length;
+                        }
+                        if (bLast < text.length) parts.push(<span key={`${keyPrefix}-t${bi}`}>{text.slice(bLast)}</span>);
+                        return parts;
+                      };
+                      linkRe.lastIndex = 0;
+                      while ((match = linkRe.exec(msg.body)) !== null) {
+                        if (match.index > lastIdx) tokens.push(...renderBold(msg.body.slice(lastIdx, match.index), `pre-${match.index}`));
+                        tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-500 hover:text-blue-400">{match[1]}</a>);
+                        lastIdx = match.index + match[0].length;
+                      }
+                      if (lastIdx < msg.body.length) tokens.push(...renderBold(msg.body.slice(lastIdx), `tail`));
+                      return tokens;
+                    })()}
+                  </p>
+                )}
               </div>
             )}
             {/* Footer: time + read receipts */}
