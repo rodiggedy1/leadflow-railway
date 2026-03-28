@@ -1514,6 +1514,13 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
   replyToBody: varchar("replyToBody", { length: 512 }),
   /** Quote-reply: display name of the replied-to message author */
   replyToAuthor: varchar("replyToAuthor", { length: 128 }),
+  /**
+   * DM thread key — present only for private 1-on-1 direct messages.
+   * Format: "<senderSlug>::<recipientSlug>" sorted alphabetically so both
+   * participants query the same key. e.g. "ianique::rohan_g"
+   * When set, channel and cleanerJobId are both null.
+   */
+  dmThread: varchar("dmThread", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxJob: index("idx_ocm_job").on(table.cleanerJobId),

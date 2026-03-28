@@ -1,0 +1,1 @@
+ALTER TABLE `ops_chat_messages` ADD `dmThread` varchar(256);

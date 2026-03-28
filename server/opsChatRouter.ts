@@ -1672,4 +1672,187 @@ export const opsChatRouter = router({
         })),
       };
     }),
+
+  // ── Direct Messages ──────────────────────────────────────────────────────────
+
+  /**
+   * Send a private DM to another agent/cleaner.
+   * dmThread key is "<senderSlug>::<recipientSlug>" sorted alphabetically.
+   */
+  sendDm: opsChatProcedure
+    .input(
+      z.object({
+        senderName: z.string().min(1),
+        recipientName: z.string().min(1),
+        body: z.string().min(1).max(4000),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const slugs = [slugify(input.senderName), slugify(input.recipientName)].sort();
+      const dmThread = slugs.join("::");
+      const [result] = await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: null,
+        dmThread,
+        authorName: input.senderName,
+        authorRole: "office",
+        body: input.body,
+      });
+      return { id: (result as any).insertId as number, dmThread };
+    }),
+
+  /**
+   * Fetch messages for a DM thread between two participants.
+   * Returns newest-first, limited to 100.
+   */
+  listDmMessages: opsChatProcedure
+    .input(
+      z.object({
+        participantA: z.string().min(1),
+        participantB: z.string().min(1),
+        limit: z.number().int().min(1).max(200).default(100),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { messages: [] };
+      const slugs = [slugify(input.participantA), slugify(input.participantB)].sort();
+      const dmThread = slugs.join("::");
+      const rows = await db
+        .select()
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.dmThread, dmThread))
+        .orderBy(desc(opsChatMessages.createdAt))
+        .limit(input.limit);
+      return {
+        dmThread,
+        messages: rows.reverse().map((m) => ({
+          id: m.id,
+          authorName: m.authorName,
+          body: m.body,
+          createdAt: m.createdAt.getTime(),
+        })),
+      };
+    }),
+
+  /**
+   * Get the full cleaner/agent roster for the DM picker.
+   * Returns all active agents + cleaner profiles.
+   */
+  listDmRoster: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { people: [] };
+    const agentRows = await db
+      .select({
+        name: agents.name,
+        photoUrl: agents.profilePhotoUrl,
+        type: agents.isAdmin,
+      })
+      .from(agents)
+      .where(eq(agents.isActive, 1))
+      .orderBy(agents.name);
+    const cleanerRows = await db
+      .select({
+        name: cleanerProfiles.name,
+      })
+      .from(cleanerProfiles)
+      .where(eq(cleanerProfiles.isActive, 1))
+      .orderBy(cleanerProfiles.name);
+    const agentNames = new Set(agentRows.map((a) => a.name?.toLowerCase()));
+    const people = [
+      ...agentRows.map((a) => ({ name: a.name ?? "Unknown", photoUrl: a.photoUrl ?? null, role: a.type === 1 ? "admin" : "agent" as string })),
+      ...cleanerRows
+        .filter((c) => !agentNames.has(c.name?.toLowerCase()))
+        .map((c) => ({ name: c.name ?? "Unknown", photoUrl: null as string | null, role: "cleaner" as string })),
+    ];
+    return { people };
+  }),
+
+  /**
+   * Get unread DM counts for the current user.
+   * Returns a map of dmThread -> unread count based on messages newer than
+   * the user's last read timestamp for that thread.
+   */
+  getDmUnreadCounts: opsChatProcedure
+    .input(z.object({ myName: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { unread: {} };
+      const mySlug = slugify(input.myName);
+      // Get all DM threads involving this user
+      const rows = await db
+        .select({
+          dmThread: opsChatMessages.dmThread,
+          id: opsChatMessages.id,
+          authorName: opsChatMessages.authorName,
+          createdAt: opsChatMessages.createdAt,
+        })
+        .from(opsChatMessages)
+        .where(
+          and(
+            isNull(opsChatMessages.cleanerJobId),
+            isNull(opsChatMessages.channel)
+          )
+        )
+        .orderBy(desc(opsChatMessages.id))
+        .limit(500);
+      // Filter to threads involving mySlug
+      const myThreadRows = rows.filter((r) => r.dmThread?.split("::").includes(mySlug));
+      // Get last-read per thread from opsChatReads using dmThread as the channel key
+      const threadKeySet = new Set(myThreadRows.map((r) => r.dmThread!).filter(Boolean));
+      const threadKeys = Array.from(threadKeySet);
+      const readRows = threadKeys.length > 0
+        ? await db
+            .select()
+            .from(opsChatReads)
+            .where(
+              and(
+                eq(opsChatReads.callerName, input.myName),
+                isNull(opsChatReads.cleanerJobId)
+              )
+            )
+        : [];
+      const lastReadMap: Record<string, number> = {};
+      for (const r of readRows) {
+        if (r.channel) lastReadMap[r.channel] = r.lastReadMessageId;
+      }
+      const unread: Record<string, number> = {};
+      for (const thread of threadKeys) {
+        const lastRead = lastReadMap[thread] ?? 0;
+        const threadMsgs = myThreadRows.filter(
+          (r) => r.dmThread === thread && r.authorName !== input.myName
+        );
+        unread[thread] = threadMsgs.filter((r) => r.id > lastRead).length;
+      }
+      return { unread };
+    }),
+
+  /**
+   * Mark a DM thread as read up to the latest message.
+   */
+  markDmRead: opsChatProcedure
+    .input(z.object({ myName: z.string().min(1), dmThread: z.string().min(1), lastMessageId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ok: false };
+      const callerId = `dm:${slugify(input.myName)}`;
+      await db
+        .insert(opsChatReads)
+        .values({
+          callerId,
+          callerName: input.myName,
+          cleanerJobId: null,
+          channel: input.dmThread,
+          lastReadMessageId: input.lastMessageId,
+        })
+        .onDuplicateKeyUpdate({ set: { lastReadMessageId: input.lastMessageId } });
+      return { ok: true };
+    }),
 });
+
+/** Convert a display name to a URL-safe slug for dmThread keys */
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}

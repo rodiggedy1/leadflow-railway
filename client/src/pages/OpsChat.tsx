@@ -11,6 +11,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
+import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
 import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -940,6 +941,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
+  // DM panels: list of open DM recipients (name + photoUrl)
+  const [openDms, setOpenDms] = useState<Array<{ name: string; photoUrl: string | null }>>([]);
+  const openDm = (name: string, photoUrl: string | null) => {
+    setOpenDms((prev) => {
+      if (prev.some((d) => d.name === name)) return prev; // already open
+      return [...prev, { name, photoUrl }];
+    });
+  };
+  const closeDm = (name: string) => setOpenDms((prev) => prev.filter((d) => d.name !== name));
 
    // Load my profile photo on mount (only when authenticated)
   const { data: myProfile } = trpc.opsChat.getMyProfile.useQuery(undefined, {
@@ -1455,13 +1465,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                             "text-slate-400"
                           )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
                         </div>
-                        {agStatus === "online" ? (
-                          <Wifi className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                        ) : agStatus === "away" ? (
-                          <Wifi className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        ) : (
-                          <WifiOff className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                        )}
+                        <button
+                          onClick={() => { openDm(ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
+                          className="ml-1 p-1 rounded-full hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors"
+                          title={`DM ${ag.name}`}
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     );
                   })}
@@ -2502,6 +2512,18 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         currentPhotoUrl={profilePhotoUrl}
         onPhotoUpdated={(url) => setProfilePhotoUrl(url || null)}
       />
+
+      {/* ── Floating DM Panels ─────────────────────────────────────────────────── */}
+      {openDms.map((dm, idx) => (
+        <DmPanel
+          key={dm.name}
+          myName={callerName}
+          recipientName={dm.name}
+          recipientPhotoUrl={dm.photoUrl}
+          slotIndex={idx}
+          onClose={() => closeDm(dm.name)}
+        />
+      ))}
       </div>{/* end flex-1 wrapper */}
     </div>
   );
