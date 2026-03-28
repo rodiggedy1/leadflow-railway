@@ -19,7 +19,7 @@ import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { calculatePrice, SERVICE_MULTIPLIERS } from "./engine/pricing";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
-import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages } from "../drizzle/schema";
+import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages, fieldMgmtCalls } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
@@ -917,6 +917,39 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   const callerPhone = call.customer?.number ?? "";
   const vapiCallId = call.id;
   const endedReason = report.message.endedReason;
+
+  // ── Guard: skip ALL post-call processing for outbound FieldMgmt / LeadAlert calls ──
+  // These are calls WE placed to cleaners or the CS team — they are not inbound customer calls.
+  // Processing them would fire spurious notifyOwner alerts, command chat cards, and missed-call SMSes.
+  const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+  if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
+    console.log(`[Vapi] Skipping post-call processing for outbound FieldMgmt/LeadAlert call (phoneNumberId=${call.phoneNumberId}, reason: ${endedReason})`);
+    // Still update the fieldMgmtCalls record if one exists for this vapiCallId
+    try {
+      const dbFm = await getDb();
+      if (dbFm && vapiCallId) {
+        const transcript = artifact?.transcript ?? null;
+        const summary = analysis?.summary ?? null;
+        const durationSeconds = call.startedAt && call.endedAt
+          ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
+          : 0;
+        await dbFm.update(fieldMgmtCalls)
+          .set({
+            outcome: endedReason === "customer-ended-call" ? "answered" : "no_answer",
+            durationSeconds,
+            transcript,
+            summary,
+            endedReason,
+            recordingUrl: artifact?.recordingUrl ?? null,
+          })
+          .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId));
+        console.log(`[Vapi] Updated fieldMgmtCalls record for vapiCallId=${vapiCallId}`);
+      }
+    } catch (fmErr) {
+      console.error("[Vapi] Failed to update fieldMgmtCalls for outbound call:", fmErr);
+    }
+    return;
+  }
 
   // ── Missed call: send auto-SMS if caller hung up before Madison could help ──
   if (MISSED_CALL_REASONS.has(endedReason) && callerPhone) {
