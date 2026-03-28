@@ -5,6 +5,9 @@
  */
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -842,6 +845,14 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // Resolved caller name — owner name takes precedence, then agent name
   const callerName = user?.name ?? agentMe?.name ?? "Office";
 
+  // ── Notification sound ──────────────────────────────────────────────────────
+  const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
+  const prevJobMsgCountRef = useRef(0);
+
+  // ── Typing indicator (keyed to selected job thread) ─────────────────────────
+  const jobChannelKey = selectedJobId ? `job:${selectedJobId}` : "";
+  const { typers: jobTypers, onKeyPress: onJobKeyPress, onBlur: onJobBlur } = useTypingIndicator(jobChannelKey);
+
   // Auth is still loading
   const authLoading = ownerLoading || agentLoading;
 
@@ -992,6 +1003,20 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   useEffect(() => {
     threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [jobDetail?.thread, channelMsgs]);
+
+  // Play notification sound when new job thread messages arrive from others
+  useEffect(() => {
+    const thread = jobDetail?.thread ?? [];
+    const curr = thread.length;
+    const prev = prevJobMsgCountRef.current;
+    if (curr > prev && prev > 0) {
+      const newest = thread[thread.length - 1];
+      if (newest && newest.from !== callerName) {
+        playNotification();
+      }
+    }
+    prevJobMsgCountRef.current = curr;
+  }, [jobDetail?.thread, callerName, playNotification]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
   const grouped = {
@@ -1482,6 +1507,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                       </div>
                     )}
 
+                    {/* Typing indicator */}
+                    <TypingBubble typers={jobTypers} />
+
                     {/* Drag-drop composer box */}
                     <div
                       className={cn(
@@ -1501,8 +1529,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
-                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { handleSend(); return; }
+                          onJobKeyPress();
                         }}
+                        onBlur={onJobBlur}
                       />
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-1 relative">

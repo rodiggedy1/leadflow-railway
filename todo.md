@@ -403,3 +403,15 @@
 - [ ] Profile photos: add avatarUrl column to users/callers table, S3 upload endpoint
 - [ ] Profile photos: profile settings page where agents can upload their photo
 - [ ] Profile photos: show photo in CommandChat and OpsChat bubbles with colored-initial fallback
+
+## Notification Sound + Typing Indicators
+
+- [ ] Notification sound: source a WhatsApp-style chime, upload to CDN
+- [ ] Notification sound: play on new incoming message in CommandChat (not own messages)
+- [ ] Notification sound: play on new incoming message in OpsChat job thread (not own messages)
+- [ ] Typing indicator: server endpoint to set/get typing presence per channel
+- [ ] Typing indicator: send typing event on keypress in CommandChat composer
+- [ ] Typing indicator: send typing event on keypress in OpsChat job thread composer
+- [ ] Typing indicator: show animated "X is typing..." bubble at bottom of thread (WhatsApp style)
+- [ ] Typing indicator: show multiple names when >1 person typing
+- [ ] Typing indicator: auto-clear after 3s of no keypress

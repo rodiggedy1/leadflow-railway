@@ -69,6 +69,9 @@ function formatTime(serviceDateTime: string | null | undefined): string {
 
 // ── router ────────────────────────────────────────────────────────────────────
 
+// In-memory typing presence store (ephemeral, no DB needed)
+const typingStore = new Map<string, Map<string, { name: string; expiresAt: number }>>();
+
 export const opsChatRouter = router({
   /**
    * List all cleaner jobs for today, grouped by priority status.
@@ -1364,5 +1367,44 @@ export const opsChatRouter = router({
         .from(opsChatReactions)
         .where(inArray(opsChatReactions.messageId, input.messageIds));
       return { reactions: rows };
+    }),
+
+  // ── Typing presence ──────────────────────────────────────────────────────────
+  // In-memory store: channelKey → Map<callerId, { name, expiresAt }>
+  // This is intentionally in-memory (no DB) — typing state is ephemeral.
+  setTyping: opsChatProcedure
+    .input(z.object({
+      channelKey: z.string().max(120), // e.g. "general" or "job:12345"
+      isTyping: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const callerId = ctx.opsCaller.id;
+      const name = ctx.opsCaller.name;
+      const map = typingStore.get(input.channelKey) ?? new Map<string, { name: string; expiresAt: number }>();
+      if (input.isTyping) {
+        map.set(callerId, { name, expiresAt: Date.now() + 4_000 });
+      } else {
+        map.delete(callerId);
+      }
+      typingStore.set(input.channelKey, map);
+      return { ok: true };
+    }),
+
+  getTyping: opsChatProcedure
+    .input(z.object({
+      channelKey: z.string().max(120),
+    }))
+    .query(async ({ ctx, input }) => {
+      const callerId = ctx.opsCaller.id;
+      const map = typingStore.get(input.channelKey);
+      if (!map) return { typers: [] };
+      const now = Date.now();
+      const typers: string[] = [];
+      for (const entry of Array.from(map.entries())) {
+        const [id, { name, expiresAt }] = entry;
+        if (expiresAt < now) { map.delete(id); continue; }
+        if (id !== callerId) typers.push(name);
+      }
+      return { typers };
     }),
 });

@@ -11,6 +11,9 @@
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
+import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { TypingBubble } from "@/components/TypingBubble";
 import { trpc } from "@/lib/trpc";
 import { senderHex } from "@/lib/senderColor";
 import GlitterBurst from "@/components/GlitterBurst";
@@ -18,7 +21,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare,
-  Pin, Bell, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
+  Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -117,6 +120,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 20_000,
   });
+
+  // ── Notification sound ──────────────────────────────────────────────────────────
+  const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
+  const prevMsgCountRef = useRef(channelMsgs.length);
+
+  // ── Typing indicator ───────────────────────────────────────────────────────────
+  const { typers: cmdTypers, onKeyPress: onCmdKeyPress, onBlur: onCmdBlur } = useTypingIndicator("command");
 
   const claimLeadMutation = trpc.opsChat.claimLead.useMutation({
     onSuccess: (res) => {
@@ -417,6 +427,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   useEffect(() => {
     threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [channelMsgs.length]);
+
+  // Play notification sound when new messages arrive from others
+  useEffect(() => {
+    const prev = prevMsgCountRef.current;
+    const curr = channelMsgs.length;
+    if (curr > prev) {
+      // Check if the newest message is from someone else
+      const newest = channelMsgs[channelMsgs.length - 1];
+      if (newest && newest.from !== callerName) {
+        playNotification();
+      }
+    }
+    prevMsgCountRef.current = curr;
+  }, [channelMsgs, callerName, playNotification]);
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];
@@ -725,6 +749,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
               </span>
             )}
+            <button
+              onClick={toggleMute}
+              title={notifMuted ? "Unmute notifications" : "Mute notifications"}
+              className="h-7 w-7 flex items-center justify-center rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
+            >
+              {notifMuted
+                ? <BellOff className="h-3.5 w-3.5 text-slate-400" />
+                : <Bell className="h-3.5 w-3.5 text-slate-500" />}
+            </button>
             <Button size="sm" variant="outline" className="h-7 text-xs rounded-full px-3" onClick={() => setBroadcastOpen(true)}>
               <Megaphone className="h-3 w-3 mr-1" />Broadcast
             </Button>
@@ -1443,6 +1476,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           )}
 
+          {/* Typing indicator */}
+          <TypingBubble typers={cmdTypers} />
+
           {/* Composer box with drag-drop */}
           <div
             className={cn(
@@ -1461,8 +1497,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               rows={2}
               className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
+                onCmdKeyPress();
               }}
+              onBlur={onCmdBlur}
             />
             <div className="flex items-center justify-between mt-2">
               <div className="flex items-center gap-1 relative">

@@ -1,3 +1,9 @@
+/* Typing indicator bounce animation */
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-5px); }
+}
+
 /* Confetti burst animations for Announce Booking card */
 @keyframes confetti-burst-0 {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
