@@ -16,7 +16,8 @@
 
 import type { Express } from "express";
 import { getDb } from "./db";
-import { conversationSessions } from "../drizzle/schema";
+import { conversationSessions, opsChatMessages } from "../drizzle/schema";
+import { desc, eq } from "drizzle-orm";
 import { sendSms, estimatePrice } from "./openphone";
 import { invokeLLM } from "./_core/llm";
 import { getNextAvailableSlots, formatAvailabilityQuestion } from "./availability";
@@ -366,6 +367,44 @@ export async function handleBarkLead(body: BarkZapierPayload): Promise<void> {
     title: `New Bark Lead: ${name}`,
     content: `${serviceType}${extracted.bedrooms ? ` · ${extracted.bedrooms}` : ""}${extracted.bathrooms ? ` / ${extracted.bathrooms}` : ""} · $${price}\n\n${extracted.summary}`,
   }).catch(() => {});
+
+  // ── Step 10: Post new lead card to MIB Command Chat ──────────────────────
+  try {
+    // Look up the session we just created to get its ID
+    const [barkSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, normalizedPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    const barkSessionId = barkSession?.id ?? null;
+
+    const sizeDisplay = `${bedrooms} / ${bathrooms}`;
+    const leadBody = `🐶 **Bark Lead** · ${name} · ${normalizedPhone}\n🏠 **${serviceType}** · ${sizeDisplay} · **$${price}**`;
+    const metadata = JSON.stringify({
+      leadName: name,
+      leadPhone: normalizedPhone,
+      serviceType,
+      size: sizeDisplay,
+      price,
+      utmSource: "bark",
+      sessionId: barkSessionId,
+      arrivedAt: Date.now(),
+    });
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "🎯 New Lead",
+      authorRole: "system",
+      body: leadBody,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+    console.log(`[BarkWebhook] Posted new_lead card with sessionId=${barkSessionId}`);
+  } catch (err) {
+    console.error("[BarkWebhook] Failed to post lead card to command channel:", err);
+  }
 }
 
 // ── Route Registration ────────────────────────────────────────────────────────

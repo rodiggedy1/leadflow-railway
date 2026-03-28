@@ -42,7 +42,7 @@ import { notifyOwner } from "./_core/notification";
 import { normalizePhone } from "./routers";
 import { getSetting, getFlowTemplate } from "./settingsRouter";
 import { ENV } from "./_core/env";
-import { and, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -559,6 +559,15 @@ export async function handleFormSubmissionEmail(
 
   // ── Post new lead card to MIB Command Chat ────────────────────────────────
   try {
+    // Look up the session we just created to get its ID
+    const [emailSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, normalizedPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    const emailSessionId = emailSession?.id ?? null;
+
     const freqDisplay = frequency ? ` (${frequency})` : "";
     const leadBody = `📧 **Email/Form Lead** · ${displayName} · ${normalizedPhone}\n🏠 **${serviceType}${freqDisplay}** · ${bedrooms} / ${bathrooms} · **$${price}**`;
     const metadata = JSON.stringify({
@@ -568,6 +577,7 @@ export async function handleFormSubmissionEmail(
       size: `${bedrooms} / ${bathrooms}`,
       price,
       utmSource: "email",
+      sessionId: emailSessionId,
       arrivedAt: Date.now(),
     });
     await db.insert(opsChatMessages).values({
@@ -686,6 +696,15 @@ export async function handleCallNotificationEmail(
 
   // ── Post call lead card to MIB Command Chat ──────────────────────────────
   try {
+    // Look up the session we just created to get its ID
+    const [voiceSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, normalizedPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    const voiceSessionId = voiceSession?.id ?? null;
+
     const callTimeDisplay = callTime ? ` at ${callTime}` : "";
     const leadBody = `📞 **Missed Call Lead** · ${normalizedPhone}${callTimeDisplay}\n🤖 Intro SMS sent automatically via Madison`;
     const metadata = JSON.stringify({
@@ -694,6 +713,7 @@ export async function handleCallNotificationEmail(
       serviceType: "Voice",
       utmSource: "voice",
       callTime: callTime ?? null,
+      sessionId: voiceSessionId,
       arrivedAt: Date.now(),
     });
     await db.insert(opsChatMessages).values({

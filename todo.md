@@ -517,3 +517,6 @@
 - [x] Backfill last new_lead message arrivedAt to now so it shows in the 8h tray window
 - [x] Fix Hot Leads tray Call Assist button to open outbound call flow (not inbound)
 - [x] Fix Hot Leads tray SMS button to open the drawer directly on the lead (not the leads list)
+- [x] Fix emailLeadWebhook: look up sessionId after session insert and include it in new_lead metadata (email/form leads)
+- [x] Fix emailLeadWebhook: look up sessionId for missed call leads and include in new_lead metadata
+- [x] Fix barkWebhook: post new_lead card to command channel after session creation (Bark leads never appear in tray)
