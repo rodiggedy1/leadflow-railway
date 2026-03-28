@@ -282,6 +282,21 @@ function HotLeadsTray({
                         <MessageCircle className="h-3.5 w-3.5" />
                       </a>
                     )}
+                    {/* Call Assist */}
+                    <button
+                      title="Open Call Assist for this lead"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (sessionId) params.set("sessionId", String(sessionId));
+                        if (leadName)    params.set("name",        encodeURIComponent(leadName));
+                        if (leadPhone)   params.set("phone",       encodeURIComponent(leadPhone));
+                        if (serviceType) params.set("serviceType", encodeURIComponent(serviceType));
+                        window.open(`/call-assist?${params.toString()}`, "_blank");
+                      }}
+                      className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors shrink-0"
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                    </button>
                     <div className="flex-1" />
                     {isClaimed ? (
                       <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
