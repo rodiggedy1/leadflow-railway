@@ -342,3 +342,4 @@
 - [x] Inline audio player for call_summary messages in Command Chat (store recordingUrl in mediaUrl, render <audio> player in bubble)
 - [x] Fix review message body: "Google Review Confirmed" → "Review Received" in DB and server code
 - [x] Fix star rating missing on review messages in Command Chat (backfill Jill Caiazzo + verify code path)
+- [x] Styled cards for review_confirmed (gold) and call_summary (blue) messages in Command Chat
