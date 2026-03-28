@@ -357,3 +357,7 @@
 - [x] Command Chat: Pin Note — sticky note UI (amber/yellow card) pinned above thread; one active pin at a time; dismiss button
 - [x] Command Chat: Announce Booking — celebratory modal with person selector + booking amount → posts confetti/glitter card to channel
 - [x] Command Chat: move header, Pinned Day Status, and pin banner above the scrollable thread so chat area is taller
+- [x] Command Chat: surface general_issue cards in Live Alerts & Escalations left column (with Resolve button)
+- [x] Command Chat: show pending reminder count indicator in header bar
+- [x] Command Chat: redesign pin banner as real sticky note (pushpin, drop shadow, lined texture, slight rotation)
+- [x] Command Chat: add CSS confetti burst animation to Announce Booking card on render

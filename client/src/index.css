@@ -1,3 +1,17 @@
+/* Confetti burst animations for Announce Booking card */
+@keyframes confetti-burst-0 {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx, 30px)), calc(-50% + var(--ty, -30px))) scale(0); opacity: 0; }
+}
+@keyframes confetti-burst-1 {
+  0% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx, -30px)), calc(-50% + var(--ty, 30px))) scale(0.1); opacity: 0; }
+}
+@keyframes confetti-burst-2 {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx, 20px)), calc(-50% + var(--ty, -40px))) rotate(270deg) scale(0); opacity: 0; }
+}
+
 /* =============================================================
    LeadFlow Quote Form — Design System
    Philosophy: Warm Coral Hospitality

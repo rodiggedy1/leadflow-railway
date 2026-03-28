@@ -334,6 +334,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const alerts = cmdData?.alerts ?? [];
   const pinnedJobs = cmdData?.pinnedJobs ?? [];
   const autoRaised = cmdData?.autoRaised ?? [];
+  const pendingReminderCount = cmdData?.pendingReminderCount ?? 0;
 
   const totalAlerts = snapshot.issue + snapshot.soon;
 
@@ -416,31 +417,60 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             ) : (
               <div className="space-y-2">
-                {alerts.map((alert, i) => (
-                  <button
-                    key={i}
-                    onClick={() => onJumpToJob(alert.jobId)}
-                    className={cn(
-                      "w-full text-left rounded-xl border p-3 transition hover:shadow-sm",
-                      alert.type === "issue" ? "bg-red-50 border-red-100 hover:bg-red-100" : "bg-amber-50 border-amber-100 hover:bg-amber-100"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className={cn("text-sm font-semibold leading-tight", alert.type === "issue" ? "text-red-700" : "text-amber-700")}>
-                        {alert.title}
+                {alerts.map((alert, i) => {
+                  if (alert.type === "general_issue") {
+                    return (
+                      <div key={i} className="rounded-xl border border-red-200 bg-red-50 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-1.5 min-w-0">
+                            <TriangleAlert className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
+                            <p className="text-sm font-semibold text-red-700 leading-tight">{alert.title}</p>
+                          </div>
+                          <span className="text-[10px] font-medium text-red-400 shrink-0 mt-0.5">{fmt12(alert.ts)}</span>
+                        </div>
+                        {alert.body && <p className="text-xs text-red-600 mt-1 leading-snug pl-5">{alert.body}</p>}
+                        <div className="flex items-center justify-between mt-2 pl-5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-red-400">{alert.source}</p>
+                          <button
+                            onClick={() => {
+                              if (alert.messageId) {
+                                openIssueMutation.mutate({ title: "__resolve__", note: "", messageId: alert.messageId, authorName: callerName });
+                              }
+                            }}
+                            className="text-[10px] font-semibold text-red-500 hover:text-red-700 underline"
+                          >
+                            Resolve
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => onJumpToJob(alert.jobId)}
+                      className={cn(
+                        "w-full text-left rounded-xl border p-3 transition hover:shadow-sm",
+                        alert.type === "issue" ? "bg-red-50 border-red-100 hover:bg-red-100" : "bg-amber-50 border-amber-100 hover:bg-amber-100"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={cn("text-sm font-semibold leading-tight", alert.type === "issue" ? "text-red-700" : "text-amber-700")}>
+                          {alert.title}
+                        </p>
+                        <span className={cn("text-[10px] font-medium shrink-0 mt-0.5", alert.type === "issue" ? "text-red-500" : "text-amber-500")}>
+                          {fmt12(alert.ts)}
+                        </span>
+                      </div>
+                      <p className={cn("text-xs mt-1 leading-snug", alert.type === "issue" ? "text-red-600" : "text-amber-600")}>
+                        {alert.body}
                       </p>
-                      <span className={cn("text-[10px] font-medium shrink-0 mt-0.5", alert.type === "issue" ? "text-red-500" : "text-amber-500")}>
-                        {fmt12(alert.ts)}
-                      </span>
-                    </div>
-                    <p className={cn("text-xs mt-1 leading-snug", alert.type === "issue" ? "text-red-600" : "text-amber-600")}>
-                      {alert.body}
-                    </p>
-                    <p className={cn("text-[10px] font-semibold uppercase tracking-wide mt-1.5", alert.type === "issue" ? "text-red-400" : "text-amber-400")}>
-                      {alert.source}
-                    </p>
-                  </button>
-                ))}
+                      <p className={cn("text-[10px] font-semibold uppercase tracking-wide mt-1.5", alert.type === "issue" ? "text-red-400" : "text-amber-400")}>
+                        {alert.source}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -457,34 +487,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <span className="hidden sm:inline text-[10px] font-medium bg-red-50 text-red-500 border border-red-100 rounded-full px-2 py-0.5 whitespace-nowrap">Priority alerts from job threads</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            {pendingReminderCount > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5">
+                <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
+              </span>
+            )}
             <Button size="sm" variant="outline" className="h-7 text-xs rounded-full px-3" onClick={() => setBroadcastOpen(true)}>
               <Megaphone className="h-3 w-3 mr-1" />Broadcast
             </Button>
           </div>
         </div>
 
-        {/* Active Sticky Pin banner */}
+        {/* Active Sticky Pin banner — real sticky note look */}
         {activePin && (
-          <div className="mx-6 mt-3 mb-0 rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm overflow-hidden" style={{ background: "linear-gradient(135deg, #fef9c3 0%, #fef3c7 50%, #fde68a 100%)" }}>
-            {/* Tape strip at top */}
-            <div className="h-2 w-full" style={{ background: "repeating-linear-gradient(90deg, #fbbf24 0px, #fbbf24 18px, #fde68a 18px, #fde68a 36px)" }} />
-            <div className="px-4 py-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <StickyNote className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-1">Pinned Note · {activePin.authorName}</p>
-                    <p className="text-sm text-amber-900 font-medium leading-snug whitespace-pre-wrap">{activePin.body}</p>
-                  </div>
+          <div className="relative mx-4 mt-3 mb-0" style={{ transform: "rotate(-0.8deg)", filter: "drop-shadow(2px 4px 8px rgba(0,0,0,0.18))" }}>
+            {/* Pushpin */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))" }}>
+              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-red-400 to-red-600 border-2 border-red-700 shadow-md" />
+              <div className="w-1.5 h-3 bg-gradient-to-b from-slate-400 to-slate-600 rounded-b-full -mt-0.5" />
+            </div>
+            {/* Note body */}
+            <div className="rounded-sm overflow-hidden pt-3" style={{ background: "#fef08a", boxShadow: "inset 0 -2px 4px rgba(0,0,0,0.06)" }}>
+              {/* Lined paper texture */}
+              <div className="px-4 pt-2 pb-3" style={{
+                backgroundImage: "repeating-linear-gradient(transparent, transparent 22px, #fde047 22px, #fde047 23px)",
+                backgroundPositionY: "28px",
+                fontFamily: "'Caveat', 'Comic Sans MS', cursive",
+              }}>
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">📌 {activePin.authorName}</p>
+                  <button
+                    onClick={() => dismissPinMutation.mutate({ channel: "command" })}
+                    className="shrink-0 rounded-full p-0.5 text-amber-600 hover:bg-amber-300 hover:text-amber-900 transition"
+                    title="Dismiss pin"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => dismissPinMutation.mutate({ channel: "command" })}
-                  className="shrink-0 rounded-full p-1 text-amber-600 hover:bg-amber-200 hover:text-amber-900 transition"
-                  title="Dismiss pin"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                <p className="text-base text-amber-950 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: "'Caveat', 'Comic Sans MS', cursive", fontSize: "1rem" }}>{activePin.body}</p>
               </div>
+              {/* Torn bottom edge */}
+              <div className="h-3 w-full" style={{ background: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12' viewBox='0 0 40 12'%3E%3Cpath d='M0 0 Q5 12 10 6 Q15 0 20 8 Q25 14 30 5 Q35 0 40 8 L40 12 L0 12 Z' fill='%23fef08a'/%3E%3C/svg%3E\") repeat-x bottom", backgroundSize: "40px 12px" }} />
             </div>
           </div>
         )}
@@ -798,22 +841,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   return (
                     <div key={msg.id} className="flex justify-start">
                       <div className="max-w-[80%] rounded-xl overflow-hidden border border-violet-200 shadow-md" style={{ background: "linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 50%, #ede9fe 100%)" }}>
-                        {/* Confetti header */}
+                        {/* Confetti header with burst animation */}
                         <div className="relative flex items-center gap-2 px-4 py-2 overflow-hidden" style={{ background: "linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)" }}>
-                          {/* Pure-CSS confetti dots */}
-                          {[...Array(12)].map((_, i) => (
-                            <span key={i} className="absolute rounded-full opacity-70 animate-bounce" style={{
-                              width: `${4 + (i % 3) * 2}px`,
-                              height: `${4 + (i % 3) * 2}px`,
-                              background: ["#fbbf24","#34d399","#f472b6","#60a5fa","#fb923c","#a3e635"][i % 6],
-                              left: `${(i * 8) % 90}%`,
-                              top: `${(i * 13) % 80}%`,
-                              animationDelay: `${(i * 0.15) % 0.9}s`,
-                              animationDuration: `${0.8 + (i % 3) * 0.3}s`,
-                            }} />
-                          ))}
+                          {/* Glitter confetti particles — burst outward then fade */}
+                          {[...Array(18)].map((_, i) => {
+                            const angle = (i / 18) * 360;
+                            const dist = 30 + (i % 3) * 20;
+                            const tx = Math.cos((angle * Math.PI) / 180) * dist;
+                            const ty = Math.sin((angle * Math.PI) / 180) * dist;
+                            const colors = ["#fbbf24","#34d399","#f472b6","#60a5fa","#fb923c","#a3e635","#fff","#e879f9"];
+                            const size = 3 + (i % 4);
+                            return (
+                              <span
+                                key={i}
+                                className="absolute rounded-full pointer-events-none"
+                                style={{
+                                  width: `${size}px`,
+                                  height: `${size}px`,
+                                  background: colors[i % colors.length],
+                                  left: "50%",
+                                  top: "50%",
+                                  transform: "translate(-50%,-50%)",
+                                  animation: `confetti-burst-${i % 3} ${0.6 + (i % 3) * 0.2}s ease-out ${(i * 0.04)}s both`,
+                                  "--tx": `${tx}px`,
+                                  "--ty": `${ty}px`,
+                                } as React.CSSProperties}
+                              />
+                            );
+                          })}
                           <PartyPopper className="h-4 w-4 text-white relative z-10" />
-                          <span className="text-[10px] font-bold text-white uppercase tracking-widest relative z-10">New Booking!</span>
+                          <span className="text-[10px] font-bold text-white uppercase tracking-widest relative z-10">🎉 New Booking!</span>
                           <span className="ml-auto text-[10px] text-purple-200 relative z-10">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Body */}

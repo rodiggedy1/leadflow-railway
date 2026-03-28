@@ -815,15 +815,42 @@ export const opsChatRouter = router({
       snapshot[s] = (snapshot[s] ?? 0) + 1;
     }
 
+    // General issues posted via Open Issue chip (filter out resolved ones via metadata)
+    const generalIssuesRaw = await db
+      .select({
+        id: opsChatMessages.id,
+        body: opsChatMessages.body,
+        metadata: opsChatMessages.metadata,
+        createdAt: opsChatMessages.createdAt,
+        authorName: opsChatMessages.authorName,
+      })
+      .from(opsChatMessages)
+      .where(eq(opsChatMessages.quickAction, "general_issue"))
+      .orderBy(desc(opsChatMessages.createdAt))
+      .limit(20);
+    // Filter out resolved ones (resolvedAt stored in metadata JSON)
+    const generalIssues = generalIssuesRaw.filter((gi) => {
+      try { const m = JSON.parse(gi.metadata ?? "{}"); return !m.resolvedAt; } catch { return true; }
+    }).slice(0, 10);
+
+    // Pending reminders (not yet fired)
+    const pendingReminders = await db
+      .select({ id: opsReminders.id, body: opsReminders.body, triggerAt: opsReminders.triggerAt })
+      .from(opsReminders)
+      .where(and(isNull(opsReminders.firedAt), eq(opsReminders.channel, "command")))
+      .orderBy(opsReminders.triggerAt);
+
     // Live alerts: flagged jobs + starting-soon jobs (within 90 min)
     const now = Date.now();
     const alerts: Array<{
-      type: "issue" | "soon";
+      type: "issue" | "soon" | "general_issue";
       jobId: number;
       title: string;
       body: string;
       source: string;
       ts: number;
+      messageId?: number;
+      resolvedAt?: number | null;
     }> = [];
 
     for (const j of jobs) {
@@ -851,6 +878,24 @@ export const opsChatRouter = router({
       }
     }
 
+    // Add general issues to alerts
+    for (const gi of generalIssues) {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(gi.metadata ?? "{}"); } catch { /* ignore */ }
+      const titleMatch = gi.body.match(/^\*\*(.+?)\*\*/);
+      const title = (meta.title as string) ?? titleMatch?.[1] ?? "General Issue";
+      const note = (meta.note as string) ?? "";
+      alerts.push({
+        type: "general_issue",
+        jobId: 0,
+        title,
+        body: note || (gi.body.replace(/\*\*.*?\*\*\s*/, "").split("\n")[0] ?? ""),
+        source: gi.authorName ?? "Command Chat",
+        ts: gi.createdAt ? new Date(gi.createdAt).getTime() : now,
+        messageId: gi.id,
+      });
+    }
+
     // Pinned day status cards
     const pinnedJobs = jobs.map((j) => ({
       id: j.id,
@@ -875,7 +920,7 @@ export const opsChatRouter = router({
       };
     });
 
-    return { snapshot, alerts, pinnedJobs, autoRaised };
+    return { snapshot, alerts, pinnedJobs, autoRaised, pendingReminderCount: pendingReminders.length };
   }),
 
   /**
@@ -966,10 +1011,27 @@ export const opsChatRouter = router({
       note: z.string().max(2000).optional(),
       jobId: z.number().int().positive().optional(),
       authorName: z.string().min(1).max(128),
+      /** If provided, resolve this existing issue message instead of creating a new one */
+      messageId: z.number().int().positive().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Resolve an existing issue
+      if (input.messageId && input.title === "__resolve__") {
+        const [existing] = await db
+          .select({ metadata: opsChatMessages.metadata })
+          .from(opsChatMessages)
+          .where(eq(opsChatMessages.id, input.messageId))
+          .limit(1);
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse(existing?.metadata ?? "{}"); } catch { /* ignore */ }
+        meta.resolvedAt = Date.now();
+        meta.resolvedBy = input.authorName;
+        await db.update(opsChatMessages).set({ metadata: JSON.stringify(meta) }).where(eq(opsChatMessages.id, input.messageId));
+        return { messageId: input.messageId };
+      }
 
       // Optionally look up job name for the tag
       let jobTitle: string | null = null;
