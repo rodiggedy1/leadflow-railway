@@ -594,8 +594,8 @@ export const opsChatRouter = router({
 
       // Post styled issue_resolved card into the job thread
       const resolvedJobMeta = JSON.stringify({
-        issueTitle: flag.issueNote,
-        issueNote: null,
+        issueTitle: flag.issueNote,   // original issue description shown as "Original Issue"
+        issueNote: flag.issueNote,    // also populate issueNote for backward compat
         resolutionNote: input.resolutionNote,
         resolvedBy: input.resolvedByName,
         resolvedAt: Date.now(),
@@ -1562,5 +1562,23 @@ export const opsChatRouter = router({
         profiles[row.email] = { name: row.name, photoUrl: row.profilePhotoUrl ?? null };
       }
       return { profiles };
+    }),
+
+  /**
+   * getAllAgentPhotoMap — return name+photoUrl for ALL agents in one call.
+   * Used by OpsChat/CommandChat to build a sender-name → photoUrl lookup map.
+   */
+  getAllAgentPhotoMap: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return { photos: {} };
+      const rows = await db
+        .select({ name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
+        .from(agents);
+      const photos: Record<string, string | null> = {};
+      for (const row of rows) {
+        photos[row.name] = row.profilePhotoUrl ?? null;
+      }
+      return { photos };
     }),
 });

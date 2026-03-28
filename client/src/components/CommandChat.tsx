@@ -9,7 +9,7 @@
  * Composer has full parity with the job-thread composer:
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
@@ -120,6 +120,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 20_000,
   });
+
+  // Load all agent photo URLs for message bubble avatars
+  const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
+    staleTime: 2 * 60 * 1000,
+    retry: false,
+  });
+  const senderPhotoMap: Record<string, string | null> = useMemo(() => agentPhotoData?.photos ?? {}, [agentPhotoData?.photos]);
 
   // ── Notification sound ──────────────────────────────────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
@@ -1264,6 +1271,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   }, {});
                   const authorInitial = (msg.from ?? "?")[0].toUpperCase();
                   const authorColor = senderHex(msg.from ?? "");
+                  const authorPhoto = senderPhotoMap[msg.from ?? ""] ?? null;
                   return (
                     <div
                       key={msg.id}
@@ -1277,11 +1285,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       {/* Avatar circle for other people's messages */}
                       {!isMine && !isAlert && (
                         <div
-                          className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-1 mr-2"
-                          style={{ backgroundColor: authorColor }}
+                          className="w-7 h-7 rounded-full overflow-hidden shrink-0 mt-1 mr-2"
                           title={msg.from}
                         >
-                          {authorInitial}
+                          {authorPhoto ? (
+                            <img src={authorPhoto} alt={msg.from ?? ""} className="w-full h-full object-cover" />
+                          ) : (
+                            <div
+                              className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white"
+                              style={{ backgroundColor: authorColor }}
+                            >
+                              {authorInitial}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {/* Own avatar — shown on right for own messages */}
+                      {isMine && !isAlert && (
+                        <div
+                          className="w-7 h-7 rounded-full overflow-hidden shrink-0 mt-1 ml-2"
+                          title={callerName}
+                        >
+                          {(senderPhotoMap[callerName] ?? null) ? (
+                            <img src={senderPhotoMap[callerName]!} alt={callerName} className="w-full h-full object-cover" />
+                          ) : (
+                            <div
+                              className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white"
+                              style={{ backgroundColor: senderHex(callerName) }}
+                            >
+                              {callerName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* Bubble + WhatsApp-style hover actions */}

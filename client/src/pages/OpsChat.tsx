@@ -388,7 +388,7 @@ function avatarColor(name: string): string {
   return palette[hash % palette.length];
 }
 
-function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reactions, onReact }: {
+function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reactions, onReact, senderPhotoMap }: {
   msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null };
   callerName: string;
   seenBy?: string[];
@@ -396,6 +396,7 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
   onScrollToMsg?: (id: number) => void;
   reactions?: { emoji: string; callerName: string; callerId: string }[];
   onReact?: (messageId: number, emoji: string) => void;
+  senderPhotoMap?: Record<string, string | null>;
 }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showReactPicker, setShowReactPicker] = useState(false);
@@ -403,6 +404,7 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const initials = msg.from.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const colorClass = senderColorClass(msg.from);
+  const senderPhoto = senderPhotoMap?.[msg.from] ?? null;
 
   // Group reactions by emoji
   const reactionGroups = (reactions ?? []).reduce<Record<string, { count: number; names: string[]; isMine: boolean }>>((acc, r) => {
@@ -466,8 +468,26 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
       <div className={cn("flex items-end gap-2 group", isMine ? "justify-end" : "justify-start")}>
         {/* Avatar — only on others' messages */}
         {!isMine && (
-          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mb-0.5", colorClass)}>
-            {initials}
+          <div className="w-7 h-7 rounded-full shrink-0 mb-0.5 overflow-hidden">
+            {senderPhoto ? (
+              <img src={senderPhoto} alt={msg.from} className="w-full h-full object-cover" />
+            ) : (
+              <div className={cn("w-full h-full flex items-center justify-center text-[10px] font-bold", colorClass)}>
+                {initials}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Own avatar — shown on right for own messages */}
+        {isMine && (
+          <div className="w-7 h-7 rounded-full shrink-0 mb-0.5 overflow-hidden">
+            {(senderPhotoMap?.[callerName] ?? null) ? (
+              <img src={senderPhotoMap![callerName]!} alt={callerName} className="w-full h-full object-cover" />
+            ) : (
+              <div className={cn("w-full h-full flex items-center justify-center text-[10px] font-bold", senderColorClass(callerName))}>
+                {callerName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+              </div>
+            )}
           </div>
         )}
         {/* Bubble + WhatsApp-style hover dropdown */}
@@ -851,6 +871,33 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
+  // Load all agent photo URLs for message bubble avatars
+  const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
+    enabled: Boolean(user) || Boolean(agentMe),
+    staleTime: 2 * 60 * 1000,
+    retry: false,
+  });
+  // senderPhotoMap: name -> photoUrl (null = use colored initial)
+  const senderPhotoMap: Record<string, string | null> = useMemo(() => {
+    const base = agentPhotoData?.photos ?? {};
+    // Always include own photo (may have just been uploaded)
+    if (callerName && profilePhotoUrl) return { ...base, [callerName]: profilePhotoUrl };
+    return base;
+  }, [agentPhotoData?.photos, callerName, profilePhotoUrl]);
+
+  // Load my profile photo on mount (only when authenticated)
+  const { data: myProfile } = trpc.opsChat.getMyProfile.useQuery(undefined, {
+    enabled: Boolean(user) || Boolean(agentMe),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  // Sync server photo into local state (only if user hasn't just uploaded a new one)
+  useEffect(() => {
+    if (myProfile?.photoUrl && !profilePhotoUrl) {
+      setProfilePhotoUrl(myProfile.photoUrl);
+    }
+  }, [myProfile?.photoUrl]);
+
   // ── Notification sound ──────────────────────────────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
   const prevJobMsgCountRef = useRef(0);
@@ -1143,6 +1190,25 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           >
             <CalendarDays className="w-4 h-4" />
           </button>
+          {/* Profile photo avatar — always visible even when collapsed */}
+          <div className="mt-auto pb-1">
+            <button
+              onClick={() => setProfilePhotoOpen(true)}
+              className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-white shadow hover:ring-slate-300 transition"
+              title={`${callerName} — edit profile photo`}
+            >
+              {profilePhotoUrl ? (
+                <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center text-xs font-bold text-white"
+                  style={{ backgroundColor: senderHex(callerName) }}
+                >
+                  {(callerName ?? "?")[0].toUpperCase()}
+                </div>
+              )}
+            </button>
+          </div>
         </div>
       ) : (
       <div className="w-[300px] shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -1441,6 +1507,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                                   onScrollToMsg={scrollToMsg}
                                   reactions={reactionsByMsgId[msgId]}
                                   onReact={(id, emoji) => toggleReaction.mutate({ messageId: id, emoji })}
+                                  senderPhotoMap={senderPhotoMap}
                                 />
                               </div>
                             );

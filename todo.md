@@ -427,5 +427,13 @@
 - [x] Profile photo: add profilePhotoUrl column to agents table and users table
 - [x] Profile photo: S3 upload endpoint for agents and owner
 - [x] Profile photo: profile settings page / modal for agents to upload their photo
-- [ ] Profile photo: show profile photos in all avatar circles in CommandChat and OpsChat job thread (partial — sidebar avatar done)
+- [x] Profile photo: show profile photos in all avatar circles in CommandChat and OpsChat job thread
 - [x] Profile photo: fallback to colored initial circle when no photo is set
+
+## Feature Batch 4: Profile Photo Visibility + Issue Resolved Card
+
+- [x] Profile photo: make upload accessible — show avatar button in sidebar even when sidebar is collapsed (collapsed mode shows icon-only nav)
+- [x] Profile photo: load current user's photo on mount via getMyProfile and persist in state
+- [x] Profile photo: show sender photos in OpsChat job thread message bubbles (with colored-initial fallback)
+- [x] Profile photo: show sender photos in CommandChat channel message bubbles (with colored-initial fallback)
+- [x] Issue resolved card: when resolveIssue is called, auto-post a styled system message to the job thread showing original issue note + resolution note + resolver name
