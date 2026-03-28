@@ -62,9 +62,6 @@ export function useOsNotification() {
     async ({ title, body, tag }: { title: string; body?: string; tag?: string }) => {
       if (typeof window === "undefined" || !("Notification" in window)) return;
 
-      // Only show OS notification when the tab is not focused
-      if (!document.hidden) return;
-
       // Ensure permission
       let perm = Notification.permission;
       if (perm === "default") {
@@ -102,7 +99,7 @@ export function useOsNotification() {
             tag: tag ?? "leadflow-msg",
             renotify: true,
             vibrate: [200, 100, 200],
-            data: { url: window.location.origin + "/admin/leads" },
+            data: { url: window.location.origin + "/ops-chat" },
           } as NotificationOptions);
           return;
         }

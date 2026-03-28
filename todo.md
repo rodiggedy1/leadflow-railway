@@ -505,3 +505,4 @@
 - [x] Add Booked Amount input to AdminDashboard drawer (was declared but never rendered in JSX)
 - [x] Allow agents to edit phone number in both AdminDashboard and AgentDashboard drawers (new updateLeadPhone procedure)
 - [x] Add SMS drawer link button to new lead cards in CommandChat (next to call + call-assist icons), fix icon row spacing
+- [ ] Background push notifications + sound for DMs and chats when tab is not focused (Service Worker + Web Push API)

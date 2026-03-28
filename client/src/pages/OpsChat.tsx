@@ -1034,6 +1034,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         const otherSlug = parts.find((p) => !openDmNames.has(p));
         if (otherSlug) {
           playNotification();
+          osNotify({
+            title: "New Direct Message",
+            body: "You have an unread DM",
+            tag: `leadflow-dm-${thread}`,
+          });
           break; // one chime per poll cycle
         }
       }
@@ -1248,8 +1253,6 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     scrollToBottom();
   }, [jobDetail?.thread, channelMsgs, scrollToBottom]);
 
-  // Track whether we have pending notifications to play when the tab becomes visible
-  const pendingNotifRef = useRef(false);
   // Play notification sound when new job thread messages arrive from others.
   // Use .length as the dep (not the array object) so we only fire when count changes,
   // not on every 15-second refetch that returns a new array reference.
@@ -1262,11 +1265,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       const newest = thread[thread.length - 1];
       // Use myNames set to handle OAuth name vs DB name mismatch
       if (newest && !myNames.has(newest.from)) {
-        if (!document.hidden) {
-          playNotification();
-        } else {
-          pendingNotifRef.current = true;
-        }
+        // Always attempt to play — AudioContext.resume() handles suspended state
+        playNotification();
         const jobName = jobs.find((j) => j.id === selectedJobId)?.title ?? "Job Thread";
         osNotify({
           title: `${jobName} — ${newest.from}`,
@@ -1293,11 +1293,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     if (curr > prev && prev > 0) {
       const newest = channelMsgs[channelMsgs.length - 1];
       if (newest && !myNames.has(newest.from)) {
-        if (!document.hidden) {
-          playNotification();
-        } else {
-          pendingNotifRef.current = true;
-        }
+        // Always attempt to play — AudioContext.resume() handles suspended state
+        playNotification();
         osNotify({
           title: `#${activeChannel} — ${newest.from}`,
           body: newest.body?.slice(0, 100) ?? "New message",
@@ -1308,16 +1305,20 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     prevChannelMsgCountRef.current = curr;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelMsgLength, activeChannel]);
-  // Play pending sound when user returns to the tab
+  // Listen for PLAY_SOUND messages from the Service Worker.
+  // When the tab is in the background, the SW shows the OS notification banner
+  // and posts PLAY_SOUND back to all open page clients. The page receives this
+  // message even when hidden; AudioContext.resume() will unblock it when the
+  // user returns to the tab.
   useEffect(() => {
-    const handleVisibility = () => {
-      if (!document.hidden && pendingNotifRef.current) {
-        pendingNotifRef.current = false;
+    if (!("serviceWorker" in navigator)) return;
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === "PLAY_SOUND") {
         playNotification();
       }
     };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleSwMessage);
   }, [playNotification]);
 
   // ── Derived data ────────────────────────────────────────────────────────────

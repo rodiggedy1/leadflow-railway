@@ -26,19 +26,31 @@ self.addEventListener("message", (event) => {
 
   if (event.data.type === "NOTIFY") {
     const { title, body, tag, icon } = event.data;
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        body: body ?? "",
-        icon: icon ?? "/favicon.ico",
-        badge: "/favicon.ico",
-        tag: tag ?? "leadflow-msg",
-        renotify: true,
-        // vibrate pattern for mobile
-        vibrate: [200, 100, 200],
-        // data passed through to notificationclick
-        data: { url: self.location.origin + "/admin/leads" },
-      })
-    );
+
+    // Show OS notification banner
+    const notifPromise = self.registration.showNotification(title, {
+      body: body ?? "",
+      icon: icon ?? "/favicon.ico",
+      badge: "/favicon.ico",
+      tag: tag ?? "leadflow-msg",
+      renotify: true,
+      silent: false,
+      vibrate: [200, 100, 200],
+      data: { url: self.location.origin + "/ops-chat" },
+    });
+
+    // Relay PLAY_SOUND to all open page clients.
+    // If the tab is focused the page plays immediately.
+    // If hidden, the page queues it via pendingNotifRef and plays on return.
+    const soundPromise = self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          client.postMessage({ type: "PLAY_SOUND" });
+        }
+      });
+
+    event.waitUntil(Promise.all([notifPromise, soundPromise]));
   }
 });
 
@@ -47,7 +59,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url)
     ? event.notification.data.url
-    : self.location.origin + "/admin/leads";
+    : self.location.origin + "/ops-chat";
 
   event.waitUntil(
     self.clients
@@ -55,7 +67,7 @@ self.addEventListener("notificationclick", (event) => {
       .then((clientList) => {
         // If a tab is already open, focus it
         for (const client of clientList) {
-          if (client.url.includes("/admin/leads") && "focus" in client) {
+          if ((client.url.includes("/ops-chat") || client.url.includes("/admin")) && "focus" in client) {
             return client.focus();
           }
         }
