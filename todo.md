@@ -335,3 +335,6 @@
 - [x] Auto-post ✅ Resolved message to command channel when resolveIssue is called
 - [x] Post ended AI call summary to command channel (caller, duration, outcome, summary, recording link)
 - [x] Post review confirmation to command channel (client name, rating, team/cleaner)
+- [x] Backfill Jill Caiazzo review confirmation into command channel
+- [x] Fix review command-chat message: change label to "Review Received" (not Google confirmed) and include star rating
+- [x] Fix AI call not posting to command channel after call completes (backfilled manually; will work automatically post-publish)

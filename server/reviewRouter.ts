@@ -353,21 +353,25 @@ export async function handleReviewReplyForJob(
 
     // ── Post review confirmation to MIB Command Chat ────────────────────────────
     try {
-      // Look up the cleaner/team for this job via cleanerJobs
+      // Look up the cleaner/team and star rating for this job via cleanerJobs
       let teamDisplay = "";
+      let ratingDisplay = "";
       if (job) {
         const [cj] = await db
-          .select({ cleanerName: cleanerJobs.cleanerName, teamName: cleanerJobs.teamName })
+          .select({ cleanerName: cleanerJobs.cleanerName, teamName: cleanerJobs.teamName, customerRating: cleanerJobs.customerRating })
           .from(cleanerJobs)
           .where(eq(cleanerJobs.completedJobId, job.id))
           .limit(1);
         if (cj) {
           teamDisplay = cj.teamName ? ` · ${cj.teamName}` : cj.cleanerName ? ` · ${cj.cleanerName}` : "";
+          if (cj.customerRating !== null && cj.customerRating !== undefined) {
+            ratingDisplay = ` · ${"⭐".repeat(cj.customerRating)} ${cj.customerRating}/5`;
+          }
         }
       }
       const clientDisplay = job?.name ?? firstName;
       const bodyLines = [
-        `⭐ **Google Review Confirmed** — ${clientDisplay}${teamDisplay}`,
+        `⭐ **Review Received** — ${clientDisplay}${teamDisplay}${ratingDisplay}`,
         job?.jobDate ? `📅 Job date: ${job.jobDate}` : null,
       ].filter(Boolean).join("\n");
       await db.insert(opsChatMessages).values({
