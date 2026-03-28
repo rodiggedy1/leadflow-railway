@@ -18,6 +18,7 @@ import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare,
   Pin, Bell, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -180,6 +181,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
   const [showGlitter, setShowGlitter] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const glitterRunning = useRef(false);
   const triggerGlitter = () => {
     if (glitterRunning.current) return; // already playing — ignore
@@ -404,6 +406,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
+
+      {/* ── Lightbox ── */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setLightboxUrl(null); }}
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+        >
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+            aria-label="Close photo"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          {/* Open in new tab */}
+          <a
+            href={lightboxUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-4 right-16 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+            aria-label="Open full size"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+          {/* Image — stop propagation so clicking the image doesn't close */}
+          <img
+            src={lightboxUrl}
+            alt="Full size"
+            className="max-h-[90vh] max-w-[90vw] rounded-2xl shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
       <div className="w-[300px] shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
@@ -985,14 +1028,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       {mediaUrls.length > 0 && (
                         <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
                           {mediaUrls.map((url, idx) => (
-                            <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setLightboxUrl(url)}
+                              className="focus:outline-none"
+                            >
                               <img
                                 src={url}
                                 alt={`attachment-${idx}`}
-                                className="rounded-xl object-cover cursor-zoom-in"
+                                className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
                                 style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
                               />
-                            </a>
+                            </button>
                           ))}
                         </div>
                       )}

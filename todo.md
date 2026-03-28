@@ -367,3 +367,4 @@
 - [x] Announce Booking: play celebration chime sound effect alongside glitter burst
 - [x] Announce Booking: broadcast glitter + sound to all agents on Command Chat page simultaneously via polling
 - [x] Fix GlitterBurst: animation should stop after 6 seconds, not run indefinitely
+- [ ] Command Chat: fix photo viewer — replace full-page takeover with proper lightbox modal (close button, ESC, backdrop click)
