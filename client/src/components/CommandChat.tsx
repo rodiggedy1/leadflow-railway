@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare,
-  Pin, Bell, TriangleAlert, PartyPopper, StickyNote,
+  Pin, Bell, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -532,39 +532,67 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         )}
 
-        {/* Pinned Day Status — compact chip strip */}
-        <div className="px-4 py-1.5 border-b border-slate-100 shrink-0">
-          {cmdLoading ? (
-            <div className="flex gap-2">
-              {[1,2,3,4].map(i => <div key={i} className="w-24 h-7 rounded-full bg-slate-100 animate-pulse shrink-0" />)}
-            </div>
-          ) : pinnedJobs.length === 0 ? (
-            <p className="text-[10px] text-slate-400">No jobs today.</p>
-          ) : (
-            <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin scrollbar-thumb-slate-200">
-              {pinnedJobs.map((job) => (
-                <button
-                  key={job.id}
-                  onClick={() => onJumpToJob(job.id)}
-                  className={cn(
-                    "shrink-0 rounded-full border px-3 py-1 text-left transition hover:shadow-sm flex items-center gap-1.5",
-                    BUCKET_BG[job.status as StatusBucket] ?? "bg-slate-50 border-slate-200"
-                  )}
+        {/* Pinned Day Status — arrow-navigated chip strip */}
+        {(() => {
+          // eslint-disable-next-line react-hooks/rules-of-hooks
+          const stripRef = useRef<HTMLDivElement>(null);
+          const scroll = (dir: "left" | "right") => {
+            if (!stripRef.current) return;
+            stripRef.current.scrollBy({ left: dir === "left" ? -160 : 160, behavior: "smooth" });
+          };
+          return (
+            <div className="border-b border-slate-100 shrink-0 flex items-center gap-1 px-2 py-1.5">
+              <button
+                onClick={() => scroll("left")}
+                className="shrink-0 rounded-full p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {cmdLoading ? (
+                <div className="flex gap-2 flex-1">
+                  {[1,2,3,4].map(i => <div key={i} className="w-24 h-7 rounded-full bg-slate-100 animate-pulse shrink-0" />)}
+                </div>
+              ) : pinnedJobs.length === 0 ? (
+                <p className="text-[10px] text-slate-400 flex-1">No jobs today.</p>
+              ) : (
+                <div
+                  ref={stripRef}
+                  className="flex gap-2 flex-1 overflow-x-auto"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                 >
-                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", {
-                    "bg-red-500": job.status === "issue",
-                    "bg-amber-500": job.status === "soon",
-                    "bg-blue-500": job.status === "progress",
-                    "bg-emerald-500": job.status === "complete",
-                    "bg-slate-400": job.status === "assigned",
-                  })} />
-                  <span className="text-xs font-semibold text-slate-800 whitespace-nowrap max-w-[100px] truncate">{job.name}</span>
-                  <span className="text-[10px] text-slate-400 whitespace-nowrap">{job.time}</span>
-                </button>
-              ))}
+                  {pinnedJobs.map((job) => (
+                    <button
+                      key={job.id}
+                      onClick={() => onJumpToJob(job.id)}
+                      className={cn(
+                        "shrink-0 rounded-full border px-3 py-1 text-left transition hover:shadow-sm flex items-center gap-1.5",
+                        BUCKET_BG[job.status as StatusBucket] ?? "bg-slate-50 border-slate-200"
+                      )}
+                    >
+                      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", {
+                        "bg-red-500": job.status === "issue",
+                        "bg-amber-500": job.status === "soon",
+                        "bg-blue-500": job.status === "progress",
+                        "bg-emerald-500": job.status === "complete",
+                        "bg-slate-400": job.status === "assigned",
+                      })} />
+                      <span className="text-xs font-semibold text-slate-800 whitespace-nowrap max-w-[100px] truncate">{job.name}</span>
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap">{job.time}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => scroll("right")}
+                className="shrink-0 rounded-full p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Conversation thread */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
