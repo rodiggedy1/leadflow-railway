@@ -98,7 +98,7 @@ export default function GlitterBurst({ onDone }: { onDone?: () => void }) {
     const t2 = setTimeout(() => spawnWave(60), 700);
 
     const startTime = performance.now();
-    const duration = 3800; // ms before fade-out completes
+    const duration = 6000; // ms before fade-out completes
 
     let raf: number;
     const tick = (now: number) => {

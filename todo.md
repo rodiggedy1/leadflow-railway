@@ -366,3 +366,4 @@
 - [x] Command Chat: full-page glitter/confetti burst across entire viewport when Announce Booking is posted
 - [x] Announce Booking: play celebration chime sound effect alongside glitter burst
 - [x] Announce Booking: broadcast glitter + sound to all agents on Command Chat page simultaneously via polling
+- [x] Fix GlitterBurst: animation should stop after 6 seconds, not run indefinitely

@@ -180,6 +180,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
   const [showGlitter, setShowGlitter] = useState(false);
+  const glitterRunning = useRef(false);
+  const triggerGlitter = () => {
+    if (glitterRunning.current) return; // already playing — ignore
+    glitterRunning.current = true;
+    setShowGlitter(true);
+    // Hard fallback: force-stop after 6.5s in case onDone never fires
+    setTimeout(() => {
+      glitterRunning.current = false;
+      setShowGlitter(false);
+    }, 6500);
+  };
 
   // ── Celebration sound helper ───────────────────────────────────────────────
   const playCelebrationSound = useCallback(() => {
@@ -208,7 +219,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
     if (id !== lastSeenCelebrationId.current) {
       lastSeenCelebrationId.current = id;
-      setShowGlitter(true);
+      triggerGlitter();
       playCelebrationSound();
     }
   }, [latestCelebration, playCelebrationSound]);
@@ -219,7 +230,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onSuccess: () => {
       toast.success("Booking announced! 🎉");
       setBookingOpen(false); setBookingPerson(""); setBookingAmount(""); setBookingNote("");
-      setShowGlitter(true);
+      triggerGlitter();
       playCelebrationSound();
     },
     onError: (err) => toast.error("Failed to announce booking", { description: err.message }),
@@ -392,7 +403,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
-      {showGlitter && <GlitterBurst onDone={() => setShowGlitter(false)} />}
+      {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
       <div className="w-[300px] shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
