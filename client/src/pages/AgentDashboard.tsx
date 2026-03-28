@@ -439,6 +439,18 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  // Phone editing
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState(session.leadPhone ?? "");
+  const updateLeadPhoneMutation = trpc.leads.updateLeadPhone.useMutation({
+    onSuccess: (data) => {
+      utils.leads.list.invalidate();
+      setEditingPhone(false);
+      toast.success(`Phone updated to ${data.leadPhone}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Reply / send message
   const [replyText, setReplyText] = useState("");
   const [localMessages, setLocalMessages] = useState<{ role: string; content: string; ts?: number }[]>(
@@ -630,7 +642,40 @@ function ConversationDrawer({
                 </button>
               )}
               <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+                {editingPhone ? (
+                  <form
+                    className="flex items-center gap-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = phoneInput.trim();
+                      if (!trimmed) return;
+                      updateLeadPhoneMutation.mutate({ sessionId: session.id, leadPhone: trimmed });
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      className="text-xs text-gray-700 border-b border-gray-400 bg-transparent outline-none w-32"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Escape") { setEditingPhone(false); setPhoneInput(session.leadPhone ?? ""); } }}
+                    />
+                    <button type="submit" disabled={updateLeadPhoneMutation.isPending} className="text-green-600 hover:text-green-700">
+                      {updateLeadPhoneMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </button>
+                    <button type="button" onClick={() => { setEditingPhone(false); setPhoneInput(session.leadPhone ?? ""); }} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="flex items-center gap-1 group"
+                    onClick={() => { setPhoneInput(session.leadPhone ?? ""); setEditingPhone(true); }}
+                    title="Edit phone"
+                  >
+                    <p className="text-xs text-gray-500">{formatPhone(session.leadPhone)}</p>
+                    <Pencil className="w-2.5 h-2.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                  </button>
+                )}
                 <a
                   href={`tel:${session.leadPhone}`}
                   title={`Call ${formatPhone(session.leadPhone)}`}

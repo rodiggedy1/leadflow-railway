@@ -733,6 +733,7 @@ type DrawerSession = {
   assignedAgentId: number | null;
   assignedAgentName: string | null;
   bookedAmount: number | null;
+  isBooked: number;
   aiMode: number;
   // UTM attribution
   utmSource: string | null;
@@ -965,6 +966,19 @@ function ConversationDrawer({
       utils.leads.list.invalidate();
       setEditingName(false);
       toast.success("Name updated");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Phone editing
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState(session.leadPhone ?? "");
+  const updateLeadPhoneMutation = trpc.leads.updateLeadPhone.useMutation({
+    onSuccess: (data) => {
+      onSessionUpdate({ leadPhone: data.leadPhone });
+      utils.leads.list.invalidate();
+      setEditingPhone(false);
+      toast.success("Phone updated");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -1285,7 +1299,40 @@ function ConversationDrawer({
                 )}
               </div>
               <div className="flex items-center gap-3 text-xs text-gray-400">
-                <span>{formatPhone(session.leadPhone)}</span>
+                {editingPhone ? (
+                  <form
+                    className="flex items-center gap-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = phoneInput.trim();
+                      if (!trimmed) return;
+                      updateLeadPhoneMutation.mutate({ sessionId: session.id, leadPhone: trimmed });
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      className="text-xs text-gray-700 border-b border-gray-400 bg-transparent outline-none w-32"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Escape") { setEditingPhone(false); setPhoneInput(session.leadPhone ?? ""); } }}
+                    />
+                    <button type="submit" disabled={updateLeadPhoneMutation.isPending} className="text-green-600 hover:text-green-700">
+                      {updateLeadPhoneMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </button>
+                    <button type="button" onClick={() => { setEditingPhone(false); setPhoneInput(session.leadPhone ?? ""); }} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="flex items-center gap-1 group"
+                    onClick={() => { setPhoneInput(session.leadPhone ?? ""); setEditingPhone(true); }}
+                    title="Edit phone"
+                  >
+                    <span>{formatPhone(session.leadPhone)}</span>
+                    <Pencil className="w-2.5 h-2.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                  </button>
+                )}
                 {lastReplyTime && (
                   <span className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
@@ -2043,6 +2090,50 @@ function ConversationDrawer({
               </div>
             )}
           </div>
+
+          {/* ── BOOKED AMOUNT card — shown when lead is booked ── */}
+          {Number(session.isBooked) === 1 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-green-100 p-5" style={{ backgroundColor: "#f0fdf4" }}>
+              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Booked Amount</p>
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder={session.quotedPrice ? String(Math.round(Number(session.quotedPrice))) : "0"}
+                    value={bookedAmountInput}
+                    onChange={e => setBookedAmountInput(e.target.value)}
+                    className="pl-5 h-8 text-xs bg-white"
+                  />
+                </div>
+                {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">✓</span>}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2.5 text-xs shrink-0 bg-white"
+                  disabled={updateBookedAmountMutation.isPending}
+                  onClick={() => {
+                    const val = bookedAmountInput.trim();
+                    const parsed = val === "" ? null : parseInt(val, 10);
+                    if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
+                      toast.error("Enter a valid dollar amount");
+                      return;
+                    }
+                    updateBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
+                  }}
+                >
+                  {updateBookedAmountMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                </Button>
+              </div>
+              <p className="text-xs text-green-600 mt-1">
+                {session.bookedAmount !== null && session.bookedAmount !== undefined
+                  ? `Override: $${session.bookedAmount}`
+                  : `Using quote: $${session.quotedPrice ? Math.round(Number(session.quotedPrice)) : "0"}`
+                }
+              </p>
+            </div>
+          )}
 
           {/* ── FOLLOW-UP PLAN card ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

@@ -794,10 +794,10 @@ export const appRouter = router({
       }),
 
     /**
-     * leads.updateLeadName — admin or agent sets/updates the name for a lead.
+     * leads.updateLeadName — any agent sets/updates the name for a lead.
      * Used when a lead comes in with no name (e.g. voice/SMS with no form submission).
      */
-    updateLeadName: adminAgentProcedure
+    updateLeadName: agentProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
         leadName: z.string().min(1).max(255).trim(),
@@ -810,6 +810,24 @@ export const appRouter = router({
           .set({ leadName: input.leadName })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true, leadName: input.leadName };
+      }),
+    /**
+     * leads.updateLeadPhone — any agent sets/updates the phone number for a lead.
+     * Used when a call-assistant booking comes in with no phone or an incorrect phone.
+     */
+    updateLeadPhone: agentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        leadPhone: z.string().min(1).max(30).trim(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ leadPhone: input.leadPhone })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true, leadPhone: input.leadPhone };
       }),
 
     /**

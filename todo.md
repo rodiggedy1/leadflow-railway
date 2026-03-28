@@ -498,3 +498,9 @@
 - [x] Fix notification sound not playing for regular chats (job threads + command channel)
 - [x] Swap chat bubble colors: my messages = dark navy, others = light grey (OpsChat, CommandChat, DmPanel)
 - [x] Fix DM send/receive not working between users — email-based thread keys, no more name slug mismatch
+- [ ] Allow agents to edit customer name in job drawer (currently admin-only)
+- [ ] Add price field to admin job drawer (agents have it, admin drawer is missing it)
+- [ ] Allow agents to add/edit phone number in job drawer
+- [x] Allow agents to edit customer name in drawer (removed adminAgentProcedure gate from updateLeadName)
+- [x] Add Booked Amount input to AdminDashboard drawer (was declared but never rendered in JSX)
+- [x] Allow agents to edit phone number in both AdminDashboard and AgentDashboard drawers (new updateLeadPhone procedure)
