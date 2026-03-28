@@ -222,7 +222,7 @@ export const trackerRouter = router({
           input.rating === 3 ? `😐 **${input.rating}-star rating ${starsStr}**` :
           input.rating === 4 ? `👍 **${input.rating}-star rating ${starsStr}**` :
                                `🌟 **5-star rating ${starsStr}**`;
-        const qualityLink = `/admin/quality${job.completedJobId ? `?jobId=${job.completedJobId}` : ""}`;
+        const qualityLink = `https://quote.maidinblack.com/admin/review-tracker${job.completedJobId ? `?jobId=${job.completedJobId}` : ""}`;
         const chatBody = [
           ratingLabel,
           `👤 Customer: ${firstName}${job.customerPhone ? ` · ${job.customerPhone}` : ""}`,
