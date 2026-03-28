@@ -44,6 +44,8 @@ interface CommandChatProps {
   onSendMessage: (body: string, mediaUrl?: string) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
+  /** Called when user clicks "Today Ops" in the in-panel tab switcher */
+  onSwitchToToday: () => void;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ function ElapsedTimer({ arrivedAt }: { arrivedAt: number }) {
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
@@ -313,6 +315,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {/* View switcher pill */}
+          <div className="flex bg-slate-100 rounded-full p-1 gap-1">
+            <button
+              onClick={onSwitchToToday}
+              className="flex-1 text-xs font-semibold rounded-full py-1.5 transition-all text-slate-500 hover:text-slate-800"
+            >
+              Today Ops
+            </button>
+            <button
+              className="flex-1 text-xs font-semibold rounded-full py-1.5 bg-slate-900 text-white shadow-sm"
+            >
+              Channels
+            </button>
+          </div>
+
           {/* Ops Snapshot */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <p className="text-xs font-semibold text-slate-500 mb-3">Ops Snapshot</p>

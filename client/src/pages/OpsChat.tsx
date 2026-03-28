@@ -1367,6 +1367,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               handleSetActiveTab("today");
               setSelectedJobId(jobId);
             }}
+            onSwitchToToday={() => handleSetActiveTab("today")}
           />
         ) : activeTab === "channels" ? (
           /* Regular channel view */

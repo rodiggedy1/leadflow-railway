@@ -347,3 +347,4 @@
 - [x] Post new leads to Command Chat as styled cards with Claim button, elapsed timer, and claimed-by attribution
 - [x] Fix TypeError: extras.join is not a function in CommandChat new_lead card (extras stored as JSON string, not array)
 - [x] Add Call Assist icon and Call icon to new_lead card in Command Chat
+- [x] Add Today Ops / Channels pill switcher above Ops Snapshot in Command Chat left column
