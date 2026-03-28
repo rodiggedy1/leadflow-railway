@@ -1300,24 +1300,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           )}
                         </div>
                       )}
-                      {/* Own avatar — shown on right for own messages */}
-                      {isMine && !isAlert && (
-                        <div
-                          className="w-7 h-7 rounded-full overflow-hidden shrink-0 mt-1 ml-2"
-                          title={callerName}
-                        >
-                          {(senderPhotoMap[callerName] ?? null) ? (
-                            <img src={senderPhotoMap[callerName]!} alt={callerName} className="w-full h-full object-cover" />
-                          ) : (
-                            <div
-                              className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white"
-                              style={{ backgroundColor: senderHex(callerName) }}
-                            >
-                              {callerName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
-                            </div>
-                          )}
-                        </div>
-                      )}
+
                       {/* Bubble + WhatsApp-style hover actions */}
                       <div className="relative flex items-start" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
                         <div className={cn(

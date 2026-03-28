@@ -466,7 +466,7 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
         <Lightbox urls={imageUrls} startIndex={lightboxIdx} onClose={() => setLightboxIdx(null)} />
       )}
       <div className={cn("flex items-end gap-2 group", isMine ? "justify-end" : "justify-start")}>
-        {/* Avatar — only on others' messages */}
+        {/* Avatar — others' messages on left */}
         {!isMine && (
           <div className="w-7 h-7 rounded-full shrink-0 mb-0.5 overflow-hidden">
             {senderPhoto ? (
@@ -474,18 +474,6 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
             ) : (
               <div className={cn("w-full h-full flex items-center justify-center text-[10px] font-bold", colorClass)}>
                 {initials}
-              </div>
-            )}
-          </div>
-        )}
-        {/* Own avatar — shown on right for own messages */}
-        {isMine && (
-          <div className="w-7 h-7 rounded-full shrink-0 mb-0.5 overflow-hidden">
-            {(senderPhotoMap?.[callerName] ?? null) ? (
-              <img src={senderPhotoMap![callerName]!} alt={callerName} className="w-full h-full object-cover" />
-            ) : (
-              <div className={cn("w-full h-full flex items-center justify-center text-[10px] font-bold", senderColorClass(callerName))}>
-                {callerName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
               </div>
             )}
           </div>

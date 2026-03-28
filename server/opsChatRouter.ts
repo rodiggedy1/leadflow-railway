@@ -1517,6 +1517,8 @@ export const opsChatRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
       const callerId = ctx.opsCaller.id;
+      // For agents, use the email field for DB lookup; for owner, use openId
+      const agentEmail = (ctx.opsCaller as { email?: string }).email ?? null;
       const suffix = Date.now().toString(36);
       const ext = input.mimeType.includes("png") ? "png" : input.mimeType.includes("webp") ? "webp" : "jpg";
       const key = `profile-photos/${callerId}-${suffix}.${ext}`;
@@ -1524,8 +1526,13 @@ export const opsChatRouter = router({
       const buffer = Buffer.from(input.base64Data, "base64");
       const { url } = await storagePut(key, buffer, input.mimeType);
 
-      // Save to agents table if this is an agent, otherwise save to users table
-      await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, callerId));
+      // Save to agents table using email (agents) or numeric id (owner)
+      if (agentEmail) {
+        await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, agentEmail));
+      } else {
+        // Owner: store in agents table by matching the owner's openId stored as email
+        await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, callerId));
+      }
 
       return { url };
     }),
@@ -1537,8 +1544,8 @@ export const opsChatRouter = router({
     .query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return { name: ctx.opsCaller.name, photoUrl: null };
-      const callerId = ctx.opsCaller.id;
-      const [agent] = await db.select({ profilePhotoUrl: agents.profilePhotoUrl, name: agents.name }).from(agents).where(eq(agents.email, callerId)).limit(1);
+      const agentEmail = (ctx.opsCaller as { email?: string }).email ?? ctx.opsCaller.id;
+      const [agent] = await db.select({ profilePhotoUrl: agents.profilePhotoUrl, name: agents.name }).from(agents).where(eq(agents.email, agentEmail)).limit(1);
       return {
         name: agent?.name ?? ctx.opsCaller.name,
         photoUrl: agent?.profilePhotoUrl ?? null,

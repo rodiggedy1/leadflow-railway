@@ -437,3 +437,10 @@
 - [x] Profile photo: show sender photos in OpsChat job thread message bubbles (with colored-initial fallback)
 - [x] Profile photo: show sender photos in CommandChat channel message bubbles (with colored-initial fallback)
 - [x] Issue resolved card: when resolveIssue is called, auto-post a styled system message to the job thread showing original issue note + resolution note + resolver name
+
+## Bug Fixes: Avatar Layout + Profile Photo + Notification Sound
+
+- [x] Fix: own-message avatar appearing on wrong side in ThreadMessage — causes large gap between avatar and bubble
+- [x] Fix: own-message avatar appearing on wrong side in CommandChat — same gap issue
+- [x] Fix: profile photo upload not saving / not displaying after upload
+- [x] Fix: notification sound only fires when returning to tab — should fire immediately even when tab is in background

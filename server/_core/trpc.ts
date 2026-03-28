@@ -120,6 +120,7 @@ export const opsChatProcedure = t.procedure.use(
           ...ctx,
           opsCaller: {
             id: String(agent.agentId),
+            email: agent.agentEmail,  // email used for DB lookups
             name: agent.agentName,
             isOwner: false,
           },
