@@ -45,6 +45,7 @@ import {
   MapPin,
   CalendarDays,
   MessageSquare,
+  ChevronDown,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -450,17 +451,8 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
             {initials}
           </div>
         )}
-        <div className="flex items-end gap-1.5" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
-          {/* Hover reply button */}
-          {onReply && (
-            <button
-              onClick={() => onReply({ id: Number(msg.id), body: msg.body, author: msg.from })}
-              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mb-1 rounded-full p-1 bg-slate-100 hover:bg-slate-200 text-slate-500"
-              title="Reply"
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-            </button>
-          )}
+        {/* Bubble + WhatsApp-style hover dropdown */}
+        <div className="relative flex items-start" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
           <div className={cn(
             "max-w-[72%] rounded-2xl overflow-hidden",
             isMine
@@ -476,16 +468,16 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
                 {imageUrls.map((url, i) => (
                   <button
                     key={i}
-                    className="relative group overflow-hidden aspect-square"
+                    className="relative group/img overflow-hidden aspect-square"
                     onClick={() => setLightboxIdx(i)}
                   >
                     <img
                       src={url}
                       alt={`Photo ${i + 1}`}
-                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105"
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
-                      <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                    <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition flex items-center justify-center">
+                      <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover/img:opacity-100 transition drop-shadow" />
                     </div>
                   </button>
                 ))}
@@ -494,20 +486,37 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
             {/* Text body */}
             {(msg.body || msg.replyToId) && (
               <div className="px-4 py-3">
+                {/* Sender name (others only) */}
                 {!isMine && (
-                  <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
+                  <p className="text-xs font-semibold mb-1" style={{ color: avatarColor(msg.from).includes("violet") ? "#7c3aed" : avatarColor(msg.from).includes("sky") ? "#0284c7" : avatarColor(msg.from).includes("emerald") ? "#059669" : avatarColor(msg.from).includes("amber") ? "#d97706" : avatarColor(msg.from).includes("rose") ? "#e11d48" : avatarColor(msg.from).includes("teal") ? "#0d9488" : avatarColor(msg.from).includes("indigo") ? "#4338ca" : "#ea580c" }}>{msg.from}</p>
                 )}
-                {/* Quoted message preview */}
+                {/* WhatsApp-style quoted block: left accent bar, sender in accent, snippet, then full reply below */}
                 {msg.replyToId && msg.replyToBody && (
-                  <div className={cn(
-                    "mb-2 rounded-lg border-l-4 px-2.5 py-1.5",
-                    isMine ? "border-slate-500 bg-slate-800" : "border-slate-300 bg-slate-50"
-                  )}>
-                    <p className={cn("text-[10px] font-semibold mb-0.5", isMine ? "text-slate-300" : "text-slate-500")}>{msg.replyToAuthor ?? "Unknown"}</p>
-                    <p className={cn("text-xs line-clamp-2", isMine ? "text-slate-400" : "text-slate-500")}>{msg.replyToBody}</p>
+                  <div
+                    className={cn(
+                      "mb-2.5 rounded-lg overflow-hidden flex cursor-default",
+                      isMine ? "bg-slate-800" : "bg-slate-100"
+                    )}
+                  >
+                    {/* Left accent bar */}
+                    <div className={cn("w-1 shrink-0", isMine ? "bg-slate-400" : "bg-slate-400")} />
+                    <div className="px-2.5 py-2 min-w-0">
+                      <p className={cn(
+                        "text-xs font-semibold mb-0.5 truncate",
+                        isMine ? "text-slate-300" : "text-slate-600"
+                      )}>
+                        {msg.replyToAuthor ?? "Unknown"}
+                      </p>
+                      <p className={cn(
+                        "text-xs line-clamp-2 leading-snug",
+                        isMine ? "text-slate-400" : "text-slate-500"
+                      )}>
+                        {msg.replyToBody}
+                      </p>
+                    </div>
                   </div>
                 )}
-                {msg.body && <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>}
+                {msg.body && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>}
               </div>
             )}
             {/* Footer: time + read receipts */}
@@ -520,6 +529,28 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
               )}
             </div>
           </div>
+          {/* WhatsApp-style hover dropdown: chevron + "Reply" label */}
+          {onReply && (
+            <div
+              className={cn(
+                "opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-start mt-2",
+                isMine ? "mr-1.5" : "ml-1.5"
+              )}
+            >
+              <button
+                onClick={() => onReply({ id: Number(msg.id), body: msg.body, author: msg.from })}
+                className={cn(
+                  "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition",
+                  isMine
+                    ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                <ChevronDown className="h-3 w-3" />
+                <span>Reply</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>

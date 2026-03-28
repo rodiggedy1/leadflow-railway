@@ -18,7 +18,7 @@ import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare,
   Pin, Bell, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
-  ExternalLink,
+  ExternalLink, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -1186,17 +1186,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 // ── Default bubble ───────────────────────────────────────────────────
                 return (
                   <div key={msg.id} className={cn("flex group", isMine ? "justify-end" : "justify-start")}>
-                    <div className="flex items-end gap-1.5" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
-                      {/* Hover reply button */}
-                      {!isAlert && (
-                        <button
-                          onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mb-1 rounded-full p-1 bg-slate-100 hover:bg-slate-200 text-slate-500"
-                          title="Reply"
-                        >
-                          <MessageSquare className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                    {/* Bubble + WhatsApp-style hover dropdown */}
+                    <div className="relative flex items-start" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
                       <div className={cn(
                         "max-w-[75%] rounded-2xl px-4 py-3",
                         isAlert ? "bg-slate-900 text-white w-full max-w-full" :
@@ -1207,14 +1198,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
                           </p>
                         )}
-                        {/* Quoted message preview */}
+                        {/* WhatsApp-style quoted block */}
                         {msg.replyToId && msg.replyToBody && (
-                          <div className="mb-2 rounded-lg border-l-4 border-slate-300 bg-slate-50 px-2.5 py-1.5">
-                            <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{msg.replyToAuthor ?? "Unknown"}</p>
-                            <p className="text-xs text-slate-500 line-clamp-2">{msg.replyToBody}</p>
+                          <div className={cn(
+                            "mb-2.5 rounded-lg overflow-hidden flex cursor-default",
+                            isMine ? "bg-slate-200" : "bg-slate-100"
+                          )}>
+                            <div className="w-1 shrink-0 bg-slate-400 rounded-l-lg" />
+                            <div className="px-2.5 py-2 min-w-0">
+                              <p className="text-xs font-semibold mb-0.5 truncate text-slate-600">{msg.replyToAuthor ?? "Unknown"}</p>
+                              <p className="text-xs text-slate-500 line-clamp-2 leading-snug break-words">{msg.replyToBody}</p>
+                            </div>
                           </div>
                         )}
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
                         {mediaUrls.length > 0 && (
                           <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
                             {mediaUrls.map((url, idx) => (
@@ -1238,6 +1235,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           {fmtMsgTime(msg.createdAt)}
                         </p>
                       </div>
+                      {/* WhatsApp-style hover dropdown: chevron + "Reply" label */}
+                      {!isAlert && (
+                        <div
+                          className={cn(
+                            "opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-start mt-2",
+                            isMine ? "mr-1.5" : "ml-1.5"
+                          )}
+                        >
+                          <button
+                            onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
+                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          >
+                            <ChevronDown className="h-3 w-3" />
+                            <span>Reply</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

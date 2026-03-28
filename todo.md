@@ -382,3 +382,8 @@
 - [x] Quote-reply: quoted-message preview bar in composer (shows sender + snippet, X to cancel)
 - [x] Quote-reply: send message with replyTo metadata, render indented quoted bubble above reply in thread
 - [x] Quote-reply: same quote-reply UI in Job thread (OpsChat job channels)
+
+## Quote-Reply UI Redesign (WhatsApp style)
+- [ ] Replace hover reply icon button with hover dropdown chevron showing "Reply" label (WhatsApp style)
+- [ ] Quoted block inside reply bubble: left-border accent, sender name in accent color, truncated snippet, full reply text below
+- [ ] Apply redesign to both CommandChat and ThreadMessage (OpsChat job thread)
