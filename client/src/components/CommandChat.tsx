@@ -530,7 +530,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const serviceType = (meta.serviceType as string) ?? "";
                   const size = (meta.size as string) ?? "";
                   const price = (meta.price as number | string) ?? "";
-                  const extras = (meta.extras as string[]) ?? [];
+                  const extrasRaw = meta.extras ?? [];
+                  const extras: string[] = Array.isArray(extrasRaw)
+                    ? (extrasRaw as string[])
+                    : typeof extrasRaw === "string"
+                      ? (() => { try { const p = JSON.parse(extrasRaw); return Array.isArray(p) ? p : [extrasRaw]; } catch { return extrasRaw ? [extrasRaw] : []; } })()
+                      : [];
                   const utmSource = (meta.utmSource as string | null) ?? null;
                   const sessionId = (meta.sessionId as number | null) ?? null;
                   const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();

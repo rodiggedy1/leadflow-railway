@@ -345,3 +345,4 @@
 - [x] Styled cards for review_confirmed (gold) and call_summary (blue) messages in Command Chat
 - [x] Refine review + call summary cards: constrain width, more sophisticated palette
 - [x] Post new leads to Command Chat as styled cards with Claim button, elapsed timer, and claimed-by attribution
+- [x] Fix TypeError: extras.join is not a function in CommandChat new_lead card (extras stored as JSON string, not array)
