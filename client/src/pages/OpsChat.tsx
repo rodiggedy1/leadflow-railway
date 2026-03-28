@@ -491,11 +491,16 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [activeChannel, setActiveChannel] = useState<string>("dispatch");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Auto-collapse sidebar when command channel is selected
+  // Auto-collapse sidebar only for command channel; expand for all other views
   const handleSetActiveChannel = (ch: string) => {
     setActiveChannel(ch);
-    if (ch === "command") setSidebarCollapsed(true);
-    else setSidebarCollapsed(false);
+    setSidebarCollapsed(ch === "command");
+  };
+
+  // Expand sidebar whenever the user switches to the today (job thread) tab
+  const handleSetActiveTab = (tab: "today" | "channels") => {
+    setActiveTab(tab);
+    if (tab === "today") setSidebarCollapsed(false);
   };
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
@@ -877,7 +882,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             return (
               <button
                 key={ch.key}
-                onClick={() => { setActiveTab("channels"); handleSetActiveChannel(ch.key); }}
+                onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
                 className={cn(
                   "relative w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
                   activeChannel === ch.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -895,7 +900,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           })}
           {/* Today ops icon */}
           <button
-            onClick={() => { setActiveTab("today"); setSidebarCollapsed(false); }}
+            onClick={() => { handleSetActiveTab("today"); }}
             className={cn(
               "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
               activeTab === "today" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -935,7 +940,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             {(["today", "channels"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleSetActiveTab(tab as "today" | "channels")}
                 className={cn(
                   "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition",
                   activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
@@ -999,7 +1004,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                     return (
                       <button
                         key={ch.key}
-                        onClick={() => { setActiveTab("channels"); handleSetActiveChannel(ch.key); }}
+                        onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
                         className={cn(
                           "w-full flex items-center justify-between rounded-2xl border px-4 py-3.5 text-sm transition",
                           isActive
@@ -1034,7 +1039,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         key={job.id}
                         job={job}
                         selected={selectedJobId === job.id}
-                        onClick={() => { setSelectedJobId(job.id); setActiveTab("today"); }}
+                        onClick={() => { setSelectedJobId(job.id); handleSetActiveTab("today"); }}
                       />
                     ))}
                   </div>
@@ -1349,7 +1354,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               sendMsg.mutate({ body, channel: "command", authorName: callerName, mediaUrl });
             }}
             onJumpToJob={(jobId) => {
-              setActiveTab("today");
+              handleSetActiveTab("today");
               setSelectedJobId(jobId);
             }}
           />

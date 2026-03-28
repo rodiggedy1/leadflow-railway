@@ -330,3 +330,4 @@
 - [x] Auto-post system alert to MIB Command Chat when flagIssue is called (includes job name, job ID, issue note)
 - [x] Escalation timer on flagged job cards — live "⚠️ X min unresolved" badge using flaggedAt timestamp, updates every 30 seconds
 - [x] Add Photo, Voice, Emoji composer toolbar to MIB Command Chat (copy from channel composer)
+- [x] Sidebar default: only auto-collapse when command channel is active; job thread always starts expanded
