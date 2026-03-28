@@ -115,6 +115,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const threadBottomRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -475,7 +476,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // Auto-scroll thread to bottom when new messages arrive
   useEffect(() => {
-    threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = threadScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [channelMsgs.length]);
 
   // Play notification sound + OS notification when new messages arrive from others
@@ -889,7 +892,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         })()}
 
         {/* Conversation thread */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
+        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
             <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
