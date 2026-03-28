@@ -219,6 +219,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Quote-reply state ─────────────────────────────────────────────────────
   const [replyTo, setReplyTo] = useState<{ id: number; body: string; author: string } | null>(null);
 
+  // ── Read receipts (seenBy) ─────────────────────────────────────────────────
+  const myCommandMsgIds = useMemo(
+    () => channelMsgs.filter(m => m.from === callerName).map(m => m.id).filter(id => id > 0),
+    [channelMsgs, callerName]
+  );
+  const { data: commandSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
+    { messageIds: myCommandMsgIds, channel: "command" },
+    { enabled: myCommandMsgIds.length > 0, refetchInterval: 10_000 }
+  );
+  const commandSeenByMap = useMemo(() => {
+    const map: Record<number, string[]> = {};
+    for (const entry of commandSeenByBulk?.reads ?? []) {
+      if (!map[entry.messageId]) map[entry.messageId] = [];
+      map[entry.messageId].push(entry.callerName);
+    }
+    return map;
+  }, [commandSeenByBulk]);
+
   // ── Reactions ────────────────────────────────────────────────────────────────
   const cmdMsgIds = channelMsgs.map(m => m.id);
   const { data: reactionsData, refetch: refetchReactions } = trpc.opsChat.getReactions.useQuery(
@@ -1340,9 +1358,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               ))}
                             </div>
                           )}
-                          <p className={cn("text-[10px] mt-1.5 text-right", isAlert ? "text-slate-400" : "text-slate-400")}>
-                            {fmtMsgTime(msg.createdAt)}
-                          </p>
+                          <div className="flex items-center justify-end gap-1 mt-1.5">
+                            <p className={cn("text-[10px]", isAlert ? "text-slate-400" : "text-slate-400")}>
+                              {fmtMsgTime(msg.createdAt)}
+                            </p>
+                            {/* WhatsApp-style read receipt — only on my own messages */}
+                            {isMine && !isAlert && (() => {
+                              const seenBy = commandSeenByMap[msg.id] ?? [];
+                              return (
+                                <span
+                                  title={seenBy.length > 0 ? `Seen by ${seenBy.join(", ")}` : "Sent"}
+                                  className="inline-flex items-center shrink-0"
+                                >
+                                  {seenBy.length > 0 ? (
+                                    <svg width="18" height="11" viewBox="0 0 18 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Seen">
+                                      <path d="M1 5.5L4.5 9L10 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                      <path d="M5 5.5L8.5 9L14 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  ) : (
+                                    <svg width="12" height="11" viewBox="0 0 12 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sent">
+                                      <path d="M1 5.5L4.5 9L11 2" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  )}
+                                </span>
+                              );
+                            })()}
+                          </div>
                           {/* Reaction pills */}
                           {Object.keys(reactionGroups).length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
