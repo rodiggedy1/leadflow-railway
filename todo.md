@@ -504,3 +504,4 @@
 - [x] Allow agents to edit customer name in drawer (removed adminAgentProcedure gate from updateLeadName)
 - [x] Add Booked Amount input to AdminDashboard drawer (was declared but never rendered in JSX)
 - [x] Allow agents to edit phone number in both AdminDashboard and AgentDashboard drawers (new updateLeadPhone procedure)
+- [x] Add SMS drawer link button to new lead cards in CommandChat (next to call + call-assist icons), fix icon row spacing

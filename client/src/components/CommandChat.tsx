@@ -21,7 +21,7 @@ import GlitterBurst from "@/components/GlitterBurst";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
-  X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare,
+  X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
 } from "lucide-react";
@@ -1041,27 +1041,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           </div>
 
                           {/* Action icons row */}
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-3 mt-3">
                             {/* Call icon — dial lead directly */}
                             {leadPhone && (
                               <a
                                 href={`tel:${leadPhone}`}
                                 title={`Call ${leadName}`}
-                                className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors"
+                                className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors shrink-0"
                               >
                                 <Phone className="h-4 w-4" />
                               </a>
                             )}
-                            {/* View Conversation — open lead in Admin Leads page */}
+                            {/* SMS icon — open SMS conversation drawer */}
                             {sessionId && (
                               <a
-                                href={`/admin/leads?session=${sessionId}`}
+                                href={`/admin/leads?session=${sessionId}&tab=sms`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title="View conversation thread"
-                                className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-700 hover:text-sky-900 transition-colors"
+                                title="Open SMS conversation"
+                                className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-900 transition-colors shrink-0"
                               >
-                                <MessageSquare className="h-4 w-4" />
+                                <MessageCircle className="h-4 w-4" />
                               </a>
                             )}
                             {/* Call Assist icon — open call assist page pre-filled */}
@@ -1075,7 +1075,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 if (serviceType) params.set("serviceType", encodeURIComponent(serviceType));
                                 window.open(`/call-assist?${params.toString()}`, "_blank");
                               }}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors"
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors shrink-0"
                             >
                               <Wand2 className="h-4 w-4" />
                             </button>

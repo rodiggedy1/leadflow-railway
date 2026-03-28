@@ -913,6 +913,7 @@ function ConversationDrawer({
   onSessionUpdate,
   onRefresh,
   currentAgentName,
+  initialTab,
 }: {
   session: DrawerSession;
   onClose: () => void;
@@ -921,6 +922,7 @@ function ConversationDrawer({
   onSessionUpdate: (updates: Partial<DrawerSession>) => void;
   onRefresh: () => void;
   currentAgentName?: string;
+  initialTab?: "conversation" | "flow" | "performance";
 }) {
   const utils = trpc.useUtils();
   let messages: { role: string; content: string }[] = [];
@@ -1024,10 +1026,22 @@ function ConversationDrawer({
     withFallbackTs(messages, session.createdAt, session.updatedAt)
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const smsComposeRef = useRef<HTMLTextAreaElement>(null);
   // Auto-scroll to bottom on first mount (skip past the AI banner)
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
   }, []);
+  // When opened from the SMS icon (initialTab hint), focus the compose box
+  useEffect(() => {
+    if (initialTab === "conversation") {
+      // Small delay to let the drawer animate in
+      const t = setTimeout(() => {
+        smsComposeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        smsComposeRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [initialTab]);
   // AI closing recommendation — fetched on drawer open, can be refreshed
   const { data: closingRec, isLoading: isLoadingRec, refetch: refetchRec } = trpc.leads.getClosingRecommendation.useQuery(
     { sessionId: session.id },
@@ -1189,7 +1203,7 @@ function ConversationDrawer({
     discount: `Hey ${firstName} — we had a schedule shift open up, so I may be able to get you a better rate if you want me to check options.`,
   };
   const [selectedAction, setSelectedAction] = useState<"lockDate" | "softCheckIn" | "urgency" | "discount">("lockDate");
-  const [drawerTab, setDrawerTab] = useState<"conversation" | "flow" | "performance">("conversation");
+  const [drawerTab, setDrawerTab] = useState<"conversation" | "flow" | "performance">(initialTab ?? "conversation");
   // Pre-fill compose box with AI suggested message on first load
   useEffect(() => {
     if (closingRec?.suggestedMessage && !replyText) {
@@ -1727,6 +1741,7 @@ function ConversationDrawer({
                   </div>
                 )}
                 <textarea
+                  ref={smsComposeRef}
                   value={replyText}
                   onChange={e => { setReplyText(e.target.value); handleTypingChange(e.target.value.length > 0); }}
                   onBlur={() => handleTypingChange(false)}
@@ -3072,18 +3087,26 @@ export default function AdminDashboard() {
     }
   }, [sessions, trpcUtils]);
 
-  // Auto-open session drawer when ?session=<id> is in the URL (e.g. from Command Chat "View Conversation" link)
+  // Track which tab to open when auto-opening the drawer from a URL param
+  const [drawerInitialTab, setDrawerInitialTab] = useState<"conversation" | "flow" | "performance" | undefined>(undefined);
+
+  // Auto-open session drawer when ?session=<id> is in the URL (e.g. from Command Chat links)
+  // ?tab=sms scrolls to the SMS compose box inside the conversation tab
   useEffect(() => {
-    const urlSessionId = new URLSearchParams(window.location.search).get("session");
+    const params = new URLSearchParams(window.location.search);
+    const urlSessionId = params.get("session");
     if (!urlSessionId) return;
     const id = parseInt(urlSessionId, 10);
     if (isNaN(id)) return;
     // Wait until sessions are loaded before trying to open
     if (sessions.length === 0) return;
+    const tab = params.get("tab");
+    setDrawerInitialTab(tab === "sms" ? "conversation" : undefined);
     handleSessionOpen(id);
-    // Remove the param from the URL without triggering a navigation
+    // Remove the params from the URL without triggering a navigation
     const url = new URL(window.location.href);
     url.searchParams.delete("session");
+    url.searchParams.delete("tab");
     window.history.replaceState({}, "", url.toString());
   }, [sessions, handleSessionOpen]);
 
@@ -3951,6 +3974,7 @@ export default function AdminDashboard() {
           onSessionUpdate={(updates) => setSelectedSession(prev => prev ? { ...prev, ...updates } : null)}
           onRefresh={() => refetch()}
           currentAgentName={meQuery.data?.name ?? "Admin"}
+          initialTab={drawerInitialTab}
         />
       )}
 
