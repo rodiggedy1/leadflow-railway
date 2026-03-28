@@ -271,12 +271,10 @@ function HotLeadsTray({
                         <Phone className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    {/* SMS — always show; use sessionId if available, else search by phone */}
-                    {(sessionId || leadPhone) && (
+                    {/* SMS — opens drawer directly on the lead via ?session=<id>&tab=sms */}
+                    {sessionId && (
                       <a
-                        href={sessionId
-                          ? `/admin/leads?session=${sessionId}&tab=sms`
-                          : `/admin/leads?phone=${encodeURIComponent(leadPhone)}&tab=sms`}
+                        href={`/admin/leads?session=${sessionId}&tab=sms`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Open SMS conversation"
@@ -285,15 +283,15 @@ function HotLeadsTray({
                         <MessageCircle className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    {/* Call Assist */}
+                    {/* Call Assist — outbound mode: pass sessionId so it appends to existing session */}
                     <button
-                      title="Open Call Assist for this lead"
+                      title="Open outbound Call Assist for this lead"
                       onClick={() => {
                         const params = new URLSearchParams();
                         if (sessionId) params.set("sessionId", String(sessionId));
-                        if (leadName)    params.set("name",        encodeURIComponent(leadName));
-                        if (leadPhone)   params.set("phone",       encodeURIComponent(leadPhone));
-                        if (serviceType) params.set("serviceType", encodeURIComponent(serviceType));
+                        if (leadName)    params.set("name",    leadName);
+                        if (leadPhone)   params.set("phone",   leadPhone);
+                        if (serviceType) params.set("serviceType", serviceType);
                         window.open(`/call-assist?${params.toString()}`, "_blank");
                       }}
                       className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors shrink-0"

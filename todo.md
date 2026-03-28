@@ -515,3 +515,5 @@
 - [x] Tray shows empty state when no unclaimed leads
 - [x] Add Call Assist button to Hot Leads tray cards (matching the chat card's Wand2 icon)
 - [x] Backfill last new_lead message arrivedAt to now so it shows in the 8h tray window
+- [x] Fix Hot Leads tray Call Assist button to open outbound call flow (not inbound)
+- [x] Fix Hot Leads tray SMS button to open the drawer directly on the lead (not the leads list)
