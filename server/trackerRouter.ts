@@ -157,30 +157,6 @@ export const trackerRouter = router({
             sendSms({ to: OWNER_ALERT_NUMBER, content: alertMsg }),
           ]);
 
-          // Post to MIB Command Chat so the team sees it immediately
-          try {
-            const db2 = await getDb();
-            if (db2) {
-              const stars = "★".repeat(input.rating) + "☆".repeat(5 - input.rating);
-              const chatBody = [
-                `⚠️ **Low rating — ${input.rating} stars ${stars}**`,
-                `👤 Customer: ${firstName}${job.customerPhone ? ` · ${job.customerPhone}` : ""}`,
-                `📍 Job: ${job.jobDate ?? "unknown date"} — ${job.jobAddress ?? "no address"}`,
-                input.comment ? `💬 Comment: "${input.comment}"` : null,
-              ].filter(Boolean).join("\n");
-              await db2.insert(opsChatMessages).values({
-                cleanerJobId: null,
-                channel: "command",
-                authorName: "⭐ Rating Alert",
-                authorRole: "system",
-                body: chatBody,
-                metadata: JSON.stringify({ rating: input.rating, customerPhone: job.customerPhone, jobAddress: job.jobAddress }),
-              });
-            }
-          } catch (chatErr) {
-            console.error("[Tracker] Failed to post low-rating alert to command chat:", chatErr);
-          }
-
           // Customer apology SMS
           if (job.customerPhone) {
             const apologyMsg =
@@ -234,6 +210,32 @@ export const trackerRouter = router({
         } catch (err) {
           console.error("[Tracker] Failed to send post-review follow-up SMS:", err);
         }
+      }
+
+      // ── Post ALL ratings to MIB Command Chat ────────────────────────────────
+      try {
+        const starsStr = "★".repeat(input.rating) + "☆".repeat(5 - input.rating);
+        const ratingLabel =
+          input.rating <= 2 ? `⚠️ **${input.rating}-star rating ${starsStr}**` :
+          input.rating === 3 ? `😐 **${input.rating}-star rating ${starsStr}**` :
+          input.rating === 4 ? `👍 **${input.rating}-star rating ${starsStr}**` :
+                               `🌟 **5-star rating ${starsStr}**`;
+        const chatBody = [
+          ratingLabel,
+          `👤 Customer: ${firstName}${job.customerPhone ? ` · ${job.customerPhone}` : ""}`,
+          `📍 Job: ${job.jobDate ?? "unknown date"} — ${job.jobAddress ?? "no address"}`,
+          input.comment ? `💬 Comment: "${input.comment}"` : null,
+        ].filter(Boolean).join("\n");
+        await db.insert(opsChatMessages).values({
+          cleanerJobId: null,
+          channel: "command",
+          authorName: "⭐ Rating Alert",
+          authorRole: "system",
+          body: chatBody,
+          metadata: JSON.stringify({ rating: input.rating, customerPhone: job.customerPhone, jobAddress: job.jobAddress }),
+        });
+      } catch (chatErr) {
+        console.error("[Tracker] Failed to post rating to command chat:", chatErr);
       }
 
       return { success: true };
