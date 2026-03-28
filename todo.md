@@ -362,3 +362,4 @@
 - [x] Command Chat: redesign pin banner as real sticky note (pushpin, drop shadow, lined texture, slight rotation)
 - [x] Command Chat: add CSS confetti burst animation to Announce Booking card on render
 - [x] Command Chat: replace horizontal scrollbar on Pinned Day Status chip strip with left/right arrow buttons
+- [x] Remove Good Morning popup from admin dashboard

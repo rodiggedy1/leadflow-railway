@@ -110,7 +110,6 @@ import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
-import DailyRecapModal, { hasShownToday, markShownToday } from "@/components/DailyRecapModal";
 import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
 import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
 import CallGuide from "@/components/CallGuide";
@@ -2859,21 +2858,7 @@ export default function AdminDashboard() {
   const authChecked = !meQuery.isLoading;
   // hasSession: any agent with a valid session cookie — the single source of truth
   const hasSession = authChecked && !!meQuery.data;
-  // ── Daily recap modal ────────────────────────────────────────────────────────
-  const [showRecap, setShowRecap] = useState(false);
-  const isLoggedIn = hasSession;;
-  useEffect(() => {
-    if (isLoggedIn && !hasShownToday()) {
-      // Small delay so the dashboard renders first
-      const t = setTimeout(() => setShowRecap(true), 800);
-      return () => clearTimeout(t);
-    }
-  }, [isLoggedIn]);
   const handleLoginSuccess = useCallback(() => { meQuery.refetch(); }, [meQuery]);
-  const handleCloseRecap = useCallback(() => {
-    markShownToday();
-    setShowRecap(false);
-  }, []);
 
   // ── Follow-up reminder toasts ──────────────────────────────────────────────────────
   const { data: todayFollowUps = [], refetch: refetchFollowUps } = trpc.leads.getTodayFollowUps.useQuery(undefined, {
@@ -3076,7 +3061,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen hj-theme">
       {/* Daily recap modal — shows once per day after login */}
-      {showRecap && <DailyRecapModal onClose={handleCloseRecap} />}
+
 
       {/* Follow-up reminder toasts — slide in from bottom-right for today's due follow-ups */}
       <FollowUpReminderToast
@@ -3850,14 +3835,7 @@ export default function AdminDashboard() {
       {/* ── Sticky footer bar: Quality, Recap, AI Simulator ── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 py-2 px-4 bg-white/80 backdrop-blur border-t border-gray-100">
         {isAdmin && <QualityWidget enabled={isAdmin} />}
-        {/* Daily Recap preview trigger */}
-        <button
-          onClick={() => { localStorage.removeItem(`recap_shown_${new Date().toISOString().slice(0,10)}`); setShowRecap(true); }}
-          title="Preview yesterday's recap"
-          className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-[#AAFF00] hover:text-gray-700 transition-colors"
-        >
-          <span className="text-xs font-bold">☀</span>
-        </button>
+
         {/* AI Simulator shortcut */}
         <button
           onClick={() => setShowSimulator(v => !v)}
