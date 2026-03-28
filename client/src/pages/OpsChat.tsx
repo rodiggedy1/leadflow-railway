@@ -487,9 +487,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
-  const [activeChannel, setActiveChannel] = useState<string>("dispatch");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
+  const [activeChannel, setActiveChannel] = useState<string>("command");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // Auto-collapse sidebar only for command channel; expand for all other views
   const handleSetActiveChannel = (ch: string) => {
