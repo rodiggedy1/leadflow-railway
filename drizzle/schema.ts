@@ -1661,3 +1661,28 @@ export const opsReminders = mysqlTable("ops_reminders", {
 }));
 export type OpsReminder = typeof opsReminders.$inferSelect;
 export type InsertOpsReminder = typeof opsReminders.$inferInsert;
+
+// ── Cleaner Rating SMS Log ────────────────────────────────────────────────────
+/**
+ * Tracks which cleaner job triggered each rating SMS sent to a cleaner.
+ * Used to route cleaner replies back to the correct job thread and command chat.
+ * One row per SMS sent; most recent row for a given cleanerPhone is the active one.
+ */
+export const cleanerRatingSmsLog = mysqlTable("cleaner_rating_sms_log", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Cleaner phone in E.164 format */
+  cleanerPhone: varchar("cleanerPhone", { length: 20 }).notNull(),
+  /** The cleanerJobs.id that triggered this SMS */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Cleaner display name */
+  cleanerName: varchar("cleanerName", { length: 255 }),
+  /** Star rating that triggered the SMS (1-5) */
+  rating: int("rating").notNull(),
+  /** When the SMS was sent */
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+}, (table) => ({
+  idxPhone: index("idx_crsl_phone").on(table.cleanerPhone),
+  idxJob: index("idx_crsl_job").on(table.cleanerJobId),
+}));
+export type CleanerRatingSmsLog = typeof cleanerRatingSmsLog.$inferSelect;
+export type InsertCleanerRatingSmsLog = typeof cleanerRatingSmsLog.$inferInsert;

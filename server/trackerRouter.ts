@@ -17,7 +17,7 @@ import { z } from "zod";
 import { router, publicProcedure, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, conversationSessions, opsChatMessages } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
 import { jobSmsReplies } from "../drizzle/schema";
 import { randomBytes } from "crypto";
@@ -237,7 +237,17 @@ export const trackerRouter = router({
           } else {
             cleanerSms = `Hi ${teamName} — ${customerFullName} left a ${input.rating}-star rating for the job on ${jobDate}. There is a $30 charge applied to your pay for this job and we will be following up with the client about a re-clean. Please reach out if you have any questions.`;
           }
-          await sendSms({ to: cleanerPhone, content: cleanerSms });
+          const normalizedCleanerPhone = `+1${cleanerPhone}`;
+          await sendSms({ to: normalizedCleanerPhone, content: cleanerSms });
+          // Log the SMS so inbound replies can be routed back to this job
+          await db.insert(cleanerRatingSmsLog).values({
+            cleanerPhone: normalizedCleanerPhone,
+            cleanerJobId: job.id,
+            cleanerName: cleanerProfile.name ?? job.cleanerName ?? null,
+            rating: input.rating,
+          }).catch((logErr: unknown) => {
+            console.error("[Tracker] Failed to log cleaner rating SMS:", logErr);
+          });
         }
       } catch (cleanerSmsErr) {
         console.error("[Tracker] Failed to send cleaner rating SMS:", cleanerSmsErr);

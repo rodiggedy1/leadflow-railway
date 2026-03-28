@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, openphoneCallRecordings } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -116,6 +116,11 @@ export function registerWebhookRoutes(app: Express) {
 
       // Fire-and-forget: store this reply against any matching cleaner jobs
       tryStoreJobSmsReply({ fromPhone, inboundText, openPhoneMessageId: inboundMessageId }).catch(() => {});
+
+      // ── Cleaner rating reply detection ──────────────────────────────────────
+      // If this inbound SMS is from a cleaner's phone (matched via cleaner_rating_sms_log),
+      // post a system card to both the job thread and the command channel.
+      tryHandleCleanerRatingReply({ fromPhone, inboundText }).catch(() => {});
 
       // ── STOP / UNSUBSCRIBE detection ─────────────────────────────────────────
       // Only exact single-word matches (case-insensitive, trimmed) to avoid
@@ -673,6 +678,67 @@ export function registerWebhookRoutes(app: Express) {
       }
     } catch (err) {
       console.error('[Webhook] tryStoreJobSmsReply error:', err);
+    }
+  }
+
+  // ── Cleaner rating reply handler ──────────────────────────────────────────────
+  // Runs fire-and-forget on every inbound SMS.
+  // If the sender's phone matches a recent entry in cleaner_rating_sms_log,
+  // posts a system card to both the job thread and the command channel.
+  async function tryHandleCleanerRatingReply(params: {
+    fromPhone: string;
+    inboundText: string;
+  }): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+
+      const { fromPhone, inboundText } = params;
+
+      // Look for the most recent rating SMS sent to this cleaner phone (within 7 days)
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const logRows = await db
+        .select()
+        .from(cleanerRatingSmsLog)
+        .where(
+          and(
+            eq(cleanerRatingSmsLog.cleanerPhone, fromPhone),
+            sql`${cleanerRatingSmsLog.sentAt} >= ${sevenDaysAgo.toISOString().slice(0, 10)}`
+          )
+        )
+        .orderBy(sql`${cleanerRatingSmsLog.sentAt} DESC`)
+        .limit(1);
+
+      const logRow = logRows[0];
+      if (!logRow) return; // Not a cleaner rating reply
+
+      const teamName = logRow.cleanerName ?? fromPhone;
+      const starsStr = '★'.repeat(logRow.rating) + '☆'.repeat(5 - logRow.rating);
+      const cardBody = `🧹 **${teamName}** replied to rating alert (${logRow.rating}-star ${starsStr}):\n"${inboundText}"`;
+
+      // Post to job thread
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: logRow.cleanerJobId,
+        channel: null,
+        authorName: '📱 Cleaner Reply',
+        authorRole: 'system',
+        body: cardBody,
+        metadata: JSON.stringify({ cleanerPhone: fromPhone, cleanerJobId: logRow.cleanerJobId, rating: logRow.rating }),
+      });
+
+      // Post to command channel
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: 'command',
+        authorName: '📱 Cleaner Reply',
+        authorRole: 'system',
+        body: cardBody,
+        metadata: JSON.stringify({ cleanerPhone: fromPhone, cleanerJobId: logRow.cleanerJobId, rating: logRow.rating }),
+      });
+
+      console.log(`[Webhook] Cleaner rating reply from ${fromPhone} posted to job ${logRow.cleanerJobId} thread + command chat`);
+    } catch (err) {
+      console.error('[Webhook] tryHandleCleanerRatingReply error:', err);
     }
   }
 }
