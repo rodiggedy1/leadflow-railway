@@ -813,7 +813,7 @@ export const opsChatRouter = router({
    */
   getCommandChatData: opsChatProcedure.query(async () => {
     const db = await getDb();
-    if (!db) return { snapshot: { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 }, alerts: [], pinnedJobs: [], autoRaised: [] };
+    if (!db) return { snapshot: { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 }, alerts: [], pinnedJobs: [], autoRaised: [], manualIssues: [] };
 
     const today = todayDateString();
     const jobs = await db
@@ -919,23 +919,22 @@ export const opsChatRouter = router({
       }
     }
 
-    // Add general issues to alerts
-    for (const gi of generalIssues) {
+    // Manual issues — built separately for the right panel (NOT added to alerts)
+    const manualIssues = generalIssues.map((gi) => {
       let meta: Record<string, unknown> = {};
       try { meta = JSON.parse(gi.metadata ?? "{}"); } catch { /* ignore */ }
-      const titleMatch = gi.body.match(/^\*\*(.+?)\*\*/);
-      const title = (meta.title as string) ?? titleMatch?.[1] ?? "General Issue";
-      const note = (meta.note as string) ?? "";
-      alerts.push({
-        type: "general_issue",
-        jobId: 0,
-        title,
-        body: note || (gi.body.replace(/\*\*.*?\*\*\s*/, "").split("\n")[0] ?? ""),
-        source: gi.authorName ?? "Command Chat",
-        ts: gi.createdAt ? new Date(gi.createdAt).getTime() : now,
+      const issueTitle = (meta.issueTitle as string) ?? gi.body.split("\n")[0] ?? "General Issue";
+      const issueNote = (meta.issueNote as string) ?? "";
+      const jobTitle = (meta.jobTitle as string | null) ?? null;
+      return {
         messageId: gi.id,
-      });
-    }
+        title: issueTitle,
+        note: issueNote,
+        jobTitle,
+        authorName: gi.authorName ?? "Team",
+        ts: gi.createdAt ? new Date(gi.createdAt).getTime() : now,
+      };
+    });
 
     // Pinned day status cards
     const pinnedJobs = jobs.map((j) => ({
@@ -961,7 +960,7 @@ export const opsChatRouter = router({
       };
     });
 
-    return { snapshot, alerts, pinnedJobs, autoRaised, pendingReminderCount: pendingReminders.length };
+    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length };
   }),
 
   /**

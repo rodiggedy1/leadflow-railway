@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { useOsNotification } from "@/hooks/useOsNotification";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { trpc } from "@/lib/trpc";
@@ -128,9 +129,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const senderPhotoMap: Record<string, string | null> = useMemo(() => agentPhotoData?.photos ?? {}, [agentPhotoData?.photos]);
 
-  // ── Notification sound ──────────────────────────────────────────────────────────
+  // ── Notification sound + OS notification ──────────────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
+  const { notify: osNotify, requestPermission: requestOsPermission } = useOsNotification();
   const prevMsgCountRef = useRef(channelMsgs.length);
+
+  // Request OS notification permission on first user interaction
+  useEffect(() => {
+    const unlock = () => {
+      requestOsPermission();
+      document.removeEventListener("click", unlock, true);
+    };
+    document.addEventListener("click", unlock, true);
+    return () => document.removeEventListener("click", unlock, true);
+  }, [requestOsPermission]);
 
   // ── Typing indicator ───────────────────────────────────────────────────────────
   const { typers: cmdTypers, onKeyPress: onCmdKeyPress, onBlur: onCmdBlur } = useTypingIndicator("command");
@@ -448,7 +460,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [channelMsgs.length]);
 
-  // Play notification sound when new messages arrive from others
+  // Play notification sound + OS notification when new messages arrive from others
   useEffect(() => {
     const prev = prevMsgCountRef.current;
     const curr = channelMsgs.length;
@@ -457,15 +469,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       const newest = channelMsgs[channelMsgs.length - 1];
       if (newest && newest.from !== callerName) {
         playNotification();
+        // Show OS notification when tab is in background
+        osNotify({
+          title: `Command Chat — ${newest.from}`,
+          body: newest.body?.slice(0, 100) ?? "New message",
+          tag: "leadflow-command",
+        });
       }
     }
     prevMsgCountRef.current = curr;
-  }, [channelMsgs, callerName, playNotification]);
+  }, [channelMsgs, callerName, playNotification, osNotify]);
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];
   const pinnedJobs = cmdData?.pinnedJobs ?? [];
   const autoRaised = cmdData?.autoRaised ?? [];
+  const manualIssues = cmdData?.manualIssues ?? [];
   const pendingReminderCount = cmdData?.pendingReminderCount ?? 0;
 
   const totalAlerts = snapshot.issue + snapshot.soon;
@@ -671,37 +690,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             ) : (
               <div className="space-y-2">
                 {alerts.map((alert, i) => {
-                  if (alert.type === "general_issue") {
-                    return (
-                      <div key={i} className="rounded-xl border border-red-200 bg-red-50 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-1.5 min-w-0">
-                            <TriangleAlert className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
-                            <p className="text-sm font-semibold text-red-700 leading-tight">{alert.title}</p>
-                          </div>
-                          <span className="text-[10px] font-medium text-red-400 shrink-0 mt-0.5">{fmt12(alert.ts)}</span>
-                        </div>
-                        {alert.body && <p className="text-xs text-red-600 mt-1 leading-snug pl-5">{alert.body}</p>}
-                        <div className="flex items-center justify-between mt-2 pl-5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-red-400">{alert.source}</p>
-                          <button
-                            onClick={() => {
-                              if (alert.messageId) {
-                                setResolveIssueMessageId(alert.messageId);
-                                setResolveIssueTitle(alert.title);
-                                setResolveIssueNote(alert.body ?? "");
-                                setResolveIssueNoteText("");
-                                setResolveIssueOpen(true);
-                              }
-                            }}
-                            className="text-[10px] font-semibold text-red-500 hover:text-red-700 underline"
-                          >
-                            Resolve
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
+                  // general_issue cards are shown in the right panel under "Manual Issues"
+                  if (alert.type === "general_issue") return null;
                   return (
                     <button
                       key={i}
@@ -1717,14 +1707,44 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           <div className="border-t border-slate-200" />
 
-          {/* Suggested Widgets */}
+          {/* Manual Issues */}
           <div>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Suggested Widgets</p>
-            <div className="space-y-2 text-sm text-slate-500">
-              <p>Late arrivals / no check-ins</p>
-              <p>Supply requests from cleaners</p>
-              <p>Client messages awaiting reply</p>
-            </div>
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
+            {cmdLoading ? (
+              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+            ) : manualIssues.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
+                <p className="text-xs text-slate-400">No open manual issues</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {manualIssues.map((issue) => (
+                  <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
+                    <div className="flex items-start justify-between gap-1">
+                      <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
+                      <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
+                    </div>
+                    {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
+                    {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
+                      <button
+                        onClick={() => {
+                          setResolveIssueMessageId(issue.messageId);
+                          setResolveIssueTitle(issue.title);
+                          setResolveIssueNote(issue.note ?? "");
+                          setResolveIssueNoteText("");
+                          setResolveIssueOpen(true);
+                        }}
+                        className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
+                      >
+                        Resolve
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

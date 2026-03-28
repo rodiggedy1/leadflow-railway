@@ -6,6 +6,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
+import { useOsNotification } from "@/hooks/useOsNotification";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
@@ -886,9 +887,20 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     }
   }, [myProfile?.photoUrl]);
 
-  // ── Notification sound ──────────────────────────────────────────────────────
+   // ── Notification sound + OS notification ─────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
+  const { notify: osNotify, requestPermission: requestOsPermission } = useOsNotification();
   const prevJobMsgCountRef = useRef(0);
+
+  // Request OS notification permission on first user interaction
+  useEffect(() => {
+    const unlock = () => {
+      requestOsPermission();
+      document.removeEventListener("click", unlock, true);
+    };
+    document.addEventListener("click", unlock, true);
+    return () => document.removeEventListener("click", unlock, true);
+  }, [requestOsPermission]);
 
   // ── Typing indicator (keyed to selected job thread) ─────────────────────────
   const jobChannelKey = selectedJobId ? `job:${selectedJobId}` : "";
@@ -1054,10 +1066,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       const newest = thread[thread.length - 1];
       if (newest && newest.from !== callerName) {
         playNotification();
+        // Show OS notification when tab is in background
+        const jobName = jobs.find((j) => j.id === selectedJobId)?.title ?? "Job Thread";
+        osNotify({
+          title: `${jobName} — ${newest.from}`,
+          body: newest.body?.slice(0, 100) ?? "New message",
+          tag: `leadflow-job-${selectedJobId}`,
+        });
       }
     }
     prevJobMsgCountRef.current = curr;
-  }, [jobDetail?.thread, callerName, playNotification]);
+  }, [jobDetail?.thread, callerName, playNotification, osNotify, jobs, selectedJobId]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
   const grouped = {

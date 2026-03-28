@@ -444,3 +444,11 @@
 - [x] Fix: own-message avatar appearing on wrong side in CommandChat — same gap issue
 - [x] Fix: profile photo upload not saving / not displaying after upload
 - [x] Fix: notification sound only fires when returning to tab — should fire immediately even when tab is in background
+
+## Command Center Layout: Manual Issues + Remove Suggested Widgets
+
+- [x] CommandChat: move manually-created issue cards (openIssue) to right panel under "Manual Issues" label
+- [x] CommandChat: remove "Suggested Widgets" placeholder section from right panel
+- [x] CommandChat: add browser OS notification (Notification API) for new messages — fires even in background tab
+- [x] CommandChat: request notification permission on first interaction
+- [x] OpsChat job thread: add browser OS notification for new job thread messages in background tab
