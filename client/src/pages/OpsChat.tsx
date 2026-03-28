@@ -56,6 +56,10 @@ import {
   Users,
   Wifi,
   WifiOff,
+  LayoutDashboard,
+  Radio,
+  UserCircle,
+  ClipboardList,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1435,8 +1439,48 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </>
             )}
           </div>
+          {/* ── Page navigation shortcuts ── */}
+          <div className="mt-auto flex flex-col items-center gap-2 pb-1">
+            <div className="w-7 h-px bg-slate-200 mb-1" />
+            <a
+              href="/admin/leads"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+              title="Leads / Admin Dashboard"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+            </a>
+            <a
+              href="/admin/command-center"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+              title="Control Tower"
+            >
+              <Radio className="w-4 h-4" />
+            </a>
+            <a
+              href="/admin/field-management"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+              title="Field Mgmt Day Board"
+            >
+              <ClipboardList className="w-4 h-4" />
+            </a>
+            <a
+              href="/agent"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+              title="Agent Workspace"
+            >
+              <UserCircle className="w-4 h-4" />
+            </a>
+          </div>
           {/* Profile photo avatar — always visible even when collapsed */}
-          <div className="mt-auto pb-1">
+          <div className="pb-1">
             <button
               onClick={() => setProfilePhotoOpen(true)}
               className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-white shadow hover:ring-slate-300 transition"
