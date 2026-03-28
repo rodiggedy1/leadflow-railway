@@ -29,6 +29,7 @@ import {
   channelPins,
   opsReminders,
   agents,
+  users,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -1516,7 +1517,7 @@ export const opsChatRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
       const callerId = ctx.opsCaller.id;
-      // For agents, use the email field for DB lookup; for owner, use openId
+      const isOwner = ctx.opsCaller.isOwner;
       const agentEmail = (ctx.opsCaller as { email?: string }).email ?? null;
       const suffix = Date.now().toString(36);
       const ext = input.mimeType.includes("png") ? "png" : input.mimeType.includes("webp") ? "webp" : "jpg";
@@ -1525,12 +1526,12 @@ export const opsChatRouter = router({
       const buffer = Buffer.from(input.base64Data, "base64");
       const { url } = await storagePut(key, buffer, input.mimeType);
 
-      // Save to agents table using email (agents) or numeric id (owner)
-      if (agentEmail) {
+      if (isOwner) {
+        // Owner: store in users table by openId
+        await db.update(users).set({ profilePhotoUrl: url }).where(eq(users.openId, callerId));
+      } else if (agentEmail) {
+        // Agent: store in agents table by email
         await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, agentEmail));
-      } else {
-        // Owner: store in agents table by matching the owner's openId stored as email
-        await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, callerId));
       }
 
       return { url };
@@ -1543,6 +1544,15 @@ export const opsChatRouter = router({
     .query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return { name: ctx.opsCaller.name, photoUrl: null };
+      if (ctx.opsCaller.isOwner) {
+        // Owner: read from users table by openId
+        const [userRow] = await db.select({ profilePhotoUrl: users.profilePhotoUrl, name: users.name }).from(users).where(eq(users.openId, ctx.opsCaller.id)).limit(1);
+        return {
+          name: userRow?.name ?? ctx.opsCaller.name,
+          photoUrl: userRow?.profilePhotoUrl ?? null,
+        };
+      }
+      // Agent: read from agents table by email
       const agentEmail = (ctx.opsCaller as { email?: string }).email ?? ctx.opsCaller.id;
       const [agent] = await db.select({ profilePhotoUrl: agents.profilePhotoUrl, name: agents.name }).from(agents).where(eq(agents.email, agentEmail)).limit(1);
       return {
@@ -1586,5 +1596,37 @@ export const opsChatRouter = router({
         photos[row.name] = row.profilePhotoUrl ?? null;
       }
       return { photos };
+    }),
+
+  /**
+   * getAgentStatusList — return all active agents with name, photo, and last-seen timestamp.
+   * Used by the Agent Status panel in the sidebar.
+   */
+  getAgentStatusList: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return { agents: [] };
+      const rows = await db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          email: agents.email,
+          profilePhotoUrl: agents.profilePhotoUrl,
+          lastSeenAt: agents.lastSeenAt,
+          isAdmin: agents.isAdmin,
+        })
+        .from(agents)
+        .where(eq(agents.isActive, 1))
+        .orderBy(agents.name);
+      return {
+        agents: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          photoUrl: r.profilePhotoUrl ?? null,
+          lastSeenAt: r.lastSeenAt ? r.lastSeenAt.getTime() : null,
+          isAdmin: r.isAdmin === 1,
+        })),
+      };
     }),
 });

@@ -1095,7 +1095,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const jobTitle = (meta.jobTitle as string | null) ?? null;
                   const isResolved = !!(meta.resolvedAt);
                   return (
-                    <div key={msg.id} className="flex justify-start">
+                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
                       <div className={cn("max-w-[72%] rounded-xl overflow-hidden border shadow-sm", isResolved ? "border-slate-200 opacity-60" : "border-red-200")}>
                         <div className={cn("flex items-center gap-1.5 px-3 py-1.5", isResolved ? "bg-slate-400" : "bg-red-600")}>
                           <TriangleAlert className="h-3 w-3 text-red-100" />
@@ -1136,7 +1136,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const remBody = (meta.reminderBody as string) ?? msg.body;
                   const setBy = (meta.setBy as string) ?? msg.from;
                   return (
-                    <div key={msg.id} className="flex justify-start">
+                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
                       <div className="max-w-[72%] rounded-xl overflow-hidden border border-sky-200 shadow-sm">
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600">
                           <Bell className="h-3 w-3 text-sky-100" />
@@ -1222,7 +1222,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const resNote = (meta.resolutionNote as string | null) ?? null;
                   const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
                   return (
-                    <div key={msg.id} className="flex justify-start">
+                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
                       <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
                           <CheckCheck className="h-3 w-3 text-emerald-100" />

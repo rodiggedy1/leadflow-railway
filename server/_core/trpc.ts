@@ -115,6 +115,20 @@ export const opsChatProcedure = t.procedure.use(
     // Fallback: try agent session cookie
     const agent = await getAgentFromRequest(ctx.req);
     if (agent) {
+      // Fire-and-forget lastSeenAt heartbeat (non-blocking)
+      try {
+        const { getDb } = await import("../db");
+        const { agents } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (db) {
+          db.update(agents)
+            .set({ lastSeenAt: new Date() })
+            .where(eq(agents.email, agent.agentEmail))
+            .execute()
+            .catch(() => { /* ignore */ });
+        }
+      } catch { /* ignore */ }
       return next({
         ctx: {
           ...ctx,

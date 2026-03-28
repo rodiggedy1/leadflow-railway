@@ -452,3 +452,10 @@
 - [x] CommandChat: add browser OS notification (Notification API) for new messages — fires even in background tab
 - [x] CommandChat: request notification permission on first interaction
 - [x] OpsChat job thread: add browser OS notification for new job thread messages in background tab
+
+## Bug Fixes: Sidebar + System Cards + Profile Photo
+
+- [x] OpsChat: add agent status icon in collapsed sidebar that opens a popover showing all agents with online/last-seen status
+- [x] OpsChat: add close button to expanded sidebar so it can be collapsed back
+- [x] OpsChat: system cards (issue, issue_resolved, reminder) should align right when authored by current user, left for others
+- [x] OpsChat: fix profile photo not persisting after page refresh — owner now stored in users table by openId, agents stored by email

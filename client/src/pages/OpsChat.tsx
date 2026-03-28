@@ -53,6 +53,9 @@ import {
   CalendarDays,
   MessageSquare,
   ChevronDown,
+  Users,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -435,7 +438,7 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
     const resNote = (meta.resolutionNote as string | null) ?? null;
     const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
     return (
-      <div className="flex justify-start">
+      <div className={cn("flex", isMine ? "justify-end" : "justify-start")}>
         <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
             <CheckCircle2 className="h-3 w-3 text-emerald-100" />
@@ -859,6 +862,14 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // Profile photo state
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [agentStatusOpen, setAgentStatusOpen] = useState(false);
+
+  // Agent status list — polled every 30s
+  const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
+    refetchInterval: 30_000,
+    enabled: agentStatusOpen,
+    retry: false,
+  });
 
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
@@ -1197,6 +1208,77 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           >
             <CalendarDays className="w-4 h-4" />
           </button>
+          {/* Agent status icon */}
+          <div className="relative">
+            <button
+              onClick={() => setAgentStatusOpen(v => !v)}
+              className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center transition",
+                agentStatusOpen ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+              title="Agent status"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+            {/* Agent status popover */}
+            {agentStatusOpen && (
+              <div className="absolute left-12 bottom-0 z-50 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-800">Agent Status</p>
+                  <button onClick={() => setAgentStatusOpen(false)} className="text-slate-400 hover:text-slate-700">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                  {!agentStatusData ? (
+                    <div className="px-4 py-6 text-center text-sm text-slate-400">Loading...</div>
+                  ) : agentStatusData.agents.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-sm text-slate-400">No agents found</div>
+                  ) : agentStatusData.agents.map((ag) => {
+                    const now = Date.now();
+                    const seenMs = ag.lastSeenAt;
+                    const diffMin = seenMs ? Math.floor((now - seenMs) / 60_000) : null;
+                    const isOnline = diffMin !== null && diffMin <= 5;
+                    const statusLabel = seenMs === null || diffMin === null ? "Never logged in" :
+                      diffMin === 0 ? "Active now" :
+                      diffMin < 60 ? `${diffMin}m ago` :
+                      diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago` :
+                      new Date(seenMs).toLocaleDateString();
+                    return (
+                      <div key={ag.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <div className="relative shrink-0">
+                          {ag.photoUrl ? (
+                            <img src={ag.photoUrl} alt={ag.name} className="w-8 h-8 rounded-full object-cover" />
+                          ) : (
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                              style={{ backgroundColor: senderHex(ag.name) }}
+                            >
+                              {ag.name[0].toUpperCase()}
+                            </div>
+                          )}
+                          <span className={cn(
+                            "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
+                            isOnline ? "bg-green-500" : "bg-slate-300"
+                          )} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{ag.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{statusLabel}</p>
+                        </div>
+                        {isOnline ? (
+                          <Wifi className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                        ) : (
+                          <WifiOff className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Profile photo avatar — always visible even when collapsed */}
           <div className="mt-auto pb-1">
             <button
@@ -1227,6 +1309,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Today</h1>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSidebarCollapsed(true)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition"
+                title="Collapse sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm font-medium">
                 {jobs.length} online
               </div>
