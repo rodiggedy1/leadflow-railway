@@ -1590,8 +1590,19 @@ export const opsChatRouter = router({
       if (ctx.opsCaller.isOwner) {
         // Owner: read from users table by openId
         const [userRow] = await db.select({ profilePhotoUrl: users.profilePhotoUrl, name: users.name }).from(users).where(eq(users.openId, ctx.opsCaller.id)).limit(1);
+        const ownerName = userRow?.name ?? ctx.opsCaller.name;
+        // Look up owner's email from agents table by name match
+        const [ownerAgent] = await db.select({ email: agents.email }).from(agents).where(eq(agents.name, ownerName)).limit(1);
+        let ownerEmail = ownerAgent?.email ?? null;
+        if (!ownerEmail) {
+          // Partial first-name match fallback
+          const allAgents = await db.select({ name: agents.name, email: agents.email }).from(agents);
+          const firstName = ownerName.split(/\s+/)[0].toLowerCase();
+          ownerEmail = allAgents.find(a => a.email && a.name.toLowerCase().startsWith(firstName))?.email ?? ownerEmail;
+        }
         return {
-          name: userRow?.name ?? ctx.opsCaller.name,
+          name: ownerName,
+          email: ownerEmail,
           photoUrl: userRow?.profilePhotoUrl ?? null,
         };
       }
@@ -1600,6 +1611,7 @@ export const opsChatRouter = router({
       const [agent] = await db.select({ profilePhotoUrl: agents.profilePhotoUrl, name: agents.name }).from(agents).where(eq(agents.email, agentEmail)).limit(1);
       return {
         name: agent?.name ?? ctx.opsCaller.name,
+        email: agentEmail,
         photoUrl: agent?.profilePhotoUrl ?? null,
       };
     }),

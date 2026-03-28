@@ -979,12 +979,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     return s;
   }, [myProfile?.name, agentMe?.name, user?.name]);
   // Agent status list — always polled every 60s so data is ready when panel opens
-  // Stable DM key for the current user (agent email)
-  const { data: myDmKeyData } = trpc.opsChat.getMyDmKey.useQuery(undefined, {
-    enabled: Boolean(user) || Boolean(agentMe),
-    staleTime: 5 * 60 * 1000,
-  });
-  const myDmKey = myDmKeyData?.dmKey ?? callerName;
+  // Stable DM key: use email from myProfile (owner) or agentMe (agent).
+  // agentMe uses publicProcedure so it always resolves even before opsChatProcedure auth.
+  // myProfile returns email for both owner and agents.
+  const myDmKey = (myProfile as any)?.email ?? agentMe?.email ?? callerName;
 
   const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -1017,7 +1015,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // -- DM unread counts + sound notification --
   const prevDmUnreadRef = useRef<Record<string, number>>({});
   const { data: dmUnreadData } = trpc.opsChat.getDmUnreadCounts.useQuery(
-    { myName: callerName, myKey: myDmKey !== callerName ? myDmKey : undefined },
+    { myName: callerName, myKey: myDmKey.includes("@") ? myDmKey : undefined },
     { enabled: Boolean(callerName && callerName !== "Office"), refetchInterval: 5_000 }
   );
   const dmUnreadMap: Record<string, number> = dmUnreadData?.unread ?? {};
