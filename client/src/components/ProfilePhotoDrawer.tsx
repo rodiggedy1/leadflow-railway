@@ -39,11 +39,17 @@ export default function ProfilePhotoDrawer({
   const [uploading, setUploading] = useState(false);
   const [uploaded, setUploaded] = useState(false);
 
+  const utils = trpc.useUtils();
+
   const uploadMutation = trpc.opsChat.uploadProfilePhoto.useMutation({
     onSuccess: (res) => {
       setUploaded(true);
       setUploading(false);
       onPhotoUpdated?.(res.url);
+      // Invalidate all caches that carry photo URLs so every avatar refreshes immediately
+      void utils.opsChat.getAllAgentPhotoMap.invalidate();
+      void utils.opsChat.getMyProfile.invalidate();
+      void utils.opsChat.getAgentStatusList.invalidate();
       toast.success("Profile photo updated!");
       setTimeout(() => setUploaded(false), 2000);
     },

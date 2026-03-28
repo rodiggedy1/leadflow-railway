@@ -488,3 +488,7 @@
 - [x] Upgrade agent status modal to 3-state: green/amber/grey with coloured status text and wifi icon
 - [x] Replace single-message seenBy query with bulk getSeenByBulk — show tick on every sent message
 - [x] Pass senderStatusMap into ThreadMessage for both job thread and channel views
+
+## Bug: Profile photo not appearing in message avatars
+- [x] After uploadProfilePhoto succeeds, invalidate getAllAgentPhotoMap + getMyProfile cache so bubbles refresh immediately
+- [x] Also invalidate agentStatusList (it also carries photoUrl)
