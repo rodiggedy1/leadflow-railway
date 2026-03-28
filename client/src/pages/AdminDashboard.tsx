@@ -2996,6 +2996,21 @@ export default function AdminDashboard() {
     }
   }, [sessions, trpcUtils]);
 
+  // Auto-open session drawer when ?session=<id> is in the URL (e.g. from Command Chat "View Conversation" link)
+  useEffect(() => {
+    const urlSessionId = new URLSearchParams(window.location.search).get("session");
+    if (!urlSessionId) return;
+    const id = parseInt(urlSessionId, 10);
+    if (isNaN(id)) return;
+    // Wait until sessions are loaded before trying to open
+    if (sessions.length === 0) return;
+    handleSessionOpen(id);
+    // Remove the param from the URL without triggering a navigation
+    const url = new URL(window.location.href);
+    url.searchParams.delete("session");
+    window.history.replaceState({}, "", url.toString());
+  }, [sessions, handleSessionOpen]);
+
   // Collect unique agent names for the agent filter dropdown (declared unconditionally)
   const agentNames = useMemo(() => {
     const names = new Set<string>();

@@ -33,6 +33,7 @@ import {
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
+import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -315,6 +316,22 @@ export function startInternalCron(): void {
       await recordHeartbeat("field-mgmt", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
+
+  // ── Unclaimed lead escalation: every minute ───────────────────────────────────
+  // Posts a ⚠️ nudge to the command channel if a new_lead card sits unclaimed
+  // for more than 5 minutes. Fires once per lead (escalationPosted flag).
+  cron.schedule("0 * * * * *", async () => {
+    try {
+      const result = await runUnclaimedLeadEscalation();
+      if (result.escalated > 0) {
+        console.log(`[InternalCron] UnclaimedLeadEscalation — checked: ${result.checked}, escalated: ${result.escalated}`);
+      }
+      await recordHeartbeat("unclaimed-lead-escalation", `checked: ${result.checked}, escalated: ${result.escalated}`, result.escalated > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] UnclaimedLeadEscalation failed:", msg);
+    }
+  });
 
   // ── First-run AI warmup: delayed 60s after startup ──────────────────────────
   // The recurring cron fires at :00 and :30 of every hour, but on a fresh

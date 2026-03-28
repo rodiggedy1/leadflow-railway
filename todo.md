@@ -348,3 +348,5 @@
 - [x] Fix TypeError: extras.join is not a function in CommandChat new_lead card (extras stored as JSON string, not array)
 - [x] Add Call Assist icon and Call icon to new_lead card in Command Chat
 - [x] Add Today Ops / Channels pill switcher above Ops Snapshot in Command Chat left column
+- [x] Add "View Conversation" icon to new_lead card in Command Chat (opens Admin Leads page with session pre-selected); improved icon spacing
+- [x] Unclaimed lead escalation: auto-post nudge to Command Chat if lead sits unclaimed for 5+ minutes
