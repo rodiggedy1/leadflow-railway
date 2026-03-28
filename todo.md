@@ -340,3 +340,5 @@
 - [x] Fix AI call not posting to command channel after call completes (backfilled manually; will work automatically post-publish)
 - [x] Widget chat link defaults to MIB Command Center (command channel, sidebar collapsed)
 - [x] Inline audio player for call_summary messages in Command Chat (store recordingUrl in mediaUrl, render <audio> player in bubble)
+- [x] Fix review message body: "Google Review Confirmed" → "Review Received" in DB and server code
+- [x] Fix star rating missing on review messages in Command Chat (backfill Jill Caiazzo + verify code path)

@@ -353,15 +353,34 @@ export async function handleReviewReplyForJob(
 
     // ── Post review confirmation to MIB Command Chat ────────────────────────────
     try {
-      // Look up the cleaner/team and star rating for this job via cleanerJobs
+      // Look up the cleaner/team and star rating for this job via cleanerJobs.
+      // First try by completedJobId; fall back to customer name + job date if not linked.
       let teamDisplay = "";
       let ratingDisplay = "";
       if (job) {
-        const [cj] = await db
-          .select({ cleanerName: cleanerJobs.cleanerName, teamName: cleanerJobs.teamName, customerRating: cleanerJobs.customerRating })
-          .from(cleanerJobs)
-          .where(eq(cleanerJobs.completedJobId, job.id))
-          .limit(1);
+        let cj: { cleanerName: string | null; teamName: string | null; customerRating: number | null } | undefined;
+
+        // Primary: join by completedJobId
+        if (job.id) {
+          const rows = await db
+            .select({ cleanerName: cleanerJobs.cleanerName, teamName: cleanerJobs.teamName, customerRating: cleanerJobs.customerRating })
+            .from(cleanerJobs)
+            .where(eq(cleanerJobs.completedJobId, job.id))
+            .limit(1);
+          cj = rows[0];
+        }
+
+        // Fallback: match by customer name + job date (handles cases where completedJobId is 0)
+        if (!cj && job.name && job.jobDate) {
+          const rows = await db
+            .select({ cleanerName: cleanerJobs.cleanerName, teamName: cleanerJobs.teamName, customerRating: cleanerJobs.customerRating })
+            .from(cleanerJobs)
+            .where(and(eq(cleanerJobs.customerName, job.name), eq(cleanerJobs.jobDate, job.jobDate)))
+            .orderBy(desc(cleanerJobs.id))
+            .limit(1);
+          cj = rows[0];
+        }
+
         if (cj) {
           teamDisplay = cj.teamName ? ` · ${cj.teamName}` : cj.cleanerName ? ` · ${cj.cleanerName}` : "";
           if (cj.customerRating !== null && cj.customerRating !== undefined) {
