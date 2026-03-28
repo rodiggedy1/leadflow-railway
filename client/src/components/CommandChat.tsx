@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { trpc } from "@/lib/trpc";
+import { senderHex } from "@/lib/senderColor";
 import GlitterBurst from "@/components/GlitterBurst";
 import { cn } from "@/lib/utils";
 import {
@@ -189,7 +190,31 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Quote-reply state ─────────────────────────────────────────────────────
   const [replyTo, setReplyTo] = useState<{ id: number; body: string; author: string } | null>(null);
 
-  // ── Resolve Issue modal state (Command Chat general_issue) ────────────────
+  // ── Reactions ────────────────────────────────────────────────────────────────
+  const cmdMsgIds = channelMsgs.map(m => m.id);
+  const { data: reactionsData, refetch: refetchReactions } = trpc.opsChat.getReactions.useQuery(
+    { messageIds: cmdMsgIds },
+    { enabled: cmdMsgIds.length > 0, refetchInterval: 10_000 }
+  );
+  const reactionsByMsgId = (reactionsData?.reactions ?? []).reduce<Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>>((acc, r) => {
+    if (!acc[r.messageId]) acc[r.messageId] = [];
+    acc[r.messageId].push(r);
+    return acc;
+  }, {});
+  const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
+
+  // ── Scroll-to-original ────────────────────────────────────────────────────────────────
+  const cmdMsgRefMap = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [highlightedCmdMsgId, setHighlightedCmdMsgId] = useState<number | null>(null);
+  function scrollToCmdMsg(id: number) {
+    const el = cmdMsgRefMap.current.get(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedCmdMsgId(id);
+    setTimeout(() => setHighlightedCmdMsgId(null), 1800);
+  }
+
+  // ── Resolve Issue modal state (Command Chat general_issue) ────────────────────
   const [resolveIssueOpen, setResolveIssueOpen] = useState(false);
   const [resolveIssueMessageId, setResolveIssueMessageId] = useState<number | null>(null);
   const [resolveIssueTitle, setResolveIssueTitle] = useState("");
@@ -1184,77 +1209,138 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 }
 
                 // ── Default bubble ───────────────────────────────────────────────────
-                return (
-                  <div key={msg.id} className={cn("flex group", isMine ? "justify-end" : "justify-start")}>
-                    {/* Bubble + WhatsApp-style hover dropdown */}
-                    <div className="relative flex items-start" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
-                      <div className={cn(
-                        "max-w-[75%] rounded-2xl px-4 py-3",
-                        isAlert ? "bg-slate-900 text-white w-full max-w-full" :
-                        isMine ? "bg-slate-100 text-slate-900" : "bg-white border border-slate-200 text-slate-900"
-                      )}>
-                        {!isMine && (
-                          <p className={cn("text-[10px] font-semibold mb-1", isAlert ? "text-slate-300" : "text-slate-500")}>
-                            {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                {
+                  const msgReactions = reactionsByMsgId[msg.id] ?? [];
+                  const reactionGroups = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
+                    if (!acc[r.emoji]) acc[r.emoji] = [];
+                    acc[r.emoji].push(r.callerName);
+                    return acc;
+                  }, {});
+                  const authorInitial = (msg.from ?? "?")[0].toUpperCase();
+                  const authorColor = senderHex(msg.from ?? "");
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn(
+                        "flex group transition-colors duration-300",
+                        isMine ? "justify-end" : "justify-start",
+                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-xl" : ""
+                      )}
+                    >
+                      {/* Avatar circle for other people's messages */}
+                      {!isMine && !isAlert && (
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-1 mr-2"
+                          style={{ backgroundColor: authorColor }}
+                          title={msg.from}
+                        >
+                          {authorInitial}
+                        </div>
+                      )}
+                      {/* Bubble + WhatsApp-style hover actions */}
+                      <div className="relative flex items-start" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
+                        <div className={cn(
+                          "max-w-[75%] rounded-2xl px-4 py-3",
+                          isAlert ? "bg-slate-900 text-white w-full max-w-full" :
+                          isMine ? "bg-slate-100 text-slate-900" : "bg-white border border-slate-200 text-slate-900"
+                        )}>
+                          {!isMine && (
+                            <p className="text-[10px] font-semibold mb-1" style={{ color: isAlert ? "#94a3b8" : authorColor }}>
+                              {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                            </p>
+                          )}
+                          {/* WhatsApp-style quoted block with vivid sender accent */}
+                          {msg.replyToId && msg.replyToBody && (
+                            <button
+                              type="button"
+                              onClick={() => msg.replyToId && scrollToCmdMsg(msg.replyToId)}
+                              className={cn(
+                                "mb-2.5 rounded-lg overflow-hidden flex w-full text-left cursor-pointer hover:brightness-95 transition-all",
+                                isMine ? "bg-slate-200" : "bg-slate-100"
+                              )}
+                            >
+                              <div className="w-1 shrink-0 rounded-l-lg" style={{ backgroundColor: senderHex(msg.replyToAuthor ?? "") }} />
+                              <div className="px-2.5 py-2 min-w-0">
+                                <p className="text-xs font-semibold mb-0.5 truncate" style={{ color: senderHex(msg.replyToAuthor ?? "") }}>{msg.replyToAuthor ?? "Unknown"}</p>
+                                <p className="text-xs text-slate-500 line-clamp-2 leading-snug break-words">{msg.replyToBody}</p>
+                              </div>
+                            </button>
+                          )}
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
+                          {mediaUrls.length > 0 && (
+                            <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
+                              {mediaUrls.map((url, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setLightboxUrl(url)}
+                                  className="focus:outline-none"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`attachment-${idx}`}
+                                    className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
+                                    style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <p className={cn("text-[10px] mt-1.5 text-right", isAlert ? "text-slate-400" : "text-slate-400")}>
+                            {fmtMsgTime(msg.createdAt)}
                           </p>
-                        )}
-                        {/* WhatsApp-style quoted block */}
-                        {msg.replyToId && msg.replyToBody && (
-                          <div className={cn(
-                            "mb-2.5 rounded-lg overflow-hidden flex cursor-default",
-                            isMine ? "bg-slate-200" : "bg-slate-100"
-                          )}>
-                            <div className="w-1 shrink-0 bg-slate-400 rounded-l-lg" />
-                            <div className="px-2.5 py-2 min-w-0">
-                              <p className="text-xs font-semibold mb-0.5 truncate text-slate-600">{msg.replyToAuthor ?? "Unknown"}</p>
-                              <p className="text-xs text-slate-500 line-clamp-2 leading-snug break-words">{msg.replyToBody}</p>
+                          {/* Reaction pills */}
+                          {Object.keys(reactionGroups).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {Object.entries(reactionGroups).map(([emoji, names]) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => toggleReactionMutation.mutate({ messageId: msg.id, emoji })}
+                                  title={names.join(", ")}
+                                  className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 transition"
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="text-slate-600 font-medium">{names.length}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* WhatsApp-style hover actions: Reply + quick-react strip */}
+                        {!isAlert && (
+                          <div
+                            className={cn(
+                              "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
+                              isMine ? "mr-1.5" : "ml-1.5"
+                            )}
+                          >
+                            <button
+                              onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
+                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            >
+                              <ChevronDown className="h-3 w-3" />
+                              <span>Reply</span>
+                            </button>
+                            <div className="flex gap-0.5">
+                              {["👍", "❤️", "✅", "🔥"].map(e => (
+                                <button
+                                  key={e}
+                                  type="button"
+                                  onClick={() => toggleReactionMutation.mutate({ messageId: msg.id, emoji: e })}
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-sm bg-slate-100 hover:bg-slate-200 transition"
+                                >
+                                  {e}
+                                </button>
+                              ))}
                             </div>
                           </div>
                         )}
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
-                        {mediaUrls.length > 0 && (
-                          <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
-                            {mediaUrls.map((url, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => setLightboxUrl(url)}
-                                className="focus:outline-none"
-                              >
-                                <img
-                                  src={url}
-                                  alt={`attachment-${idx}`}
-                                  className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
-                                  style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
-                                />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        <p className={cn("text-[10px] mt-1.5 text-right", isAlert ? "text-slate-400" : "text-slate-400")}>
-                          {fmtMsgTime(msg.createdAt)}
-                        </p>
                       </div>
-                      {/* WhatsApp-style hover dropdown: chevron + "Reply" label */}
-                      {!isAlert && (
-                        <div
-                          className={cn(
-                            "opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-start mt-2",
-                            isMine ? "mr-1.5" : "ml-1.5"
-                          )}
-                        >
-                          <button
-                            onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
-                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
-                          >
-                            <ChevronDown className="h-3 w-3" />
-                            <span>Reply</span>
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                );
+                  );
+                }
               })
             )}
             <div ref={threadBottomRef} />

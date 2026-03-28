@@ -395,3 +395,11 @@
 - [ ] Emoji reactions: hover bubble shows 👍 ❤️ ✅ 🔥 picker, reactions stored in DB, pill counts shown below bubble
 - [ ] Read receipts: mark messages as read on view, show double-tick (✓✓) with reader names on sent messages
 - [ ] Apply all above to both Command Center and Job thread
+
+## CommandChat Fixes + Profile Photos
+- [ ] CommandChat: fix quoted block accent bar — make color vivid (use senderHex, not grey bg)
+- [ ] CommandChat: add colored avatar initials circle next to each bubble (like OpsChat)
+- [ ] CommandChat: wire emoji reactions — picker on hover, pill counts below bubble, toggleReaction server call
+- [ ] Profile photos: add avatarUrl column to users/callers table, S3 upload endpoint
+- [ ] Profile photos: profile settings page where agents can upload their photo
+- [ ] Profile photos: show photo in CommandChat and OpsChat bubbles with colored-initial fallback
