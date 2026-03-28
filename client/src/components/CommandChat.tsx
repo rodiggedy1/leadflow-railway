@@ -1317,7 +1317,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <div className={cn(
                           "max-w-[75%] rounded-2xl px-4 py-3",
                           isAlert ? "bg-slate-900 text-white w-full max-w-full" :
-                          isMine ? "bg-slate-100 text-slate-900" : "bg-white border border-slate-200 text-slate-900"
+                          isMine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"
                         )}>
                           {!isMine && (
                             <p className="text-[10px] font-semibold mb-1" style={{ color: isAlert ? "#94a3b8" : authorColor }}>
@@ -1331,13 +1331,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               onClick={() => msg.replyToId && scrollToCmdMsg(msg.replyToId)}
                               className={cn(
                                 "mb-2.5 rounded-lg overflow-hidden flex w-full text-left cursor-pointer hover:brightness-95 transition-all",
-                                isMine ? "bg-slate-200" : "bg-slate-100"
+                                isMine ? "bg-slate-700" : "bg-slate-100"
                               )}
                             >
                               <div className="w-1 shrink-0 rounded-l-lg" style={{ backgroundColor: senderHex(msg.replyToAuthor ?? "") }} />
                               <div className="px-2.5 py-2 min-w-0">
                                 <p className="text-xs font-semibold mb-0.5 truncate" style={{ color: senderHex(msg.replyToAuthor ?? "") }}>{msg.replyToAuthor ?? "Unknown"}</p>
-                                <p className="text-xs text-slate-500 line-clamp-2 leading-snug break-words">{msg.replyToBody}</p>
+                                <p className={cn("text-xs line-clamp-2 leading-snug break-words", isMine ? "text-slate-300" : "text-slate-500")}>{msg.replyToBody}</p>
                               </div>
                             </button>
                           )}

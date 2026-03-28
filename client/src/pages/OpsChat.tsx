@@ -516,7 +516,7 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
             "max-w-[72%] rounded-2xl overflow-hidden",
             isMine
               ? "bg-slate-900 text-white rounded-br-sm"
-              : "bg-white border border-slate-100 text-slate-900 shadow-sm rounded-bl-sm"
+              : "bg-slate-100 text-slate-900 rounded-bl-sm"
           )}>
             {/* Inline images */}
             {imageUrls.length > 0 && (

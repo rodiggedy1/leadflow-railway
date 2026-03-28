@@ -154,12 +154,12 @@ export default function DmPanel({
               <div
                 className={`max-w-[80%] rounded-2xl px-3 py-1.5 text-sm leading-snug ${
                   isMine
-                    ? "bg-primary text-primary-foreground rounded-br-sm"
-                    : "bg-card text-card-foreground border border-border rounded-bl-sm"
+                    ? "bg-slate-900 text-white rounded-br-sm"
+                    : "bg-slate-100 text-slate-900 rounded-bl-sm"
                 }`}
               >
                 <p className="whitespace-pre-wrap break-words">{msg.body}</p>
-                <p className={`text-[10px] mt-0.5 ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"} text-right`}>
+                <p className={`text-[10px] mt-0.5 ${isMine ? "text-slate-400" : "text-slate-500"} text-right`}>
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
