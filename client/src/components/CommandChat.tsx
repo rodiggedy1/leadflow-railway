@@ -428,26 +428,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
                 // ── Review card (warm gold) ──────────────────────────────────────
                 if (isReview) {
-                  // Parse lines: first line is the main info, second is job date
                   const lines = msg.body.split("\n").filter(Boolean);
                   const mainLine = lines[0] ?? "";
                   const dateLine = lines[1] ?? "";
-                  // Strip markdown bold from main line for clean rendering
                   const cleanMain = mainLine.replace(/\*\*/g, "").replace(/^⭐\s*/, "");
                   return (
-                    <div key={msg.id} className="flex justify-start w-full">
-                      <div className="w-full rounded-2xl overflow-hidden border border-amber-200 shadow-sm">
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-100 shadow-sm">
                         {/* Header band */}
-                        <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-300">
-                          <span className="text-lg">⭐</span>
-                          <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">Review Received</span>
-                          <span className="ml-auto text-[10px] text-amber-800 opacity-80">{fmtMsgTime(msg.createdAt)}</span>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border-b border-amber-100">
+                          <span className="text-sm">⭐</span>
+                          <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Review Received</span>
+                          <span className="ml-auto text-[10px] text-amber-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Body */}
-                        <div className="px-4 py-3 bg-amber-50">
-                          <p className="text-sm font-semibold text-amber-900 leading-snug">{cleanMain}</p>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-medium text-slate-800 leading-snug">{cleanMain}</p>
                           {dateLine && (
-                            <p className="text-xs text-amber-700 mt-1 opacity-80">{dateLine.replace(/^📅\s*/, "📅 ")}</p>
+                            <p className="text-xs text-slate-400 mt-1">{dateLine.replace(/^📅\s*/, "📅 ")}</p>
                           )}
                         </div>
                       </div>
@@ -460,35 +458,34 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const recordingMatch = msg.body.match(/\[Recording\]\((https?:\/\/[^)]+)\)/);
                   const recordingUrl = msg.mediaUrl || (recordingMatch ? recordingMatch[1] : null);
                   const cleanBody = msg.body.replace(/\n?🎙️\s*\[Recording\]\([^)]+\)/, "").trim();
-                  // Split into lines: first = headline (AI Call Ended…), rest = summary
                   const bodyLines = cleanBody.split("\n").filter(Boolean);
                   const headLine = bodyLines[0]?.replace(/\*\*/g, "").replace(/^📱\s*/, "") ?? "";
                   const summaryLines = bodyLines.slice(1).map(l => l.replace(/^📋\s*/, ""));
                   return (
-                    <div key={msg.id} className="flex justify-start w-full">
-                      <div className="w-full rounded-2xl overflow-hidden border border-blue-200 shadow-sm">
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
                         {/* Header band */}
-                        <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-slate-600">
-                          <span className="text-base">📞</span>
-                          <span className="text-xs font-bold text-white uppercase tracking-wider">AI Call Summary</span>
-                          <span className="ml-auto text-[10px] text-blue-200">{fmtMsgTime(msg.createdAt)}</span>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
+                          <span className="text-sm">📞</span>
+                          <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">AI Call Summary</span>
+                          <span className="ml-auto text-[10px] text-slate-500">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Headline row */}
-                        <div className="px-4 pt-3 pb-1 bg-blue-50 border-b border-blue-100">
-                          <p className="text-sm font-semibold text-blue-900">{headLine}</p>
+                        <div className="px-3 pt-2.5 pb-1.5 bg-slate-50 border-b border-slate-100">
+                          <p className="text-sm font-medium text-slate-700">{headLine}</p>
                         </div>
                         {/* Summary */}
-                        <div className="px-4 py-3 bg-white">
+                        <div className="px-3 py-2.5 bg-white">
                           {summaryLines.map((line, i) => (
-                            <p key={i} className="text-sm text-slate-700 leading-relaxed">{line}</p>
+                            <p key={i} className="text-sm text-slate-600 leading-relaxed">{line}</p>
                           ))}
                           {recordingUrl && (
-                            <div className="mt-3">
-                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">🎙️ Recording</p>
+                            <div className="mt-2.5">
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
                               <audio
                                 controls
                                 src={recordingUrl}
-                                className="w-full h-9 rounded-lg"
+                                className="w-full h-8 rounded-lg"
                               />
                             </div>
                           )}
