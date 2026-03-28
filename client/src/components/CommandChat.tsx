@@ -3,13 +3,20 @@
  * Renders when the user selects the "command" channel.
  * Layout: 3 columns
  *   Left  : Ops Snapshot + Live Alerts & Escalations
- *   Center: Pinned Day Status + Conversation thread + quick-action chips
+ *   Center: Pinned Day Status + Conversation thread + quick-action chips + composer
  *   Right : Command Center Rules + Auto-Raised Issues + Suggested Widgets
+ *
+ * Composer has full parity with the job-thread composer:
+ *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, Bell, MapPin, MessageSquare, X } from "lucide-react";
+import {
+  AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
+  X, Camera, Mic, Smile, ImageIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -32,7 +39,7 @@ interface CommandChatProps {
   channelLoading: boolean;
   callerName: string;
   /** Called when user hits Send in the composer */
-  onSendMessage: (body: string) => void;
+  onSendMessage: (body: string, mediaUrl?: string) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
 }
@@ -78,6 +85,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const threadBottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 20_000,
@@ -94,6 +103,142 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
   });
 
+  // ── Staged photos ──────────────────────────────────────────────────────────
+  type StagedPhoto = {
+    id: string;
+    previewUrl: string;
+    file: File;
+    status: "pending" | "uploading" | "done" | "error";
+    s3Url?: string;
+  };
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const uploadPhoto = trpc.opsChat.uploadOpsPhoto.useMutation();
+
+  async function stageFiles(files: FileList | File[]) {
+    const arr = Array.from(files).filter(f => f.type.startsWith("image/"));
+    if (!arr.length) return;
+    const newItems: StagedPhoto[] = arr.map(f => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      previewUrl: URL.createObjectURL(f),
+      file: f,
+      status: "pending",
+    }));
+    setStagedPhotos(prev => [...prev, ...newItems]);
+    for (const item of newItems) {
+      setStagedPhotos(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading" } : p));
+      try {
+        const dataBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(item.file);
+        });
+        const { url } = await uploadPhoto.mutateAsync({
+          filename: item.file.name,
+          mimeType: item.file.type,
+          dataBase64,
+        });
+        setStagedPhotos(prev => prev.map(p => p.id === item.id ? { ...p, status: "done", s3Url: url } : p));
+      } catch {
+        setStagedPhotos(prev => prev.map(p => p.id === item.id ? { ...p, status: "error" } : p));
+        toast.error("Photo upload failed");
+      }
+    }
+  }
+
+  function removeStagedPhoto(id: string) {
+    setStagedPhotos(prev => {
+      const item = prev.find(p => p.id === id);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter(p => p.id !== id);
+    });
+  }
+
+  // ── Emoji picker ───────────────────────────────────────────────────────────
+  const [showEmoji, setShowEmoji] = useState(false);
+  const emojiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showEmoji) return;
+    function handleClick(e: MouseEvent) {
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
+        setShowEmoji(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showEmoji]);
+
+  function insertEmoji(data: EmojiClickData) {
+    const el = composerRef.current;
+    if (!el) { setComposer(prev => prev + data.emoji); return; }
+    const start = el.selectionStart ?? composer.length;
+    const end = el.selectionEnd ?? composer.length;
+    const next = composer.slice(0, start) + data.emoji + composer.slice(end);
+    setComposer(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + data.emoji.length, start + data.emoji.length);
+    });
+  }
+
+  // ── Voice recording ────────────────────────────────────────────────────────
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setIsTranscribing(true);
+    await new Promise<void>(resolve => {
+      mr.onstop = () => resolve();
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+    });
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text } = await transcribeVoice.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      setComposer(prev => prev ? prev + " " + text : text);
+      toast.success("Voice note transcribed");
+    } catch {
+      toast.error("Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [transcribeVoice]);
+
   // Auto-scroll thread to bottom when new messages arrive
   useEffect(() => {
     threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -107,10 +252,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const totalAlerts = snapshot.issue + snapshot.soon;
 
   function handleSend() {
-    const text = composer.trim();
-    if (!text) return;
-    onSendMessage(text);
+    const hasText = composer.trim().length > 0;
+    const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
+    const uploadingPhotos = stagedPhotos.filter(p => p.status === "uploading" || p.status === "pending");
+    if (!hasText && donePhotos.length === 0) return;
+    if (uploadingPhotos.length > 0) {
+      toast.error("Please wait for photos to finish uploading");
+      return;
+    }
+    const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
+    const body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
+    onSendMessage(body, mediaUrl);
     setComposer("");
+    setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
   }
 
   return (
@@ -263,6 +417,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               channelMsgs.map((msg) => {
                 const isMine = msg.from === callerName;
                 const isAlert = msg.role === "alert" || msg.role === "system";
+                // Parse mediaUrl — may be a JSON array of URLs or a single URL
+                let mediaUrls: string[] = [];
+                if (msg.mediaUrl) {
+                  try { mediaUrls = JSON.parse(msg.mediaUrl); } catch { mediaUrls = [msg.mediaUrl]; }
+                }
                 return (
                   <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
                     <div className={cn(
@@ -276,6 +435,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         </p>
                       )}
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                      {mediaUrls.length > 0 && (
+                        <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
+                          {mediaUrls.map((url, idx) => (
+                            <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={url}
+                                alt={`attachment-${idx}`}
+                                className="rounded-xl object-cover cursor-zoom-in"
+                                style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                       <p className={cn("text-[10px] mt-1.5 text-right", isAlert ? "text-slate-400" : "text-slate-400")}>
                         {fmtMsgTime(msg.createdAt)}
                       </p>
@@ -312,19 +485,130 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
             ))}
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+
+          {/* Staged photo preview strip */}
+          {stagedPhotos.length > 0 && (
+            <div className="flex gap-2 mb-2 flex-wrap">
+              {stagedPhotos.map((p) => (
+                <div key={p.id} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                  <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
+                  {(p.status === "pending" || p.status === "uploading") && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                      <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+                    </div>
+                  )}
+                  {p.status === "error" && (
+                    <div className="absolute inset-0 bg-red-900/60 flex items-center justify-center">
+                      <span className="text-white text-[10px] font-bold">ERR</span>
+                    </div>
+                  )}
+                  <button
+                    className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80 transition"
+                    onClick={() => removeStagedPhoto(p.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <button
+                className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 hover:border-slate-400 hover:text-slate-600 transition shrink-0"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImageIcon className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => { if (e.target.files) stageFiles(e.target.files); e.target.value = ""; }}
+          />
+
+          {/* Composer box with drag-drop */}
+          <div
+            className={cn(
+              "rounded-2xl border bg-slate-50 p-3 transition",
+              isDragging ? "border-slate-900 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200"
+            )}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
+          >
             <Textarea
+              ref={composerRef}
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
-              placeholder="Message MIB Command Chat… (Enter to send, Shift+Enter for new line)"
+              placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Type a message or drop photos…"}
               rows={2}
               className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
               }}
             />
-            <div className="flex justify-end mt-2">
-              <Button size="sm" onClick={handleSend} disabled={!composer.trim()} className="rounded-xl">
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center gap-1 relative">
+                {/* Photo */}
+                <button
+                  className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Camera className="h-4 w-4" /> Photo
+                </button>
+                {/* Voice */}
+                {isRecording ? (
+                  <button
+                    className="rounded-xl px-2.5 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium"
+                    onClick={stopRecording}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    {recordingSeconds}s — Stop
+                  </button>
+                ) : isTranscribing ? (
+                  <button disabled className="rounded-xl px-2.5 py-1.5 text-slate-400 transition text-xs flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
+                  </button>
+                ) : (
+                  <button
+                    className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                    onClick={startRecording}
+                  >
+                    <Mic className="h-4 w-4" /> Voice
+                  </button>
+                )}
+                {/* Emoji */}
+                <div ref={emojiRef} className="relative">
+                  <button
+                    className={cn("rounded-xl p-2 transition", showEmoji ? "text-slate-900 bg-white" : "text-slate-400 hover:text-slate-700 hover:bg-white")}
+                    onClick={() => setShowEmoji(v => !v)}
+                  >
+                    <Smile className="h-4 w-4" />
+                  </button>
+                  {showEmoji && (
+                    <div className="absolute bottom-10 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">
+                      <EmojiPicker
+                        theme={Theme.LIGHT}
+                        onEmojiClick={(data) => { insertEmoji(data); setShowEmoji(false); }}
+                        height={350}
+                        width={300}
+                        searchDisabled={false}
+                        skinTonesDisabled
+                        previewConfig={{ showPreview: false }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSend}
+                disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0)}
+                className="rounded-xl"
+              >
                 <Send className="h-3.5 w-3.5 mr-1.5" /> Send
               </Button>
             </div>

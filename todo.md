@@ -329,3 +329,4 @@
 - [ ] Live escalation countdown on flagged job cards in sidebar (e.g. "⚠️ 12 min unresolved")
 - [x] Auto-post system alert to MIB Command Chat when flagIssue is called (includes job name, job ID, issue note)
 - [x] Escalation timer on flagged job cards — live "⚠️ X min unresolved" badge using flaggedAt timestamp, updates every 30 seconds
+- [x] Add Photo, Voice, Emoji composer toolbar to MIB Command Chat (copy from channel composer)

@@ -1345,8 +1345,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
             callerName={callerName}
-            onSendMessage={(body) => {
-              sendMsg.mutate({ body, channel: "command", authorName: callerName });
+            onSendMessage={(body, mediaUrl) => {
+              sendMsg.mutate({ body, channel: "command", authorName: callerName, mediaUrl });
             }}
             onJumpToJob={(jobId) => {
               setActiveTab("today");
