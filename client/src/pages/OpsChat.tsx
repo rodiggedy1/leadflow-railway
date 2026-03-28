@@ -709,6 +709,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null); // scroll container ref for reliable bottom scroll
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1120,10 +1121,23 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJobId, jobDetail?.thread?.length, isAuthenticated]);
 
-  // Scroll thread to bottom on new messages
+  // Scroll thread to bottom on new messages — double-rAF ensures the new message
+  // DOM node is fully painted before we scroll, preventing the "one message short" bug.
+  const scrollToBottom = useCallback((instant = false) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const container = threadScrollRef.current;
+        if (container) {
+          container.scrollTo({ top: container.scrollHeight, behavior: instant ? "instant" : "smooth" });
+        } else {
+          threadBottomRef.current?.scrollIntoView({ behavior: instant ? "instant" : "smooth", block: "end" });
+        }
+      });
+    });
+  }, []);
   useEffect(() => {
-    threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [jobDetail?.thread, channelMsgs]);
+    scrollToBottom();
+  }, [jobDetail?.thread, channelMsgs, scrollToBottom]);
 
   // Play notification sound when new job thread messages arrive from others
   useEffect(() => {
@@ -1645,7 +1659,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <span className="text-xs font-semibold text-red-600">Requires response</span>
                       )}
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                    <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                       <div className="space-y-4">
                         {jobDetail.thread.length === 0 ? (
                           <p className="text-sm text-slate-400 text-center py-8">No messages yet — start the thread below.</p>
@@ -1894,7 +1908,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </h2>
               <p className="text-sm text-slate-500 mt-0.5">Internal team channel</p>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <div className="space-y-4">
                 {channelLoading ? (
                   <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
