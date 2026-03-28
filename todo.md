@@ -333,3 +333,5 @@
 - [x] Sidebar default: only auto-collapse when command channel is active; job thread always starts expanded
 - [x] Clicking "Channels" tab from Jobs view defaults to MIB Command Chat with sidebar collapsed
 - [x] Auto-post ✅ Resolved message to command channel when resolveIssue is called
+- [x] Post ended AI call summary to command channel (caller, duration, outcome, summary, recording link)
+- [x] Post review confirmation to command channel (client name, rating, team/cleaner)

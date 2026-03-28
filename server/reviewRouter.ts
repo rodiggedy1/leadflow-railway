@@ -17,6 +17,8 @@ import {
   conversationSessions,
   reactivationContacts,
   reactivationCampaigns,
+  opsChatMessages,
+  cleanerJobs,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
@@ -347,6 +349,38 @@ export async function handleReviewReplyForJob(
           status: "PENDING",
         });
       }
+    }
+
+    // ── Post review confirmation to MIB Command Chat ────────────────────────────
+    try {
+      // Look up the cleaner/team for this job via cleanerJobs
+      let teamDisplay = "";
+      if (job) {
+        const [cj] = await db
+          .select({ cleanerName: cleanerJobs.cleanerName, teamName: cleanerJobs.teamName })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.completedJobId, job.id))
+          .limit(1);
+        if (cj) {
+          teamDisplay = cj.teamName ? ` · ${cj.teamName}` : cj.cleanerName ? ` · ${cj.cleanerName}` : "";
+        }
+      }
+      const clientDisplay = job?.name ?? firstName;
+      const bodyLines = [
+        `⭐ **Google Review Confirmed** — ${clientDisplay}${teamDisplay}`,
+        job?.jobDate ? `📅 Job date: ${job.jobDate}` : null,
+      ].filter(Boolean).join("\n");
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "⭐ Review Received",
+        authorRole: "office",
+        body: bodyLines,
+        mediaUrl: null,
+        quickAction: "review_confirmed",
+      });
+    } catch (err) {
+      console.error("[ReviewRouter] Failed to post review confirmation to command channel:", err);
     }
 
     const confirmedReply = await getTemplate("review_confirmed_response", { "[Name]": firstName });

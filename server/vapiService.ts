@@ -19,7 +19,7 @@ import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { calculatePrice, SERVICE_MULTIPLIERS } from "./engine/pricing";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
-import { voiceCalls, conversationSessions, quoteLeads, callbackTasks } from "../drizzle/schema";
+import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
@@ -1196,6 +1196,43 @@ Rules:
     } catch (err) {
       console.error("[Vapi] Failed to backfill voiceCallId on callbackTasks:", err);
     }
+  }
+
+  // ── Post call summary to MIB Command Chat ──────────────────────────────────
+  // Only post answered calls (not outbound alerts, not missed calls — those return early above)
+  try {
+    const outcomeEmoji =
+      outcome === "booked"             ? "📅" :
+      outcome === "quote_given"        ? "💰" :
+      outcome === "faq_answered"       ? "💬" :
+      outcome === "callback_requested" ? "📲" :
+      outcome === "transferred"        ? "🔀" : "📞";
+    const callerDisplay = structuredData?.callerName
+      ? `${structuredData.callerName}${normalizedPhone ? ` (${normalizedPhone})` : ""}`
+      : normalizedPhone ?? "Unknown caller";
+    const durationDisplay = durationSeconds >= 60
+      ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`
+      : `${durationSeconds}s`;
+    const outcomeLabel = outcome.replace(/_/g, " ");
+    const bodyLines = [
+      `${outcomeEmoji} **AI Call Ended** — ${callerDisplay} · ${durationDisplay} · ${outcomeLabel}`,
+      summary ? `📋 ${summary}` : null,
+      recordingUrl ? `🎙️ [Recording](${recordingUrl})` : null,
+    ].filter(Boolean).join("\n");
+    const dbForPost = await getDb();
+    if (dbForPost) {
+      await dbForPost.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "📞 AI Call Summary",
+        authorRole: "office",
+        body: bodyLines,
+        mediaUrl: null,
+        quickAction: "call_summary",
+      });
+    }
+  } catch (err) {
+    console.error("[Vapi] Failed to post call summary to command channel:", err);
   }
 
   // Notify agent/owner of the call
