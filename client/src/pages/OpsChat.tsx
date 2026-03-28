@@ -1168,7 +1168,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <div className="w-14 shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-visible transition-all">
+        <div className="w-14 shrink-0 h-full border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-visible transition-all">
           <button
             onClick={() => setSidebarCollapsed(false)}
             className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
@@ -1301,7 +1301,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           </div>
         </div>
       ) : (
-      <div className="w-[300px] shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden">
+      <div className="w-[300px] shrink-0 h-full border-r border-slate-200 bg-white flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-center justify-between mb-3">

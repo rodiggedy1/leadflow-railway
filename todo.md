@@ -464,3 +464,12 @@
 
 - [x] Fix: agent status panel does not open when status icon is clicked in collapsed sidebar
 - [x] Fix: profile photo avatar button not visible in lower-left of collapsed sidebar for agent accounts (confirmed present by user)
+
+## Bug Fix: Agent Status lastSeenAt
+
+- [ ] Fix: agent status panel shows "Never logged in" for all agents — backfill lastSeenAt from recent message activity
+
+## Bug Fix: Profile Photo Button for Agents + lastSeenAt Backfill
+
+- [x] Fix: agents cannot see the profile photo upload button — added h-full to both sidebar containers so footer button is always visible
+- [x] Fix: backfill lastSeenAt for agents from opsChatMessages history via SQL UPDATE
