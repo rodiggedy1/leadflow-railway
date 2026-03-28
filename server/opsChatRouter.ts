@@ -1207,14 +1207,12 @@ export const opsChatRouter = router({
         .select({ id: opsChatMessages.id, createdAt: opsChatMessages.createdAt })
         .from(opsChatMessages)
         .where(
-          // @ts-ignore — drizzle sql helpers
-          (t: typeof opsChatMessages) =>
-            require("drizzle-orm").and(
-              require("drizzle-orm").eq(t.channel, "command"),
-              require("drizzle-orm").eq(t.quickAction, "announce_booking")
-            )
+          and(
+            eq(opsChatMessages.channel, "command"),
+            eq(opsChatMessages.quickAction, "announce_booking")
+          )
         )
-        .orderBy(require("drizzle-orm").desc(opsChatMessages.createdAt))
+        .orderBy(desc(opsChatMessages.createdAt))
         .limit(1);
       return rows[0] ?? null;
     }),
