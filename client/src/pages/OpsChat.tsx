@@ -497,10 +497,20 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     setSidebarCollapsed(ch === "command");
   };
 
-  // Expand sidebar whenever the user switches to the today (job thread) tab
+  // Switching to today always expands sidebar.
+  // Switching to channels from today defaults to command channel with sidebar collapsed.
   const handleSetActiveTab = (tab: "today" | "channels") => {
-    setActiveTab(tab);
-    if (tab === "today") setSidebarCollapsed(false);
+    if (tab === "channels" && activeTab === "today") {
+      // Coming from jobs view → land on command channel, sidebar collapsed
+      setActiveTab("channels");
+      setActiveChannel("command");
+      setSidebarCollapsed(true);
+    } else if (tab === "today") {
+      setActiveTab("today");
+      setSidebarCollapsed(false);
+    } else {
+      setActiveTab(tab);
+    }
   };
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
