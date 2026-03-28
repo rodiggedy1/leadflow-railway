@@ -886,14 +886,27 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     onError: (e) => toast.error(e.message),
   });
 
-  // Resolved caller name — owner name takes precedence, then agent name
-  const callerName = user?.name ?? agentMe?.name ?? "Office";
-
   // Profile photo state
   const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
 
+   // Load my profile photo on mount (only when authenticated)
+  const { data: myProfile } = trpc.opsChat.getMyProfile.useQuery(undefined, {
+    enabled: Boolean(user) || Boolean(agentMe),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  // Sync server photo into local state (only if user hasn't just uploaded a new one)
+  useEffect(() => {
+    if (myProfile?.photoUrl && !profilePhotoUrl) {
+      setProfilePhotoUrl(myProfile.photoUrl);
+    }
+  }, [myProfile?.photoUrl]);
+  // Resolved caller name — use myProfile.name (from DB) as the authoritative name
+  // because messages are stored with the DB name (e.g. "Rohan G"), not the OAuth name (e.g. "Rohan Gilkes").
+  // Fall back to agentMe.name, then user.name, then "Office".
+  const callerName = myProfile?.name ?? agentMe?.name ?? user?.name ?? "Office";
   // Agent status list — always polled every 60s so data is ready when panel opens
   const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -901,7 +914,6 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     retry: false,
     staleTime: 30_000,
   });
-
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
     enabled: Boolean(user) || Boolean(agentMe),
@@ -914,20 +926,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     // Always include own photo (may have just been uploaded)
     if (callerName && profilePhotoUrl) return { ...base, [callerName]: profilePhotoUrl };
     return base;
-  }, [agentPhotoData?.photos, callerName, profilePhotoUrl]);
-
-  // Load my profile photo on mount (only when authenticated)
-  const { data: myProfile } = trpc.opsChat.getMyProfile.useQuery(undefined, {
-    enabled: Boolean(user) || Boolean(agentMe),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-  // Sync server photo into local state (only if user hasn't just uploaded a new one)
-  useEffect(() => {
-    if (myProfile?.photoUrl && !profilePhotoUrl) {
-      setProfilePhotoUrl(myProfile.photoUrl);
-    }
-  }, [myProfile?.photoUrl]);
+  }, [agentPhotoData?.photos, callerName, profilePhotoUrl]);;
 
    // ── Notification sound + OS notification ─────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
@@ -1021,13 +1020,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // Build seenByMap from flat reads array (server returns flat to avoid superjson depth issues)
   const activeSeenByMap = useMemo(() => {
     const bulkData = activeTab === "today" ? threadSeenByBulk : channelSeenByBulk;
+    console.log('[ReadReceipts] activeTab:', activeTab, 'bulkData:', bulkData, 'myThreadMsgIds:', myThreadMsgIds.slice(0,3), 'myChannelMsgIds:', myChannelMsgIds.slice(0,3));
     const map: Record<number, string[]> = {};
     for (const entry of bulkData?.reads ?? []) {
       if (!map[entry.messageId]) map[entry.messageId] = [];
       map[entry.messageId].push(entry.callerName);
     }
+    console.log('[ReadReceipts] map keys:', Object.keys(map).slice(0,5));
     return map;
-  }, [activeTab, threadSeenByBulk, channelSeenByBulk]);
+  }, [activeTab, threadSeenByBulk, channelSeenByBulk, myThreadMsgIds, myChannelMsgIds]);
 
   // ── Sender status map ─────────────────────────────────────────────────────────
   // Derived from agentStatusList: name -> "online" | "away" | "offline"
@@ -1139,6 +1140,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     scrollToBottom();
   }, [jobDetail?.thread, channelMsgs, scrollToBottom]);
 
+  // Track whether we have pending notifications to play when the tab becomes visible
+  const pendingNotifRef = useRef(false);
   // Play notification sound when new job thread messages arrive from others
   useEffect(() => {
     const thread = jobDetail?.thread ?? [];
@@ -1147,8 +1150,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     if (curr > prev && prev > 0) {
       const newest = thread[thread.length - 1];
       if (newest && newest.from !== callerName) {
-        playNotification();
-        // Show OS notification when tab is in background
+        if (!document.hidden) {
+          // Tab is visible — play immediately
+          playNotification();
+        } else {
+          // Tab is hidden — Web Audio is suspended by browser policy.
+          // Mark pending so we play when user returns, and fire OS notification.
+          pendingNotifRef.current = true;
+        }
+        // Always attempt OS notification (only fires when tab is hidden, per hook logic)
         const jobName = jobs.find((j) => j.id === selectedJobId)?.title ?? "Job Thread";
         osNotify({
           title: `${jobName} — ${newest.from}`,
@@ -1159,6 +1169,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     }
     prevJobMsgCountRef.current = curr;
   }, [jobDetail?.thread, callerName, playNotification, osNotify, jobs, selectedJobId]);
+  // Play pending sound when user returns to the tab
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && pendingNotifRef.current) {
+        pendingNotifRef.current = false;
+        playNotification();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [playNotification]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
   const grouped = {
@@ -1293,6 +1314,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             </button>
             {/* Agent status popover */}
             {agentStatusOpen && (
+              <>
+              {/* Backdrop — click outside to close */}
+              <div className="fixed inset-0 z-40" onClick={() => setAgentStatusOpen(false)} />
               <div className="absolute left-12 bottom-0 z-50 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-800">Agent Status</p>
@@ -1358,9 +1382,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   })}
                 </div>
               </div>
+              </>
             )}
           </div>
-
           {/* Profile photo avatar — always visible even when collapsed */}
           <div className="mt-auto pb-1">
             <button
