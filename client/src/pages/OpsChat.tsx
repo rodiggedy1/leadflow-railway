@@ -551,16 +551,27 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
               </div>
             )}
             {/* Footer: time + read receipts */}
-            <div className={cn("flex items-center justify-between gap-2 px-4 pb-3", !msg.body && imageUrls.length > 0 ? "pt-2" : "-mt-1")}>
-              <p className={cn("text-xs", isMine ? "text-slate-400" : "text-slate-400")}>{timeStr}</p>
-              {isMine && seenBy && seenBy.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-slate-400">✓✓</span>
-                  <p className="text-[10px] text-slate-400 italic">Seen by {seenBy.join(", ")}</p>
-                </div>
-              )}
-              {isMine && (!seenBy || seenBy.length === 0) && (
-                <span className="text-[10px] text-slate-300">✓</span>
+            <div className={cn("flex items-center gap-1.5 px-4 pb-3", !msg.body && imageUrls.length > 0 ? "pt-2" : "-mt-1")}>
+              <p className={cn("text-xs flex-1", isMine ? "text-slate-400" : "text-slate-400")}>{timeStr}</p>
+              {/* WhatsApp-style read receipt — only on my own messages */}
+              {isMine && seenBy !== undefined && (
+                <span
+                  title={seenBy.length > 0 ? `Seen by ${seenBy.join(", ")}` : "Sent"}
+                  className="inline-flex items-center shrink-0"
+                >
+                  {seenBy.length > 0 ? (
+                    /* Double blue tick — seen */
+                    <svg width="18" height="11" viewBox="0 0 18 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Seen">
+                      <path d="M1 5.5L4.5 9L10 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M5 5.5L8.5 9L14 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : (
+                    /* Single grey tick — sent */
+                    <svg width="12" height="11" viewBox="0 0 12 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sent">
+                      <path d="M1 5.5L4.5 9L11 2" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </span>
               )}
             </div>
             {/* Reaction pills */}

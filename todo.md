@@ -473,3 +473,9 @@
 
 - [x] Fix: agents cannot see the profile photo upload button — added h-full to both sidebar containers so footer button is always visible
 - [x] Fix: backfill lastSeenAt for agents from opsChatMessages history via SQL UPDATE
+
+## WhatsApp-style Read Receipts
+
+- [x] Replace plain text ✓/✓✓ with proper SVG double-checkmark icons (single grey = sent, double blue = seen) in OpsChat job thread
+- [x] Same checkmark upgrade in CommandChat channel messages (ThreadMessage is shared)
+- [x] Show "Seen by X" tooltip on hover over the blue double-tick
