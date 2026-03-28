@@ -25,6 +25,7 @@ import {
   opsChatMessages,
   issueFlags,
   opsChatReads,
+  opsChatReactions,
   channelPins,
   opsReminders,
 } from "../drizzle/schema";
@@ -1297,5 +1298,71 @@ export const opsChatRouter = router({
       const result = await transcribeAudio({ audioUrl: url });
       if ("error" in result) throw new Error(result.error);
       return { text: result.text ?? "" };
+    }),
+
+  /**
+   * Toggle an emoji reaction on a message.
+   * If the caller already reacted with this emoji, remove it (toggle off).
+   * Otherwise, insert it.
+   */
+  toggleReaction: opsChatProcedure
+    .input(z.object({
+      messageId: z.number().int().positive(),
+      emoji: z.string().max(8),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { action: "none" };
+      const callerId = ctx.opsCaller.id;
+      const callerName = ctx.opsCaller.name;
+      // Check if reaction already exists
+      const existing = await db
+        .select({ id: opsChatReactions.id })
+        .from(opsChatReactions)
+        .where(
+          and(
+            eq(opsChatReactions.messageId, input.messageId),
+            eq(opsChatReactions.callerId, callerId),
+            eq(opsChatReactions.emoji, input.emoji),
+          )
+        )
+        .limit(1);
+      if (existing.length > 0) {
+        await db.delete(opsChatReactions).where(eq(opsChatReactions.id, existing[0].id));
+        return { action: "removed" };
+      } else {
+        await db.insert(opsChatReactions).values({
+          messageId: input.messageId,
+          callerId,
+          callerName,
+          emoji: input.emoji,
+        });
+        return { action: "added" };
+      }
+    }),
+
+  /**
+   * Get all reactions for a set of message IDs.
+   * Used to hydrate reaction pills on load.
+   */
+  getReactions: opsChatProcedure
+    .input(z.object({
+      messageIds: z.array(z.number().int().positive()).max(200),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { reactions: [] };
+      if (input.messageIds.length === 0) return { reactions: [] };
+      const { inArray } = await import("drizzle-orm");
+      const rows = await db
+        .select({
+          messageId: opsChatReactions.messageId,
+          callerId: opsChatReactions.callerId,
+          callerName: opsChatReactions.callerName,
+          emoji: opsChatReactions.emoji,
+        })
+        .from(opsChatReactions)
+        .where(inArray(opsChatReactions.messageId, input.messageIds));
+      return { reactions: rows };
     }),
 });

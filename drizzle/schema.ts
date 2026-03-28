@@ -1545,6 +1545,29 @@ export const opsChatReads = mysqlTable("ops_chat_reads", {
 }));
 export type OpsChatRead = typeof opsChatReads.$inferSelect;
 
+// ── OpsChat Reactions ─────────────────────────────────────────────────────────
+/**
+ * Stores emoji reactions on ops chat messages.
+ * One row per (messageId, callerId, emoji) — toggle by inserting/deleting.
+ */
+export const opsChatReactions = mysqlTable("ops_chat_reactions", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The message being reacted to */
+  messageId: int("messageId").notNull(),
+  /** Caller identity key: "owner:{openId}" or "agent:{agentId}" */
+  callerId: varchar("callerId", { length: 128 }).notNull(),
+  /** Display name of the reactor */
+  callerName: varchar("callerName", { length: 128 }).notNull(),
+  /** The emoji character: 👍 ❤️ ✅ 🔥 */
+  emoji: varchar("emoji", { length: 8 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxMsg: index("idx_ocreact_msg").on(table.messageId),
+  idxCaller: index("idx_ocreact_caller").on(table.callerId),
+  uniqReaction: uniqueIndex("uniq_ocreact").on(table.messageId, table.callerId, table.emoji),
+}));
+export type OpsChatReaction = typeof opsChatReactions.$inferSelect;
+
 // ── Issue Flags ───────────────────────────────────────────────────────────────
 /**
  * Tracks issue flags raised on jobs (from cleaners or agents).

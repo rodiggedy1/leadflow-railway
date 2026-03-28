@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
@@ -382,17 +383,30 @@ function avatarColor(name: string): string {
   return palette[hash % palette.length];
 }
 
-function ThreadMessage({ msg, callerName, seenBy, onReply }: {
+function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reactions, onReact }: {
   msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null };
   callerName: string;
   seenBy?: string[];
   onReply?: (msg: { id: number; body: string; author: string }) => void;
+  onScrollToMsg?: (id: number) => void;
+  reactions?: { emoji: string; callerName: string; callerId: string }[];
+  onReact?: (messageId: number, emoji: string) => void;
 }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const [showReactPicker, setShowReactPicker] = useState(false);
   const isMine = msg.from === callerName;
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const initials = msg.from.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-  const colorClass = avatarColor(msg.from);
+  const colorClass = senderColorClass(msg.from);
+
+  // Group reactions by emoji
+  const reactionGroups = (reactions ?? []).reduce<Record<string, { count: number; names: string[]; isMine: boolean }>>((acc, r) => {
+    if (!acc[r.emoji]) acc[r.emoji] = { count: 0, names: [], isMine: false };
+    acc[r.emoji].count++;
+    acc[r.emoji].names.push(r.callerName);
+    if (r.callerName === callerName) acc[r.emoji].isMine = true;
+    return acc;
+  }, {});
 
   // Parse mediaUrl — may be a JSON array of URLs or a single URL
   const imageUrls: string[] = (() => {
@@ -488,23 +502,23 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
               <div className="px-4 py-3">
                 {/* Sender name (others only) */}
                 {!isMine && (
-                  <p className="text-xs font-semibold mb-1" style={{ color: avatarColor(msg.from).includes("violet") ? "#7c3aed" : avatarColor(msg.from).includes("sky") ? "#0284c7" : avatarColor(msg.from).includes("emerald") ? "#059669" : avatarColor(msg.from).includes("amber") ? "#d97706" : avatarColor(msg.from).includes("rose") ? "#e11d48" : avatarColor(msg.from).includes("teal") ? "#0d9488" : avatarColor(msg.from).includes("indigo") ? "#4338ca" : "#ea580c" }}>{msg.from}</p>
+                  <p className="text-xs font-semibold mb-1" style={{ color: senderHex(msg.from) }}>{msg.from}</p>
                 )}
-                {/* WhatsApp-style quoted block: left accent bar, sender in accent, snippet, then full reply below */}
+                {/* WhatsApp-style quoted block: left accent bar uses sender's color, click scrolls to original */}
                 {msg.replyToId && msg.replyToBody && (
                   <div
                     className={cn(
-                      "mb-2.5 rounded-lg overflow-hidden flex cursor-default",
+                      "mb-2.5 rounded-lg overflow-hidden flex transition-colors",
+                      onScrollToMsg ? "cursor-pointer hover:brightness-95" : "cursor-default",
                       isMine ? "bg-slate-800" : "bg-slate-100"
                     )}
+                    onClick={() => msg.replyToId && onScrollToMsg?.(msg.replyToId)}
+                    title={onScrollToMsg ? "Click to jump to original message" : undefined}
                   >
-                    {/* Left accent bar */}
-                    <div className={cn("w-1 shrink-0", isMine ? "bg-slate-400" : "bg-slate-400")} />
+                    {/* Left accent bar — color matches the quoted author's sender color */}
+                    <div className="w-1 shrink-0 rounded-l-lg" style={{ backgroundColor: senderHex(msg.replyToAuthor ?? "") }} />
                     <div className="px-2.5 py-2 min-w-0">
-                      <p className={cn(
-                        "text-xs font-semibold mb-0.5 truncate",
-                        isMine ? "text-slate-300" : "text-slate-600"
-                      )}>
+                      <p className="text-xs font-semibold mb-0.5 truncate" style={{ color: senderHex(msg.replyToAuthor ?? "") }}>
                         {msg.replyToAuthor ?? "Unknown"}
                       </p>
                       <p className={cn(
@@ -523,20 +537,46 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
             <div className={cn("flex items-center justify-between gap-2 px-4 pb-3", !msg.body && imageUrls.length > 0 ? "pt-2" : "-mt-1")}>
               <p className={cn("text-xs", isMine ? "text-slate-400" : "text-slate-400")}>{timeStr}</p>
               {isMine && seenBy && seenBy.length > 0 && (
-                <p className="text-[10px] text-slate-400 italic">
-                  Seen by {seenBy.join(", ")}
-                </p>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-slate-400">✓✓</span>
+                  <p className="text-[10px] text-slate-400 italic">Seen by {seenBy.join(", ")}</p>
+                </div>
+              )}
+              {isMine && (!seenBy || seenBy.length === 0) && (
+                <span className="text-[10px] text-slate-300">✓</span>
               )}
             </div>
+            {/* Reaction pills */}
+            {Object.keys(reactionGroups).length > 0 && (
+              <div className={cn("flex flex-wrap gap-1 px-4 pb-2", isMine ? "justify-end" : "justify-start")}>
+                {Object.entries(reactionGroups).map(([emoji, { count, names, isMine: myReact }]) => (
+                  <button
+                    key={emoji}
+                    onClick={() => onReact?.(Number(msg.id), emoji)}
+                    title={names.join(", ")}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border transition hover:scale-110",
+                      myReact
+                        ? "bg-blue-100 border-blue-300 text-blue-700"
+                        : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
+                    )}
+                  >
+                    <span>{emoji}</span>
+                    <span className="font-medium">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          {/* WhatsApp-style hover dropdown: chevron + "Reply" label */}
-          {onReply && (
-            <div
-              className={cn(
-                "opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-start mt-2",
-                isMine ? "mr-1.5" : "ml-1.5"
-              )}
-            >
+          {/* Hover actions: Reply + React */}
+          <div
+            className={cn(
+              "opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 self-start mt-2",
+              isMine ? "mr-1.5 flex-row-reverse" : "ml-1.5"
+            )}
+          >
+            {/* Reply button */}
+            {onReply && (
               <button
                 onClick={() => onReply({ id: Number(msg.id), body: msg.body, author: msg.from })}
                 className={cn(
@@ -549,8 +589,26 @@ function ThreadMessage({ msg, callerName, seenBy, onReply }: {
                 <ChevronDown className="h-3 w-3" />
                 <span>Reply</span>
               </button>
-            </div>
-          )}
+            )}
+            {/* Quick-react: 4 emoji buttons */}
+            {onReact && (
+              <div className="flex items-center gap-0.5">
+                {["\uD83D\uDC4D", "\u2764\uFE0F", "\u2705", "\uD83D\uDD25"].map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => onReact(Number(msg.id), emoji)}
+                    className={cn(
+                      "text-sm rounded-full w-7 h-7 flex items-center justify-center transition hover:scale-125",
+                      isMine ? "hover:bg-slate-700" : "hover:bg-slate-200"
+                    )}
+                    title={`React with ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>
@@ -852,6 +910,44 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     { messageId: lastMyThreadMsgId ?? 0, cleanerJobId: selectedJobId ?? 0 },
     { enabled: isAuthenticated && activeTab === "today" && !!lastMyThreadMsgId && lastMyThreadMsgId > 0 && !!selectedJobId, refetchInterval: 10_000 }
   );
+
+  // ── Reactions ────────────────────────────────────────────────────────────────
+  // Collect all visible message IDs for the reactions query
+  const threadMsgIds = useMemo(() => (jobDetail?.thread ?? []).map(m => Number(m.id)), [jobDetail?.thread]);
+  const channelMsgIds = useMemo(() => channelMsgs.map(m => m.id), [channelMsgs]);
+  const activeMsgIds = activeTab === "today" ? threadMsgIds : channelMsgIds;
+
+  const { data: reactionsData, refetch: refetchReactions } = trpc.opsChat.getReactions.useQuery(
+    { messageIds: activeMsgIds },
+    { enabled: isAuthenticated && activeMsgIds.length > 0, refetchInterval: 10_000 }
+  );
+
+  // Group reactions by messageId for O(1) lookup in render
+  const reactionsByMsgId = useMemo(() => {
+    const map: Record<number, Array<{ callerId: string; callerName: string; emoji: string }>> = {};
+    for (const r of reactionsData?.reactions ?? []) {
+      if (!map[r.messageId]) map[r.messageId] = [];
+      map[r.messageId].push(r);
+    }
+    return map;
+  }, [reactionsData]);
+
+  const toggleReaction = trpc.opsChat.toggleReaction.useMutation({
+    onSuccess: () => refetchReactions(),
+  });
+
+  // ── Scroll-to-original ────────────────────────────────────────────────────────
+  // Map of messageId → DOM element ref for scroll-to-original
+  const msgRefMap = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [highlightedMsgId, setHighlightedMsgId] = useState<number | null>(null);
+
+  function scrollToMsg(id: number) {
+    const el = msgRefMap.current.get(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMsgId(id);
+    setTimeout(() => setHighlightedMsgId(null), 1800);
+  }
 
   // ── Send message mutation ───────────────────────────────────────────────────
   const sendMsg = trpc.opsChat.sendMessage.useMutation({
@@ -1277,14 +1373,26 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                           jobDetail.thread.map((msg, idx) => {
                             const isLast = idx === jobDetail.thread.length - 1;
                             const isMine = msg.from === callerName;
+                            const msgId = Number(msg.id);
                             return (
-                              <ThreadMessage
+                              <div
                                 key={msg.id}
-                                msg={msg}
-                                callerName={callerName}
-                                seenBy={isLast && isMine ? (threadSeenBy?.seenBy ?? []) : undefined}
-                                onReply={(m) => setJobReplyTo(m)}
-                              />
+                                ref={(el) => { if (el) msgRefMap.current.set(msgId, el); else msgRefMap.current.delete(msgId); }}
+                                className={cn(
+                                  "rounded-xl transition-colors duration-700",
+                                  highlightedMsgId === msgId ? "bg-amber-100" : ""
+                                )}
+                              >
+                                <ThreadMessage
+                                  msg={msg}
+                                  callerName={callerName}
+                                  seenBy={isLast && isMine ? (threadSeenBy?.seenBy ?? []) : undefined}
+                                  onReply={(m) => setJobReplyTo(m)}
+                                  onScrollToMsg={scrollToMsg}
+                                  reactions={reactionsByMsgId[msgId]}
+                                  onReact={(id, emoji) => toggleReaction.mutate({ messageId: id, emoji })}
+                                />
+                              </div>
                             );
                           })
                         )}
@@ -1298,7 +1406,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                     {/* Reply preview bar */}
                     {jobReplyTo && (
                       <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
-                        <div className="w-0.5 h-8 bg-slate-400 rounded-full shrink-0" />
+                        <div className="w-0.5 h-8 rounded-full shrink-0" style={{ backgroundColor: senderHex(jobReplyTo.author) }} />
                         <div className="flex-1 min-w-0">
                           <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{jobReplyTo.author}</p>
                           <p className="text-xs text-slate-600 truncate">{jobReplyTo.body}</p>
@@ -1509,13 +1617,25 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   channelMsgs.map((msg, idx) => {
                     const isLast = idx === channelMsgs.length - 1;
                     const isMine = msg.from === callerName;
+                    const msgId = msg.id;
                     return (
-                      <ThreadMessage
+                      <div
                         key={msg.id}
-                        msg={{ ...msg, id: String(msg.id), source: "ops" }}
-                        callerName={callerName}
-                        seenBy={isLast && isMine ? (channelSeenBy?.seenBy ?? []) : undefined}
-                      />
+                        ref={(el) => { if (el) msgRefMap.current.set(msgId, el); else msgRefMap.current.delete(msgId); }}
+                        className={cn(
+                          "rounded-xl transition-colors duration-700",
+                          highlightedMsgId === msgId ? "bg-amber-100" : ""
+                        )}
+                      >
+                        <ThreadMessage
+                          msg={{ ...msg, id: String(msg.id), source: "ops" }}
+                          callerName={callerName}
+                          seenBy={isLast && isMine ? (channelSeenBy?.seenBy ?? []) : undefined}
+                          onScrollToMsg={scrollToMsg}
+                          reactions={reactionsByMsgId[msgId]}
+                          onReact={(id, emoji) => toggleReaction.mutate({ messageId: id, emoji })}
+                        />
+                      </div>
                     );
                   })
                 )}

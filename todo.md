@@ -387,3 +387,11 @@
 - [ ] Replace hover reply icon button with hover dropdown chevron showing "Reply" label (WhatsApp style)
 - [ ] Quoted block inside reply bubble: left-border accent, sender name in accent color, truncated snippet, full reply text below
 - [ ] Apply redesign to both CommandChat and ThreadMessage (OpsChat job thread)
+
+## Chat Enhancements Batch 2
+
+- [ ] Quoted block accent bar: deterministic hash-based color per sender (teal/violet/amber/rose/sky/emerald/indigo/orange)
+- [ ] Click quoted block to scroll to original message with brief highlight flash
+- [ ] Emoji reactions: hover bubble shows 👍 ❤️ ✅ 🔥 picker, reactions stored in DB, pill counts shown below bubble
+- [ ] Read receipts: mark messages as read on view, show double-tick (✓✓) with reader names on sent messages
+- [ ] Apply all above to both Command Center and Job thread
