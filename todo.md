@@ -506,3 +506,10 @@
 - [x] Allow agents to edit phone number in both AdminDashboard and AgentDashboard drawers (new updateLeadPhone procedure)
 - [x] Add SMS drawer link button to new lead cards in CommandChat (next to call + call-assist icons), fix icon row spacing
 - [ ] Background push notifications + sound for DMs and chats when tab is not focused (Service Worker + Web Push API)
+- [x] Replace "Command Center Rules" static text in right panel with live "Hot Leads" tray
+- [x] Hot Leads tray: derive unclaimed new_lead messages from channelMsgs prop (no new query needed)
+- [x] Pulsing amber ring animation on unclaimed lead cards in the tray
+- [x] Live time-to-claim counter on each tray card
+- [x] Claim button on tray card — calls existing claimLead mutation, stops pulse on success
+- [x] Claimed cards show agent name + claimed time, no longer pulse
+- [x] Tray shows empty state when no unclaimed leads

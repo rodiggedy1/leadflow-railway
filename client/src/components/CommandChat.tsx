@@ -108,6 +108,205 @@ function ElapsedTimer({ arrivedAt }: { arrivedAt: number }) {
   return <span className="text-red-600 font-semibold">{h}h {m}m ago</span>;
 }
 
+// ── HotLeadsTray ─────────────────────────────────────────────────────────────
+
+type LeadMsg = {
+  id: number;
+  from: string;
+  role: string;
+  body: string;
+  mediaUrl?: string | null;
+  quickAction?: string | null;
+  metadata?: string | null;
+  replyToId?: number | null;
+  replyToBody?: string | null;
+  replyToAuthor?: string | null;
+  createdAt: Date;
+};
+
+type ClaimMutation = {
+  mutate: (args: { messageId: number; sessionId?: number }) => void;
+  isPending: boolean;
+};
+
+function HotLeadClaimTimer({ arrivedAt }: { arrivedAt: number }) {
+  const [secs, setSecs] = useState(() => Math.floor((Date.now() - arrivedAt) / 1000));
+  useEffect(() => {
+    const id = setInterval(() => setSecs(Math.floor((Date.now() - arrivedAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [arrivedAt]);
+  const mins = Math.floor(secs / 60);
+  const urgency = mins < 2 ? "text-emerald-600" : mins < 5 ? "text-amber-600" : "text-red-600";
+  const label = mins < 1
+    ? `${secs}s`
+    : mins < 60
+    ? `${mins}m ${secs % 60}s`
+    : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  return <span className={cn("font-mono font-bold tabular-nums", urgency)}>{label}</span>;
+}
+
+function HotLeadsTray({
+  channelMsgs,
+  claimLeadMutation,
+  onCollapse,
+}: {
+  channelMsgs: LeadMsg[];
+  claimLeadMutation: ClaimMutation;
+  onCollapse: () => void;
+}) {
+  // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
+  const cutoff = Date.now() - 8 * 60 * 60 * 1000;
+  const leads = channelMsgs
+    .filter((m) => m.quickAction === "new_lead" && m.createdAt.getTime() > cutoff)
+    .slice()
+    .reverse(); // newest first
+
+  const unclaimedCount = leads.filter((m) => {
+    try { const meta = JSON.parse(m.metadata ?? "{}"); return !meta.claimedBy; } catch { return true; }
+  }).length;
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Hot Leads</p>
+          {unclaimedCount > 0 && (
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold animate-pulse">
+              {unclaimedCount}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onCollapse}
+          title="Collapse panel"
+          className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Lead cards */}
+      {leads.length === 0 ? (
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-center">
+          <Zap className="h-4 w-4 text-slate-300 mx-auto mb-1" />
+          <p className="text-xs text-slate-400">No new leads in the last 8 hours</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {leads.map((msg) => {
+            let meta: Record<string, unknown> = {};
+            try { meta = JSON.parse(msg.metadata ?? "{}"); } catch {}
+            const leadName = (meta.leadName as string) ?? msg.from;
+            const leadPhone = (meta.leadPhone as string) ?? "";
+            const serviceType = (meta.serviceType as string) ?? "";
+            const price = (meta.price as number | string) ?? "";
+            const sessionId = (meta.sessionId as number | null) ?? null;
+            const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();
+            const claimedBy = (meta.claimedBy as string | null) ?? null;
+            const claimedAt = (meta.claimedAt as number | null) ?? null;
+            const isClaimed = Boolean(claimedBy);
+
+            return (
+              <div
+                key={msg.id}
+                className={cn(
+                  "relative rounded-xl border overflow-hidden transition-shadow",
+                  isClaimed
+                    ? "border-emerald-200 bg-white shadow-sm"
+                    : "border-amber-300 bg-white shadow-md",
+                )}
+              >
+                {/* Pulsing amber glow ring for unclaimed */}
+                {!isClaimed && (
+                  <span className="absolute inset-0 rounded-xl ring-2 ring-amber-400 ring-offset-0 animate-pulse pointer-events-none" />
+                )}
+
+                {/* Status band */}
+                <div className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5",
+                  isClaimed ? "bg-emerald-600" : "bg-amber-500"
+                )}>
+                  {isClaimed ? (
+                    <>
+                      <UserCheck className="h-3 w-3 text-white shrink-0" />
+                      <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
+                        Claimed · {claimedBy}
+                      </span>
+                      {claimedAt && (
+                        <span className="ml-auto text-[10px] text-emerald-100 shrink-0">
+                          {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-3 w-3 text-white shrink-0" />
+                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">Unclaimed</span>
+                      <span className="ml-auto text-[10px] text-amber-100 shrink-0">
+                        <HotLeadClaimTimer arrivedAt={arrivedAt} />
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Lead info */}
+                <div className="px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-bold text-slate-900 leading-tight truncate">{leadName}</p>
+                    {price && <p className="text-sm font-bold text-emerald-700 shrink-0">${price}</p>}
+                  </div>
+                  {leadPhone && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
+                  {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-2 mt-2.5">
+                    {leadPhone && (
+                      <a
+                        href={`tel:${leadPhone}`}
+                        title={`Call ${leadName}`}
+                        className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    {sessionId && (
+                      <a
+                        href={`/admin/leads?session=${sessionId}&tab=sms`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open SMS conversation"
+                        className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors shrink-0"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    <div className="flex-1" />
+                    {isClaimed ? (
+                      <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
+                    ) : (
+                      <button
+                        onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+                        disabled={claimLeadMutation.isPending}
+                        className="h-7 px-3 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {claimLeadMutation.isPending
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : <>⚡ Claim</>}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday }: CommandChatProps) {
@@ -1687,25 +1886,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       >
         <div className="px-5 py-4 space-y-5">
 
-          {/* Command Center Rules */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Command Center Rules</p>
-              <button
-                type="button"
-                onClick={() => setRightCollapsed(true)}
-                title="Collapse panel"
-                className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="space-y-3 text-sm text-slate-600 leading-relaxed">
-              <p>Any issue flagged inside a job thread automatically surfaces here as an alert card.</p>
-              <p>Regular team conversation still happens here, but urgent ops signals stay visible and pinned.</p>
-              <p>This page acts like dispatch control: teamwide reminders, bottlenecks, route awareness, and job health at a glance.</p>
-            </div>
-          </div>
+          {/* ── Hot Leads Tray ── */}
+          <HotLeadsTray
+            channelMsgs={channelMsgs}
+            claimLeadMutation={claimLeadMutation}
+            onCollapse={() => setRightCollapsed(true)}
+          />
 
           <div className="border-t border-slate-200" />
 
