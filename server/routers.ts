@@ -3311,6 +3311,14 @@ async function processWidgetLeadInBackground(input: {
   // ── Step 6: Post new widget lead card to MIB Command Chat ─────────────────
   try {
     const { opsChatMessages } = await import("../drizzle/schema");
+    // Look up the session we just created to get its ID
+    const [newSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, normalizedPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    const widgetSessionId = newSession?.id ?? null;
     const sourceDisplay = input.utmSource ? `\n📍 Source: ${input.utmSource}` : "";
     const leadBody = `📱 **Widget Lead** · ${toTitleCase(input.name)}${sourceDisplay}`;
     const metadata = JSON.stringify({
@@ -3318,6 +3326,7 @@ async function processWidgetLeadInBackground(input: {
       leadPhone: normalizedPhone,
       serviceType: "Widget",
       utmSource: input.utmSource ?? null,
+      sessionId: widgetSessionId,
       arrivedAt: Date.now(),
     });
     await db.insert(opsChatMessages).values({
@@ -3330,6 +3339,7 @@ async function processWidgetLeadInBackground(input: {
       quickAction: "new_lead",
       metadata,
     });
+    console.log(`[submitWidgetLead] Posted new_lead card with sessionId=${widgetSessionId}`);
   } catch (err) {
     console.error("[submitWidgetLead] Failed to post lead card to command channel:", err);
   }
