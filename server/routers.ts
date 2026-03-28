@@ -3289,6 +3289,32 @@ async function processWidgetLeadInBackground(input: {
   } catch (dbErr) {
     console.error("[submitWidgetLead] Failed to create conversation session:", dbErr);
   }
+
+  // ── Step 6: Post new widget lead card to MIB Command Chat ─────────────────
+  try {
+    const { opsChatMessages } = await import("../drizzle/schema");
+    const sourceDisplay = input.utmSource ? `\n📍 Source: ${input.utmSource}` : "";
+    const leadBody = `📱 **Widget Lead** · ${toTitleCase(input.name)}${sourceDisplay}`;
+    const metadata = JSON.stringify({
+      leadName: toTitleCase(input.name),
+      leadPhone: normalizedPhone,
+      serviceType: "Widget",
+      utmSource: input.utmSource ?? null,
+      arrivedAt: Date.now(),
+    });
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "🎯 New Lead",
+      authorRole: "system",
+      body: leadBody,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+  } catch (err) {
+    console.error("[submitWidgetLead] Failed to post lead card to command channel:", err);
+  }
 }
 
 /**
