@@ -574,6 +574,26 @@ export const opsChatRouter = router({
         quickAction: "resolved",
       });
 
+      // Auto-post a ✅ Resolved alert into the MIB Command Chat (command channel)
+      // so the whole team sees the issue lifecycle close out in real time
+      const [jobRow] = await db
+        .select({ customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, flag.cleanerJobId))
+        .limit(1);
+      const jobLabel = jobRow?.customerName
+        ? `${jobRow.customerName.split(" ")[0]} Home`
+        : jobRow?.jobAddress ?? `Job #${flag.cleanerJobId}`;
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "✅ Issue Resolved",
+        authorRole: "office",
+        body: `✅ Issue resolved at **${jobLabel}** (Job #${flag.cleanerJobId}) by ${input.resolvedByName}: ${input.resolutionNote}`,
+        mediaUrl: null,
+        quickAction: "resolved",
+      });
+
       return { success: true };
     }),
 
