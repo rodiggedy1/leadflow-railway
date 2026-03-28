@@ -907,6 +907,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // because messages are stored with the DB name (e.g. "Rohan G"), not the OAuth name (e.g. "Rohan Gilkes").
   // Fall back to agentMe.name, then user.name, then "Office".
   const callerName = myProfile?.name ?? agentMe?.name ?? user?.name ?? "Office";
+  // All possible names this user may have — covers the race where myProfile hasn't loaded yet
+  // but messages are already rendered (OAuth name vs DB name mismatch).
+  const myNames = useMemo(() => {
+    const s = new Set<string>();
+    if (myProfile?.name) s.add(myProfile.name);
+    if (agentMe?.name) s.add(agentMe.name);
+    if (user?.name) s.add(user.name);
+    return s;
+  }, [myProfile?.name, agentMe?.name, user?.name]);
   // Agent status list — always polled every 60s so data is ready when panel opens
   const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -930,7 +939,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
    // ── Notification sound + OS notification ─────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
-  const { notify: osNotify, requestPermission: requestOsPermission } = useOsNotification();
+  const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
+  const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
   const prevJobMsgCountRef = useRef(0);
 
   // Request OS notification permission on first user interaction
@@ -1253,7 +1263,32 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+      {/* ── Notification permission banner ── */}
+      {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <span className="text-base">🔔</span>
+            <span><strong>Enable notifications</strong> to get background alerts when new messages arrive.</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => requestOsPermission()}
+              className="text-xs font-semibold px-3 py-1 rounded-full bg-amber-600 text-white hover:bg-amber-700 transition"
+            >
+              Enable
+            </button>
+            <button
+              onClick={() => setNotifBannerDismissed(true)}
+              className="text-xs text-amber-600 hover:text-amber-800 transition"
+              aria-label="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
@@ -1690,7 +1725,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         ) : (
                           jobDetail.thread.map((msg, idx) => {
                             const isLast = idx === jobDetail.thread.length - 1;
-                            const isMine = msg.from === callerName;
+                            const isMine = myNames.has(msg.from);
                             const msgId = Number(msg.id);
                             return (
                               <div
@@ -1941,7 +1976,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 ) : (
                   channelMsgs.map((msg, idx) => {
                     const isLast = idx === channelMsgs.length - 1;
-                    const isMine = msg.from === callerName;
+                    const isMine = myNames.has(msg.from);
                     const msgId = msg.id;
                     return (
                       <div
@@ -2377,6 +2412,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         currentPhotoUrl={profilePhotoUrl}
         onPhotoUpdated={(url) => setProfilePhotoUrl(url || null)}
       />
+      </div>{/* end flex-1 wrapper */}
     </div>
   );
 }
