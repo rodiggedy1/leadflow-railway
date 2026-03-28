@@ -392,9 +392,11 @@ function avatarColor(name: string): string {
   return palette[hash % palette.length];
 }
 
-function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reactions, onReact, senderPhotoMap, senderStatusMap }: {
+function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onReply, onScrollToMsg, reactions, onReact, senderPhotoMap, senderStatusMap }: {
   msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null };
   callerName: string;
+  /** Pass true when the message was sent by the current user — overrides internal msg.from === callerName check */
+  isMine?: boolean;
   seenBy?: string[];
   onReply?: (msg: { id: number; body: string; author: string }) => void;
   onScrollToMsg?: (id: number) => void;
@@ -406,7 +408,8 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
 }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showReactPicker, setShowReactPicker] = useState(false);
-  const isMine = msg.from === callerName;
+  // Prefer the explicit isMine prop (computed with myNames Set at call site) over the internal check
+  const isMine = isMineOverride ?? (msg.from === callerName);
   const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const initials = msg.from.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const colorClass = senderColorClass(msg.from);
@@ -773,7 +776,19 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const emojiRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
-  // Close emoji picker on outside click
+  // Auto-resize composer textarea and scroll to cursor as user types
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    // Reset height first so shrinking works correctly
+    el.style.height = "auto";
+    // Grow to fit content, capped at 200px (≈8 lines)
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+    // Scroll the textarea itself so the cursor is always visible
+    el.scrollTop = el.scrollHeight;
+  }, [composer]);
+
+  // Close emoji picker on outside clickk
   useEffect(() => {
     if (!showEmoji) return;
     function handleClick(e: MouseEvent) {
@@ -1739,6 +1754,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                                 <ThreadMessage
                                   msg={msg}
                                   callerName={callerName}
+                                  isMine={isMine}
                                   seenBy={isMine ? (activeSeenByMap[msgId] ?? []) : undefined}
                                   onReply={(m) => setJobReplyTo(m)}
                                   onScrollToMsg={scrollToMsg}
@@ -1855,8 +1871,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         value={composer}
                         onChange={(e) => setComposer(e.target.value)}
                         placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Type a message or drop photos…"}
-                        rows={3}
-                        className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
+                        className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400 min-h-[72px] overflow-y-auto"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
                           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { handleSend(); return; }
@@ -1990,6 +2005,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <ThreadMessage
                           msg={{ ...msg, id: String(msg.id), source: "ops" }}
                           callerName={callerName}
+                          isMine={isMine}
                           seenBy={isMine ? (activeSeenByMap[msgId] ?? []) : undefined}
                           onScrollToMsg={scrollToMsg}
                           reactions={reactionsByMsgId[msgId]}
@@ -2050,8 +2066,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   value={composer}
                   onChange={(e) => setComposer(e.target.value)}
                   placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : `Message ${CHANNELS.find(c => c.key === activeChannel)?.label ?? activeChannel}…`}
-                  rows={3}
-                  className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
+                  className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400 min-h-[72px] overflow-y-auto"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
