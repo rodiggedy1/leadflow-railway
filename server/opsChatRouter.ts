@@ -757,6 +757,46 @@ export const opsChatRouter = router({
     }),
 
   /**
+   * getSeenByBulk — batch version of getSeenBy.
+   * Given an array of messageIds, returns a map of messageId -> seenBy[] (names).
+   * A caller has "seen" message N if their lastReadMessageId >= N.
+   * Used to show per-message read receipts without N individual queries.
+   */
+  getSeenByBulk: opsChatProcedure
+    .input(z.object({
+      messageIds: z.array(z.number().int().positive()).max(200),
+      channel: z.string().optional(),
+      cleanerJobId: z.number().int().positive().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db || input.messageIds.length === 0) return { seenByMap: {} as Record<number, string[]> };
+      // Fetch all read rows for this channel/thread in one query
+      const rows = await db
+        .select({
+          callerName: opsChatReads.callerName,
+          callerId: opsChatReads.callerId,
+          lastReadMessageId: opsChatReads.lastReadMessageId,
+        })
+        .from(opsChatReads)
+        .where(
+          and(
+            input.channel ? eq(opsChatReads.channel, input.channel) : isNull(opsChatReads.channel),
+            input.cleanerJobId ? eq(opsChatReads.cleanerJobId, input.cleanerJobId) : isNull(opsChatReads.cleanerJobId),
+          )
+        );
+      // Build map: messageId -> names of readers whose lastRead >= messageId (excluding self)
+      const myCallerId = ctx.opsCaller.id;
+      const seenByMap: Record<number, string[]> = {};
+      for (const msgId of input.messageIds) {
+        seenByMap[msgId] = rows
+          .filter((r) => r.callerId !== myCallerId && r.lastReadMessageId >= msgId)
+          .map((r) => r.callerName);
+      }
+      return { seenByMap };
+    }),
+
+  /**
    * uploadOpsPhoto — upload an image from the admin/agent OpsChat composer.
    * Accepts base64-encoded image, stores in S3, returns the public URL.
    * The caller then includes the URL in a sendMessage call as mediaUrl.

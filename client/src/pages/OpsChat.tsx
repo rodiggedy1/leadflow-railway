@@ -392,7 +392,7 @@ function avatarColor(name: string): string {
   return palette[hash % palette.length];
 }
 
-function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reactions, onReact, senderPhotoMap }: {
+function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reactions, onReact, senderPhotoMap, senderStatusMap }: {
   msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null };
   callerName: string;
   seenBy?: string[];
@@ -401,6 +401,8 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
   reactions?: { emoji: string; callerName: string; callerId: string }[];
   onReact?: (messageId: number, emoji: string) => void;
   senderPhotoMap?: Record<string, string | null>;
+  /** Map of senderName -> "online" | "away" | "offline" for status dot overlay */
+  senderStatusMap?: Record<string, "online" | "away" | "offline">;
 }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showReactPicker, setShowReactPicker] = useState(false);
@@ -470,16 +472,32 @@ function ThreadMessage({ msg, callerName, seenBy, onReply, onScrollToMsg, reacti
         <Lightbox urls={imageUrls} startIndex={lightboxIdx} onClose={() => setLightboxIdx(null)} />
       )}
       <div className={cn("flex items-end gap-2 group", isMine ? "justify-end" : "justify-start")}>
-        {/* Avatar — others' messages on left */}
+        {/* Avatar — others' messages on left, with online status dot overlay */}
         {!isMine && (
-          <div className="w-7 h-7 rounded-full shrink-0 mb-0.5 overflow-hidden">
-            {senderPhoto ? (
-              <img src={senderPhoto} alt={msg.from} className="w-full h-full object-cover" />
-            ) : (
-              <div className={cn("w-full h-full flex items-center justify-center text-[10px] font-bold", colorClass)}>
-                {initials}
-              </div>
-            )}
+          <div className="relative w-7 h-7 shrink-0 mb-0.5">
+            <div className="w-full h-full rounded-full overflow-hidden">
+              {senderPhoto ? (
+                <img src={senderPhoto} alt={msg.from} className="w-full h-full object-cover" />
+              ) : (
+                <div className={cn("w-full h-full flex items-center justify-center text-[10px] font-bold", colorClass)}>
+                  {initials}
+                </div>
+              )}
+            </div>
+            {/* Status dot — only shown when senderStatusMap is provided */}
+            {senderStatusMap && (() => {
+              const st = senderStatusMap[msg.from];
+              if (!st || st === "offline") return null;
+              return (
+                <span
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white",
+                    st === "online" ? "bg-green-500" : "bg-amber-400"
+                  )}
+                  title={st === "online" ? "Online" : "Away"}
+                />
+              );
+            })()}
           </div>
         )}
         {/* Bubble + WhatsApp-style hover dropdown */}
@@ -975,28 +993,51 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     onSuccess: () => refetchUnread(),
   });
 
-  // seenBy for the last my-message in current channel
-  const lastMyChannelMsgId = useMemo(() => {
-    const mine = [...channelMsgs].reverse().find((m) => m.from === callerName);
-    return mine ? mine.id : null;
-  }, [channelMsgs, callerName]);
-
-  const { data: channelSeenBy } = trpc.opsChat.getSeenBy.useQuery(
-    { messageId: lastMyChannelMsgId ?? 0, channel: activeChannel },
-    { enabled: isAuthenticated && activeTab === "channels" && !!lastMyChannelMsgId && lastMyChannelMsgId > 0, refetchInterval: 10_000 }
-  );
-
-  // seenBy for the last my-message in current job thread
-  const lastMyThreadMsgId = useMemo(() => {
-    if (!jobDetail?.thread) return null;
-    const mine = [...jobDetail.thread].reverse().find((m) => m.from === callerName);
-    return mine ? Number(mine.id) : null;
+  // ── Per-message read receipts (bulk) ────────────────────────────────────────
+  // Collect IDs of MY sent messages only — we only show ticks on own messages
+  const myThreadMsgIds = useMemo(() => {
+    return (jobDetail?.thread ?? [])
+      .filter((m) => m.from === callerName)
+      .map((m) => Number(m.id))
+      .filter((id) => id > 0);
   }, [jobDetail?.thread, callerName]);
 
-  const { data: threadSeenBy } = trpc.opsChat.getSeenBy.useQuery(
-    { messageId: lastMyThreadMsgId ?? 0, cleanerJobId: selectedJobId ?? 0 },
-    { enabled: isAuthenticated && activeTab === "today" && !!lastMyThreadMsgId && lastMyThreadMsgId > 0 && !!selectedJobId, refetchInterval: 10_000 }
+  const myChannelMsgIds = useMemo(() => {
+    return channelMsgs
+      .filter((m) => m.from === callerName)
+      .map((m) => m.id)
+      .filter((id) => id > 0);
+  }, [channelMsgs, callerName]);
+
+  const { data: threadSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
+    { messageIds: myThreadMsgIds, cleanerJobId: selectedJobId ?? 0 },
+    { enabled: isAuthenticated && activeTab === "today" && myThreadMsgIds.length > 0 && !!selectedJobId, refetchInterval: 10_000 }
   );
+
+  const { data: channelSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
+    { messageIds: myChannelMsgIds, channel: activeChannel },
+    { enabled: isAuthenticated && activeTab === "channels" && myChannelMsgIds.length > 0, refetchInterval: 10_000 }
+  );
+
+  // seenByMap: messageId -> seenBy[] for current view
+  const activeSeenByMap = activeTab === "today"
+    ? (threadSeenByBulk?.seenByMap ?? {})
+    : (channelSeenByBulk?.seenByMap ?? {});
+
+  // ── Sender status map ─────────────────────────────────────────────────────────
+  // Derived from agentStatusList: name -> "online" | "away" | "offline"
+  const senderStatusMap = useMemo(() => {
+    const map: Record<string, "online" | "away" | "offline"> = {};
+    const now = Date.now();
+    for (const ag of agentStatusData?.agents ?? []) {
+      const diffMin = ag.lastSeenAt ? Math.floor((now - ag.lastSeenAt) / 60_000) : null;
+      if (diffMin === null) { map[ag.name] = "offline"; }
+      else if (diffMin <= 2) { map[ag.name] = "online"; }
+      else if (diffMin <= 15) { map[ag.name] = "away"; }
+      else { map[ag.name] = "offline"; }
+    }
+    return map;
+  }, [agentStatusData?.agents]);
 
   // ── Reactions ────────────────────────────────────────────────────────────────
   // Collect all visible message IDs for the reactions query
@@ -1250,12 +1291,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                     const now = Date.now();
                     const seenMs = ag.lastSeenAt;
                     const diffMin = seenMs ? Math.floor((now - seenMs) / 60_000) : null;
-                    const isOnline = diffMin !== null && diffMin <= 5;
+                    const agStatus: "online" | "away" | "offline" =
+                      diffMin === null ? "offline"
+                      : diffMin <= 2 ? "online"
+                      : diffMin <= 15 ? "away"
+                      : "offline";
                     const statusLabel = seenMs === null || diffMin === null ? "Never logged in" :
                       diffMin === 0 ? "Active now" :
                       diffMin < 60 ? `${diffMin}m ago` :
                       diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago` :
                       new Date(seenMs).toLocaleDateString();
+                    const dotColor = agStatus === "online" ? "bg-green-500" : agStatus === "away" ? "bg-amber-400" : "bg-slate-300";
                     return (
                       <div key={ag.id} className="flex items-center gap-3 px-4 py-2.5">
                         <div className="relative shrink-0">
@@ -1269,17 +1315,23 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                               {ag.name[0].toUpperCase()}
                             </div>
                           )}
-                          <span className={cn(
-                            "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
-                            isOnline ? "bg-green-500" : "bg-slate-300"
-                          )} />
+                          <span
+                            className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white", dotColor)}
+                            title={agStatus === "online" ? "Online" : agStatus === "away" ? "Away (active <15m)" : "Offline"}
+                          />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate">{ag.name}</p>
-                          <p className="text-xs text-slate-400 truncate">{statusLabel}</p>
+                          <p className={cn("text-xs truncate",
+                            agStatus === "online" ? "text-green-600 font-medium" :
+                            agStatus === "away" ? "text-amber-500" :
+                            "text-slate-400"
+                          )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
                         </div>
-                        {isOnline ? (
+                        {agStatus === "online" ? (
                           <Wifi className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                        ) : agStatus === "away" ? (
+                          <Wifi className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                         ) : (
                           <WifiOff className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                         )}
@@ -1610,12 +1662,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                                 <ThreadMessage
                                   msg={msg}
                                   callerName={callerName}
-                                  seenBy={isLast && isMine ? (threadSeenBy?.seenBy ?? []) : undefined}
+                                  seenBy={isMine ? (activeSeenByMap[msgId] ?? []) : undefined}
                                   onReply={(m) => setJobReplyTo(m)}
                                   onScrollToMsg={scrollToMsg}
                                   reactions={reactionsByMsgId[msgId]}
                                   onReact={(id, emoji) => toggleReaction.mutate({ messageId: id, emoji })}
                                   senderPhotoMap={senderPhotoMap}
+                                  senderStatusMap={senderStatusMap}
                                 />
                               </div>
                             );
@@ -1860,10 +1913,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <ThreadMessage
                           msg={{ ...msg, id: String(msg.id), source: "ops" }}
                           callerName={callerName}
-                          seenBy={isLast && isMine ? (channelSeenBy?.seenBy ?? []) : undefined}
+                          seenBy={isMine ? (activeSeenByMap[msgId] ?? []) : undefined}
                           onScrollToMsg={scrollToMsg}
                           reactions={reactionsByMsgId[msgId]}
                           onReact={(id, emoji) => toggleReaction.mutate({ messageId: id, emoji })}
+                          senderStatusMap={senderStatusMap}
                         />
                       </div>
                     );

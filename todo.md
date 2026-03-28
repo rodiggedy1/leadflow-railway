@@ -479,3 +479,12 @@
 - [x] Replace plain text ✓/✓✓ with proper SVG double-checkmark icons (single grey = sent, double blue = seen) in OpsChat job thread
 - [x] Same checkmark upgrade in CommandChat channel messages (ThreadMessage is shared)
 - [x] Show "Seen by X" tooltip on hover over the blue double-tick
+
+## Online Status Dots + Per-Message Read Receipts
+
+- [x] Add getSeenByBulk server procedure: given array of messageIds + context, return map of messageId -> seenBy[]
+- [x] Build senderStatusMap (name -> "online"|"away"|"offline") from agentStatusList in OpsChat page
+- [x] Add status dot overlay to ThreadMessage avatar (green=online <=2min, amber=away <=15min, hidden=offline)
+- [x] Upgrade agent status modal to 3-state: green/amber/grey with coloured status text and wifi icon
+- [x] Replace single-message seenBy query with bulk getSeenByBulk — show tick on every sent message
+- [x] Pass senderStatusMap into ThreadMessage for both job thread and channel views
