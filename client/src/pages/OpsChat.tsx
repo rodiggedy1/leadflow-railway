@@ -1357,7 +1357,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         ) : activeTab === "channels" && activeChannel === "command" ? (
           /* MIB Command Chat — special 3-column ops view */
           <CommandChat
-            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, createdAt: new Date(m.ts) }))}
+            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
             callerName={callerName}
             onSendMessage={(body, mediaUrl) => {

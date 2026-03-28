@@ -1217,7 +1217,6 @@ Rules:
     const bodyLines = [
       `${outcomeEmoji} **AI Call Ended** — ${callerDisplay} · ${durationDisplay} · ${outcomeLabel}`,
       summary ? `📋 ${summary}` : null,
-      recordingUrl ? `🎙️ [Recording](${recordingUrl})` : null,
     ].filter(Boolean).join("\n");
     const dbForPost = await getDb();
     if (dbForPost) {
@@ -1227,7 +1226,7 @@ Rules:
         authorName: "📞 AI Call Summary",
         authorRole: "office",
         body: bodyLines,
-        mediaUrl: null,
+        mediaUrl: recordingUrl ?? null,  // stored in mediaUrl so the UI can render an inline audio player
         quickAction: "call_summary",
       });
     }

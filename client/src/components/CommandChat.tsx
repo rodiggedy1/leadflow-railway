@@ -34,6 +34,7 @@ interface CommandChatProps {
     role: string;
     body: string;
     mediaUrl?: string | null;
+    quickAction?: string | null;
     createdAt: Date;
   }>;
   channelLoading: boolean;
@@ -434,8 +435,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
                         </p>
                       )}
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-                      {mediaUrls.length > 0 && (
+                      {/* For call_summary messages, strip the raw recording markdown link from body and show clean text + audio player */}
+                      {msg.quickAction === "call_summary" ? (() => {
+                        // Extract recording URL from body (markdown link pattern) or mediaUrl
+                        const recordingMatch = msg.body.match(/\[Recording\]\((https?:\/\/[^)]+)\)/);
+                        const recordingUrl = msg.mediaUrl || (recordingMatch ? recordingMatch[1] : null);
+                        const cleanBody = msg.body.replace(/\n?🎙️\s*\[Recording\]\([^)]+\)/, "").trim();
+                        return (
+                          <>
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{cleanBody}</p>
+                            {recordingUrl && (
+                              <div className="mt-3">
+                                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">🎙️ Recording</p>
+                                <audio
+                                  controls
+                                  src={recordingUrl}
+                                  className="w-full h-9 rounded-lg"
+                                  style={{ colorScheme: "dark" }}
+                                />
+                              </div>
+                            )}
+                          </>
+                        );
+                      })() : (
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                      )}
+                      {mediaUrls.length > 0 && msg.quickAction !== "call_summary" && (
                         <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
                           {mediaUrls.map((url, idx) => (
                             <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
