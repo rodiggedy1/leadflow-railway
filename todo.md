@@ -344,3 +344,4 @@
 - [x] Fix star rating missing on review messages in Command Chat (backfill Jill Caiazzo + verify code path)
 - [x] Styled cards for review_confirmed (gold) and call_summary (blue) messages in Command Chat
 - [x] Refine review + call summary cards: constrain width, more sophisticated palette
+- [x] Post new leads to Command Chat as styled cards with Claim button, elapsed timer, and claimed-by attribution

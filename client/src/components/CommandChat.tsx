@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
-  X, Camera, Mic, Smile, ImageIcon,
+  X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +35,7 @@ interface CommandChatProps {
     body: string;
     mediaUrl?: string | null;
     quickAction?: string | null;
+    metadata?: string | null;
     createdAt: Date;
   }>;
   channelLoading: boolean;
@@ -79,6 +80,20 @@ function fmtMsgTime(d: Date): string {
   return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
+// ── ElapsedTimer: live "X min ago" display ───────────────────────────────────
+
+function ElapsedTimer({ arrivedAt }: { arrivedAt: number }) {
+  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - arrivedAt) / 60000));
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - arrivedAt) / 60000)), 30_000);
+    return () => clearInterval(id);
+  }, [arrivedAt]);
+  if (elapsed < 1) return <span className="text-emerald-600 font-semibold">just now</span>;
+  if (elapsed < 60) return <span className="text-amber-600 font-semibold">{elapsed}m ago</span>;
+  const h = Math.floor(elapsed / 60), m = elapsed % 60;
+  return <span className="text-red-600 font-semibold">{h}h {m}m ago</span>;
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob }: CommandChatProps) {
@@ -91,6 +106,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 20_000,
+  });
+
+  const claimLeadMutation = trpc.opsChat.claimLead.useMutation({
+    onSuccess: (res) => {
+      if (!res.success && 'alreadyClaimedBy' in res) {
+        toast.info(`Already claimed by ${res.alreadyClaimedBy}`);
+      } else {
+        toast.success("Lead claimed!");
+      }
+    },
+    onError: (err) => toast.error("Claim failed", { description: err.message }),
   });
 
   const broadcastMutation = trpc.opsChat.broadcastSmsToCleaners.useMutation({
@@ -489,6 +515,83 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               />
                             </div>
                           )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── New Lead card (emerald/green) ─────────────────────────────────
+                if (msg.quickAction === "new_lead") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const leadName = (meta.leadName as string) ?? msg.from;
+                  const leadPhone = (meta.leadPhone as string) ?? "";
+                  const serviceType = (meta.serviceType as string) ?? "";
+                  const size = (meta.size as string) ?? "";
+                  const price = (meta.price as number | string) ?? "";
+                  const extras = (meta.extras as string[]) ?? [];
+                  const utmSource = (meta.utmSource as string | null) ?? null;
+                  const sessionId = (meta.sessionId as number | null) ?? null;
+                  const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();
+                  const claimedBy = (meta.claimedBy as string | null) ?? null;
+                  const claimedAt = (meta.claimedAt as number | null) ?? null;
+
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
+                        {/* Header band */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-700">
+                          <Zap className="h-3 w-3 text-emerald-200" />
+                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">New Lead</span>
+                          <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Lead info */}
+                        <div className="px-3 py-2.5 bg-white">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-base font-bold text-slate-900 leading-tight">{leadName}</p>
+                              {leadPhone && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-lg font-bold text-emerald-700">${price}</p>
+                              <p className="text-[10px] text-slate-400">{serviceType}</p>
+                            </div>
+                          </div>
+                          {size && (
+                            <p className="text-xs text-slate-500 mt-1.5">🛏️ {size} &nbsp;·&nbsp; {serviceType}</p>
+                          )}
+                          {extras.length > 0 && (
+                            <p className="text-xs text-slate-400 mt-0.5">📦 {extras.join(", ")}</p>
+                          )}
+                          {utmSource && (
+                            <p className="text-xs text-slate-400 mt-0.5">📍 {utmSource}</p>
+                          )}
+                          {/* Elapsed + claim */}
+                          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
+                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                              <Clock className="h-3 w-3" />
+                              <ElapsedTimer arrivedAt={arrivedAt} />
+                            </div>
+                            {claimedBy ? (
+                              <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                                <UserCheck className="h-3.5 w-3.5" />
+                                <span>Claimed by {claimedBy}</span>
+                                {claimedAt && (
+                                  <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-3"
+                                disabled={claimLeadMutation.isPending}
+                                onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+                              >
+                                {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

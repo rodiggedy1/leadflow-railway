@@ -1,0 +1,1 @@
+ALTER TABLE `ops_chat_messages` ADD `metadata` text;

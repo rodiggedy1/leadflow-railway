@@ -17,6 +17,7 @@ import { getDb } from "./db";
 import {
   cleanerJobs,
   cleanerProfiles,
+  conversationSessions,
   fieldMgmtLog,
   jobPhotos,
   jobStatusHistory,
@@ -420,6 +421,7 @@ export const opsChatRouter = router({
         body: m.body,
         mediaUrl: m.mediaUrl,
         quickAction: m.quickAction,
+        metadata: m.metadata ?? null,
       }));
     }),
 
@@ -898,6 +900,58 @@ export const opsChatRouter = router({
         }
       }
       return { sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+    }),
+
+  /**
+   * claimLead — mark a lead card in the command channel as claimed by the current user.
+   * Updates the opsChatMessages.metadata field and stamps the conversationSession.
+   */
+  claimLead: opsChatProcedure
+    .input(z.object({ messageId: z.number(), sessionId: z.number().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const claimedAt = Date.now();
+      const claimedBy = ctx.opsCaller.name;
+
+      // Fetch existing metadata to merge
+      const [existing] = await db
+        .select({ metadata: opsChatMessages.metadata })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.messageId))
+        .limit(1);
+
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(existing.metadata ?? "{}"); } catch { /* ignore */ }
+
+      // If already claimed by someone else, don't override
+      if (meta.claimedBy) {
+        return { success: false, alreadyClaimedBy: meta.claimedBy as string };
+      }
+
+      meta.claimedBy = claimedBy;
+      meta.claimedAt = claimedAt;
+
+      await db
+        .update(opsChatMessages)
+        .set({ metadata: JSON.stringify(meta) })
+        .where(eq(opsChatMessages.id, input.messageId));
+
+      // Also stamp the conversation session if sessionId provided
+      if (input.sessionId) {
+        await db
+          .update(conversationSessions)
+          .set({
+            assignedAgentName: claimedBy,
+          })
+          .where(eq(conversationSessions.id, input.sessionId))
+          .catch(() => {}); // non-fatal
+      }
+
+      return { success: true, claimedBy, claimedAt };
     }),
 
   /**

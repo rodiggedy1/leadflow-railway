@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -3484,6 +3484,7 @@ async function processQuoteInBackground(
   }).catch(() => {});
 
   // ── Step 6: Save lead record ──────────────────────────────────────────────
+  let newLeadSessionId: number | undefined;
   try {
     await db.insert(quoteLeads).values({
       name: input.name,
@@ -3498,6 +3499,51 @@ async function processQuoteInBackground(
     });
   } catch (dbErr) {
     console.error("[submitQuote] Failed to save lead:", dbErr);
+  }
+
+  // ── Step 7: Post new lead card to MIB Command Chat ────────────────────────
+  try {
+    // Look up the session we just created to get its ID
+    const [newSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, normalizedPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    newLeadSessionId = newSession?.id;
+
+    const isOffice = input.serviceType === "Office Cleaning";
+    const sizeDisplay = isOffice ? input.bedrooms : `${input.bedrooms} / ${input.bathrooms}`;
+    const extrasDisplay = input.extras && input.extras.length > 0
+      ? `\n📦 Extras: ${input.extras.join(", ")}`
+      : "";
+    const sourceDisplay = input.utmSource ? `\n📍 Source: ${input.utmSource}` : "";
+    const leadBody = `🏠 **${input.serviceType}** · ${sizeDisplay} · **$${price}**${extrasDisplay}${sourceDisplay}`;
+
+    const metadata = JSON.stringify({
+      leadName: input.name,
+      leadPhone: normalizedPhone,
+      serviceType: input.serviceType,
+      size: sizeDisplay,
+      price,
+      extras: input.extras ?? [],
+      utmSource: input.utmSource ?? null,
+      sessionId: newLeadSessionId ?? null,
+      arrivedAt: Date.now(),
+    });
+
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "🎯 New Lead",
+      authorRole: "system",
+      body: leadBody,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+  } catch (err) {
+    console.error("[submitQuote] Failed to post lead card to command channel:", err);
   }
 }
 

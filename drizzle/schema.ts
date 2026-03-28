@@ -1503,6 +1503,8 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
   mediaUrl: varchar("mediaUrl", { length: 512 }),
   /** Quick action tag if this message was sent via a quick-action button */
   quickAction: varchar("quickAction", { length: 64 }),
+  /** JSON metadata for structured cards (e.g. lead claim state, sessionId) */
+  metadata: text("metadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxJob: index("idx_ocm_job").on(table.cleanerJobId),
