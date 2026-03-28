@@ -864,11 +864,12 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [agentStatusOpen, setAgentStatusOpen] = useState(false);
 
-  // Agent status list — polled every 30s
+  // Agent status list — always polled every 60s so data is ready when panel opens
   const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
-    refetchInterval: 30_000,
-    enabled: agentStatusOpen,
+    refetchInterval: 60_000,
+    enabled: Boolean(user) || Boolean(agentMe),
     retry: false,
+    staleTime: 30_000,
   });
 
   // Load all agent photo URLs for message bubble avatars
@@ -1167,7 +1168,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <div className="w-14 shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-hidden transition-all">
+        <div className="w-14 shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-visible transition-all">
           <button
             onClick={() => setSidebarCollapsed(false)}
             className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"

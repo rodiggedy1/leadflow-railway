@@ -459,3 +459,8 @@
 - [x] OpsChat: add close button to expanded sidebar so it can be collapsed back
 - [x] OpsChat: system cards (issue, issue_resolved, reminder) should align right when authored by current user, left for others
 - [x] OpsChat: fix profile photo not persisting after page refresh — owner now stored in users table by openId, agents stored by email
+
+## Bug Fixes: Agent Status Panel + Profile Photo Button
+
+- [x] Fix: agent status panel does not open when status icon is clicked in collapsed sidebar
+- [x] Fix: profile photo avatar button not visible in lower-left of collapsed sidebar for agent accounts (confirmed present by user)
