@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { trpc } from "@/lib/trpc";
+import GlitterBurst from "@/components/GlitterBurst";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
@@ -178,6 +179,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [showGlitter, setShowGlitter] = useState(false);
   const [bookingPerson, setBookingPerson] = useState("");
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
@@ -185,6 +187,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onSuccess: () => {
       toast.success("Booking announced! 🎉");
       setBookingOpen(false); setBookingPerson(""); setBookingAmount(""); setBookingNote("");
+      setShowGlitter(true);
     },
     onError: (err) => toast.error("Failed to announce booking", { description: err.message }),
   });
@@ -356,6 +359,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
+      {showGlitter && <GlitterBurst onDone={() => setShowGlitter(false)} />}
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
       <div className="w-[300px] shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
