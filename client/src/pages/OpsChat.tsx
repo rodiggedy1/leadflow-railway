@@ -1541,13 +1541,29 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                             "text-slate-400"
                           )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
                         </div>
-                        <button
-                          onClick={() => { openDm(ag.name, ag.email ?? ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
-                          className="ml-1 p-1 rounded-full hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors"
-                          title={`DM ${ag.name}`}
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
+                        {/* DM button with per-agent unread badge */}
+                        {(() => {
+                          // Build the canonical thread key for this agent pair
+                          const agEmail = ag.email ?? "";
+                          const threadKey = agEmail && myDmKey.includes("@")
+                            ? [myDmKey, agEmail].sort().join("::")
+                            : "";
+                          const agentUnread = threadKey ? (dmUnreadMap[threadKey] ?? 0) : 0;
+                          return (
+                            <button
+                              onClick={() => { openDm(ag.name, ag.email ?? ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
+                              className="relative ml-1 p-1 rounded-full hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors"
+                              title={agentUnread > 0 ? `${agentUnread} unread DM${agentUnread > 1 ? "s" : ""} from ${ag.name}` : `DM ${ag.name}`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              {agentUnread > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                                  {agentUnread > 9 ? "9+" : agentUnread}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </div>
                     );
                   })}
