@@ -180,6 +180,38 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
   const [showGlitter, setShowGlitter] = useState(false);
+
+  // ── Celebration sound helper ───────────────────────────────────────────────
+  const playCelebrationSound = useCallback(() => {
+    try {
+      const audio = new Audio("https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/celebration_chime_648a50c1.wav");
+      audio.volume = 0.7;
+      audio.play().catch(() => {/* autoplay blocked — silent fail */});
+    } catch { /* ignore */ }
+  }, []);
+
+  // ── Broadcast celebration polling ─────────────────────────────────────────
+  // Poll every 3s; when a new announce_booking message appears that we haven't
+  // seen yet, fire glitter + sound on every agent's screen simultaneously.
+  const lastSeenCelebrationId = useRef<number | null>(null);
+  const { data: latestCelebration } = trpc.opsChat.getLatestCelebration.useQuery(undefined, {
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+  });
+  useEffect(() => {
+    if (!latestCelebration) return;
+    const id = latestCelebration.id;
+    if (lastSeenCelebrationId.current === null) {
+      // First load — just record the current latest, don't fire
+      lastSeenCelebrationId.current = id;
+      return;
+    }
+    if (id !== lastSeenCelebrationId.current) {
+      lastSeenCelebrationId.current = id;
+      setShowGlitter(true);
+      playCelebrationSound();
+    }
+  }, [latestCelebration, playCelebrationSound]);
   const [bookingPerson, setBookingPerson] = useState("");
   const [bookingAmount, setBookingAmount] = useState("");
   const [bookingNote, setBookingNote] = useState("");
@@ -188,6 +220,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       toast.success("Booking announced! 🎉");
       setBookingOpen(false); setBookingPerson(""); setBookingAmount(""); setBookingNote("");
       setShowGlitter(true);
+      playCelebrationSound();
     },
     onError: (err) => toast.error("Failed to announce booking", { description: err.message }),
   });

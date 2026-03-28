@@ -1196,6 +1196,30 @@ export const opsChatRouter = router({
     }),
 
   /**
+   * getLatestCelebration — returns the most recent announce_booking message
+   * in the command channel so clients can detect new celebrations via polling.
+   */
+  getLatestCelebration: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return null;
+      const rows = await db
+        .select({ id: opsChatMessages.id, createdAt: opsChatMessages.createdAt })
+        .from(opsChatMessages)
+        .where(
+          // @ts-ignore — drizzle sql helpers
+          (t: typeof opsChatMessages) =>
+            require("drizzle-orm").and(
+              require("drizzle-orm").eq(t.channel, "command"),
+              require("drizzle-orm").eq(t.quickAction, "announce_booking")
+            )
+        )
+        .orderBy(require("drizzle-orm").desc(opsChatMessages.createdAt))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
+  /**
    * Transcribe a voice note recorded in the browser.
    * Accepts base64-encoded audio (webm/mp3/wav) and returns the transcript text.
    */

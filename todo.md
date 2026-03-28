@@ -364,3 +364,5 @@
 - [x] Command Chat: replace horizontal scrollbar on Pinned Day Status chip strip with left/right arrow buttons
 - [x] Remove Good Morning popup from admin dashboard
 - [x] Command Chat: full-page glitter/confetti burst across entire viewport when Announce Booking is posted
+- [x] Announce Booking: play celebration chime sound effect alongside glitter burst
+- [x] Announce Booking: broadcast glitter + sound to all agents on Command Chat page simultaneously via polling
