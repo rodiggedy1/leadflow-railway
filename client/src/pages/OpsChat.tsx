@@ -44,6 +44,7 @@ import {
   Flag,
   MapPin,
   CalendarDays,
+  MessageSquare,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -380,10 +381,11 @@ function avatarColor(name: string): string {
   return palette[hash % palette.length];
 }
 
-function ThreadMessage({ msg, callerName, seenBy }: {
-  msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null };
+function ThreadMessage({ msg, callerName, seenBy, onReply }: {
+  msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null };
   callerName: string;
   seenBy?: string[];
+  onReply?: (msg: { id: number; body: string; author: string }) => void;
 }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const isMine = msg.from === callerName;
@@ -401,65 +403,122 @@ function ThreadMessage({ msg, callerName, seenBy }: {
     return [msg.mediaUrl];
   })();
 
+  // ── issue_resolved card ────────────────────────────────────────────────────────────────────────
+  if (msg.quickAction === "issue_resolved") {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+    const issTitle = (meta.issueTitle as string) ?? "Issue";
+    const issNote = (meta.issueNote as string | null) ?? null;
+    const resNote = (meta.resolutionNote as string | null) ?? null;
+    const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
+            <CheckCircle2 className="h-3 w-3 text-emerald-100" />
+            <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">✅ Issue Resolved</span>
+            <span className="ml-auto text-[10px] text-emerald-300">{timeStr}</span>
+          </div>
+          <div className="px-3 py-2.5 bg-white">
+            <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-1.5 mb-2">
+              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-0.5">Original Issue</p>
+              <p className="text-xs text-slate-700 font-medium">{issTitle}</p>
+              {issNote && <p className="text-xs text-slate-500 mt-0.5">{issNote}</p>}
+            </div>
+            {resNote && (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 mb-2">
+                <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-0.5">Resolution</p>
+                <p className="text-xs text-slate-700">{resNote}</p>
+              </div>
+            )}
+            <p className="text-[10px] text-slate-400">Resolved by {resolvedBy}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {lightboxIdx !== null && (
         <Lightbox urls={imageUrls} startIndex={lightboxIdx} onClose={() => setLightboxIdx(null)} />
       )}
-      <div className={cn("flex items-end gap-2", isMine ? "justify-end" : "justify-start")}>
+      <div className={cn("flex items-end gap-2 group", isMine ? "justify-end" : "justify-start")}>
         {/* Avatar — only on others' messages */}
         {!isMine && (
           <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mb-0.5", colorClass)}>
             {initials}
           </div>
         )}
-        <div className={cn(
-          "max-w-[72%] rounded-2xl overflow-hidden",
-          isMine
-            ? "bg-slate-900 text-white rounded-br-sm"
-            : "bg-white border border-slate-100 text-slate-900 shadow-sm rounded-bl-sm"
-        )}>
-          {/* Inline images */}
-          {imageUrls.length > 0 && (
-            <div className={cn(
-              "grid gap-0.5",
-              imageUrls.length === 1 ? "grid-cols-1" : imageUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"
-            )}>
-              {imageUrls.map((url, i) => (
-                <button
-                  key={i}
-                  className="relative group overflow-hidden aspect-square"
-                  onClick={() => setLightboxIdx(i)}
-                >
-                  <img
-                    src={url}
-                    alt={`Photo ${i + 1}`}
-                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
-                    <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
-                  </div>
-                </button>
-              ))}
-            </div>
+        <div className="flex items-end gap-1.5" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
+          {/* Hover reply button */}
+          {onReply && (
+            <button
+              onClick={() => onReply({ id: Number(msg.id), body: msg.body, author: msg.from })}
+              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mb-1 rounded-full p-1 bg-slate-100 hover:bg-slate-200 text-slate-500"
+              title="Reply"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </button>
           )}
-          {/* Text body */}
-          {msg.body && (
-            <div className="px-4 py-3">
-              {!isMine && (
-                <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
-              )}
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-            </div>
-          )}
-          {/* Footer: time + read receipts */}
-          <div className={cn("flex items-center justify-between gap-2 px-4 pb-3", !msg.body && imageUrls.length > 0 ? "pt-2" : "-mt-1")}>
-            <p className="text-xs text-slate-400">{timeStr}</p>
-            {isMine && seenBy && seenBy.length > 0 && (
-              <p className="text-[10px] text-slate-400 italic">
-                Seen by {seenBy.join(", ")}
-              </p>
+          <div className={cn(
+            "max-w-[72%] rounded-2xl overflow-hidden",
+            isMine
+              ? "bg-slate-900 text-white rounded-br-sm"
+              : "bg-white border border-slate-100 text-slate-900 shadow-sm rounded-bl-sm"
+          )}>
+            {/* Inline images */}
+            {imageUrls.length > 0 && (
+              <div className={cn(
+                "grid gap-0.5",
+                imageUrls.length === 1 ? "grid-cols-1" : imageUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"
+              )}>
+                {imageUrls.map((url, i) => (
+                  <button
+                    key={i}
+                    className="relative group overflow-hidden aspect-square"
+                    onClick={() => setLightboxIdx(i)}
+                  >
+                    <img
+                      src={url}
+                      alt={`Photo ${i + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
+                      <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                    </div>
+                  </button>
+                ))}
+              </div>
             )}
+            {/* Text body */}
+            {(msg.body || msg.replyToId) && (
+              <div className="px-4 py-3">
+                {!isMine && (
+                  <p className="text-xs font-semibold mb-1 text-slate-500">{msg.from}</p>
+                )}
+                {/* Quoted message preview */}
+                {msg.replyToId && msg.replyToBody && (
+                  <div className={cn(
+                    "mb-2 rounded-lg border-l-4 px-2.5 py-1.5",
+                    isMine ? "border-slate-500 bg-slate-800" : "border-slate-300 bg-slate-50"
+                  )}>
+                    <p className={cn("text-[10px] font-semibold mb-0.5", isMine ? "text-slate-300" : "text-slate-500")}>{msg.replyToAuthor ?? "Unknown"}</p>
+                    <p className={cn("text-xs line-clamp-2", isMine ? "text-slate-400" : "text-slate-500")}>{msg.replyToBody}</p>
+                  </div>
+                )}
+                {msg.body && <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>}
+              </div>
+            )}
+            {/* Footer: time + read receipts */}
+            <div className={cn("flex items-center justify-between gap-2 px-4 pb-3", !msg.body && imageUrls.length > 0 ? "pt-2" : "-mt-1")}>
+              <p className={cn("text-xs", isMine ? "text-slate-400" : "text-slate-400")}>{timeStr}</p>
+              {isMine && seenBy && seenBy.length > 0 && (
+                <p className="text-[10px] text-slate-400 italic">
+                  Seen by {seenBy.join(", ")}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -678,6 +737,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
   const [resolveSubmitting, setResolveSubmitting] = useState(false);
+  // Quote-reply state for job thread
+  const [jobReplyTo, setJobReplyTo] = useState<{ id: number; body: string; author: string } | null>(null);
   const resolveIssue = trpc.opsChat.resolveIssue.useMutation({
     onSuccess: () => {
       setShowResolveModal(false);
@@ -836,7 +897,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         authorRole: "office",
         quickAction: selectedQuickAction ?? undefined,
         mediaUrl,
+        replyToId: jobReplyTo?.id,
+        replyToBody: jobReplyTo?.body,
+        replyToAuthor: jobReplyTo?.author,
       });
+      setJobReplyTo(null);
     } else if (activeTab === "channels") {
       sendMsg.mutate({
         channel: activeChannel,
@@ -1187,6 +1252,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                                 msg={msg}
                                 callerName={callerName}
                                 seenBy={isLast && isMine ? (threadSeenBy?.seenBy ?? []) : undefined}
+                                onReply={(m) => setJobReplyTo(m)}
                               />
                             );
                           })
@@ -1198,6 +1264,22 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
                   {/* Quick actions + Composer */}
                   <div className="px-6 py-3 border-t border-slate-100 bg-white">
+                    {/* Reply preview bar */}
+                    {jobReplyTo && (
+                      <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="w-0.5 h-8 bg-slate-400 rounded-full shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{jobReplyTo.author}</p>
+                          <p className="text-xs text-slate-600 truncate">{jobReplyTo.body}</p>
+                        </div>
+                        <button
+                          onClick={() => setJobReplyTo(null)}
+                          className="shrink-0 rounded-full p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                     {/* Hidden file input */}
                     <input
                       ref={fileInputRef}
@@ -1357,11 +1439,19 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         ) : activeTab === "channels" && activeChannel === "command" ? (
           /* MIB Command Chat — special 3-column ops view */
           <CommandChat
-            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, createdAt: new Date(m.ts) }))}
+            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
             callerName={callerName}
-            onSendMessage={(body, mediaUrl) => {
-              sendMsg.mutate({ body, channel: "command", authorName: callerName, mediaUrl });
+            onSendMessage={(body, mediaUrl, replyTo) => {
+              sendMsg.mutate({
+                body,
+                channel: "command",
+                authorName: callerName,
+                mediaUrl,
+                replyToId: replyTo?.id,
+                replyToBody: replyTo?.body,
+                replyToAuthor: replyTo?.author,
+              });
             }}
             onJumpToJob={(jobId) => {
               handleSetActiveTab("today");

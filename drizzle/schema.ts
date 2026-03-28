@@ -1505,6 +1505,12 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
   quickAction: varchar("quickAction", { length: 64 }),
   /** JSON metadata for structured cards (e.g. lead claim state, sessionId) */
   metadata: text("metadata"),
+  /** Quote-reply: the ID of the message being replied to */
+  replyToId: int("replyToId"),
+  /** Quote-reply: snapshot of the replied-to message body (truncated) */
+  replyToBody: varchar("replyToBody", { length: 512 }),
+  /** Quote-reply: display name of the replied-to message author */
+  replyToAuthor: varchar("replyToAuthor", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxJob: index("idx_ocm_job").on(table.cleanerJobId),

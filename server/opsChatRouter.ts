@@ -305,6 +305,10 @@ export const opsChatRouter = router({
         body: string;
         mediaUrl?: string | null;
         quickAction?: string | null;
+        metadata?: string | null;
+        replyToId?: number | null;
+        replyToBody?: string | null;
+        replyToAuthor?: string | null;
         source: "ops" | "sms";
       };
 
@@ -319,6 +323,10 @@ export const opsChatRouter = router({
           body: m.body,
           mediaUrl: m.mediaUrl,
           quickAction: m.quickAction,
+          metadata: m.metadata ?? null,
+          replyToId: m.replyToId ?? null,
+          replyToBody: m.replyToBody ?? null,
+          replyToAuthor: m.replyToAuthor ?? null,
           source: "ops",
         });
       }
@@ -380,6 +388,12 @@ export const opsChatRouter = router({
         authorRole: z.enum(["office", "agent", "system"]).default("office"),
         mediaUrl: z.string().optional(), // JSON array of URLs or single URL for backwards compat
         quickAction: z.string().max(64).optional(),
+        /** Quote-reply: ID of the message being replied to */
+        replyToId: z.number().int().positive().optional(),
+        /** Quote-reply: snapshot of replied-to body (truncated to 512 chars) */
+        replyToBody: z.string().max(512).optional(),
+        /** Quote-reply: display name of replied-to author */
+        replyToAuthor: z.string().max(128).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -394,6 +408,9 @@ export const opsChatRouter = router({
         body: input.body,
         mediaUrl: input.mediaUrl ?? null,
         quickAction: input.quickAction ?? null,
+        replyToId: input.replyToId ?? null,
+        replyToBody: input.replyToBody ?? null,
+        replyToAuthor: input.replyToAuthor ?? null,
       });
 
       return { success: true };
@@ -424,6 +441,9 @@ export const opsChatRouter = router({
         mediaUrl: m.mediaUrl,
         quickAction: m.quickAction,
         metadata: m.metadata ?? null,
+        replyToId: m.replyToId ?? null,
+        replyToBody: m.replyToBody ?? null,
+        replyToAuthor: m.replyToAuthor ?? null,
       }));
     }),
 
@@ -567,19 +587,26 @@ export const opsChatRouter = router({
           .where(eq(cleanerJobs.id, flag.cleanerJobId));
       }
 
-      // Post resolution message into the job thread
+      // Post styled issue_resolved card into the job thread
+      const resolvedJobMeta = JSON.stringify({
+        issueTitle: flag.issueNote,
+        issueNote: null,
+        resolutionNote: input.resolutionNote,
+        resolvedBy: input.resolvedByName,
+        resolvedAt: Date.now(),
+      });
       await db.insert(opsChatMessages).values({
         cleanerJobId: flag.cleanerJobId,
         channel: null,
         authorName: input.resolvedByName,
         authorRole: "office",
-        body: `✅ Issue resolved: ${input.resolutionNote}`,
+        body: `✅ Issue resolved by ${input.resolvedByName}: ${input.resolutionNote}`,
         mediaUrl: null,
-        quickAction: "resolved",
+        quickAction: "issue_resolved",
+        metadata: resolvedJobMeta,
       });
 
-      // Auto-post a ✅ Resolved alert into the MIB Command Chat (command channel)
-      // so the whole team sees the issue lifecycle close out in real time
+      // Auto-post a styled issue_resolved card into the MIB Command Chat
       const [jobRow] = await db
         .select({ customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress })
         .from(cleanerJobs)
@@ -588,14 +615,23 @@ export const opsChatRouter = router({
       const jobLabel = jobRow?.customerName
         ? `${jobRow.customerName.split(" ")[0]} Home`
         : jobRow?.jobAddress ?? `Job #${flag.cleanerJobId}`;
+      const resolvedCmdMeta = JSON.stringify({
+        issueTitle: flag.issueNote,
+        issueNote: null,
+        jobTitle: jobLabel,
+        resolutionNote: input.resolutionNote,
+        resolvedBy: input.resolvedByName,
+        resolvedAt: Date.now(),
+      });
       await db.insert(opsChatMessages).values({
         cleanerJobId: null,
         channel: "command",
-        authorName: "✅ Issue Resolved",
+        authorName: input.resolvedByName,
         authorRole: "office",
-        body: `✅ Issue resolved at **${jobLabel}** (Job #${flag.cleanerJobId}) by ${input.resolvedByName}: ${input.resolutionNote}`,
+        body: `✅ Issue resolved at ${jobLabel} (Job #${flag.cleanerJobId}) by ${input.resolvedByName}: ${input.resolutionNote}`,
         mediaUrl: null,
-        quickAction: "resolved",
+        quickAction: "issue_resolved",
+        metadata: resolvedCmdMeta,
       });
 
       return { success: true };
@@ -1013,15 +1049,17 @@ export const opsChatRouter = router({
       authorName: z.string().min(1).max(128),
       /** If provided, resolve this existing issue message instead of creating a new one */
       messageId: z.number().int().positive().optional(),
+      /** Resolution note when resolving a general_issue */
+      resolutionNote: z.string().max(2000).optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      // Resolve an existing issue
+      // Resolve an existing general_issue
       if (input.messageId && input.title === "__resolve__") {
         const [existing] = await db
-          .select({ metadata: opsChatMessages.metadata })
+          .select({ metadata: opsChatMessages.metadata, channel: opsChatMessages.channel })
           .from(opsChatMessages)
           .where(eq(opsChatMessages.id, input.messageId))
           .limit(1);
@@ -1029,7 +1067,30 @@ export const opsChatRouter = router({
         try { meta = JSON.parse(existing?.metadata ?? "{}"); } catch { /* ignore */ }
         meta.resolvedAt = Date.now();
         meta.resolvedBy = input.authorName;
+        meta.resolutionNote = input.resolutionNote ?? null;
         await db.update(opsChatMessages).set({ metadata: JSON.stringify(meta) }).where(eq(opsChatMessages.id, input.messageId));
+
+        // Post a styled issue_resolved card to the same channel
+        const issueTitle = (meta.issueTitle as string) ?? "Issue";
+        const issueNote = (meta.issueNote as string | null) ?? null;
+        const jobTitle = (meta.jobTitle as string | null) ?? null;
+        const resolvedMeta = JSON.stringify({
+          issueTitle,
+          issueNote,
+          jobTitle,
+          resolutionNote: input.resolutionNote ?? null,
+          resolvedBy: input.authorName,
+          resolvedAt: Date.now(),
+        });
+        await db.insert(opsChatMessages).values({
+          channel: existing?.channel ?? input.channel,
+          authorName: input.authorName,
+          authorRole: "office",
+          body: `✅ Issue resolved by ${input.authorName}${input.resolutionNote ? ": " + input.resolutionNote : ""}`,
+          quickAction: "issue_resolved",
+          metadata: resolvedMeta,
+        });
+
         return { messageId: input.messageId };
       }
 

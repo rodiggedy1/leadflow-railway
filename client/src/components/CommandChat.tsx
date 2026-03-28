@@ -40,12 +40,15 @@ interface CommandChatProps {
     mediaUrl?: string | null;
     quickAction?: string | null;
     metadata?: string | null;
+    replyToId?: number | null;
+    replyToBody?: string | null;
+    replyToAuthor?: string | null;
     createdAt: Date;
   }>;
   channelLoading: boolean;
   callerName: string;
   /** Called when user hits Send in the composer */
-  onSendMessage: (body: string, mediaUrl?: string) => void;
+  onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
   /** Called when user clicks "Today Ops" in the in-panel tab switcher */
@@ -182,6 +185,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [bookingOpen, setBookingOpen] = useState(false);
   const [showGlitter, setShowGlitter] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // ── Quote-reply state ─────────────────────────────────────────────────────
+  const [replyTo, setReplyTo] = useState<{ id: number; body: string; author: string } | null>(null);
+
+  // ── Resolve Issue modal state (Command Chat general_issue) ────────────────
+  const [resolveIssueOpen, setResolveIssueOpen] = useState(false);
+  const [resolveIssueMessageId, setResolveIssueMessageId] = useState<number | null>(null);
+  const [resolveIssueTitle, setResolveIssueTitle] = useState("");
+  const [resolveIssueNote, setResolveIssueNote] = useState("");
+  const [resolveIssueNoteText, setResolveIssueNoteText] = useState("");
+  const [resolveIssueSubmitting, setResolveIssueSubmitting] = useState(false);
   const glitterRunning = useRef(false);
   const triggerGlitter = () => {
     if (glitterRunning.current) return; // already playing — ignore
@@ -398,8 +412,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
     const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
     const body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
-    onSendMessage(body, mediaUrl);
+    onSendMessage(body, mediaUrl, replyTo ?? undefined);
     setComposer("");
+    setReplyTo(null);
     setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
   }
 
@@ -603,7 +618,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           <button
                             onClick={() => {
                               if (alert.messageId) {
-                                openIssueMutation.mutate({ title: "__resolve__", note: "", messageId: alert.messageId, authorName: callerName });
+                                setResolveIssueMessageId(alert.messageId);
+                                setResolveIssueTitle(alert.title);
+                                setResolveIssueNote(alert.body ?? "");
+                                setResolveIssueNoteText("");
+                                setResolveIssueOpen(true);
                               }
                             }}
                             className="text-[10px] font-semibold text-red-500 hover:text-red-700 underline"
@@ -1006,19 +1025,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const issTitle = (meta.issueTitle as string) ?? msg.body;
                   const issNote = (meta.issueNote as string | null) ?? null;
                   const jobTitle = (meta.jobTitle as string | null) ?? null;
+                  const isResolved = !!(meta.resolvedAt);
                   return (
                     <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-red-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
+                      <div className={cn("max-w-[72%] rounded-xl overflow-hidden border shadow-sm", isResolved ? "border-slate-200 opacity-60" : "border-red-200")}>
+                        <div className={cn("flex items-center gap-1.5 px-3 py-1.5", isResolved ? "bg-slate-400" : "bg-red-600")}>
                           <TriangleAlert className="h-3 w-3 text-red-100" />
-                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">Issue Raised</span>
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">{isResolved ? "Issue (Resolved)" : "Issue Raised"}</span>
                           {jobTitle && <span className="ml-1.5 text-[10px] bg-red-700 text-red-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
                           <span className="ml-auto text-[10px] text-red-300">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         <div className="px-3 py-2.5 bg-white">
                           <p className="text-sm font-semibold text-slate-900">{issTitle}</p>
                           {issNote && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{issNote}</p>}
-                          <p className="text-[10px] text-slate-400 mt-2">Raised by {msg.from}</p>
+                          <div className="flex items-center justify-between mt-2">
+                            <p className="text-[10px] text-slate-400">Raised by {msg.from}</p>
+                            {!isResolved && (
+                              <button
+                                onClick={() => {
+                                  setResolveIssueMessageId(msg.id);
+                                  setResolveIssueTitle(issTitle);
+                                  setResolveIssueNote(issNote ?? "");
+                                  setResolveIssueNoteText("");
+                                  setResolveIssueOpen(true);
+                                }}
+                                className="text-[10px] font-semibold text-green-600 hover:text-green-800 flex items-center gap-0.5"
+                              >
+                                <CheckCheck className="h-3 w-3" /> Resolve
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1108,43 +1144,100 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
-
-                // ── Default bubble ───────────────────────────────────────────────
-                return (
-                  <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-                    <div className={cn(
-                      "max-w-[75%] rounded-2xl px-4 py-3",
-                      isAlert ? "bg-slate-900 text-white w-full max-w-full" :
-                      isMine ? "bg-slate-100 text-slate-900" : "bg-white border border-slate-200 text-slate-900"
-                    )}>
-                      {!isMine && (
-                        <p className={cn("text-[10px] font-semibold mb-1", isAlert ? "text-slate-300" : "text-slate-500")}>
-                          {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
-                        </p>
-                      )}
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-                      {mediaUrls.length > 0 && (
-                        <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
-                          {mediaUrls.map((url, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => setLightboxUrl(url)}
-                              className="focus:outline-none"
-                            >
-                              <img
-                                src={url}
-                                alt={`attachment-${idx}`}
-                                className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
-                                style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
-                              />
-                            </button>
-                          ))}
+                // ── Issue Resolved card (green) ───────────────────────────────────
+                if (msg.quickAction === "issue_resolved") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const issTitle = (meta.issueTitle as string) ?? "Issue";
+                  const issNote = (meta.issueNote as string | null) ?? null;
+                  const jobTitle = (meta.jobTitle as string | null) ?? null;
+                  const resNote = (meta.resolutionNote as string | null) ?? null;
+                  const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
+                          <CheckCheck className="h-3 w-3 text-emerald-100" />
+                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">✅ Issue Resolved</span>
+                          {jobTitle && <span className="ml-1.5 text-[10px] bg-emerald-700 text-emerald-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
+                          <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          {/* Original issue context */}
+                          <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-1.5 mb-2">
+                            <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-0.5">Original Issue</p>
+                            <p className="text-xs text-slate-700 font-medium">{issTitle}</p>
+                            {issNote && <p className="text-xs text-slate-500 mt-0.5">{issNote}</p>}
+                          </div>
+                          {/* Resolution note */}
+                          {resNote && (
+                            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 mb-2">
+                              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-0.5">Resolution</p>
+                              <p className="text-xs text-slate-700">{resNote}</p>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-slate-400">Resolved by {resolvedBy}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Default bubble ───────────────────────────────────────────────────
+                return (
+                  <div key={msg.id} className={cn("flex group", isMine ? "justify-end" : "justify-start")}>
+                    <div className="flex items-end gap-1.5" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
+                      {/* Hover reply button */}
+                      {!isAlert && (
+                        <button
+                          onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mb-1 rounded-full p-1 bg-slate-100 hover:bg-slate-200 text-slate-500"
+                          title="Reply"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </button>
                       )}
-                      <p className={cn("text-[10px] mt-1.5 text-right", isAlert ? "text-slate-400" : "text-slate-400")}>
-                        {fmtMsgTime(msg.createdAt)}
-                      </p>
+                      <div className={cn(
+                        "max-w-[75%] rounded-2xl px-4 py-3",
+                        isAlert ? "bg-slate-900 text-white w-full max-w-full" :
+                        isMine ? "bg-slate-100 text-slate-900" : "bg-white border border-slate-200 text-slate-900"
+                      )}>
+                        {!isMine && (
+                          <p className={cn("text-[10px] font-semibold mb-1", isAlert ? "text-slate-300" : "text-slate-500")}>
+                            {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                          </p>
+                        )}
+                        {/* Quoted message preview */}
+                        {msg.replyToId && msg.replyToBody && (
+                          <div className="mb-2 rounded-lg border-l-4 border-slate-300 bg-slate-50 px-2.5 py-1.5">
+                            <p className="text-[10px] font-semibold text-slate-500 mb-0.5">{msg.replyToAuthor ?? "Unknown"}</p>
+                            <p className="text-xs text-slate-500 line-clamp-2">{msg.replyToBody}</p>
+                          </div>
+                        )}
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                        {mediaUrls.length > 0 && (
+                          <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
+                            {mediaUrls.map((url, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setLightboxUrl(url)}
+                                className="focus:outline-none"
+                              >
+                                <img
+                                  src={url}
+                                  alt={`attachment-${idx}`}
+                                  className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
+                                  style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <p className={cn("text-[10px] mt-1.5 text-right", isAlert ? "text-slate-400" : "text-slate-400")}>
+                          {fmtMsgTime(msg.createdAt)}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1232,6 +1325,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             className="hidden"
             onChange={(e) => { if (e.target.files) stageFiles(e.target.files); e.target.value = ""; }}
           />
+
+          {/* Quote-reply preview bar */}
+          {replyTo && (
+            <div className="flex items-start gap-2 mb-2 px-3 py-2 bg-slate-100 rounded-xl border-l-4 border-slate-400">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-semibold text-slate-500 mb-0.5">Replying to {replyTo.author}</p>
+                <p className="text-xs text-slate-600 truncate">{replyTo.body.slice(0, 120)}{replyTo.body.length > 120 ? "…" : ""}</p>
+              </div>
+              <button
+                onClick={() => setReplyTo(null)}
+                className="shrink-0 text-slate-400 hover:text-slate-700 p-0.5"
+                aria-label="Cancel reply"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Composer box with drag-drop */}
           <div
@@ -1647,6 +1757,97 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Resolve Issue Modal (Command Chat general_issue) ───────────────────────────── */}
+      {resolveIssueOpen && resolveIssueMessageId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => !resolveIssueSubmitting && setResolveIssueOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">
+                  <CheckCheck className="h-4.5 w-4.5 text-green-600" />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Resolve Issue</h2>
+              </div>
+              <button
+                className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                onClick={() => setResolveIssueOpen(false)}
+                disabled={resolveIssueSubmitting}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Original issue preview */}
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 mb-4">
+              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1">⚠️ Original Issue</p>
+              <p className="text-sm font-semibold text-slate-900">{resolveIssueTitle}</p>
+              {resolveIssueNote && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{resolveIssueNote}</p>}
+            </div>
+
+            {/* Resolution note */}
+            <div className="mb-4">
+              <label className="text-sm font-semibold text-slate-700 mb-1.5 block">How was it resolved?</label>
+              <Textarea
+                value={resolveIssueNoteText}
+                onChange={(e) => setResolveIssueNoteText(e.target.value)}
+                placeholder="e.g. Cleaner got access via lockbox, client called back, issue was a false alarm…"
+                rows={3}
+                className="resize-none rounded-xl border-slate-200 text-sm"
+                autoFocus
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl border-slate-200 text-slate-700"
+                onClick={() => setResolveIssueOpen(false)}
+                disabled={resolveIssueSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white"
+                disabled={!resolveIssueNoteText.trim() || resolveIssueSubmitting}
+                onClick={async () => {
+                  if (!resolveIssueNoteText.trim() || !resolveIssueMessageId) return;
+                  setResolveIssueSubmitting(true);
+                  try {
+                    await openIssueMutation.mutateAsync({
+                      title: "__resolve__",
+                      note: "",
+                      messageId: resolveIssueMessageId,
+                      authorName: callerName,
+                      resolutionNote: resolveIssueNoteText.trim(),
+                    });
+                    setResolveIssueOpen(false);
+                    setResolveIssueNoteText("");
+                    toast.success("Issue resolved ✅");
+                  } catch (err: unknown) {
+                    toast.error("Failed to resolve issue", { description: err instanceof Error ? err.message : "Unknown error" });
+                  } finally {
+                    setResolveIssueSubmitting(false);
+                  }
+                }}
+              >
+                {resolveIssueSubmitting
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <><CheckCheck className="h-4 w-4 mr-1.5" /> Mark Resolved</>
+                }
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -373,3 +373,12 @@
 - [x] Command Center: collapse/expand chevron buttons on left and right side panels
 - [x] Command Center: persist column widths and collapse state in localStorage
 - [x] Command Center: enforce min-width guards (left ≥ 200px, right ≥ 180px, center ≥ 400px)
+
+## Quote-Reply + Resolve-with-Note — Batch
+- [x] Resolve Issue: world-class modal with original issue preview + resolution note textarea (Command Center)
+- [x] Resolve Issue: post styled resolution card to thread (original issue text + resolution note + resolver name)
+- [x] Resolve Issue: same modal + resolution card in Job thread (OpsChat job channels)
+- [x] Quote-reply: hover reply button on any message bubble in Command Center thread
+- [x] Quote-reply: quoted-message preview bar in composer (shows sender + snippet, X to cancel)
+- [x] Quote-reply: send message with replyTo metadata, render indented quoted bubble above reply in thread
+- [x] Quote-reply: same quote-reply UI in Job thread (OpsChat job channels)
