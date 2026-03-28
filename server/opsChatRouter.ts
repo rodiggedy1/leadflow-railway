@@ -141,7 +141,7 @@ export const opsChatRouter = router({
 
     return rows.map((r) => ({
       id: r.id,
-      title: r.customerName ? `${r.customerName.split(" ")[0]} Home` : r.jobAddress ?? "Job",
+      title: r.customerName ?? r.jobAddress ?? "Job",
       client: r.customerName ?? "",
       team: r.teamName ?? r.cleanerName,
       address: r.jobAddress ?? "",
@@ -337,7 +337,7 @@ export const opsChatRouter = router({
       return {
         job: {
           id: job.id,
-          title: job.customerName ? `${job.customerName.split(" ")[0]} Home` : job.jobAddress ?? "Job",
+          title: job.customerName ?? job.jobAddress ?? "Job",
           client: job.customerName ?? "",
           address: job.jobAddress ?? "",
           serviceType: job.serviceType ?? "",

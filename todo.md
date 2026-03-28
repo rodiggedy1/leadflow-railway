@@ -350,3 +350,4 @@
 - [x] Add Today Ops / Channels pill switcher above Ops Snapshot in Command Chat left column
 - [x] Add "View Conversation" icon to new_lead card in Command Chat (opens Admin Leads page with session pre-selected); improved icon spacing
 - [x] Unclaimed lead escalation: auto-post nudge to Command Chat if lead sits unclaimed for 5+ minutes
+- [x] Fix Today Ops: all jobs showing last name "Home" instead of actual customer last name
