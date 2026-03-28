@@ -17,7 +17,7 @@ import { z } from "zod";
 import { router, publicProcedure, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, conversationSessions } from "../drizzle/schema";
+import { cleanerJobs, conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
 import { jobSmsReplies } from "../drizzle/schema";
 import { randomBytes } from "crypto";
@@ -156,6 +156,30 @@ export const trackerRouter = router({
             notifyOwner({ title: `⚠️ ${input.rating}★ rating — ${firstName}`, content: alertMsg }),
             sendSms({ to: OWNER_ALERT_NUMBER, content: alertMsg }),
           ]);
+
+          // Post to MIB Command Chat so the team sees it immediately
+          try {
+            const db2 = await getDb();
+            if (db2) {
+              const stars = "★".repeat(input.rating) + "☆".repeat(5 - input.rating);
+              const chatBody = [
+                `⚠️ **Low rating — ${input.rating} stars ${stars}**`,
+                `👤 Customer: ${firstName}${job.customerPhone ? ` · ${job.customerPhone}` : ""}`,
+                `📍 Job: ${job.jobDate ?? "unknown date"} — ${job.jobAddress ?? "no address"}`,
+                input.comment ? `💬 Comment: "${input.comment}"` : null,
+              ].filter(Boolean).join("\n");
+              await db2.insert(opsChatMessages).values({
+                cleanerJobId: null,
+                channel: "command",
+                authorName: "⭐ Rating Alert",
+                authorRole: "system",
+                body: chatBody,
+                metadata: JSON.stringify({ rating: input.rating, customerPhone: job.customerPhone, jobAddress: job.jobAddress }),
+              });
+            }
+          } catch (chatErr) {
+            console.error("[Tracker] Failed to post low-rating alert to command chat:", chatErr);
+          }
 
           // Customer apology SMS
           if (job.customerPhone) {
