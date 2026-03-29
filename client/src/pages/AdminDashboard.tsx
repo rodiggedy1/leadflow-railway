@@ -81,6 +81,7 @@ import {
   BarChart2,
   ChevronRight,
   Headphones,
+  XCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -939,6 +940,7 @@ function ConversationDrawer({
     messages = [];
   }
 
+  const [pendingLostSession, setPendingLostSession] = useState<{ id: number; name: string | null } | null>(null);
   const updateStageMutation = trpc.leads.adminUpdateStage.useMutation({
     onSuccess: (_, vars) => {
       onSessionUpdate({ stage: vars.stage });
@@ -949,6 +951,24 @@ function ConversationDrawer({
     },
     onError: (e) => toast.error(e.message),
   });
+  const markAsLostMutation = trpc.leads.markAsLost.useMutation({
+    onSuccess: () => {
+      onSessionUpdate({ stage: "LOST" as Stage });
+      utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
+      onRefresh();
+      toast.success("Lead marked as lost");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  function handleStageSelect(val: string) {
+    if (val === session.stage) return;
+    if (val === "LOST") {
+      setPendingLostSession({ id: session.id, name: session.leadName ?? session.leadPhone ?? null });
+      return;
+    }
+    updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
+  }
 
   const assignAgentMutation = trpc.leads.adminAssignAgent.useMutation({
     onSuccess: (_, vars) => {
@@ -1372,11 +1392,8 @@ function ConversationDrawer({
               {/* Status dropdown — quick stage update from header */}
               <Select
                 value={session.stage}
-                onValueChange={(val) => {
-                  if (val === session.stage) return;
-                  updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
-                }}
-                disabled={updateStageMutation.isPending}
+                onValueChange={handleStageSelect}
+                disabled={updateStageMutation.isPending || markAsLostMutation.isPending}
               >
                 <SelectTrigger
                   className="h-8 text-xs font-semibold rounded-full border px-3 pr-2.5 gap-1.5 focus:ring-0 min-w-[120px]"
@@ -1874,11 +1891,8 @@ function ConversationDrawer({
                   <div className="flex items-center gap-2">
                     <Select
                       value={session.stage}
-                      onValueChange={(val) => {
-                        if (val === session.stage) return;
-                        updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
-                      }}
-                      disabled={updateStageMutation.isPending}
+                      onValueChange={handleStageSelect}
+                      disabled={updateStageMutation.isPending || markAsLostMutation.isPending}
                     >
                       <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -2408,6 +2422,67 @@ function ConversationDrawer({
         </DialogContent>
       </Dialog>
     )}
+      {/* ── Lost Reason Picker ── */}
+      {pendingLostSession && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setPendingLostSession(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl p-6 w-80 max-w-[90vw]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <XCircle className="w-4 h-4 text-red-500" />
+              <span className="text-sm font-bold text-gray-800">Mark as Lost</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Why is <span className="font-semibold text-gray-700">{pendingLostSession.name ?? "this lead"}</span> not moving forward?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: "price" as const, label: "Price", color: "#ef4444", bg: "bg-red-50 hover:bg-red-100 border-red-200" },
+                { key: "timing" as const, label: "Timing", color: "#f97316", bg: "bg-orange-50 hover:bg-orange-100 border-orange-200" },
+                { key: "no_response" as const, label: "No Response", color: "#6b7280", bg: "bg-gray-50 hover:bg-gray-100 border-gray-200" },
+                { key: "competitor" as const, label: "Competitor", color: "#8b5cf6", bg: "bg-violet-50 hover:bg-violet-100 border-violet-200" },
+              ]).map(r => (
+                <button
+                  key={r.key}
+                  onClick={() => {
+                    markAsLostMutation.mutate(
+                      { sessionId: pendingLostSession.id, lostReason: r.key },
+                      { onSettled: () => setPendingLostSession(null) }
+                    );
+                  }}
+                  disabled={markAsLostMutation.isPending}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${r.bg}`}
+                  style={{ color: r.color }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                markAsLostMutation.mutate(
+                  { sessionId: pendingLostSession.id, lostReason: "other" },
+                  { onSettled: () => setPendingLostSession(null) }
+                );
+              }}
+              disabled={markAsLostMutation.isPending}
+              className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 transition-colors"
+            >
+              Other
+            </button>
+            <button
+              onClick={() => setPendingLostSession(null)}
+              className="mt-2 w-full text-xs text-gray-400 hover:text-gray-600 transition-colors py-1"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

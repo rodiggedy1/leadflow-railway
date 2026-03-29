@@ -534,3 +534,5 @@
 - [x] Remove Not Interested and Future Booking from outcome stages everywhere
 - [x] Add VOICEMAIL outcome stage to Stage type, STAGE_CONFIG, OUTCOME_STAGES, tray band, server z.enum
 - [x] Change Booked icon to dollar sign, Lost icon to sad face in tray band and dropdown
+- [x] Add lost reason quick-select in drawer when Lost stage is selected
+- [x] Verify all 5 outcome stages wire correctly from drawer → DB → tray card
