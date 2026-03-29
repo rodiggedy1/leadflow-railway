@@ -124,12 +124,16 @@ function GlobalOpsChat() {
 
   return (
     <>
-      {/* Full-screen overlay — visible when state === "open" */}
-      {state === "open" && (
-        <div className="fixed inset-0 z-50 bg-slate-50 overflow-hidden">
-          <OpsChat onMinimize={minimize} onClose={close} />
-        </div>
-      )}
+      {/* Full-screen overlay — always mounted, hidden when not open.
+           Keeping OpsChat in the DOM prevents prevMsgCountRef / scroll refs
+           from resetting on every open, which was causing spurious sounds
+           and fast-scroll animations on re-entry. */}
+      <div
+        className="fixed inset-0 z-50 bg-slate-50 overflow-hidden"
+        style={{ display: state === "open" ? "flex" : "none" }}
+      >
+        <OpsChat onMinimize={minimize} onClose={close} />
+      </div>
 
       {/* Floating bubble — visible when closed or minimized */}
       {state !== "open" && (
