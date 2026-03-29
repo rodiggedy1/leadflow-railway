@@ -1008,8 +1008,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
   const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
-  const prevJobMsgCountRef = useRef(0);
-  const prevChannelMsgCountRef = useRef(0);
+  // -1 sentinel: means "not yet initialized" — prevents spurious sound on first load
+  const prevJobMsgCountRef = useRef(-1);
+  const prevChannelMsgCountRef = useRef(-1);
   const prevChannelRef = useRef("");
 
   // -- DM unread counts + sound notification --
@@ -1249,9 +1250,26 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       });
     });
   }, []);
+  // Track whether we've done the initial scroll for the current view.
+  // On first load/re-entry: jump instantly. On subsequent new messages: smooth scroll.
+  const initialScrollDoneRef = useRef(false);
+  const prevScrollKeyRef = useRef("");
   useEffect(() => {
-    scrollToBottom();
-  }, [jobDetail?.thread, channelMsgs, scrollToBottom]);
+    // Build a key that changes when the user switches views (job vs channel)
+    const key = selectedJobId ? `job-${selectedJobId}` : `channel-${activeChannel}`;
+    const isNewView = prevScrollKeyRef.current !== key;
+    if (isNewView) {
+      prevScrollKeyRef.current = key;
+      initialScrollDoneRef.current = false;
+    }
+    if (!initialScrollDoneRef.current) {
+      scrollToBottom(true); // instant on first load
+      initialScrollDoneRef.current = true;
+    } else {
+      scrollToBottom(false); // smooth for new messages
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobDetail?.thread?.length, channelMsgs.length, selectedJobId, activeChannel]);
 
   // Play notification sound when new job thread messages arrive from others.
   // Use .length as the dep (not the array object) so we only fire when count changes,
@@ -1261,7 +1279,12 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     const thread = jobDetail?.thread ?? [];
     const curr = thread.length;
     const prev = prevJobMsgCountRef.current;
-    if (curr > prev && prev > 0) {
+    if (prev === -1) {
+      // First load — just record count, don't fire sound
+      prevJobMsgCountRef.current = curr;
+      return;
+    }
+    if (curr > prev) {
       const newest = thread[thread.length - 1];
       // Use myNames set to handle OAuth name vs DB name mismatch
       if (newest && !myNames.has(newest.from)) {
@@ -1284,13 +1307,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   useEffect(() => {
     const curr = channelMsgLength;
     const prev = prevChannelMsgCountRef.current;
-    // Reset counter when user switches channels
-    if (prevChannelRef.current !== activeChannel) {
+    // Reset counter when user switches channels (or on first load)
+    if (prevChannelRef.current !== activeChannel || prev === -1) {
       prevChannelRef.current = activeChannel;
       prevChannelMsgCountRef.current = curr;
       return;
     }
-    if (curr > prev && prev > 0) {
+    if (curr > prev) {
       const newest = channelMsgs[channelMsgs.length - 1];
       if (newest && !myNames.has(newest.from)) {
         // Always attempt to play — AudioContext.resume() handles suspended state

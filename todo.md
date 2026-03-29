@@ -538,4 +538,4 @@
 - [x] Verify all 5 outcome stages wire correctly from drawer → DB → tray card
 - [x] Fix agent drawer: stage dropdown hidden behind isAdmin guard — show to all agents via agentUpdateStage procedure
 - [x] Delete lead from drawer should also remove the corresponding hot_lead card from the command channel tray
-- [x] Fix CommandChat bug: navigating back to command chat fires notification sound and fast-scrolls the page
+- [x] Fix CommandChat + OpsChat bug: navigating back to command chat fires notification sound and fast-scrolls the page
