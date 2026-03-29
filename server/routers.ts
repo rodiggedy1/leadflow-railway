@@ -826,7 +826,7 @@ export const appRouter = router({
      * Setting a date moves the session to FOLLOW_UP_SCHEDULED stage.
      * Clearing (date = null) reverts to AVAILABILITY.
      */
-    adminSetFollowUp: adminAgentProcedure
+    adminSetFollowUp: agentProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
         followUpDate: z.string().nullable(), // YYYY-MM-DD or null to clear
@@ -864,7 +864,7 @@ export const appRouter = router({
      * leads.adminAssignAgent — admin assigns or unassigns a lead to any agent.
      * Pass agentId: null to unassign.
      */
-    adminAssignAgent: adminAgentProcedure
+    adminAssignAgent: agentProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
         agentId: z.number().int().positive().nullable(),
@@ -1399,7 +1399,7 @@ export const appRouter = router({
      * leads.markAsLost — agent marks a lead as lost/dead via the 3-dot menu.
      * Sets stage to LOST, turns off AI mode, and logs activity.
      */
-    markAsLost: adminAgentProcedure
+    markAsLost: agentProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
         lostReason: z.enum(["price", "timing", "no_response", "competitor", "other"]).optional(),
@@ -1507,7 +1507,7 @@ export const appRouter = router({
      * Sorted by callStartedAt ascending so they appear in chronological order
      * when merged into the conversation thread.
      */
-    getCallRecordings: adminAgentProcedure
+    getCallRecordings: agentProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1720,7 +1720,7 @@ Return ONLY the script text, nothing else.`;
      * Analyzes the full conversation history, detects the objection type,
      * and returns a world-class SMS closing strategy based on top-closer frameworks.
      */
-    getClosingRecommendation: adminAgentProcedure
+    getClosingRecommendation: agentProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
       .query(async ({ input }) => {
         const db = await getDb();
