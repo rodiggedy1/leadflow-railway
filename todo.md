@@ -537,5 +537,3 @@
 - [x] Add lost reason quick-select in drawer when Lost stage is selected
 - [x] Verify all 5 outcome stages wire correctly from drawer → DB → tray card
 - [x] Fix agent drawer: stage dropdown hidden behind isAdmin guard — show to all agents via agentUpdateStage procedure
-- [x] Add Move Stage dropdown to AgentDashboard drawer (separate component from AdminDashboard)
-- [x] Extract ConversationDrawer into shared component so AdminDashboard and AgentDashboard use identical drawer
