@@ -406,6 +406,28 @@ export const opsChatRouter = router({
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
 
+      // Dedup guard: if this is an "I'm Back" message, check whether the same author
+      // already posted one in the last 10 seconds. If so, silently skip the insert.
+      // This prevents duplicate messages when the button click + keystroke handler
+      // both fire before React has propagated the awayStatus state update.
+      if (input.quickAction === "away_status:back") {
+        const tenSecondsAgo = new Date(Date.now() - 10_000);
+        const recent = await db
+          .select({ id: opsChatMessages.id })
+          .from(opsChatMessages)
+          .where(
+            and(
+              eq(opsChatMessages.authorName, input.authorName),
+              eq(opsChatMessages.quickAction, "away_status:back"),
+              gte(opsChatMessages.createdAt, tenSecondsAgo)
+            )
+          )
+          .limit(1);
+        if (recent.length > 0) {
+          return { success: true, deduped: true };
+        }
+      }
+
       await db.insert(opsChatMessages).values({
         cleanerJobId: input.cleanerJobId ?? null,
         channel: input.channel ?? null,

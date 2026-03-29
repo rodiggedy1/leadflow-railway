@@ -493,6 +493,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const threadScrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
+  const imBackFiredRef = useRef(false);
 
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 20_000,
@@ -1978,6 +1980,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 className="text-xs font-semibold rounded-full px-4 py-2 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5"
                 onClick={() => {
+                  if (imBackFiredRef.current) return;
+                  imBackFiredRef.current = true;
                   onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
                   onSetAwayStatus?.(null);
                 }}
@@ -2007,6 +2011,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       className="w-full text-left px-3 py-2.5 rounded-lg hover:opacity-90 transition flex items-center gap-3 mb-1"
                       style={{ background: bg, border: `1px solid ${border}` }}
                       onClick={() => {
+                        // Reset guard so the next "I'm Back" can fire
+                        imBackFiredRef.current = false;
                         onSendMessage(`${emoji} ${callerName} — ${label}`, undefined, undefined, `away_status:${key}`);
                         onSetAwayStatus?.(key);
                         setAwayOpen(false);
@@ -2108,8 +2114,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
                 // Auto-return: first keystroke while away clears status and posts "I'm Back"
                 if (awayStatus && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                  onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
-                  onSetAwayStatus?.(null);
+                  if (!imBackFiredRef.current) {
+                    imBackFiredRef.current = true;
+                    onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
+                    onSetAwayStatus?.(null);
+                  }
                 }
                 onCmdKeyPress();
               }}

@@ -275,18 +275,28 @@ describe("SMS message content", () => {
 // ── VAPI escalation call ──────────────────────────────────────────────────────
 
 describe("placeNoCheckinEscalationCall", () => {
-  it("returns false when VAPI key is missing (no key in test env)", async () => {
-    // In the test environment VAPI_PRIVATE_KEY is not set, so the call returns false.
-    // In production (FIELD_MGMT_ENABLED=true) this would attempt a real VAPI call.
-    const result = await placeNoCheckinEscalationCall({
-      cleanerName: "Jane",
-      customerName: "Bob",
-      jobAddress: "123 Main St",
-      scheduledTime: "9:00 AM",
-    });
-    // Returns false because VAPI_PRIVATE_KEY is absent in test env
-    expect(typeof result).toBe("boolean");
-  }, 10_000);
+  it("returns a boolean result (mocking fetch to avoid real VAPI call)", async () => {
+    // Mock global fetch so no real VAPI network call is made in the test environment.
+    // The function may return true (success) or false (outside hours / other guard) —
+    // we only assert the return type is boolean.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: "call_test_123", status: "queued" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    try {
+      const result = await placeNoCheckinEscalationCall({
+        cleanerName: "Jane",
+        customerName: "Bob",
+        jobAddress: "123 Main St",
+        scheduledTime: "9:00 AM",
+      });
+      expect(typeof result).toBe("boolean");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  }, 5_000);
 });
 
 // ── Time window logic ─────────────────────────────────────────────────────────
