@@ -470,9 +470,8 @@ type Stage =
   | "DONE"
   | "UNHANDLED"
   | "BOOKED"
-  | "NOT_INTERESTED"
-  | "FUTURE_BOOKING"
   | "FOLLOW_UP_SCHEDULED"
+  | "VOICEMAIL"
   | "WIDGET_SIZING"
   | "COLD"
   | "LOST";
@@ -537,32 +536,25 @@ const STAGE_CONFIG: Record<
     order: 8,
   },
   BOOKED: {
-    label: "Booked ✔",
+    label: "$ Booked",
     textColor: "#065f46",
     bgColor: "#d1fae5",
     borderColor: "#6ee7b7",
     order: 9,
   },
-  NOT_INTERESTED: {
-    label: "Not Interested",
-    textColor: "#374151",
-    bgColor: "#f3f4f6",
-    borderColor: "#d1d5db",
-    order: 10,
-  },
-  FUTURE_BOOKING: {
-    label: "Future Booking 📅",
-    textColor: "#1e40af",
-    bgColor: "#eff6ff",
-    borderColor: "#bfdbfe",
-    order: 11,
-  },
   FOLLOW_UP_SCHEDULED: {
-    label: "Follow Up",
+    label: "🔔 Follow Up",
     textColor: "#7c3aed",
     bgColor: "#f5f3ff",
     borderColor: "#ddd6fe",
-    order: 12,
+    order: 10,
+  },
+  VOICEMAIL: {
+    label: "📞 Voicemail",
+    textColor: "#0369a1",
+    bgColor: "#e0f2fe",
+    borderColor: "#bae6fd",
+    order: 11,
   },
   WIDGET_SIZING: {
     label: "Sizing",
@@ -572,18 +564,18 @@ const STAGE_CONFIG: Record<
     order: 0,
   },
   COLD: {
-    label: "Cold ❄️",
+    label: "❄️ Cold",
     textColor: "#334155",
     bgColor: "#f1f5f9",
     borderColor: "#cbd5e1",
-    order: 13,
+    order: 12,
   },
   LOST: {
-    label: "Lost",
+    label: "😞 Lost",
     textColor: "#6b7280",
     bgColor: "#f3f4f6",
     borderColor: "#d1d5db",
-    order: 14,
+    order: 13,
   },
 };
 
@@ -595,8 +587,7 @@ const ALL_STAGES = (Object.keys(STAGE_CONFIG) as Stage[]).sort(
 const OUTCOME_STAGES: Stage[] = [
   "BOOKED",
   "FOLLOW_UP_SCHEDULED",
-  "FUTURE_BOOKING",
-  "NOT_INTERESTED",
+  "VOICEMAIL",
   "COLD",
   "LOST",
 ];
@@ -1852,7 +1843,7 @@ function ConversationDrawer({
                 const stageToIndex: Record<string, number> = {
                   WIDGET_SIZING: 0, QUOTE_SENT: 1, AVAILABILITY: 2, SLOT_CHOICE: 2, ADDRESS: 2,
                   CONFIRMATION: 2, CALL_SCHEDULED: 2, DONE: 2, UNHANDLED: 2,
-                  FOLLOW_UP_SCHEDULED: 3, FUTURE_BOOKING: 3, COLD: 4, NOT_INTERESTED: 4, BOOKED: 5,
+                  FOLLOW_UP_SCHEDULED: 3, VOICEMAIL: 3, COLD: 4, BOOKED: 5,
                 };
                 const currentIdx = stageToIndex[session.stage] ?? 0;
                 return (

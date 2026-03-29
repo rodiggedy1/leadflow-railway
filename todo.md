@@ -528,3 +528,9 @@
 - [x] Hide mid-conversation stages from stage dropdown in admin drawer (show outcome-level only)
 - [x] Hide mid-conversation stages from stage dropdown in agent drawer (show outcome-level only)
 - [x] Update Hot Leads tray to show NOT_INTERESTED and FOLLOW_UP_SCHEDULED bands
+- [x] Fix Cold→Lost display bug: setting stage to Cold shows as Lost on tray card
+- [x] Add icons + sub-label explanations to each outcome stage in the dropdown
+- [x] Ensure tray card band shows exact stage label (not a mapped/overridden value)
+- [x] Remove Not Interested and Future Booking from outcome stages everywhere
+- [x] Add VOICEMAIL outcome stage to Stage type, STAGE_CONFIG, OUTCOME_STAGES, tray band, server z.enum
+- [x] Change Booked icon to dollar sign, Lost icon to sad face in tray band and dropdown

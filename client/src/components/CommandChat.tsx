@@ -186,16 +186,22 @@ function HotLeadCard({
   const isClaimed   = Boolean(claimedBy);
 
   // Derive live status from sessionStatus prop
-  const isBooked = sessionStatus?.isBooked ?? false;
-  const isLost   = !isBooked && (sessionStatus?.stage === "LOST" || sessionStatus?.stage === "COLD");
+  const isBooked  = sessionStatus?.isBooked ?? false;
+  const stage     = sessionStatus?.stage ?? null;
+  // Each outcome stage gets its own band — never collapse Cold into Lost
+  const isLost    = !isBooked && stage === "LOST";
+  const isCold    = !isBooked && stage === "COLD";
+  const isFollowUp  = !isBooked && stage === "FOLLOW_UP_SCHEDULED";
+  const isVoicemail  = !isBooked && stage === "VOICEMAIL";
+  const isResolved   = isBooked || isLost || isCold || isFollowUp || isVoicemail;
 
   // Live elapsed seconds — drives both timer label and urgency colors
   const secs = useElapsedSecs(arrivedAt);
   const mins = Math.floor(secs / 60);
 
-  // Shake every 8 seconds while unclaimed and not yet booked/lost
+  // Shake every 8 seconds while unclaimed and not yet resolved
   useEffect(() => {
-    if (isClaimed || isBooked || isLost) return;
+    if (isClaimed || isResolved) return;
     // Trigger immediately on mount
     setShaking(true);
     const onEnd = () => setShaking(false);
@@ -209,12 +215,18 @@ function HotLeadCard({
     ? "bg-blue-600   border-blue-200"
     : isLost
     ? "bg-slate-500  border-slate-300"
+    : isCold
+    ? "bg-sky-700    border-sky-400"
+    : isVoicemail
+    ? "bg-cyan-700   border-cyan-400"
+    : isFollowUp
+    ? "bg-purple-600 border-purple-300"
     : isClaimed
     ? "bg-emerald-600 border-emerald-200"
     : mins < 2  ? "bg-amber-500  border-amber-300"
     : mins < 5  ? "bg-orange-500 border-orange-400"
     :             "bg-red-600    border-red-400";
-  const urgencyRing = (isBooked || isLost || isClaimed) ? "" :
+  const urgencyRing = (isResolved || isClaimed) ? "" :
     mins < 2  ? "ring-amber-400"
     : mins < 5 ? "ring-orange-500"
     :            "ring-red-500";
@@ -237,7 +249,7 @@ function HotLeadCard({
       )}
     >
       {/* Pulsing glow ring for unclaimed — color shifts with urgency */}
-      {!isClaimed && !isBooked && !isLost && (
+      {!isClaimed && !isResolved && (
         <span className={cn("absolute inset-0 rounded-xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
       )}
 
@@ -245,7 +257,7 @@ function HotLeadCard({
       <div className={cn("flex items-center gap-1.5 px-3 py-1.5", bandBg)}>
         {isBooked ? (
           <>
-            <CheckCircle2 className="h-3 w-3 text-white shrink-0" />
+            <span className="text-white text-xs shrink-0">$</span>
             <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
               Booked{sessionStatus?.bookedByAgentName ? ` · ${sessionStatus.bookedByAgentName}` : ""}
             </span>
@@ -257,10 +269,25 @@ function HotLeadCard({
           </>
         ) : isLost ? (
           <>
-            <XCircle className="h-3 w-3 text-white shrink-0" />
+            <span className="text-white text-xs shrink-0">😞</span>
             <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
               Lost{sessionStatus?.lostReason ? ` · ${sessionStatus.lostReason.replace(/_/g, " ")}` : ""}
             </span>
+          </>
+        ) : isCold ? (
+          <>
+            <span className="text-white text-xs shrink-0">❄️</span>
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">Cold · No reply</span>
+          </>
+        ) : isVoicemail ? (
+          <>
+            <span className="text-white text-xs shrink-0">📞</span>
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">Voicemail · Call back</span>
+          </>
+        ) : isFollowUp ? (
+          <>
+            <span className="text-white text-xs shrink-0">🔔</span>
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">Follow-up Set</span>
           </>
         ) : isClaimed ? (
           <>
