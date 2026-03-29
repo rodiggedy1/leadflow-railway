@@ -1340,40 +1340,58 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   //   - First open: jump to bottom instantly.
   //   - New message arrives: only scroll if already near bottom (don't interrupt reading).
   //   - Switching back to a view: do nothing — DOM node was never destroyed, position preserved.
+  //
+  // Double-rAF: first frame = React DOM commit, second frame = browser layout complete.
+  // This prevents the "last message half-hidden" bug caused by stale scrollHeight.
   useEffect(() => {
     if (opsChatState !== "open") return;
-    const el = jobScrollRef.current;
-    if (!el) return;
     const threadLen = jobDetail?.thread?.length ?? 0;
     if (!jobInitialScrollDone.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
-      jobInitialScrollDone.current = true;
-      prevJobThreadLen.current = threadLen;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = jobScrollRef.current;
+          if (!el) return;
+          el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+          jobInitialScrollDone.current = true;
+          prevJobThreadLen.current = threadLen;
+        });
+      });
     } else if (threadLen > prevJobThreadLen.current) {
-      // New message — only scroll if user is near the bottom
-      if (isNearBottom(el)) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      }
       prevJobThreadLen.current = threadLen;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = jobScrollRef.current;
+          if (!el) return;
+          if (isNearBottom(el)) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        });
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobDetail?.thread?.length, selectedJobId, opsChatState]);
 
-  // Channel view scroll behaviour (same logic).
+  // Channel view scroll behaviour (same logic, double-rAF for correct scrollHeight).
   useEffect(() => {
     if (opsChatState !== "open") return;
-    const el = channelScrollRef.current;
-    if (!el) return;
     const msgLen = channelMsgs.length;
     if (!channelInitialScrollDone.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
-      channelInitialScrollDone.current = true;
-      prevChannelMsgLen.current = msgLen;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = channelScrollRef.current;
+          if (!el) return;
+          el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+          channelInitialScrollDone.current = true;
+          prevChannelMsgLen.current = msgLen;
+        });
+      });
     } else if (msgLen > prevChannelMsgLen.current) {
-      if (isNearBottom(el)) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      }
       prevChannelMsgLen.current = msgLen;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = channelScrollRef.current;
+          if (!el) return;
+          if (isNearBottom(el)) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        });
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelMsgs.length, activeChannel, opsChatState]);

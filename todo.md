@@ -565,3 +565,5 @@
 - [x] URGENT: quote form broken — vendor-react chunk caused dual-React conflict with Manus runtime injection; React moved back into index chunk
 - [ ] Fix: video on quote page freezes at ~10 seconds
 - [x] Fix notification sound regression — root cause: AudioContext was never created because the gesture-unlock listener required a click inside the hidden OpsChat overlay (display:none when minimized). Agents never triggered it, so ctx stayed null and every playSound() call silently failed. Fixed by replacing AudioContext with new Audio() + cloneNode() pattern — simpler, reliable, and works without any gesture-gating since agents have already interacted with the page.
+- [x] Fix OpsChat autoscroll — last message is half-hidden or cut off when new message arrives; scroll must land with the message fully visible plus breathing room
+- [x] Fix notification sound — still not playing after new Audio() rewrite; simplified to bare new Audio(CHIME_URL).play() on every call, no pre-load, no cloneNode, no AudioContext

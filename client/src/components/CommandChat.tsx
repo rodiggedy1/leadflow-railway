@@ -867,6 +867,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Guard: when OpsChat overlay is display:none, scrollHeight = 0.
   // Only scroll when visible. On first open: jump to bottom.
   // On new messages: only scroll if user is already near the bottom (preserve reading position).
+  //
+  // IMPORTANT: We use double-rAF (requestAnimationFrame inside requestAnimationFrame).
+  // The first rAF fires after React commits the new DOM node.
+  // The second rAF fires after the browser has finished layout/paint for that frame,
+  // so scrollHeight is fully updated and the scroll lands with the message fully visible.
   const { state: opsChatState } = useOpsChatWindow();
   const initialScrollDone = useRef(false);
   const prevMsgLen = useRef(0);
@@ -876,13 +881,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     if (!el) return;
     const len = channelMsgs.length;
     if (!initialScrollDone.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
-      initialScrollDone.current = true;
-      prevMsgLen.current = len;
+      // First open: double-rAF then jump instantly to bottom
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!threadScrollRef.current) return;
+          threadScrollRef.current.scrollTo({ top: threadScrollRef.current.scrollHeight, behavior: "instant" as ScrollBehavior });
+          initialScrollDone.current = true;
+          prevMsgLen.current = len;
+        });
+      });
     } else if (len > prevMsgLen.current) {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-      if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       prevMsgLen.current = len;
+      // New message: double-rAF then smooth-scroll if near bottom
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const container = threadScrollRef.current;
+          if (!container) return;
+          const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+          if (nearBottom) container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+        });
+      });
     }
   }, [channelMsgs.length, opsChatState]);
 
