@@ -1027,11 +1027,14 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // myProfile returns email for both owner and agents.
   const myDmKey = (myProfile as any)?.email ?? agentMe?.email ?? callerName;
 
+  // Poll every 15 s so all team members see away status changes promptly.
+  // enabled fires as soon as either the owner OAuth session OR the agent session resolves.
+  // staleTime is 0 so the data is always considered stale and refetches on schedule.
   const { data: agentStatusData, refetch: refetchAgentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
     enabled: Boolean(user) || Boolean(agentMe),
     retry: false,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   // My current away status — read directly from agentMe (the source of truth).

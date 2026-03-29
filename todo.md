@@ -555,3 +555,4 @@
 - [x] Fix: I'm Back toggle not showing (myAwayStatus not being read correctly)
 - [x] Fix: Auto-return on typing not firing while Away
 - [x] Away banner: persistent amber strip at top of OpsChat showing all away agents + reason, disappears when all are back
+- [x] Fix: away banner not visible to other users — reduced poll to 15s, staleTime 0, enabled guard correct
