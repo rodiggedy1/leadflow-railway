@@ -167,6 +167,52 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // React core — tiny, must load first, keep together
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "vendor-react";
+          }
+          // tRPC + React Query — always needed for data fetching
+          if (
+            id.includes("node_modules/@trpc/") ||
+            id.includes("node_modules/@tanstack/react-query") ||
+            id.includes("node_modules/superjson")
+          ) {
+            return "vendor-trpc";
+          }
+          // Radix UI primitives — large collection, lazy-load separately
+          if (id.includes("node_modules/@radix-ui/")) {
+            return "vendor-radix";
+          }
+          // Framer Motion — animation library, only needed on animated pages
+          if (id.includes("node_modules/framer-motion")) {
+            return "vendor-framer";
+          }
+          // Lucide icons — tree-shaken but still sizeable
+          if (id.includes("node_modules/lucide-react")) {
+            return "vendor-lucide";
+          }
+          // Date utilities
+          if (id.includes("node_modules/date-fns")) {
+            return "vendor-date";
+          }
+          // Recharts + D3 — only used on analytics/chart pages
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-") || id.includes("node_modules/victory-vendor")) {
+            return "vendor-charts";
+          }
+          // Emoji picker — large, only used in OpsChat composer
+          if (id.includes("node_modules/emoji-picker-react")) {
+            return "vendor-emoji";
+          }
+          // Remaining node_modules go into a shared vendor chunk
+          if (id.includes("node_modules/")) {
+            return "vendor-misc";
+          }
+        },
+      },
+    },
   },
   server: {
     host: true,
