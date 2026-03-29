@@ -886,32 +886,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
   }, [channelMsgs.length, opsChatState]);
 
-  // Play notification sound + OS notification when new messages arrive from others.
-  // Skip on first load (prev === -1) to avoid firing for all existing messages on remount.
-  useEffect(() => {
-    const prev = prevMsgCountRef.current;
-    const curr = channelMsgs.length;
-    if (prev === -1) {
-      // First load — just record current count, don't fire sound
-      prevMsgCountRef.current = curr;
-      return;
-    }
-    if (curr > prev) {
-      // Check if the newest message is from someone else
-      const newest = channelMsgs[channelMsgs.length - 1];
-      if (newest && newest.from !== callerName) {
-        playNotification();
-        // Show OS notification when tab is in background
-        osNotify({
-          title: `Command Chat — ${newest.from}`,
-          body: newest.body?.slice(0, 100) ?? "New message",
-          tag: "leadflow-command",
-        });
-      }
-    }
-    prevMsgCountRef.current = curr;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelMsgs.length, callerName, playNotification, osNotify]);
+  // NOTE: Notification sound + OS notification for command channel messages is handled
+  // exclusively by OpsChat.tsx (the parent) via useTabLeader to prevent duplicates.
+  // CommandChat.tsx intentionally does NOT fire its own notifications.
 
    // ── Unclaimed leads (badge/highlight only — repeating sound removed) ───────
   const unclaimedLeads = useMemo(() => {

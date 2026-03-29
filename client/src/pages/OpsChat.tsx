@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
+import { useTabLeader } from "@/hooks/useTabLeader";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
@@ -1067,6 +1068,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // -- Notification sound + OS notification --
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
   const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
+  // Only the leader tab fires notifications — prevents duplicates when multiple tabs are open.
+  const { isLeader: isNotifLeader } = useTabLeader();
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
   // -1 sentinel: means "not yet initialized" — prevents spurious sound on first load
   const prevJobMsgCountRef = useRef(-1);
@@ -1093,7 +1096,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         // Only play if the DM panel for this thread is NOT open
         const parts = thread.split("::");
         const otherSlug = parts.find((p) => !openDmNames.has(p));
-        if (otherSlug) {
+        if (otherSlug && isNotifLeader) {
           playNotification();
           osNotify({
             title: "New Direct Message",
@@ -1391,8 +1394,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     if (curr > prev) {
       const newest = thread[thread.length - 1];
       // Use myNames set to handle OAuth name vs DB name mismatch
-      if (newest && !myNames.has(newest.from)) {
-        // Always attempt to play — AudioContext.resume() handles suspended state
+      if (newest && !myNames.has(newest.from) && isNotifLeader) {
         playNotification();
         const jobName = jobs.find((j) => j.id === selectedJobId)?.title ?? "Job Thread";
         osNotify({
@@ -1419,8 +1421,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     }
     if (curr > prev) {
       const newest = channelMsgs[channelMsgs.length - 1];
-      if (newest && !myNames.has(newest.from)) {
-        // Always attempt to play — AudioContext.resume() handles suspended state
+      if (newest && !myNames.has(newest.from) && isNotifLeader) {
         playNotification();
         osNotify({
           title: `#${activeChannel} — ${newest.from}`,
@@ -1433,20 +1434,18 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelMsgLength, activeChannel]);
   // Listen for PLAY_SOUND messages from the Service Worker.
-  // When the tab is in the background, the SW shows the OS notification banner
-  // and posts PLAY_SOUND back to all open page clients. The page receives this
-  // message even when hidden; AudioContext.resume() will unblock it when the
-  // user returns to the tab.
+  // The SW broadcasts PLAY_SOUND to all tabs when it shows an OS notification.
+  // We only play the sound in the leader tab to prevent multi-tab duplication.
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const handleSwMessage = (event: MessageEvent) => {
-      if (event.data?.type === "PLAY_SOUND") {
+      if (event.data?.type === "PLAY_SOUND" && isNotifLeader) {
         playNotification();
       }
     };
     navigator.serviceWorker.addEventListener("message", handleSwMessage);
     return () => navigator.serviceWorker.removeEventListener("message", handleSwMessage);
-  }, [playNotification]);
+  }, [playNotification, isNotifLeader]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
   const grouped = {
