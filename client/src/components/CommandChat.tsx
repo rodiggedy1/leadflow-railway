@@ -159,6 +159,8 @@ function HotLeadCard({
   msg: LeadMsg;
   claimLeadMutation: ClaimMutation;
 }) {
+  // Shake state: fires every 8 seconds while unclaimed
+  const [shaking, setShaking] = useState(false);
   let meta: Record<string, unknown> = {};
   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch {}
   const leadName    = (meta.leadName    as string)         ?? msg.from;
@@ -172,8 +174,20 @@ function HotLeadCard({
   const isClaimed   = Boolean(claimedBy);
 
   // Live elapsed seconds — drives both timer label and urgency colors
-  const secs = useElapsedSecs(isClaimed ? arrivedAt : arrivedAt); // always ticking for unclaimed
+  const secs = useElapsedSecs(arrivedAt);
   const mins = Math.floor(secs / 60);
+
+  // Shake every 8 seconds while unclaimed
+  useEffect(() => {
+    if (isClaimed) return;
+    // Trigger immediately on mount
+    setShaking(true);
+    const onEnd = () => setShaking(false);
+    const interval = setInterval(() => {
+      setShaking(true);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isClaimed]);
 
   const urgencyBand = isClaimed
     ? "bg-emerald-600 border-emerald-200"
@@ -195,8 +209,10 @@ function HotLeadCard({
 
   return (
     <div
+      onAnimationEnd={() => setShaking(false)}
       className={cn(
         "relative rounded-xl border overflow-hidden transition-all",
+        !isClaimed && shaking && "animate-lead-shake",
         isClaimed ? "border-emerald-200 bg-white shadow-sm" : cn("bg-white shadow-md", borderColor),
       )}
     >
@@ -746,6 +762,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
     prevMsgCountRef.current = curr;
   }, [channelMsgs, callerName, playNotification, osNotify]);
+
+  // ── Repeating sound every 60 seconds while any unclaimed lead exists ─────────
+  const unclaimedLeads = useMemo(() => {
+    return channelMsgs.filter(m => {
+      if (m.quickAction !== "new_lead") return false;
+      try {
+        const meta = JSON.parse(m.metadata ?? "{}");
+        return !meta.claimedBy;
+      } catch { return false; }
+    });
+  }, [channelMsgs]);
+
+  useEffect(() => {
+    if (unclaimedLeads.length === 0) return;
+    const interval = setInterval(() => {
+      playNotification();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [unclaimedLeads.length, playNotification]);
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];

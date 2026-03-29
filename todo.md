@@ -521,3 +521,5 @@
 - [x] Fix emailLeadWebhook: look up sessionId for missed call leads and include in new_lead metadata
 - [x] Fix barkWebhook: post new_lead card to command channel after session creation (Bark leads never appear in tray)
 - [x] Hot Leads tray: time-to-claim timer turns amber at 2 min, red at 5 min on unclaimed cards
+- [x] Unclaimed Hot Lead cards shake animation until claimed
+- [x] Repeating sound notification every 60 seconds while any unclaimed lead exists
