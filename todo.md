@@ -541,3 +541,4 @@
 - [x] Fix CommandChat + OpsChat bug: navigating back to command chat fires notification sound and fast-scrolls the page
 - [x] CommandChat: restore scroll position when re-opening chat (currently jumps to top)
 - [x] CommandChat: message history cut off — load more messages beyond the current limit (raised to 500)
+- [x] Fix OpsChat scroll position not restoring on re-open (still jumps to top)

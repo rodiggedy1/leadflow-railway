@@ -722,6 +722,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
   // Save scroll position when widget hides; restore it when widget re-opens
   const savedScrollTopRef = useRef<number | null>(null);
+  // When true, the scroll-to-bottom effect should skip so the restore can win
+  const pendingScrollRestoreRef = useRef(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
@@ -1266,10 +1268,14 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       // Widget is re-opening — restore saved scroll position
       const saved = savedScrollTopRef.current;
       if (saved !== null) {
+        pendingScrollRestoreRef.current = true;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const container = threadScrollRef.current;
-            if (container) container.scrollTop = saved;
+            if (container) {
+              container.scrollTop = saved;
+            }
+            pendingScrollRestoreRef.current = false;
           });
         });
       }
@@ -1289,12 +1295,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     }
     if (!initialScrollDoneRef.current) {
       // Only jump to bottom on first load if we don't have a saved position to restore
-      if (savedScrollTopRef.current === null) {
+      if (savedScrollTopRef.current === null && !pendingScrollRestoreRef.current) {
         scrollToBottom(true);
       }
       initialScrollDoneRef.current = true;
     } else {
-      scrollToBottom(false); // smooth for new messages
+      // Skip smooth scroll if a position restore is pending (widget just re-opened)
+      if (!pendingScrollRestoreRef.current) {
+        scrollToBottom(false); // smooth for new messages
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobDetail?.thread?.length, channelMsgs.length, selectedJobId, activeChannel]);
