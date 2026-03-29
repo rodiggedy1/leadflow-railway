@@ -131,7 +131,12 @@ const STAGE_LABELS: Record<string, string> = {
   BOOKED:              "Booked ✔",
   NOT_INTERESTED:      "Not Interested",
   FOLLOW_UP_SCHEDULED: "Follow Up 📅",
+  COLD:                "Cold ❄️",
+  VOICEMAIL:           "Voicemail 📞",
+  LOST:                "Lost",
 };
+const OUTCOME_STAGES = ["BOOKED", "FOLLOW_UP_SCHEDULED", "VOICEMAIL", "COLD", "LOST"] as const;
+type OutcomeStage = typeof OUTCOME_STAGES[number];
 const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   WIDGET_SIZING:  { bg: "#ede9fe", text: "#7c3aed", border: "#ddd6fe" },
   QUOTE_SENT:     { bg: "#dbeafe", text: "#1d4ed8", border: "#bfdbfe" },
@@ -145,6 +150,9 @@ const STAGE_COLORS: Record<string, { bg: string; text: string; border: string }>
   BOOKED:              { bg: "#bbf7d0", text: "#14532d", border: "#4ade80" },
   NOT_INTERESTED:      { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
   FOLLOW_UP_SCHEDULED: { bg: "#f5f3ff", text: "#7c3aed", border: "#ddd6fe" },
+  COLD:                { bg: "#e0f2fe", text: "#0369a1", border: "#bae6fd" },
+  VOICEMAIL:           { bg: "#fef9c3", text: "#854d0e", border: "#fef08a" },
+  LOST:                { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -539,6 +547,31 @@ function ConversationDrawer({
     onError: (err) => toast.error(err.message),
   });
 
+  // Stage update
+  const [pendingLostSession, setPendingLostSession] = useState<{ id: number; name: string | null } | null>(null);
+  const [lostReason, setLostReason] = useState<"price" | "timing" | "no_response" | "competitor" | "other" | "">("")
+  const agentUpdateStageMutation = trpc.leads.agentUpdateStage.useMutation({
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      toast.success("Stage updated");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const markAsLostMutation = trpc.leads.markAsLost.useMutation({
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      toast.success("Lead marked as lost");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  function handleStageSelect(val: string) {
+    if (val === session.stage) return;
+    if (val === "LOST") {
+      setPendingLostSession({ id: session.id, name: session.leadName ?? session.leadPhone ?? null });
+      return;
+    }
+    agentUpdateStageMutation.mutate({ sessionId: session.id, stage: val as OutcomeStage });
+  }
   // Internal notes
   const { data: notesData } = trpc.agents.getNotes.useQuery({ sessionId: session.id });
   const [notes, setNotes] = useState(notesData?.notes ?? "");
@@ -591,6 +624,7 @@ function ConversationDrawer({
   }, [closingRec?.suggestedMessage]);
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={onClose}
@@ -1193,6 +1227,42 @@ function ConversationDrawer({
               </div>
             )}
 
+            {/* Move Stage */}
+            <div className="px-4 py-3 border-b" style={{ borderColor: "#F0D8D0" }}>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Move Stage</p>
+              <Select
+                value={session.stage}
+                onValueChange={handleStageSelect}
+                disabled={agentUpdateStageMutation.isPending || markAsLostMutation.isPending}
+              >
+                <SelectTrigger
+                  className="h-8 text-xs font-semibold rounded-full border px-3 gap-1.5 focus:ring-0 w-full"
+                  style={{
+                    backgroundColor: STAGE_COLORS[session.stage]?.bg ?? "#f3f4f6",
+                    color: STAGE_COLORS[session.stage]?.text ?? "#374151",
+                    borderColor: STAGE_COLORS[session.stage]?.border ?? "#d1d5db",
+                  }}
+                >
+                  <SelectValue>
+                    {agentUpdateStageMutation.isPending || markAsLostMutation.isPending
+                      ? <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Updating…</span>
+                      : (STAGE_LABELS[session.stage] ?? session.stage)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {OUTCOME_STAGES.map(s => (
+                    <SelectItem key={s} value={s} className="text-xs">
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: STAGE_COLORS[s]?.bg, color: STAGE_COLORS[s]?.text }}
+                      >
+                        {STAGE_LABELS[s] ?? s}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {/* Booked Amount */}
             {session.isBooked === 1 && (
               <div className="px-4 py-3 border-b" style={{ borderColor: "#bbf7d0", backgroundColor: "#f0fdf4" }}>
@@ -1349,11 +1419,52 @@ function ConversationDrawer({
         </div>
       </div>
     </div>
+    {/* Lost reason dialog */}
+    {pendingLostSession && (
+      <Dialog open onOpenChange={() => { setPendingLostSession(null); setLostReason(""); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mark as Lost</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            Why is <b>{pendingLostSession.name ?? "this lead"}</b> being marked as lost?
+          </p>
+          <Select value={lostReason} onValueChange={v => setLostReason(v as typeof lostReason)}>
+            <SelectTrigger className="text-sm">
+              <SelectValue placeholder="Select a reason (optional)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="price">Price too high</SelectItem>
+              <SelectItem value="timing">Bad timing</SelectItem>
+              <SelectItem value="no_response">No response</SelectItem>
+              <SelectItem value="competitor">Went with competitor</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setPendingLostSession(null); setLostReason(""); }}>Cancel</Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={markAsLostMutation.isPending}
+              onClick={() => {
+                markAsLostMutation.mutate(
+                  { sessionId: pendingLostSession.id, lostReason: (lostReason || undefined) as ("price" | "timing" | "no_response" | "competitor" | "other" | undefined) },
+                  { onSuccess: () => { setPendingLostSession(null); setLostReason(""); } }
+                );
+              }}
+            >
+              {markAsLostMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+              Confirm Lost
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      )}
+    </>
   );
 }
-
 // ── Lead Card ─────────────────────────────────────────────────────────────────
-
 function LeadCard({
   session,
   currentAgentId,

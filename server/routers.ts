@@ -1399,7 +1399,7 @@ export const appRouter = router({
      * leads.markAsLost — agent marks a lead as lost/dead via the 3-dot menu.
      * Sets stage to LOST, turns off AI mode, and logs activity.
      */
-    markAsLost: adminAgentProcedure
+    markAsLost: agentProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
         lostReason: z.enum(["price", "timing", "no_response", "competitor", "other"]).optional(),
