@@ -556,3 +556,4 @@
 - [x] Fix: Auto-return on typing not firing while Away
 - [x] Away banner: persistent amber strip at top of OpsChat showing all away agents + reason, disappears when all are back
 - [x] Fix: away banner not visible to other users — reduced poll to 15s, staleTime 0, enabled guard correct
+- [x] Fix: HTTP 414 on getReactions — converted from query (GET) to mutation (POST) so IDs go in body not URL

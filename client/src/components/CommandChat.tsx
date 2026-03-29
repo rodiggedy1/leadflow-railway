@@ -615,16 +615,29 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }, [commandSeenByBulk]);
 
   // ── Reactions ────────────────────────────────────────────────────────────────
-  const cmdMsgIds = channelMsgs.map(m => m.id);
-  const { data: reactionsData, refetch: refetchReactions } = trpc.opsChat.getReactions.useQuery(
-    { messageIds: cmdMsgIds },
-    { enabled: cmdMsgIds.length > 0, refetchInterval: 10_000 }
-  );
-  const reactionsByMsgId = (reactionsData?.reactions ?? []).reduce<Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>>((acc, r) => {
-    if (!acc[r.messageId]) acc[r.messageId] = [];
-    acc[r.messageId].push(r);
-    return acc;
-  }, {});
+  // getReactions is a mutation (POST) to avoid HTTP 414 when hundreds of IDs are sent.
+  const cmdMsgIds = useMemo(() => channelMsgs.map(m => m.id), [channelMsgs]);
+  const [reactionsData, setReactionsData] = useState<{ reactions: Array<{ messageId: number; callerId: string; callerName: string; emoji: string }> } | undefined>(undefined);
+  const getReactionsMutation = trpc.opsChat.getReactions.useMutation({
+    onSuccess: (data) => setReactionsData(data),
+  });
+  const refetchReactions = useCallback(() => {
+    if (cmdMsgIds.length > 0) getReactionsMutation.mutate({ messageIds: cmdMsgIds });
+  }, [cmdMsgIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    refetchReactions();
+    const interval = setInterval(refetchReactions, 10_000);
+    return () => clearInterval(interval);
+  }, [refetchReactions]);
+  const reactionsByMsgId = useMemo(() =>
+    (reactionsData?.reactions ?? []).reduce<Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>>(
+      (acc: Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>, r: { messageId: number; callerId: string; callerName: string; emoji: string }) => {
+        if (!acc[r.messageId]) acc[r.messageId] = [];
+        acc[r.messageId].push(r);
+        return acc;
+      }, {}
+    ),
+  [reactionsData]);
   const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
 
   // ── Scroll-to-original ────────────────────────────────────────────────────────────────

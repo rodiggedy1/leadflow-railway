@@ -1393,11 +1393,14 @@ export const opsChatRouter = router({
    * Get all reactions for a set of message IDs.
    * Used to hydrate reaction pills on load.
    */
+  // NOTE: This is intentionally a mutation (not a query) so that the message IDs
+  // are sent in the POST body rather than the URL. With hundreds of IDs, a GET
+  // request would exceed nginx's URI size limit (HTTP 414).
   getReactions: opsChatProcedure
     .input(z.object({
       messageIds: z.array(z.number().int().positive()).max(1000),
     }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return { reactions: [] };
       if (input.messageIds.length === 0) return { reactions: [] };

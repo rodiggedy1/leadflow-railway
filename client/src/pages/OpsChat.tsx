@@ -1232,10 +1232,22 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const channelMsgIds = useMemo(() => channelMsgs.map(m => m.id), [channelMsgs]);
   const activeMsgIds = activeTab === "today" ? threadMsgIds : channelMsgIds;
 
-  const { data: reactionsData, refetch: refetchReactions } = trpc.opsChat.getReactions.useQuery(
-    { messageIds: activeMsgIds },
-    { enabled: isAuthenticated && activeMsgIds.length > 0, refetchInterval: 10_000 }
-  );
+  // getReactions is a mutation (POST) to avoid HTTP 414 when hundreds of IDs are sent.
+  // We replicate the polling behaviour with a useEffect + setInterval.
+  const [reactionsData, setReactionsData] = useState<{ reactions: Array<{ messageId: number; callerId: string; callerName: string; emoji: string }> } | undefined>(undefined);
+  const getReactionsMutation = trpc.opsChat.getReactions.useMutation({
+    onSuccess: (data) => setReactionsData(data),
+  });
+  const refetchReactions = useCallback(() => {
+    if (isAuthenticated && activeMsgIds.length > 0) {
+      getReactionsMutation.mutate({ messageIds: activeMsgIds });
+    }
+  }, [isAuthenticated, activeMsgIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    refetchReactions();
+    const interval = setInterval(refetchReactions, 10_000);
+    return () => clearInterval(interval);
+  }, [refetchReactions]);
 
   // Group reactions by messageId for O(1) lookup in render
   const reactionsByMsgId = useMemo(() => {
