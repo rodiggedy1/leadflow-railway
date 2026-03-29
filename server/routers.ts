@@ -1092,6 +1092,25 @@ export const appRouter = router({
         await db
           .delete(conversationSessions)
           .where(eq(conversationSessions.id, input.sessionId));
+        // Remove the hot lead card from the command channel tray.
+        // new_lead cards store sessionId in their JSON metadata field.
+        try {
+          const hotLeadMsgs = await db
+            .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+            .from(opsChatMessages)
+            .where(eq(opsChatMessages.quickAction, "new_lead"));
+          const toDelete = hotLeadMsgs
+            .filter(m => {
+              try { return JSON.parse(m.metadata ?? "{}").sessionId === input.sessionId; }
+              catch { return false; }
+            })
+            .map(m => m.id);
+          if (toDelete.length > 0) {
+            await db.delete(opsChatMessages).where(inArray(opsChatMessages.id, toDelete));
+          }
+        } catch (err) {
+          console.error("[deleteLead] Failed to remove hot lead card:", err);
+        }
         return { success: true };
       }),
 

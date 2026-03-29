@@ -537,3 +537,4 @@
 - [x] Add lost reason quick-select in drawer when Lost stage is selected
 - [x] Verify all 5 outcome stages wire correctly from drawer → DB → tray card
 - [x] Fix agent drawer: stage dropdown hidden behind isAdmin guard — show to all agents via agentUpdateStage procedure
+- [x] Delete lead from drawer should also remove the corresponding hot_lead card from the command channel tray
