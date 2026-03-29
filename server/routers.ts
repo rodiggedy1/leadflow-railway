@@ -684,7 +684,7 @@ export const appRouter = router({
           "LOST",
         ]),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const stageUpdates: Record<string, unknown> = { stage: input.stage };
@@ -703,6 +703,43 @@ export const appRouter = router({
         // If marking as BOOKED, increment campaign bookedCount for reactivation leads
         if (input.stage === "BOOKED") {
           await markReactivationContactBooked(input.sessionId).catch(console.error);
+          // Auto-fire booking announcement into the command channel
+          try {
+            const [session] = await db
+              .select({
+                leadName: conversationSessions.leadName,
+                quotedPrice: conversationSessions.quotedPrice,
+                serviceType: conversationSessions.serviceType,
+                bookedAmount: conversationSessions.bookedAmount,
+              })
+              .from(conversationSessions)
+              .where(eq(conversationSessions.id, input.sessionId))
+              .limit(1);
+            const personName = session?.leadName ?? "Lead";
+            const rawAmount = session?.bookedAmount
+              ? `$${session.bookedAmount}`
+              : session?.quotedPrice ?? null;
+            const note = session?.serviceType ?? null;
+            const authorName = ctx.agent.agentName;
+            const meta = JSON.stringify({
+              personName,
+              amount: rawAmount ?? undefined,
+              note: note ?? undefined,
+            });
+            const body = rawAmount
+              ? `🎉 New booking! ${personName} — ${rawAmount}${note ? ` · ${note}` : ""}`
+              : `🎉 New booking! ${personName}${note ? ` · ${note}` : ""}`;
+            await db.insert(opsChatMessages).values({
+              channel: "command",
+              authorName,
+              authorRole: "office",
+              body,
+              quickAction: "announce_booking",
+              metadata: meta,
+            });
+          } catch (err) {
+            console.error("[adminUpdateStage] Failed to post booking announcement:", err);
+          }
         }
         return { success: true };
       }),
