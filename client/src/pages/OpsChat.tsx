@@ -81,9 +81,9 @@ function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: stri
   if (awayAgents.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
+    <div className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
       <span className="text-amber-500 shrink-0">⚠️</span>
-      <p className="text-sm text-amber-800 leading-snug">
+      <p className="text-sm text-amber-800 leading-snug text-center">
         {awayAgents.map((ag, i) => {
           const copy = AWAY_COPY[ag.awayStatus!] ?? { emoji: "🟡", phrase: "away" };
           return (
