@@ -2469,7 +2469,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
       if (agent.pagePermissions !== null && agent.pagePermissions !== undefined) {
         try { pagePermissions = JSON.parse(agent.pagePermissions as string); } catch { pagePermissions = null; }
       }
-      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive, isAdmin: agent.isAdmin === 1, pagePermissions };
+      return { id: agent.id, name: agent.name, email: agent.email, isActive: agent.isActive, isAdmin: agent.isAdmin === 1, pagePermissions, awayStatus: agent.awayStatus ?? null };
     }),
 
     /**

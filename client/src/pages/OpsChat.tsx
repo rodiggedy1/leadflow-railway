@@ -997,17 +997,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     staleTime: 30_000,
   });
 
-  // My current away status — derived from agentStatusData (my own record)
-  // Agents only: owners don't have an agents record so this stays null for them.
-  const myAwayStatus = useMemo(() => {
-    if (!agentMe) return null;
-    const myRecord = agentStatusData?.agents.find(ag => ag.name === callerName);
-    return myRecord?.awayStatus ?? null;
-  }, [agentStatusData?.agents, agentMe, callerName]);
+  // My current away status — read directly from agentMe (the source of truth).
+  // agentMe is refetched after every setAwayStatus mutation so it stays in sync.
+  // Owners don't have an agents record so this is always null for them.
+  const myAwayStatus: string | null = agentMe?.awayStatus ?? null;
 
   // Mutation to persist away status to the DB
   const setAwayStatusMutation = trpc.agents.setAwayStatus.useMutation({
-    onSuccess: () => refetchAgentStatusData(),
+    onSuccess: () => {
+      refetchAgentMe();
+      refetchAgentStatusData();
+    },
     onError: (err) => console.error("[Away] setAwayStatus failed:", err.message),
   });
   // Load all agent photo URLs for message bubble avatars
