@@ -525,3 +525,6 @@
 - [x] Repeating sound notification every 60 seconds while any unclaimed lead exists
 - [x] Show live lead status (booked/lost/etc.) on new_lead cards in chat feed and Hot Leads tray
 - [x] Join session status at query time so status updates in AdminDashboard reflect on cards immediately
+- [x] Hide mid-conversation stages from stage dropdown in admin drawer (show outcome-level only)
+- [x] Hide mid-conversation stages from stage dropdown in agent drawer (show outcome-level only)
+- [x] Update Hot Leads tray to show NOT_INTERESTED and FOLLOW_UP_SCHEDULED bands

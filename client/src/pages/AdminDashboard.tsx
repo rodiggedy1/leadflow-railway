@@ -474,8 +474,8 @@ type Stage =
   | "FUTURE_BOOKING"
   | "FOLLOW_UP_SCHEDULED"
   | "WIDGET_SIZING"
-  | "COLD";
-
+  | "COLD"
+  | "LOST";
 const STAGE_CONFIG: Record<
   Stage,
   { label: string; textColor: string; bgColor: string; borderColor: string; order: number }
@@ -578,13 +578,29 @@ const STAGE_CONFIG: Record<
     borderColor: "#cbd5e1",
     order: 13,
   },
+  LOST: {
+    label: "Lost",
+    textColor: "#6b7280",
+    bgColor: "#f3f4f6",
+    borderColor: "#d1d5db",
+    order: 14,
+  },
 };
 
 const ALL_STAGES = (Object.keys(STAGE_CONFIG) as Stage[]).sort(
   (a, b) => STAGE_CONFIG[a].order - STAGE_CONFIG[b].order
 );
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Outcome-level stages shown in drawers — mid-conversation AI stages are hidden but still valid in DB
+const OUTCOME_STAGES: Stage[] = [
+  "BOOKED",
+  "FOLLOW_UP_SCHEDULED",
+  "FUTURE_BOOKING",
+  "NOT_INTERESTED",
+  "COLD",
+  "LOST",
+];
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function timeAgo(date: Date | string): string {
   const now = Date.now();
@@ -1385,7 +1401,7 @@ function ConversationDrawer({
                     : <ChevronDown className="w-3 h-3 ml-1 shrink-0 opacity-60" />}
                 </SelectTrigger>
                 <SelectContent>
-                  {ALL_STAGES.map(s => (
+                  {OUTCOME_STAGES.map(s => (
                     <SelectItem key={s} value={s} className="text-xs">
                       <span
                         className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -1875,8 +1891,15 @@ function ConversationDrawer({
                     >
                       <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {(["WIDGET_SIZING","QUOTE_SENT","AVAILABILITY","SLOT_CHOICE","TIME_PREF","ADDRESS","CONFIRMATION","CALL_SCHEDULED","DONE","UNHANDLED","BOOKED","NOT_INTERESTED","FUTURE_BOOKING","FOLLOW_UP_SCHEDULED","COLD"] as const).map(s => (
-                          <SelectItem key={s} value={s} className="text-xs">{STAGE_CONFIG[s as Stage]?.label ?? s}</SelectItem>
+                        {OUTCOME_STAGES.map(s => (
+                          <SelectItem key={s} value={s} className="text-xs">
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
+                              style={{ backgroundColor: STAGE_CONFIG[s]?.bgColor, color: STAGE_CONFIG[s]?.textColor }}
+                            >
+                              {STAGE_CONFIG[s]?.label ?? s}
+                            </span>
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
