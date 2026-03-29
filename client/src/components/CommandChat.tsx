@@ -496,7 +496,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Notification sound + OS notification ──────────────────────────────────────
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
   const { notify: osNotify, requestPermission: requestOsPermission } = useOsNotification();
-  const prevMsgCountRef = useRef(channelMsgs.length);
+  // -1 sentinel: means "not yet initialized" — prevents spurious sound on first load/remount
+  const prevMsgCountRef = useRef(-1);
 
   // Request OS notification permission on first user interaction
   useEffect(() => {
@@ -837,17 +838,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
   }, [transcribeVoice]);
 
-  // Auto-scroll thread to bottom when new messages arrive
+  // Auto-scroll thread to bottom when new messages arrive.
+  // On first mount (initialScrollDone is false) jump instantly — no smooth scroll
+  // so re-entering the chat doesn't trigger a jarring fast-scroll animation.
+  const initialScrollDone = useRef(false);
   useEffect(() => {
     const el = threadScrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!initialScrollDone.current) {
+      // First render — jump to bottom instantly, no animation
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+      initialScrollDone.current = true;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [channelMsgs.length]);
 
-  // Play notification sound + OS notification when new messages arrive from others
+  // Play notification sound + OS notification when new messages arrive from others.
+  // Skip on first load (prev === -1) to avoid firing for all existing messages on remount.
   useEffect(() => {
     const prev = prevMsgCountRef.current;
     const curr = channelMsgs.length;
+    if (prev === -1) {
+      // First load — just record current count, don't fire sound
+      prevMsgCountRef.current = curr;
+      return;
+    }
     if (curr > prev) {
       // Check if the newest message is from someone else
       const newest = channelMsgs[channelMsgs.length - 1];
