@@ -123,7 +123,7 @@ export interface ZapierEmailPayload {
 
 // ── Email type detection ──────────────────────────────────────────────────────
 
-export type EmailType = "form_submission" | "phone_call" | "unknown";
+export type EmailType = "form_submission" | "phone_call" | "yelp_inquiry" | "unknown";
 
 /**
  * Detects whether an email is a form submission or a Google Voice/Fi call notification.
@@ -142,6 +142,16 @@ export function detectEmailType(body: string, subject?: string): EmailType {
     subjectLower.includes("received a call")
   ) {
     return "phone_call";
+  }
+
+  // Yelp inquiry: contains Yelp-specific phrasing
+  if (
+    bodyLower.includes("reply to") && bodyLower.includes("yelp biz") ||
+    subjectLower.includes("yelp") ||
+    bodyLower.includes("yelp.com") ||
+    (bodyLower.includes("sent to") && bodyLower.includes("maids in black") && bodyLower.includes("bedroom"))
+  ) {
+    return "yelp_inquiry";
   }
 
   // Form submission: has at least a Phone field and one of the service fields
@@ -444,6 +454,208 @@ export async function buildEmailLeadIntroSms(
 export function buildEmailLeadSchedulingSms(): string {
   const slots = getNextAvailableSlots(2);
   return formatAvailabilityQuestion(slots);
+}
+
+// ── Yelp Inquiry Parser ──────────────────────────────────────────────────────
+
+export interface YelpLeadParsed {
+  clientName: string | null;
+  serviceType: string;
+  bedrooms: string | null;
+  bathrooms: string | null;
+  requestedDate: string | null;
+  zipCode: string | null;
+}
+
+/**
+ * Parses a Yelp inquiry email body.
+ *
+ * Example format:
+ *   You have a new move-in or move-out cleaning request.
+ *   Reply to Seattle on Yelp Biz
+ *   Sent to Maids in Black
+ *
+ *   5028 Wisconsin Ave Washington, DC 20016   ← business address, ignore
+ *
+ *   How many bedrooms are in your home?
+ *   1 bedroom
+ *
+ *   How many bathrooms are in your home?
+ *   1 bathroom
+ *
+ *   When do you require this service?
+ *   2026-05-18
+ *
+ *   In what location do you need the service?
+ *   22025
+ *
+ *   Seattle G.
+ */
+export function parseYelpLeadBody(body: string, subject?: string): YelpLeadParsed {
+  const lines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // Extract client name: "Reply to <Name> on Yelp Biz"
+  let clientName: string | null = null;
+  for (const line of lines) {
+    const replyMatch = line.match(/^Reply to (.+?) on Yelp Biz/i);
+    if (replyMatch) {
+      clientName = replyMatch[1].trim();
+      break;
+    }
+  }
+  // Fallback: last non-empty line that looks like a name (e.g. "Seattle G.")
+  if (!clientName) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (/^[A-Z][a-z]+(\s[A-Z]\.?)?$/.test(l)) {
+        clientName = l;
+        break;
+      }
+    }
+  }
+
+  // Extract service type from the first line or subject
+  let serviceType = "Move-In/Out Cleaning"; // default for Yelp move-in/out
+  const firstLine = lines[0]?.toLowerCase() ?? "";
+  const subjectLower = (subject ?? "").toLowerCase();
+  if (firstLine.includes("deep clean") || subjectLower.includes("deep clean")) {
+    serviceType = "Deep Cleaning";
+  } else if (firstLine.includes("standard") || subjectLower.includes("standard")) {
+    serviceType = "Standard Cleaning";
+  } else if (firstLine.includes("move") || subjectLower.includes("move")) {
+    serviceType = "Move-In/Out Cleaning";
+  } else if (firstLine.includes("office") || subjectLower.includes("office")) {
+    serviceType = "Office Cleaning";
+  }
+
+  // Parse Q&A pairs: question line followed by answer line
+  let bedrooms: string | null = null;
+  let bathrooms: string | null = null;
+  let requestedDate: string | null = null;
+  let zipCode: string | null = null;
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const q = lines[i].toLowerCase();
+    const answer = lines[i + 1];
+
+    if (q.includes("how many bedroom")) {
+      bedrooms = parseBedroomCount(answer);
+      i++;
+    } else if (q.includes("how many bathroom")) {
+      bathrooms = parseBathroomCount(answer);
+      i++;
+    } else if (q.includes("when do you require") || q.includes("what date") || q.includes("service date")) {
+      requestedDate = answer.trim();
+      i++;
+    } else if (q.includes("what location") || q.includes("location do you need") || q.includes("zip") || q.includes("area")) {
+      // Only treat as zip if the answer looks like a zip code (5 digits)
+      if (/^\d{5}(-\d{4})?$/.test(answer.trim())) {
+        zipCode = answer.trim();
+      }
+      i++;
+    }
+  }
+
+  // Fallback zip: scan all lines for a 5-digit zip that is NOT the business address
+  if (!zipCode) {
+    // Skip lines that contain the business address keywords
+    for (const line of lines) {
+      if (
+        line.toLowerCase().includes("wisconsin") ||
+        line.toLowerCase().includes("washington, dc") ||
+        line.toLowerCase().includes("sent to")
+      ) continue;
+      const zipMatch = line.match(/\b(\d{5})\b/);
+      if (zipMatch) {
+        zipCode = zipMatch[1];
+        break;
+      }
+    }
+  }
+
+  return { clientName, serviceType, bedrooms, bathrooms, requestedDate, zipCode };
+}
+
+// ── Handler: Yelp Inquiry ─────────────────────────────────────────────────────
+
+export async function handleYelpInquiryEmail(
+  body: string,
+  fromAddress: string,
+  subject?: string
+): Promise<void> {
+  console.log(`[YelpLead] Processing Yelp inquiry from: ${fromAddress}`);
+
+  const parsed = parseYelpLeadBody(body, subject);
+  console.log(`[YelpLead] Parsed: name=${parsed.clientName}, service=${parsed.serviceType}, bedrooms=${parsed.bedrooms}, bathrooms=${parsed.bathrooms}, date=${parsed.requestedDate}, zip=${parsed.zipCode}`);
+
+  const db = await getDb();
+  if (!db) {
+    console.error("[YelpLead] No DB connection — skipping");
+    return;
+  }
+
+  const displayName = parsed.clientName ?? "Yelp Lead";
+  const bedroomsDisplay = parsed.bedrooms ?? "Unknown";
+  const bathroomsDisplay = parsed.bathrooms ?? "Unknown";
+  const dateDisplay = parsed.requestedDate ?? "Not specified";
+  const zipDisplay = parsed.zipCode ?? "Not specified";
+
+  // Build Command Chat card body
+  const leadBody = [
+    `📍 **Yelp Inquiry** · ${displayName}`,
+    `🏠 **${parsed.serviceType}** · ${bedroomsDisplay} / ${bathroomsDisplay}`,
+    `📅 Requested date: **${dateDisplay}**`,
+    `📮 Zip code: **${zipDisplay}**`,
+    `⚠️ No phone number — follow up via Yelp Biz to get contact info`,
+  ].join("\n");
+
+  const metadata = JSON.stringify({
+    leadName: displayName,
+    leadPhone: null,
+    serviceType: parsed.serviceType,
+    size: `${bedroomsDisplay} / ${bathroomsDisplay}`,
+    requestedDate: parsed.requestedDate,
+    zipCode: parsed.zipCode,
+    utmSource: "yelp",
+    arrivedAt: Date.now(),
+  });
+
+  try {
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "📍 Yelp Lead",
+      authorRole: "system",
+      body: leadBody,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+    console.log(`[YelpLead] Posted Yelp lead card to Command Chat`);
+  } catch (err) {
+    console.error("[YelpLead] Failed to post lead card:", err);
+  }
+
+  // Alert CS team via SMS
+  const alertMsg = `📍 New Yelp lead: ${displayName} · ${parsed.serviceType} · ${bedroomsDisplay}/${bathroomsDisplay} · Date: ${dateDisplay} · Zip: ${zipDisplay}\nNo phone — follow up on Yelp Biz`;
+  sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch((err) =>
+    console.error("[YelpLead] CS alert SMS failed:", err)
+  );
+  sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch((err) =>
+    console.error("[YelpLead] Secondary alert SMS failed:", err)
+  );
+
+  notifyOwner({
+    title: `New Yelp Lead: ${displayName}`,
+    content: `${parsed.serviceType} · ${bedroomsDisplay} / ${bathroomsDisplay}\nDate: ${dateDisplay} · Zip: ${zipDisplay}\n\nNo phone number — follow up via Yelp Biz.`,
+  }).catch(() => {});
+
+  logActivity({
+    eventType: "new_lead",
+    title: `New Yelp lead: ${displayName}`,
+    body: `${parsed.serviceType} · ${bedroomsDisplay} / ${bathroomsDisplay} · ${dateDisplay}`,
+    meta: { leadName: displayName, serviceType: parsed.serviceType, source: "yelp" },
+  }).catch(() => {});
 }
 
 // ── Handler: Form Submission Lead ─────────────────────────────────────────────
@@ -758,6 +970,8 @@ export async function handleEmailLead(payload: ZapierEmailPayload): Promise<void
     await handleFormSubmissionEmail(emailBody, fromAddress);
   } else if (emailType === "phone_call") {
     await handleCallNotificationEmail(emailBody, fromAddress);
+  } else if (emailType === "yelp_inquiry") {
+    await handleYelpInquiryEmail(emailBody, fromAddress, subject);
   } else {
     console.warn(`[EmailLead] Unknown email type — subject="${subject}", body preview="${emailBody.slice(0, 100)}". Dropping.`);
   }
