@@ -6,13 +6,23 @@
  * preventing duplicates when multiple tabs are open simultaneously.
  *
  * Protocol (BroadcastChannel "leadflow-tab-leader"):
+ *
+ *   Election:
  *   - On mount: broadcast "PING" to ask if a leader already exists.
  *   - If a "PONG" arrives within 200 ms → this tab is a follower.
  *   - If no PONG arrives → this tab becomes the leader and broadcasts "I_AM_LEADER".
  *   - When a leader tab receives "PING" → it replies "PONG".
- *   - When a leader tab unmounts (closes/navigates away) → it broadcasts "LEADER_GONE".
- *   - Any follower that receives "LEADER_GONE" runs its own election after a short
- *     random delay (to avoid simultaneous elections) and becomes the new leader.
+ *
+ *   Heartbeat (prevents silent dead-leader):
+ *   - The leader broadcasts "HEARTBEAT" every HEARTBEAT_INTERVAL_MS.
+ *   - Followers record the last heartbeat timestamp.
+ *   - If a follower hasn't seen a heartbeat in HEARTBEAT_TIMEOUT_MS it runs
+ *     a new election (handles the case where the leader tab crashed or closed
+ *     without broadcasting "LEADER_GONE").
+ *
+ *   Graceful handoff:
+ *   - When a leader tab unmounts it broadcasts "LEADER_GONE" so followers
+ *     can elect a new leader immediately without waiting for the timeout.
  *
  * Returns: { isLeader: boolean }
  */
@@ -20,12 +30,20 @@ import { useEffect, useRef, useState } from "react";
 
 const CHANNEL_NAME = "leadflow-tab-leader";
 const PONG_TIMEOUT_MS = 200;
+const HEARTBEAT_INTERVAL_MS = 5_000;   // leader pings every 5 s
+const HEARTBEAT_TIMEOUT_MS = 12_000;   // follower re-elects if silent for 12 s
 
 export function useTabLeader(): { isLeader: boolean } {
   const [isLeader, setIsLeader] = useState(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const pongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Keep a ref in sync so the onmessage closure can read the current value
+  const heartbeatSendRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatWatchRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastHeartbeatRef = useRef<number>(Date.now());
+
+  // Keep a ref in sync with isLeader so the onmessage closure always reads the
+  // current value — updated IMMEDIATELY inside becomeLeader() (not via a
+  // separate useEffect) so cleanup sees the correct value even on fast unmount.
   const isLeaderRef = useRef(false);
 
   useEffect(() => {
@@ -33,15 +51,69 @@ export function useTabLeader(): { isLeader: boolean } {
     if (typeof BroadcastChannel === "undefined") {
       // Fallback: always be the leader (single-tab behaviour)
       setIsLeader(true);
+      isLeaderRef.current = true;
       return;
     }
 
     const ch = new BroadcastChannel(CHANNEL_NAME);
     channelRef.current = ch;
 
+    const stopHeartbeatSend = () => {
+      if (heartbeatSendRef.current) {
+        clearInterval(heartbeatSendRef.current);
+        heartbeatSendRef.current = null;
+      }
+    };
+
+    const stopHeartbeatWatch = () => {
+      if (heartbeatWatchRef.current) {
+        clearInterval(heartbeatWatchRef.current);
+        heartbeatWatchRef.current = null;
+      }
+    };
+
     const becomeLeader = () => {
+      // Sync ref immediately — before any async state update — so that the
+      // cleanup function sees the correct value even if the component unmounts
+      // before React flushes the setState.
+      isLeaderRef.current = true;
       setIsLeader(true);
       ch.postMessage({ type: "I_AM_LEADER" });
+
+      // Stop watching for heartbeats (we are the source now)
+      stopHeartbeatWatch();
+
+      // Start sending heartbeats so followers know we are alive
+      stopHeartbeatSend();
+      heartbeatSendRef.current = setInterval(() => {
+        ch.postMessage({ type: "HEARTBEAT" });
+      }, HEARTBEAT_INTERVAL_MS);
+    };
+
+    const becomeFollower = () => {
+      isLeaderRef.current = false;
+      setIsLeader(false);
+      stopHeartbeatSend();
+
+      // Start watching for heartbeats — re-elect if leader goes silent
+      stopHeartbeatWatch();
+      lastHeartbeatRef.current = Date.now();
+      heartbeatWatchRef.current = setInterval(() => {
+        if (Date.now() - lastHeartbeatRef.current > HEARTBEAT_TIMEOUT_MS) {
+          // Leader has been silent too long — run a new election
+          stopHeartbeatWatch();
+          runElection();
+        }
+      }, HEARTBEAT_TIMEOUT_MS / 2);
+    };
+
+    const runElection = () => {
+      ch.postMessage({ type: "PING" });
+      if (pongTimerRef.current) clearTimeout(pongTimerRef.current);
+      pongTimerRef.current = setTimeout(() => {
+        // No PONG received — we are the new leader
+        becomeLeader();
+      }, PONG_TIMEOUT_MS);
     };
 
     ch.onmessage = (event) => {
@@ -56,12 +128,12 @@ export function useTabLeader(): { isLeader: boolean } {
       }
 
       if (type === "PONG") {
-        // A leader already exists — cancel our election timer and stay as follower
+        // A leader already exists — cancel our election timer and become follower
         if (pongTimerRef.current) {
           clearTimeout(pongTimerRef.current);
           pongTimerRef.current = null;
         }
-        setIsLeader(false);
+        becomeFollower();
         return;
       }
 
@@ -71,30 +143,38 @@ export function useTabLeader(): { isLeader: boolean } {
           clearTimeout(pongTimerRef.current);
           pongTimerRef.current = null;
         }
-        setIsLeader(false);
+        becomeFollower();
+        return;
+      }
+
+      if (type === "HEARTBEAT") {
+        // Leader is alive — reset the watchdog timer
+        lastHeartbeatRef.current = Date.now();
         return;
       }
 
       if (type === "LEADER_GONE") {
-        // The leader closed — run a randomised election so only one tab wins
+        // Leader closed gracefully — run a randomised election so only one tab wins
+        stopHeartbeatWatch();
         const delay = Math.random() * 150;
+        if (pongTimerRef.current) clearTimeout(pongTimerRef.current);
         pongTimerRef.current = setTimeout(() => {
-          becomeLeader();
+          runElection();
         }, delay);
         return;
       }
     };
 
-    // Kick off the election: broadcast PING and wait for a PONG
-    ch.postMessage({ type: "PING" });
-    pongTimerRef.current = setTimeout(() => {
-      // No PONG received — we are the leader
-      becomeLeader();
-    }, PONG_TIMEOUT_MS);
+    // Kick off the initial election
+    runElection();
 
     return () => {
       if (pongTimerRef.current) clearTimeout(pongTimerRef.current);
-      // Notify other tabs that the leader is gone (only matters if we are the leader)
+      stopHeartbeatSend();
+      stopHeartbeatWatch();
+      // Notify other tabs that the leader is gone (only if we are the leader).
+      // isLeaderRef.current is always up-to-date because becomeLeader() sets it
+      // synchronously before calling setIsLeader().
       if (isLeaderRef.current) {
         ch.postMessage({ type: "LEADER_GONE" });
       }
@@ -102,10 +182,6 @@ export function useTabLeader(): { isLeader: boolean } {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    isLeaderRef.current = isLeader;
-  }, [isLeader]);
 
   return { isLeader };
 }
