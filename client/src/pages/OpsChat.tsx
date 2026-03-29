@@ -1253,8 +1253,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const jobInitialScrollDone = useRef(false);
   const channelInitialScrollDone = useRef(false);
 
-  // Job thread: scroll to bottom when thread grows
+  // Job thread: scroll to bottom when thread grows.
+  // Guard: skip when OpsChat is hidden (display:none) — scrollHeight is 0 then,
+  // which would set scrollTop=0 (top) and mark initialScrollDone=true prematurely.
   useEffect(() => {
+    if (opsChatState !== "open") return;
     const el = jobScrollRef.current;
     if (!el) return;
     if (!jobInitialScrollDone.current) {
@@ -1264,10 +1267,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobDetail?.thread?.length, selectedJobId]);
+  }, [jobDetail?.thread?.length, selectedJobId, opsChatState]);
 
-  // Channel view: scroll to bottom when messages grow
+  // Channel view: scroll to bottom when messages grow.
   useEffect(() => {
+    if (opsChatState !== "open") return;
     const el = channelScrollRef.current;
     if (!el) return;
     if (!channelInitialScrollDone.current) {
@@ -1277,7 +1281,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelMsgs.length, activeChannel]);
+  }, [channelMsgs.length, activeChannel, opsChatState]);
 
   // Play notification sound when new job thread messages arrive from others.
   // Use .length as the dep (not the array object) so we only fire when count changes,
