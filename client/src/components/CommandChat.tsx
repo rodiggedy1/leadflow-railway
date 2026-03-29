@@ -878,7 +878,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       }
     }
     prevMsgCountRef.current = curr;
-  }, [channelMsgs, callerName, playNotification, osNotify]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelMsgs.length, callerName, playNotification, osNotify]);
 
   // ── Repeating sound every 60 seconds while any unclaimed lead exists ─────────
   const unclaimedLeads = useMemo(() => {
