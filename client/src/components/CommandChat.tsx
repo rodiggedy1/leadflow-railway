@@ -9,7 +9,7 @@
  * Composer has full parity with the job-thread composer:
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
@@ -473,6 +473,10 @@ function HotLeadsTray({
 
 // ── component ─────────────────────────────────────────────────────────────────
 
+// Module-level variable: persists across CommandChat unmount/remount cycles
+// (unlike useRef which resets to its initial value on each mount).
+let _commandChatScrollTop = 0;
+
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   const [broadcastOpen, setBroadcastOpen] = useState(false);
@@ -838,18 +842,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
   }, [transcribeVoice]);
 
-  // Auto-scroll thread to bottom when new messages arrive.
-  // On first mount (initialScrollDone is false) jump instantly — no smooth scroll
-  // so re-entering the chat doesn't trigger a jarring fast-scroll animation.
+  // ── Scroll position persistence ─────────────────────────────────────────────
+  // CommandChat is conditionally rendered, so its DOM node is destroyed and
+  // recreated each time the user switches away and back. We save the scroll
+  // position in the module-level variable _commandChatScrollTop (defined above
+  // the component) so it survives unmount/remount. On mount we restore it
+  // synchronously via useLayoutEffect before the browser paints.
+  const pendingRestore = useRef(false);
   const initialScrollDone = useRef(false);
+
+  // Save scroll position continuously.
+  useEffect(() => {
+    const el = threadScrollRef.current;
+    if (!el) return;
+    const onScroll = () => { _commandChatScrollTop = el.scrollTop; };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  });
+
+  // On mount: restore saved position synchronously before paint.
+  useLayoutEffect(() => {
+    const el = threadScrollRef.current;
+    if (!el) return;
+    if (_commandChatScrollTop > 0) {
+      el.scrollTop = _commandChatScrollTop;
+      pendingRestore.current = true;
+      requestAnimationFrame(() => { pendingRestore.current = false; });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Scroll to bottom when new messages arrive, unless restoring.
   useEffect(() => {
     const el = threadScrollRef.current;
     if (!el) return;
     if (!initialScrollDone.current) {
-      // First render — jump to bottom instantly, no animation
-      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+      // First render — jump to bottom only if no saved position
+      if (_commandChatScrollTop === 0) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+      }
       initialScrollDone.current = true;
-    } else {
+    } else if (!pendingRestore.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   }, [channelMsgs.length]);

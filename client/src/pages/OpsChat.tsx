@@ -4,7 +4,7 @@
  * Layout: 3 columns — left sidebar (queue + jobs), center (timeline + thread), right (job details + actions).
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
@@ -720,9 +720,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   const { minimize: minimizeFromHook, state: opsChatState } = useOpsChatWindow();
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
-  // Save scroll position when widget hides; restore it when widget re-opens
+  // Per-view scroll position map: key = view key (e.g. "channel-command", "job-42")
+  // Saves scroll position when the user scrolls, restores it when switching back to that view.
+  const scrollPositionMap = useRef<Map<string, number>>(new Map());
+  // Kept for backward compat with pendingScrollRestoreRef checks below
   const savedScrollTopRef = useRef<number | null>(null);
-  // When true, the scroll-to-bottom effect should skip so the restore can win
   const pendingScrollRestoreRef = useRef(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
@@ -1254,56 +1256,64 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       });
     });
   }, []);
-  // Save scroll position when widget hides; restore it when widget re-opens.
-  const prevOpsChatStateRef = useRef(opsChatState);
-  useEffect(() => {
-    const prev = prevOpsChatStateRef.current;
-    const curr = opsChatState;
-    prevOpsChatStateRef.current = curr;
-    if (prev === "open" && curr !== "open") {
-      // Widget is hiding — save current scroll position
-      const container = threadScrollRef.current;
-      if (container) savedScrollTopRef.current = container.scrollTop;
-    } else if (prev !== "open" && curr === "open") {
-      // Widget is re-opening — restore saved scroll position
-      const saved = savedScrollTopRef.current;
-      if (saved !== null) {
-        pendingScrollRestoreRef.current = true;
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const container = threadScrollRef.current;
-            if (container) {
-              container.scrollTop = saved;
-            }
-            pendingScrollRestoreRef.current = false;
-          });
-        });
-      }
-    }
-  }, [opsChatState]);
-  // Track whether we've done the initial scroll for the current view.
-  // On first load/re-entry: jump instantly. On subsequent new messages: smooth scroll.
-  const initialScrollDoneRef = useRef(false);
+  // ── Scroll position persistence ───────────────────────────────────────────
+  // The center panel conditionally renders different scroll containers depending
+  // on the active view (job thread vs channel). Each time the view switches, the
+  // old DOM node is destroyed and a new one is created, resetting scrollTop to 0.
+  //
+  // Strategy: track the current view key, save scroll position on every scroll
+  // event into a Map keyed by view, and restore it synchronously via
+  // useLayoutEffect whenever the view key changes (before the browser paints).
+
+  const currentScrollKey = selectedJobId ? `job-${selectedJobId}` : `channel-${activeChannel}`;
   const prevScrollKeyRef = useRef("");
+  const initialScrollDoneRef = useRef(false);
+
+  // Save scroll position continuously as the user scrolls.
+  // This effect re-attaches on every render so it always has the latest container ref.
   useEffect(() => {
-    // Build a key that changes when the user switches views (job vs channel)
-    const key = selectedJobId ? `job-${selectedJobId}` : `channel-${activeChannel}`;
+    const container = threadScrollRef.current;
+    if (!container) return;
+    const key = currentScrollKey;
+    const onScroll = () => {
+      scrollPositionMap.current.set(key, container.scrollTop);
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
+  });
+
+  // Restore saved position synchronously when the view changes (before paint).
+  // Also handles the case where the widget re-opens on the same view.
+  useLayoutEffect(() => {
+    const container = threadScrollRef.current;
+    if (!container) return;
+    const key = currentScrollKey;
+    const saved = scrollPositionMap.current.get(key);
+    if (saved !== undefined && saved > 0) {
+      container.scrollTop = saved;
+      pendingScrollRestoreRef.current = true;
+      // Clear the flag after a tick so the scroll-to-bottom effect doesn't override
+      requestAnimationFrame(() => { pendingScrollRestoreRef.current = false; });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScrollKey]);
+
+  // Scroll to bottom when new messages arrive, but not when restoring a saved position.
+  useEffect(() => {
+    const key = currentScrollKey;
     const isNewView = prevScrollKeyRef.current !== key;
     if (isNewView) {
       prevScrollKeyRef.current = key;
       initialScrollDoneRef.current = false;
     }
     if (!initialScrollDoneRef.current) {
-      // Only jump to bottom on first load if we don't have a saved position to restore
-      if (savedScrollTopRef.current === null && !pendingScrollRestoreRef.current) {
-        scrollToBottom(true);
-      }
+      // First render of this view: jump to bottom only if no saved position
+      const hasSaved = (scrollPositionMap.current.get(key) ?? 0) > 0;
+      if (!hasSaved) scrollToBottom(true);
       initialScrollDoneRef.current = true;
-    } else {
-      // Skip smooth scroll if a position restore is pending (widget just re-opened)
-      if (!pendingScrollRestoreRef.current) {
-        scrollToBottom(false); // smooth for new messages
-      }
+    } else if (!pendingScrollRestoreRef.current) {
+      // Subsequent message arrivals: smooth scroll to bottom
+      scrollToBottom(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobDetail?.thread?.length, channelMsgs.length, selectedJobId, activeChannel]);
@@ -1891,7 +1901,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {activeTab === "today" && selectedJob ? (
+        {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
+             This keeps scrollTop, refs, and query caches alive across tab switches.
+             No save/restore needed — the DOM node simply never dies. ── */}
+
+        {/* VIEW: Job Thread */}
+        <div style={{ display: activeTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden">
+          {selectedJob ? (
           <>
             {/* Center header */}
             <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4">
@@ -2198,8 +2214,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               )}
             </div>
           </>
-        ) : activeTab === "channels" && activeChannel === "command" ? (
-          /* MIB Command Chat — special 3-column ops view */
+        ) : null}
+        </div>
+
+        {/* VIEW: Command Chat */}
+        <div style={{ display: activeTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden">
           <CommandChat
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
@@ -2221,8 +2240,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
           />
-        ) : activeTab === "channels" ? (
-          /* Regular channel view */
+        </div>
+
+        {/* VIEW: Regular channel */}
+        <div style={{ display: activeTab === "channels" && activeChannel !== "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden">
           <>
             <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between">
               <div>
@@ -2399,7 +2420,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </div>
             </div>
           </>
-        ) : (
+        </div>
+
+        {/* VIEW: Fallback — no job selected */}
+        {activeTab === "today" && !selectedJob && (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
             Select a job from the left panel
           </div>

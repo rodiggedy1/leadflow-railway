@@ -114,20 +114,21 @@ function GlobalOpsChat() {
     ? (unreadCounts.urgent + unreadCounts.dispatch + unreadCounts.general + unreadCounts.cleaners)
     : 0;
 
-  // Only show on admin / agent / call-assist routes
+  // OpsChat is only relevant on admin / agent / call-assist routes.
+  // However, we must NEVER unmount OpsChat once it has been mounted — doing so
+  // destroys all scroll refs and causes the position to reset to 0 on re-entry.
+  // Solution: always render the OpsChat overlay (so refs survive page navigation),
+  // but only show the floating bubble on eligible routes.
   const isEligible =
     location.startsWith("/admin") ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
 
-  if (!isEligible) return null;
-
   return (
     <>
-      {/* Full-screen overlay — always mounted, hidden when not open.
-           Keeping OpsChat in the DOM prevents prevMsgCountRef / scroll refs
-           from resetting on every open, which was causing spurious sounds
-           and fast-scroll animations on re-entry. */}
+      {/* Full-screen overlay — ALWAYS in the DOM regardless of route.
+           Keeping OpsChat mounted preserves scroll refs, query caches, and
+           prevMsgCountRef so position/sounds don't reset on page navigation. */}
       <div
         className="fixed inset-0 z-50 bg-slate-50 overflow-hidden"
         style={{ display: state === "open" ? "flex" : "none" }}
@@ -135,8 +136,8 @@ function GlobalOpsChat() {
         <OpsChat onMinimize={minimize} onClose={close} />
       </div>
 
-      {/* Floating bubble — visible when closed or minimized */}
-      {state !== "open" && (
+      {/* Floating bubble — only visible on eligible routes when not open */}
+      {isEligible && state !== "open" && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
           <button
             onClick={open}
