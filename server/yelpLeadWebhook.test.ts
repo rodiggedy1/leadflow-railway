@@ -37,6 +37,10 @@ describe("detectEmailType — Yelp", () => {
     expect(detectEmailType("some body text", "New Yelp Request")).toBe("yelp_inquiry");
   });
 
+  it("detects Yelp inquiry from messaging.yelp.com sender address", () => {
+    expect(detectEmailType("some unrelated body", "New Request", "reply+abc123@messaging.yelp.com")).toBe("yelp_inquiry");
+  });
+
   it("does not misidentify a Google form submission as Yelp", () => {
     const googleBody = "Phone: +1 302 981 6191\nCleaning Type: BiWeekly\nBedrooms: Two\nBathrooms: One";
     expect(detectEmailType(googleBody)).toBe("form_submission");

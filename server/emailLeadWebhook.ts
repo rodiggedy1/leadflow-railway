@@ -131,7 +131,7 @@ export type EmailType = "form_submission" | "phone_call" | "yelp_inquiry" | "unk
  * Form submissions contain structured "Phone:", "Cleaning Type:", etc. lines.
  * Call notifications contain the phrase "You received a call from".
  */
-export function detectEmailType(body: string, subject?: string): EmailType {
+export function detectEmailType(body: string, subject?: string, fromAddress?: string): EmailType {
   const bodyLower = body.toLowerCase();
   const subjectLower = (subject ?? "").toLowerCase();
 
@@ -144,9 +144,12 @@ export function detectEmailType(body: string, subject?: string): EmailType {
     return "phone_call";
   }
 
-  // Yelp inquiry: contains Yelp-specific phrasing
+  // Yelp inquiry: sender is Yelp's messaging proxy, or body/subject contains Yelp-specific phrasing
+  const fromLower = (fromAddress ?? "").toLowerCase();
   if (
-    bodyLower.includes("reply to") && bodyLower.includes("yelp biz") ||
+    fromLower.includes("messaging.yelp.com") ||
+    fromLower.includes("yelp.com") ||
+    (bodyLower.includes("reply to") && bodyLower.includes("yelp biz")) ||
     subjectLower.includes("yelp") ||
     bodyLower.includes("yelp.com") ||
     (bodyLower.includes("sent to") && bodyLower.includes("maids in black") && bodyLower.includes("bedroom"))
@@ -963,7 +966,7 @@ export async function handleEmailLead(payload: ZapierEmailPayload): Promise<void
   console.log(`[EmailLead] New email from: ${fromAddress}, subject: "${subject}"`);
   console.log(`[EmailLead] Body preview: ${emailBody.slice(0, 200)}`);
 
-  const emailType = detectEmailType(emailBody, subject);
+  const emailType = detectEmailType(emailBody, subject, fromAddress);
   console.log(`[EmailLead] Detected email type: ${emailType}`);
 
   if (emailType === "form_submission") {
