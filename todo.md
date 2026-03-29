@@ -558,3 +558,4 @@
 - [x] Fix: away banner not visible to other users — reduced poll to 15s, staleTime 0, enabled guard correct
 - [x] Fix: HTTP 414 on getReactions — converted from query (GET) to mutation (POST) so IDs go in body not URL
 - [x] Fix: duplicate notifications when multiple tabs open — useTabLeader (BroadcastChannel) elects one leader; CommandChat duplicate removed; SW PLAY_SOUND gated to leader only
+- [x] Fix: notification sound leaking — (1) OpsChat only mounts after first eligible route visit so quote form never gets sound hooks; (2) SW PLAY_SOUND now filtered to /admin|/agent|/call-assist tabs only

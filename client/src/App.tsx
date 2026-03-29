@@ -4,7 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import { MessageCircle } from "lucide-react";
 import OpsChat from "./pages/OpsChat";
@@ -115,26 +115,40 @@ function GlobalOpsChat() {
     : 0;
 
   // OpsChat is only relevant on admin / agent / call-assist routes.
-  // However, we must NEVER unmount OpsChat once it has been mounted — doing so
-  // destroys all scroll refs and causes the position to reset to 0 on re-entry.
-  // Solution: always render the OpsChat overlay (so refs survive page navigation),
-  // but only show the floating bubble on eligible routes.
+  // IMPORTANT: Once OpsChat has been mounted, we must NEVER unmount it while
+  // navigating between eligible routes — doing so destroys scroll refs and
+  // causes the position to reset to 0. However, it must NOT be mounted at all
+  // on public pages (e.g. the quote form at /) to prevent notification sounds
+  // from leaking onto those pages.
   const isEligible =
     location.startsWith("/admin") ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
 
+  // Track whether OpsChat has ever been mounted in this session.
+  // Once true, keep it in the DOM for the rest of the session (eligible routes only).
+  const [hasBeenMounted, setHasBeenMounted] = useState(false);
+  useEffect(() => {
+    if (isEligible && !hasBeenMounted) setHasBeenMounted(true);
+  }, [isEligible, hasBeenMounted]);
+
+  // Only render OpsChat if we are on (or have visited) an eligible route.
+  // This prevents the sound hooks from being active on the public quote form.
+  const shouldRenderOpsChat = hasBeenMounted;
+
   return (
     <>
-      {/* Full-screen overlay — ALWAYS in the DOM regardless of route.
+      {/* Full-screen overlay — only in the DOM after first eligible route visit.
            Keeping OpsChat mounted preserves scroll refs, query caches, and
            prevMsgCountRef so position/sounds don't reset on page navigation. */}
-      <div
-        className="fixed inset-0 z-50 bg-slate-50 overflow-hidden"
-        style={{ display: state === "open" ? "flex" : "none" }}
-      >
-        <OpsChat onMinimize={minimize} onClose={close} />
-      </div>
+      {shouldRenderOpsChat && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-50 overflow-hidden"
+          style={{ display: state === "open" ? "flex" : "none" }}
+        >
+          <OpsChat onMinimize={minimize} onClose={close} />
+        </div>
+      )}
 
       {/* Floating bubble — only visible on eligible routes when not open */}
       {isEligible && state !== "open" && (

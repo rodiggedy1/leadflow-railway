@@ -39,14 +39,21 @@ self.addEventListener("message", (event) => {
       data: { url: self.location.origin + "/ops-chat" },
     });
 
-    // Relay PLAY_SOUND to all open page clients.
-    // If the tab is focused the page plays immediately.
-    // If hidden, the page queues it via pendingNotifRef and plays on return.
+    // Relay PLAY_SOUND only to OpsChat-eligible tabs (admin / agent / call-assist).
+    // This prevents the chime from playing on the public quote form at / or any
+    // other non-ops page that happens to be open in the same browser.
     const soundPromise = self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
         for (const client of clients) {
-          client.postMessage({ type: "PLAY_SOUND" });
+          const url = client.url || "";
+          const isOpsTab =
+            url.includes("/admin") ||
+            url.includes("/agent") ||
+            url.includes("/call-assist");
+          if (isOpsTab) {
+            client.postMessage({ type: "PLAY_SOUND" });
+          }
         }
       });
 
