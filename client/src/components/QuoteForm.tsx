@@ -855,9 +855,33 @@ export default function QuoteForm() {
                 </p>
               </div>
 
+              {/* Wistia Video */}
+              <div className="animate-fade-slide-up delay-1 mb-8">
+                <div
+                  className="relative w-full rounded-2xl overflow-hidden"
+                  style={{
+                    boxShadow: "0 4px 24px rgba(232,96,60,0.14), 0 1px 6px rgba(0,0,0,0.07)",
+                    border: "1px solid rgba(232,96,60,0.18)",
+                    background: "#1a1a1a",
+                  }}
+                >
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: `<wistia-player media-id="bzlt49ipk1" seo="false" aspect="1.7777777777777777" style="display:block;width:100%"></wistia-player>`,
+                    }}
+                  />
+                </div>
+                <p
+                  className="text-center text-xs mt-2.5"
+                  style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  See how we work — 60 seconds
+                </p>
+              </div>
+
               {/* Divider */}
               <div
-                className="animate-fade-slide-up delay-1 h-px w-16 mx-auto mb-8"
+                className="animate-fade-slide-up delay-2 h-px w-16 mx-auto mb-8"
                 style={{ background: "linear-gradient(90deg, transparent, #E8603C, transparent)" }}
               />
 

@@ -546,3 +546,4 @@
 - [x] Yelp leads: create placeholder conversationSession (no phone) so they appear in Leads list with Yelp badge
 - [x] "Contacted via Yelp Biz" button in Admin and Agent lead drawers for Yelp sessions (YELP_CONTACTED stage)
 - [x] Fix notification sound firing every few seconds (removed 60s repeating interval in CommandChat)
+- [x] Add Wistia video embed under title on QuoteForm with world-class UI
