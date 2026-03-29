@@ -27,6 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -54,7 +55,7 @@ interface CommandChatProps {
   channelLoading: boolean;
   callerName: string;
   /** Called when user hits Send in the composer */
-  onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }) => void;
+  onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }, quickAction?: string) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
   /** Called when user clicks "Today Ops" in the in-panel tab switcher */
@@ -946,6 +947,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem("cmd_leftCollapsed") === "true"; } catch { return false; }
   });
+  const [awayOpen, setAwayOpen] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem("cmd_rightCollapsed") === "true"; } catch { return false; }
   });
@@ -1637,6 +1639,40 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
+                // ── Away Status card ──────────────────────────────────────────────
+                if (msg.quickAction?.startsWith("away_status:")) {
+                  const statusKey = msg.quickAction.split(":")[1];
+                  const STATUS_MAP: Record<string, { label: string; sub: string; emoji: string; accent: string; bg: string; border: string; headerBg: string }> = {
+                    away_sec: { label: "Away for a sec",  sub: "Quick break",        emoji: "☕", accent: "#92400e", bg: "#fffbeb", border: "#fde68a", headerBg: "linear-gradient(90deg,#f59e0b,#fbbf24)" },
+                    lunch:    { label: "Lunch break",     sub: "Quick munch",        emoji: "🍔", accent: "#065f46", bg: "#ecfdf5", border: "#a7f3d0", headerBg: "linear-gradient(90deg,#10b981,#34d399)" },
+                    back15:   { label: "Back in 15",      sub: "Short defined break", emoji: "⏰", accent: "#3730a3", bg: "#eef2ff", border: "#c7d2fe", headerBg: "linear-gradient(90deg,#6366f1,#818cf8)" },
+                    eod:      { label: "Signing off",     sub: "End of day",         emoji: "🌙", accent: "#0c4a6e", bg: "#f0f9ff", border: "#bae6fd", headerBg: "linear-gradient(90deg,#0ea5e9,#38bdf8)" },
+                  };
+                  const s = STATUS_MAP[statusKey] ?? { label: msg.body, sub: "", emoji: "💬", accent: "#334155", bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155" };
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-2xl overflow-hidden shadow-md" style={{ border: `1px solid ${s.border}`, background: s.bg }}>
+                        {/* Coloured header strip */}
+                        <div className="flex items-center gap-2 px-4 py-2" style={{ background: s.headerBg }}>
+                          <span className="text-lg leading-none">{s.emoji}</span>
+                          <span className="text-[11px] font-bold text-white uppercase tracking-widest">{s.label}</span>
+                          <span className="ml-auto text-[10px] text-white/70">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-4 py-3 flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                            style={{ background: s.headerBg }}>
+                            {(msg.from ?? "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: s.accent }}>{msg.from}</p>
+                            <p className="text-xs text-slate-500">{s.sub}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Issue Resolved card (green) ───────────────────────────────────
                 if (msg.quickAction === "issue_resolved") {
                   let meta: Record<string, unknown> = {};
@@ -1906,12 +1942,39 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             >
               Pin Note
             </button>
-            <button
-              onClick={() => setBookingOpen(true)}
-              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50"
-            >
-              Announce Booking
-            </button>
+            <Popover open={awayOpen} onOpenChange={setAwayOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                  Away
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-1.5" align="end">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Set status</p>
+                {([
+                  { key: "away_sec",  label: "Away for a sec",  sub: "Quick break",       emoji: "☕",  accent: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
+                  { key: "lunch",     label: "Lunch break",     sub: "Quick munch",       emoji: "🍔",  accent: "#10b981", bg: "#ecfdf5", border: "#a7f3d0" },
+                  { key: "back15",    label: "Back in 15",      sub: "Short defined break",emoji: "⏰",  accent: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
+                  { key: "eod",       label: "Signing off",     sub: "End of day",        emoji: "🌙",  accent: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd" },
+                ] as const).map(({ key, label, sub, emoji, accent, bg, border }) => (
+                  <button
+                    key={key}
+                    className="w-full text-left px-3 py-2.5 rounded-lg hover:opacity-90 transition flex items-center gap-3 mb-1"
+                    style={{ background: bg, border: `1px solid ${border}` }}
+                    onClick={() => {
+                      onSendMessage(`${emoji} ${callerName} — ${label}`, undefined, undefined, `away_status:${key}`);
+                      setAwayOpen(false);
+                    }}
+                  >
+                    <span className="text-xl leading-none">{emoji}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-tight" style={{ color: accent }}>{label}</p>
+                      <p className="text-[11px] text-slate-400 leading-tight">{sub}</p>
+                    </div>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Staged photo preview strip */}

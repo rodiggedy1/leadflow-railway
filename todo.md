@@ -547,3 +547,5 @@
 - [x] "Contacted via Yelp Biz" button in Admin and Agent lead drawers for Yelp sessions (YELP_CONTACTED stage)
 - [x] Fix notification sound firing every few seconds (removed 60s repeating interval in CommandChat)
 - [x] Add Wistia video embed under title on QuoteForm with world-class UI
+- [x] CommandChat: hide Announce Booking button, add Away status popover that posts status to chat
+- [x] Away status: 4 options with styled chat cards (Away for a sec, Lunch break, Back in 15, EOD/Signing off)
