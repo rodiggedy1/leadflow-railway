@@ -342,6 +342,8 @@ export const agents = mysqlTable("agents", {
   lastSeenAt: timestamp("lastSeenAt"), // Updated on every authenticated request — used for online status
   /** Current away status: null = available, or one of: away_sec | lunch | back15 | eod */
   awayStatus: varchar("awayStatus", { length: 32 }),
+  /** Timestamp when awayStatus was last set — used for auto-dismiss logic */
+  awaySetAt: timestamp("awaySetAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

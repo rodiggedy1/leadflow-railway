@@ -77,8 +77,27 @@ const AWAY_COPY: Record<string, { emoji: string; phrase: string }> = {
   eod:      { emoji: "🌙", phrase: "signing off for the day" },
 };
 
-function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null }> }) {
-  const awayAgents = agents.filter(a => a.awayStatus);
+// Statuses that auto-dismiss after 15 minutes
+const AUTO_DISMISS_STATUSES = new Set(["eod", "back15"]);
+const AUTO_DISMISS_MS = 15 * 60 * 1000;
+
+function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null; awaySetAt?: number | null }> }) {
+  // Re-render every 30 seconds so the timer check stays current
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const now = Date.now();
+  const awayAgents = agents.filter(a => {
+    if (!a.awayStatus) return false;
+    // Auto-dismiss eod and back15 after 15 minutes
+    if (AUTO_DISMISS_STATUSES.has(a.awayStatus) && a.awaySetAt) {
+      if (now - a.awaySetAt > AUTO_DISMISS_MS) return false;
+    }
+    return true;
+  });
   if (awayAgents.length === 0) return null;
 
   return (

@@ -3201,7 +3201,11 @@ STAGE DETECTION — return the stage the conversation is currently in:
         if (!db) throw new Error("Database unavailable");
         await db
           .update(agents)
-          .set({ awayStatus: input.status })
+          .set({
+            awayStatus: input.status,
+            // Record when the status was set (null when clearing)
+            awaySetAt: input.status ? new Date() : null,
+          })
           .where(eq(agents.id, agentSession.agentId));
         return { ok: true };
       }),
@@ -3218,6 +3222,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           id: agents.id,
           name: agents.name,
           awayStatus: agents.awayStatus,
+          awaySetAt: agents.awaySetAt,
           profilePhotoUrl: agents.profilePhotoUrl,
         })
         .from(agents)

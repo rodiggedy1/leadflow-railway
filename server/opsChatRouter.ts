@@ -1695,6 +1695,7 @@ export const opsChatRouter = router({
           lastSeenAt: agents.lastSeenAt,
           isAdmin: agents.isAdmin,
           awayStatus: agents.awayStatus,
+          awaySetAt: agents.awaySetAt,
         })
         .from(agents)
         .where(eq(agents.isActive, 1))
@@ -1708,6 +1709,7 @@ export const opsChatRouter = router({
           lastSeenAt: r.lastSeenAt ? r.lastSeenAt.getTime() : null,
           isAdmin: r.isAdmin === 1,
           awayStatus: r.awayStatus ?? null,
+          awaySetAt: r.awaySetAt ? r.awaySetAt.getTime() : null,
         })),
       };
     }),
