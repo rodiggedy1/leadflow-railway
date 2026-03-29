@@ -564,4 +564,4 @@
 - [ ] Fix: notification sound not playing when OpsChat tab is closed (regression from sound-leak fix)
 - [x] URGENT: quote form broken — vendor-react chunk caused dual-React conflict with Manus runtime injection; React moved back into index chunk
 - [ ] Fix: video on quote page freezes at ~10 seconds
-- [x] Fix notification sound regression — sound stopped working when last tab closes. Rewrote useTabLeader: ref now synced immediately in becomeLeader() (not via separate useEffect), added 5s heartbeat from leader, 12s dead-leader watchdog on followers, and graceful LEADER_GONE handoff.
+- [x] Fix notification sound regression — root cause: AudioContext was never created because the gesture-unlock listener required a click inside the hidden OpsChat overlay (display:none when minimized). Agents never triggered it, so ctx stayed null and every playSound() call silently failed. Fixed by replacing AudioContext with new Audio() + cloneNode() pattern — simpler, reliable, and works without any gesture-gating since agents have already interacted with the page.
