@@ -1252,33 +1252,52 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   const jobInitialScrollDone = useRef(false);
   const channelInitialScrollDone = useRef(false);
+  const prevJobThreadLen = useRef(0);
+  const prevChannelMsgLen = useRef(0);
 
-  // Job thread: scroll to bottom when thread grows.
-  // Guard: skip when OpsChat is hidden (display:none) — scrollHeight is 0 then,
-  // which would set scrollTop=0 (top) and mark initialScrollDone=true prematurely.
+  // Returns true if the scroll container is within 120px of the bottom.
+  function isNearBottom(el: HTMLDivElement) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
+  // Job thread scroll behaviour:
+  //   - First open: jump to bottom instantly.
+  //   - New message arrives: only scroll if already near bottom (don't interrupt reading).
+  //   - Switching back to a view: do nothing — DOM node was never destroyed, position preserved.
   useEffect(() => {
     if (opsChatState !== "open") return;
     const el = jobScrollRef.current;
     if (!el) return;
+    const threadLen = jobDetail?.thread?.length ?? 0;
     if (!jobInitialScrollDone.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
       jobInitialScrollDone.current = true;
-    } else {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      prevJobThreadLen.current = threadLen;
+    } else if (threadLen > prevJobThreadLen.current) {
+      // New message — only scroll if user is near the bottom
+      if (isNearBottom(el)) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      }
+      prevJobThreadLen.current = threadLen;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobDetail?.thread?.length, selectedJobId, opsChatState]);
 
-  // Channel view: scroll to bottom when messages grow.
+  // Channel view scroll behaviour (same logic).
   useEffect(() => {
     if (opsChatState !== "open") return;
     const el = channelScrollRef.current;
     if (!el) return;
+    const msgLen = channelMsgs.length;
     if (!channelInitialScrollDone.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
       channelInitialScrollDone.current = true;
-    } else {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      prevChannelMsgLen.current = msgLen;
+    } else if (msgLen > prevChannelMsgLen.current) {
+      if (isNearBottom(el)) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      }
+      prevChannelMsgLen.current = msgLen;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelMsgs.length, activeChannel, opsChatState]);

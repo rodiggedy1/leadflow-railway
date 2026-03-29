@@ -843,20 +843,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
   }, [transcribeVoice]);
 
-    // ── Scroll to bottom ─────────────────────────────────────────────────────────
+    // ── Scroll behaviour ─────────────────────────────────────────────────────────
   // Guard: when OpsChat overlay is display:none, scrollHeight = 0.
-  // Scrolling then sets scrollTop = 0 (top). Only scroll when visible.
+  // Only scroll when visible. On first open: jump to bottom.
+  // On new messages: only scroll if user is already near the bottom (preserve reading position).
   const { state: opsChatState } = useOpsChatWindow();
   const initialScrollDone = useRef(false);
+  const prevMsgLen = useRef(0);
   useEffect(() => {
     if (opsChatState !== "open") return;
     const el = threadScrollRef.current;
     if (!el) return;
+    const len = channelMsgs.length;
     if (!initialScrollDone.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
       initialScrollDone.current = true;
-    } else {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      prevMsgLen.current = len;
+    } else if (len > prevMsgLen.current) {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      prevMsgLen.current = len;
     }
   }, [channelMsgs.length, opsChatState]);
 
