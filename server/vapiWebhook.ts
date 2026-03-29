@@ -253,6 +253,22 @@ export function registerVapiWebhookRoute(app: Express): void {
         if (status === "in-progress") {
           const callObj = message?.call as Record<string, unknown> | undefined;
           const callerPhone = (callObj?.customer as Record<string, unknown> | undefined)?.number as string | undefined ?? "";
+
+          // Guard: skip outbound FieldMgmt/LeadAlert calls placed by the system.
+          // These use a dedicated Vapi phone number ID and have customer.number = the
+          // CS office line. Without this guard they fire spurious "call received" SMSes
+          // even though no call is stored in the calls area.
+          const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+          const BUSINESS_PHONE = "+12028885362";
+          const callPhoneNumberId = callObj?.phoneNumberId as string | undefined;
+          const isOutboundAlertCall = callPhoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID;
+          const isBusinessNumberCaller = callerPhone === BUSINESS_PHONE;
+
+          if (isOutboundAlertCall || isBusinessNumberCaller) {
+            console.log(`[Vapi] status-update in-progress — skipping owner SMS (outbound/internal call, phoneNumberId=${callPhoneNumberId}, caller=${callerPhone})`);
+            return res.json({ received: true });
+          }
+
           const displayPhone = callerPhone || "unknown number";
           notifyOwner({
             title: `📞 Incoming call from ${displayPhone}`,
