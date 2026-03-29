@@ -543,3 +543,4 @@
 - [x] CommandChat: message history cut off — load more messages beyond the current limit (raised to 500)
 - [x] Fix OpsChat scroll position not restoring on re-open (still jumps to top)
 - [x] Yelp lead flow: parse Yelp inquiry emails via Zapier, post Command Chat alert card (no SMS — no phone number from Yelp)
+- [x] Yelp leads: create placeholder conversationSession (no phone) so they appear in Leads list with Yelp badge

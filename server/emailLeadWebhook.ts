@@ -660,6 +660,27 @@ export async function handleYelpInquiryEmail(
     body: `${parsed.serviceType} · ${bedroomsDisplay} / ${bathroomsDisplay} · ${dateDisplay}`,
     meta: { leadName: displayName, serviceType: parsed.serviceType, source: "yelp" },
   }).catch(() => {});
+
+  // Create a placeholder session so the lead appears in the Leads list.
+  // Use a synthetic phone key since Yelp does not provide a phone number.
+  const placeholderPhone = `yelp-${Date.now()}`;
+  try {
+    await db.insert(conversationSessions).values({
+      leadPhone: placeholderPhone,
+      leadName: displayName,
+      stage: "QUOTE_SENT" as any,
+      serviceType: parsed.serviceType ?? null,
+      bedrooms: bedroomsDisplay !== "Unknown" ? bedroomsDisplay : null,
+      bathrooms: bathroomsDisplay !== "Unknown" ? bathroomsDisplay : null,
+      zipCode: parsed.zipCode ?? null,
+      leadSource: "yelp",
+      aiMode: 0, // no AI — no phone to SMS
+      barkQA: `Requested date: ${dateDisplay}\nZip: ${zipDisplay}`,
+    } as any);
+    console.log(`[YelpLead] Created placeholder session with phone=${placeholderPhone}`);
+  } catch (err) {
+    console.error("[YelpLead] Failed to create placeholder session:", err);
+  }
 }
 
 // ── Handler: Form Submission Lead ─────────────────────────────────────────────

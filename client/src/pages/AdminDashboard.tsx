@@ -811,6 +811,9 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "reactivation") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
   }
+  if (leadSource === "yelp") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Yelp</span>;
+  }
   if (leadSource === "bark") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Bark</span>;
   }
@@ -3235,6 +3238,7 @@ export default function AdminDashboard() {
         (sourceFilter === "voice" && s.leadSource === "voice") ||
         (sourceFilter === "always-on" && (s.leadSource?.startsWith("always-on:") ?? false)) ||
         (sourceFilter === "bark" && s.leadSource === "bark") ||
+        (sourceFilter === "yelp" && s.leadSource === "yelp") ||
         (sourceFilter === "email" && s.leadSource === "email") ||
         (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
       const q = search.toLowerCase();
@@ -3796,6 +3800,7 @@ export default function AdminDashboard() {
               <SelectItem value="reactivation">Campaign</SelectItem>
               <SelectItem value="always-on">Always-On</SelectItem>
               <SelectItem value="bark">Bark</SelectItem>
+              <SelectItem value="yelp">Yelp</SelectItem>
             </SelectContent>
           </Select>
           {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all") && (
