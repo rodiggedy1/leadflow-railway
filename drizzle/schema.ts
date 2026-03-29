@@ -120,6 +120,10 @@ export const conversationStages = [
    * Excluded from active pipeline view; visible via the "Show Lost" toggle.
    */
   "LOST",
+  /**
+   * VOICEMAIL → Agent left a voicemail; waiting for callback.
+   */
+  "VOICEMAIL",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
