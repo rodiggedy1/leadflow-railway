@@ -2253,39 +2253,39 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <div className="flex items-center gap-1 relative">
                           {/* Photo */}
                           <button
-                            className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                            className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
                             onClick={() => fileInputRef.current?.click()}
                           >
-                            <Camera className="h-4 w-4" /> Photo
+                            📷 Photo
                           </button>
                           {/* Voice */}
                           {isRecording ? (
                             <button
-                              className="rounded-xl px-2.5 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium"
+                              className="rounded-full px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium shadow-sm"
                               onClick={stopRecording}
                             >
                               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                               {recordingSeconds}s — Stop
                             </button>
                           ) : isTranscribing ? (
-                            <button disabled className="rounded-xl px-2.5 py-1.5 text-slate-400 transition text-xs flex items-center gap-1.5">
+                            <button disabled className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-400 transition text-xs flex items-center gap-1.5 shadow-sm">
                               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
                             </button>
                           ) : (
                             <button
-                              className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                              className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
                               onClick={startRecording}
                             >
-                              <Mic className="h-4 w-4" /> Voice
+                              🎤 Voice
                             </button>
                           )}
                           {/* Emoji */}
                           <div ref={emojiRef} className="relative">
                             <button
-                              className={cn("rounded-xl p-2 transition", showEmoji ? "text-slate-900 bg-white" : "text-slate-400 hover:text-slate-700 hover:bg-white")}
+                              className={cn("rounded-full px-3 py-1.5 bg-white border transition text-xs font-medium shadow-sm", showEmoji ? "border-slate-400 text-slate-800" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800")}
                               onClick={() => setShowEmoji(v => !v)}
                             >
-                              <Smile className="h-4 w-4" />
+                              😊
                             </button>
                             {showEmoji && (
                               <div className="absolute bottom-10 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">
@@ -2470,39 +2470,39 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   <div className="flex items-center gap-1 relative">
                     {/* Photo */}
                     <button
-                      className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                      className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <Camera className="h-4 w-4" /> Photo
+                      📷 Photo
                     </button>
                     {/* Voice */}
                     {isRecording ? (
                       <button
-                        className="rounded-xl px-2.5 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium"
+                        className="rounded-full px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium shadow-sm"
                         onClick={stopRecording}
                       >
                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                         {recordingSeconds}s — Stop
                       </button>
                     ) : isTranscribing ? (
-                      <button disabled className="rounded-xl px-2.5 py-1.5 text-slate-400 transition text-xs flex items-center gap-1.5">
+                      <button disabled className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-400 transition text-xs flex items-center gap-1.5 shadow-sm">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
                       </button>
                     ) : (
                       <button
-                        className="rounded-xl p-2 text-slate-400 hover:text-slate-700 hover:bg-white transition text-xs flex items-center gap-1"
+                        className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
                         onClick={startRecording}
                       >
-                        <Mic className="h-4 w-4" /> Voice
+                        🎤 Voice
                       </button>
                     )}
                     {/* Emoji */}
                     <div ref={emojiRef} className="relative">
                       <button
-                        className={cn("rounded-xl p-2 transition", showEmoji ? "text-slate-900 bg-white" : "text-slate-400 hover:text-slate-700 hover:bg-white")}
+                        className={cn("rounded-full px-3 py-1.5 bg-white border transition text-xs font-medium shadow-sm", showEmoji ? "border-slate-400 text-slate-800" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800")}
                         onClick={() => setShowEmoji(v => !v)}
                       >
-                        <Smile className="h-4 w-4" />
+                        😊
                       </button>
                       {showEmoji && (
                         <div className="absolute bottom-10 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">

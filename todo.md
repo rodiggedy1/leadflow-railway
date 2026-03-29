@@ -570,3 +570,4 @@
 - [x] Fix tRPC procedures on Home page (/) returning HTML instead of JSON — root cause was a transient 502 during server restart (vite.config.ts change at 15:45 UTC), not a code bug. Build and TypeScript are clean. No code changes needed.
 - [x] Fix duplicate "I'm Back" notifications — added imBackFiredRef guard in CommandChat (prevents button + keystroke from both firing) and server-side dedup in sendMessage procedure (skips insert if same author posted away_status:back within last 10s). Also fixed pre-existing flaky test that made a real VAPI network call.
 - [x] Auto-dismiss away status banner after 15 min for eod and back15 statuses only; other statuses stay until manually cleared. Added awaySetAt column to agents table, set it on setAwayStatus, returned it from getAgentStatusList, and filter in AwayBanner with 30s tick interval.
+- [x] Restyle Photo/Voice/emoji buttons in CommandChat and OpsChat to pill-shaped with border and emoji+label treatment
