@@ -65,6 +65,43 @@ import {
   BellOff,
 } from "lucide-react";
 
+// ── AwayBanner ───────────────────────────────────────────────────────────────
+// Shown at the very top of OpsChat when one or more agents have an active away status.
+// Visible to the whole team; disappears automatically when all agents are back.
+
+const AWAY_COPY: Record<string, { emoji: string; phrase: string }> = {
+  away_sec: { emoji: "☕", phrase: "away for a sec" },
+  lunch:    { emoji: "🍔", phrase: "on lunch break" },
+  back15:   { emoji: "⏰", phrase: "back in 15" },
+  eod:      { emoji: "🌙", phrase: "signing off for the day" },
+};
+
+function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null }> }) {
+  const awayAgents = agents.filter(a => a.awayStatus);
+  if (awayAgents.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
+      <span className="text-amber-500 shrink-0">⚠️</span>
+      <p className="text-sm text-amber-800 leading-snug">
+        {awayAgents.map((ag, i) => {
+          const copy = AWAY_COPY[ag.awayStatus!] ?? { emoji: "🟡", phrase: "away" };
+          return (
+            <span key={ag.name}>
+              {i > 0 && <span className="text-amber-400 mx-1">·</span>}
+              <strong>{ag.name.split(" ")[0]}</strong>
+              {" is "}
+              {copy.emoji}
+              {" "}
+              {copy.phrase}
+            </span>
+          );
+        })}
+      </p>
+    </div>
+  );
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type PriorityStatus = "issue" | "soon" | "progress" | "complete" | "assigned";
@@ -1470,6 +1507,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       {/* ── Notification permission banner ── */}
+      {/* ── Away banner — visible to all team members when someone is away —— */}
+      <AwayBanner agents={agentStatusData?.agents ?? []} />
+
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
           <div className="flex items-center gap-2 text-sm text-amber-800">

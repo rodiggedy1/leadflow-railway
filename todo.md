@@ -554,3 +554,4 @@
 - [x] Coloured status dot on agent avatars in Command Chat sidebar (agentStatus in DB)
 - [x] Fix: I'm Back toggle not showing (myAwayStatus not being read correctly)
 - [x] Fix: Auto-return on typing not firing while Away
+- [x] Away banner: persistent amber strip at top of OpsChat showing all away agents + reason, disappears when all are back
