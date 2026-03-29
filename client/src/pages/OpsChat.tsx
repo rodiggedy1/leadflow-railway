@@ -722,10 +722,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
   // Per-view scroll position map: key = view key (e.g. "channel-command", "job-42")
   // Saves scroll position when the user scrolls, restores it when switching back to that view.
-  const scrollPositionMap = useRef<Map<string, number>>(new Map());
-  // Kept for backward compat with pendingScrollRestoreRef checks below
-  const savedScrollTopRef = useRef<number | null>(null);
-  const pendingScrollRestoreRef = useRef(false);
+
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
@@ -756,7 +753,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
-  const threadScrollRef = useRef<HTMLDivElement>(null); // scroll container ref for reliable bottom scroll
+  const jobScrollRef = useRef<HTMLDivElement>(null);     // job thread scroll container
+  const channelScrollRef = useRef<HTMLDivElement>(null); // channel view scroll container
+  // Active scroll container: always points to the currently-visible view
+
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1244,79 +1244,40 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // Scroll thread to bottom on new messages — double-rAF ensures the new message
   // DOM node is fully painted before we scroll, preventing the "one message short" bug.
-  const scrollToBottom = useCallback((instant = false) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const container = threadScrollRef.current;
-        if (container) {
-          container.scrollTo({ top: container.scrollHeight, behavior: instant ? "instant" : "smooth" });
-        } else {
-          threadBottomRef.current?.scrollIntoView({ behavior: instant ? "instant" : "smooth", block: "end" });
-        }
-      });
-    });
-  }, []);
-  // ── Scroll position persistence ───────────────────────────────────────────
-  // The center panel conditionally renders different scroll containers depending
-  // on the active view (job thread vs channel). Each time the view switches, the
-  // old DOM node is destroyed and a new one is created, resetting scrollTop to 0.
-  //
-  // Strategy: track the current view key, save scroll position on every scroll
-  // event into a Map keyed by view, and restore it synchronously via
-  // useLayoutEffect whenever the view key changes (before the browser paints).
+  // ── Scroll behaviour ──────────────────────────────────────────────────────
+  // Both views (job thread + channel) are always mounted (display:none when hidden).
+  // Their DOM nodes — and therefore their scrollTop — are NEVER destroyed.
+  // All we need to do is scroll to bottom when new messages arrive.
+  // On the very first render of each view we jump instantly; after that we smooth-scroll.
 
-  const currentScrollKey = selectedJobId ? `job-${selectedJobId}` : `channel-${activeChannel}`;
-  const prevScrollKeyRef = useRef("");
-  const initialScrollDoneRef = useRef(false);
+  const jobInitialScrollDone = useRef(false);
+  const channelInitialScrollDone = useRef(false);
 
-  // Save scroll position continuously as the user scrolls.
-  // This effect re-attaches on every render so it always has the latest container ref.
+  // Job thread: scroll to bottom when thread grows
   useEffect(() => {
-    const container = threadScrollRef.current;
-    if (!container) return;
-    const key = currentScrollKey;
-    const onScroll = () => {
-      scrollPositionMap.current.set(key, container.scrollTop);
-    };
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => container.removeEventListener('scroll', onScroll);
-  });
-
-  // Restore saved position synchronously when the view changes (before paint).
-  // Also handles the case where the widget re-opens on the same view.
-  useLayoutEffect(() => {
-    const container = threadScrollRef.current;
-    if (!container) return;
-    const key = currentScrollKey;
-    const saved = scrollPositionMap.current.get(key);
-    if (saved !== undefined && saved > 0) {
-      container.scrollTop = saved;
-      pendingScrollRestoreRef.current = true;
-      // Clear the flag after a tick so the scroll-to-bottom effect doesn't override
-      requestAnimationFrame(() => { pendingScrollRestoreRef.current = false; });
+    const el = jobScrollRef.current;
+    if (!el) return;
+    if (!jobInitialScrollDone.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+      jobInitialScrollDone.current = true;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentScrollKey]);
+  }, [jobDetail?.thread?.length, selectedJobId]);
 
-  // Scroll to bottom when new messages arrive, but not when restoring a saved position.
+  // Channel view: scroll to bottom when messages grow
   useEffect(() => {
-    const key = currentScrollKey;
-    const isNewView = prevScrollKeyRef.current !== key;
-    if (isNewView) {
-      prevScrollKeyRef.current = key;
-      initialScrollDoneRef.current = false;
-    }
-    if (!initialScrollDoneRef.current) {
-      // First render of this view: jump to bottom only if no saved position
-      const hasSaved = (scrollPositionMap.current.get(key) ?? 0) > 0;
-      if (!hasSaved) scrollToBottom(true);
-      initialScrollDoneRef.current = true;
-    } else if (!pendingScrollRestoreRef.current) {
-      // Subsequent message arrivals: smooth scroll to bottom
-      scrollToBottom(false);
+    const el = channelScrollRef.current;
+    if (!el) return;
+    if (!channelInitialScrollDone.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+      channelInitialScrollDone.current = true;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobDetail?.thread?.length, channelMsgs.length, selectedJobId, activeChannel]);
+  }, [channelMsgs.length, activeChannel]);
 
   // Play notification sound when new job thread messages arrive from others.
   // Use .length as the dep (not the array object) so we only fire when count changes,
@@ -1997,7 +1958,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <span className="text-xs font-semibold text-red-600">Requires response</span>
                       )}
                     </div>
-                    <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                    <div ref={jobScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                       <div className="space-y-4">
                         {jobDetail.thread.length === 0 ? (
                           <p className="text-sm text-slate-400 text-center py-8">No messages yet — start the thread below.</p>
@@ -2264,7 +2225,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 {notifMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
               </button>
             </div>
-            <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            <div ref={channelScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <div className="space-y-4">
                 {channelLoading ? (
                   <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
