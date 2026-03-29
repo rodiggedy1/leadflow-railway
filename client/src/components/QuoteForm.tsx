@@ -12,6 +12,40 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
+// ── Wistia Player — stable mount, never re-rendered by React ──────────────────
+// The <wistia-player> Web Component is managed entirely by the Wistia SDK.
+// We insert it once via useEffect into a stable ref div so that React re-renders
+// of the parent (e.g. from mutation state changes) never touch the player DOM node.
+function WistiaPlayer() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || el.querySelector("wistia-player")) return; // already mounted
+    const player = document.createElement("wistia-player");
+    player.setAttribute("media-id", "bzlt49ipk1");
+    player.setAttribute("seo", "false");
+    player.setAttribute("aspect", "1.7777777777777777");
+    player.style.display = "block";
+    player.style.width = "100%";
+    el.appendChild(player);
+  }, []); // empty deps — run once on mount only
+
+  return (
+    <div className="animate-fade-slide-up delay-1 mb-4">
+      <div
+        ref={containerRef}
+        className="relative w-full rounded-2xl overflow-hidden"
+        style={{
+          boxShadow: "0 4px 24px rgba(232,96,60,0.14), 0 1px 6px rgba(0,0,0,0.07)",
+          border: "1px solid rgba(232,96,60,0.18)",
+          background: "#1a1a1a",
+        }}
+      />
+    </div>
+  );
+}
+
 // ── Static Testimonial ───────────────────────────────────────────────────────
 
 function TrustStrip() {
@@ -855,29 +889,18 @@ export default function QuoteForm() {
                 </p>
               </div>
 
-              {/* Wistia Video */}
-              <div className="animate-fade-slide-up delay-1 mb-8">
-                <div
-                  className="relative w-full rounded-2xl overflow-hidden"
-                  style={{
-                    boxShadow: "0 4px 24px rgba(232,96,60,0.14), 0 1px 6px rgba(0,0,0,0.07)",
-                    border: "1px solid rgba(232,96,60,0.18)",
-                    background: "#1a1a1a",
-                  }}
-                >
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html: `<wistia-player media-id="bzlt49ipk1" seo="false" aspect="1.7777777777777777" style="display:block;width:100%"></wistia-player>`,
-                    }}
-                  />
-                </div>
-                <p
-                  className="text-center text-xs mt-2.5"
-                  style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}
-                >
-                  See how we work — 60 seconds
-                </p>
-              </div>
+              {/* Wistia Video — rendered via ref so React never touches the DOM node after mount.
+               *  Using dangerouslySetInnerHTML here would cause React to replace the inner HTML
+               *  on every re-render (e.g. when the trackPageView mutation state changes at ~8s),
+               *  which destroys and recreates the <wistia-player> Web Component, resetting the video.
+               */}
+              <WistiaPlayer />
+              <p
+                className="text-center text-xs mt-2.5"
+                style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}
+              >
+                See how we work — 60 seconds
+              </p>
 
               {/* Divider */}
               <div

@@ -563,3 +563,4 @@
 - [x] Vite manualChunks: split index vendor bundle from 1.36MB into 7 named chunks, largest is now 384KB
 - [ ] Fix: notification sound not playing when OpsChat tab is closed (regression from sound-leak fix)
 - [x] URGENT: quote form broken — vendor-react chunk caused dual-React conflict with Manus runtime injection; React moved back into index chunk
+- [ ] Fix: video on quote page freezes at ~10 seconds
