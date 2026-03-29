@@ -1890,6 +1890,39 @@ export const opsChatRouter = router({
   /**
    * Mark a DM thread as read up to the latest message.
    */
+  /**
+   * Returns live status for a list of sessionIds extracted from new_lead card metadata.
+   * Used by the Hot Leads tray and chat-feed lead cards to show booked/lost/stage badges.
+   */
+  getLeadSessionStatuses: opsChatProcedure
+    .input(z.object({ sessionIds: z.array(z.number()).max(50) }))
+    .query(async ({ input }) => {
+      if (input.sessionIds.length === 0) return [];
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          id: conversationSessions.id,
+          isBooked: conversationSessions.isBooked,
+          bookedAt: conversationSessions.bookedAt,
+          bookedByAgentName: conversationSessions.bookedByAgentName,
+          bookedAmount: conversationSessions.bookedAmount,
+          stage: conversationSessions.stage,
+          lostReason: conversationSessions.lostReason,
+        })
+        .from(conversationSessions)
+        .where(or(...input.sessionIds.map(id => eq(conversationSessions.id, id))));
+      return rows.map(r => ({
+        id: r.id,
+        isBooked: r.isBooked === 1,
+        bookedAt: r.bookedAt ? r.bookedAt.getTime() : null,
+        bookedByAgentName: r.bookedByAgentName ?? null,
+        bookedAmount: r.bookedAmount ?? null,
+        stage: r.stage,
+        lostReason: r.lostReason ?? null,
+      }));
+    }),
+
   markDmRead: opsChatProcedure
     .input(z.object({ myName: z.string().min(1), dmThread: z.string().min(1), lastMessageId: z.number().int() }))
     .mutation(async ({ input }) => {

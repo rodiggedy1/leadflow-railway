@@ -24,7 +24,7 @@ import {
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
-} from "lucide-react";
+  CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -152,12 +152,24 @@ function HotLeadClaimTimer({ arrivedAt }: { arrivedAt: number }) {
   return <span className={cn("font-mono font-bold tabular-nums", colorClass)}>{label}</span>;
 }
 
+type SessionStatus = {
+  id: number;
+  isBooked: boolean;
+  bookedAt: number | null;
+  bookedByAgentName: string | null;
+  bookedAmount: number | null;
+  stage: string;
+  lostReason: string | null;
+};
+
 function HotLeadCard({
   msg,
   claimLeadMutation,
+  sessionStatus,
 }: {
   msg: LeadMsg;
   claimLeadMutation: ClaimMutation;
+  sessionStatus?: SessionStatus | null;
 }) {
   // Shake state: fires every 8 seconds while unclaimed
   const [shaking, setShaking] = useState(false);
@@ -173,13 +185,17 @@ function HotLeadCard({
   const claimedAt   = (meta.claimedAt   as number | null)  ?? null;
   const isClaimed   = Boolean(claimedBy);
 
+  // Derive live status from sessionStatus prop
+  const isBooked = sessionStatus?.isBooked ?? false;
+  const isLost   = !isBooked && (sessionStatus?.stage === "LOST" || sessionStatus?.stage === "COLD");
+
   // Live elapsed seconds — drives both timer label and urgency colors
   const secs = useElapsedSecs(arrivedAt);
   const mins = Math.floor(secs / 60);
 
-  // Shake every 8 seconds while unclaimed
+  // Shake every 8 seconds while unclaimed and not yet booked/lost
   useEffect(() => {
-    if (isClaimed) return;
+    if (isClaimed || isBooked || isLost) return;
     // Trigger immediately on mount
     setShaking(true);
     const onEnd = () => setShaking(false);
@@ -189,12 +205,16 @@ function HotLeadCard({
     return () => clearInterval(interval);
   }, [isClaimed]);
 
-  const urgencyBand = isClaimed
+  const urgencyBand = isBooked
+    ? "bg-blue-600   border-blue-200"
+    : isLost
+    ? "bg-slate-500  border-slate-300"
+    : isClaimed
     ? "bg-emerald-600 border-emerald-200"
     : mins < 2  ? "bg-amber-500  border-amber-300"
     : mins < 5  ? "bg-orange-500 border-orange-400"
     :             "bg-red-600    border-red-400";
-  const urgencyRing = isClaimed ? "" :
+  const urgencyRing = (isBooked || isLost || isClaimed) ? "" :
     mins < 2  ? "ring-amber-400"
     : mins < 5 ? "ring-orange-500"
     :            "ring-red-500";
@@ -217,13 +237,32 @@ function HotLeadCard({
       )}
     >
       {/* Pulsing glow ring for unclaimed — color shifts with urgency */}
-      {!isClaimed && (
+      {!isClaimed && !isBooked && !isLost && (
         <span className={cn("absolute inset-0 rounded-xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
       )}
 
       {/* Status band */}
       <div className={cn("flex items-center gap-1.5 px-3 py-1.5", bandBg)}>
-        {isClaimed ? (
+        {isBooked ? (
+          <>
+            <CheckCircle2 className="h-3 w-3 text-white shrink-0" />
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
+              Booked{sessionStatus?.bookedByAgentName ? ` · ${sessionStatus.bookedByAgentName}` : ""}
+            </span>
+            {sessionStatus?.bookedAmount && (
+              <span className="ml-auto text-[10px] text-blue-100 shrink-0 font-bold">
+                ${sessionStatus.bookedAmount}
+              </span>
+            )}
+          </>
+        ) : isLost ? (
+          <>
+            <XCircle className="h-3 w-3 text-white shrink-0" />
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
+              Lost{sessionStatus?.lostReason ? ` · ${sessionStatus.lostReason.replace(/_/g, " ")}` : ""}
+            </span>
+          </>
+        ) : isClaimed ? (
           <>
             <UserCheck className="h-3 w-3 text-white shrink-0" />
             <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
@@ -327,6 +366,30 @@ function HotLeadsTray({
     .slice()
     .reverse(); // newest first
 
+  // Collect sessionIds from lead metadata to poll live status
+  const sessionIds = useMemo(() => {
+    const ids: number[] = [];
+    for (const m of leads) {
+      try {
+        const meta = JSON.parse(m.metadata ?? "{}");
+        if (typeof meta.sessionId === "number") ids.push(meta.sessionId);
+      } catch {}
+    }
+    return ids;
+  }, [leads]);
+
+  const { data: sessionStatuses } = trpc.opsChat.getLeadSessionStatuses.useQuery(
+    { sessionIds },
+    { enabled: sessionIds.length > 0, refetchInterval: 30_000 }
+  );
+
+  // Build a map from sessionId -> status for O(1) lookup
+  const statusMap = useMemo(() => {
+    const m = new Map<number, SessionStatus>();
+    for (const s of sessionStatuses ?? []) m.set(s.id, s);
+    return m;
+  }, [sessionStatuses]);
+
   const unclaimedCount = leads.filter((m) => {
     try { const meta = JSON.parse(m.metadata ?? "{}"); return !meta.claimedBy; } catch { return true; }
   }).length;
@@ -362,7 +425,18 @@ function HotLeadsTray({
       ) : (
         <div className="space-y-2.5">
           {leads.map((msg) => (
-            <HotLeadCard key={msg.id} msg={msg} claimLeadMutation={claimLeadMutation} />
+            <HotLeadCard
+              key={msg.id}
+              msg={msg}
+              claimLeadMutation={claimLeadMutation}
+              sessionStatus={(() => {
+                try {
+                  const meta = JSON.parse(msg.metadata ?? "{}");
+                  const sid = typeof meta.sessionId === "number" ? meta.sessionId : null;
+                  return sid ? (statusMap.get(sid) ?? null) : null;
+                } catch { return null; }
+              })()}
+            />
           ))}
         </div>
       )}

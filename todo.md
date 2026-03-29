@@ -523,3 +523,5 @@
 - [x] Hot Leads tray: time-to-claim timer turns amber at 2 min, red at 5 min on unclaimed cards
 - [x] Unclaimed Hot Lead cards shake animation until claimed
 - [x] Repeating sound notification every 60 seconds while any unclaimed lead exists
+- [x] Show live lead status (booked/lost/etc.) on new_lead cards in chat feed and Hot Leads tray
+- [x] Join session status at query time so status updates in AdminDashboard reflect on cards immediately
