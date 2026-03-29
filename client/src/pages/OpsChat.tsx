@@ -990,11 +990,25 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // myProfile returns email for both owner and agents.
   const myDmKey = (myProfile as any)?.email ?? agentMe?.email ?? callerName;
 
-  const { data: agentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
+  const { data: agentStatusData, refetch: refetchAgentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
     refetchInterval: 60_000,
     enabled: Boolean(user) || Boolean(agentMe),
     retry: false,
     staleTime: 30_000,
+  });
+
+  // My current away status — derived from agentStatusData (my own record)
+  // Agents only: owners don't have an agents record so this stays null for them.
+  const myAwayStatus = useMemo(() => {
+    if (!agentMe) return null;
+    const myRecord = agentStatusData?.agents.find(ag => ag.name === callerName);
+    return myRecord?.awayStatus ?? null;
+  }, [agentStatusData?.agents, agentMe, callerName]);
+
+  // Mutation to persist away status to the DB
+  const setAwayStatusMutation = trpc.agents.setAwayStatus.useMutation({
+    onSuccess: () => refetchAgentStatusData(),
+    onError: (err) => console.error("[Away] setAwayStatus failed:", err.message),
   });
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
@@ -1152,10 +1166,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // ── Sender status map ─────────────────────────────────────────────────────────
   // Derived from agentStatusList: name -> "online" | "away" | "offline"
+  // awayStatus field takes precedence: if explicitly set, agent is "away" regardless of lastSeenAt.
+  // If awayStatus is null, fall back to time-based heuristic.
   const senderStatusMap = useMemo(() => {
     const map: Record<string, "online" | "away" | "offline"> = {};
     const now = Date.now();
     for (const ag of agentStatusData?.agents ?? []) {
+      // Explicit away status overrides time-based heuristic
+      if (ag.awayStatus) {
+        map[ag.name] = "away";
+        continue;
+      }
       const diffMin = ag.lastSeenAt ? Math.floor((now - ag.lastSeenAt) / 60_000) : null;
       if (diffMin === null) { map[ag.name] = "offline"; }
       else if (diffMin <= 2) { map[ag.name] = "online"; }
@@ -1558,16 +1579,26 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                     const now = Date.now();
                     const seenMs = ag.lastSeenAt;
                     const diffMin = seenMs ? Math.floor((now - seenMs) / 60_000) : null;
-                    const agStatus: "online" | "away" | "offline" =
-                      diffMin === null ? "offline"
+                    // awayStatus field takes precedence over time-based heuristic
+                    const agStatus: "online" | "away" | "offline" = ag.awayStatus
+                      ? "away"
+                      : diffMin === null ? "offline"
                       : diffMin <= 2 ? "online"
                       : diffMin <= 15 ? "away"
                       : "offline";
-                    const statusLabel = seenMs === null || diffMin === null ? "Never logged in" :
-                      diffMin === 0 ? "Active now" :
-                      diffMin < 60 ? `${diffMin}m ago` :
-                      diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago` :
-                      new Date(seenMs).toLocaleDateString();
+                    // Status label: show the named away reason when explicitly set
+                    const awayLabels: Record<string, string> = {
+                      away_sec: "Away for a sec ☕",
+                      lunch: "Lunch break 🍔",
+                      back15: "Back in 15 ⏰",
+                      eod: "Signing off 🌙",
+                    };
+                    const statusLabel = ag.awayStatus ? (awayLabels[ag.awayStatus] ?? "Away")
+                      : seenMs === null || diffMin === null ? "Never logged in"
+                      : diffMin === 0 ? "Active now"
+                      : diffMin < 60 ? `${diffMin}m ago`
+                      : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago`
+                      : new Date(seenMs).toLocaleDateString();
                     const dotColor = agStatus === "online" ? "bg-green-500" : agStatus === "away" ? "bg-amber-400" : "bg-slate-300";
                     return (
                       <div key={ag.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -1584,7 +1615,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                           )}
                           <span
                             className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white", dotColor)}
-                            title={agStatus === "online" ? "Online" : agStatus === "away" ? "Away (active <15m)" : "Offline"}
+                            title={agStatus === "online" ? "Online" : agStatus === "away" ? (ag.awayStatus ? statusLabel : "Away (active <15m)") : "Offline"}
                           />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -2224,6 +2255,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               setSelectedJobId(jobId);
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
+            awayStatus={myAwayStatus}
+            onSetAwayStatus={(status) => {
+              setAwayStatusMutation.mutate({ status: status as "away_sec" | "lunch" | "back15" | "eod" | null });
+            }}
+            senderStatusMap={senderStatusMap}
           />
         </div>
 

@@ -60,6 +60,12 @@ interface CommandChatProps {
   onJumpToJob: (jobId: number) => void;
   /** Called when user clicks "Today Ops" in the in-panel tab switcher */
   onSwitchToToday: () => void;
+  /** Current away status of the calling agent (null = available) */
+  awayStatus?: string | null;
+  /** Called when agent sets or clears away status */
+  onSetAwayStatus?: (status: string | null) => void;
+  /** Map of senderName -> "online" | "away" | "offline" for status dot overlays on avatars */
+  senderStatusMap?: Record<string, "online" | "away" | "offline">;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -479,7 +485,7 @@ function HotLeadsTray({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, awayStatus, onSetAwayStatus, senderStatusMap }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
@@ -1735,20 +1741,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     >
                       {/* Avatar circle for other people's messages */}
                       {!isMine && !isAlert && (
-                        <div
-                          className="w-7 h-7 rounded-full overflow-hidden shrink-0 mt-1 mr-2"
-                          title={msg.from}
-                        >
-                          {authorPhoto ? (
-                            <img src={authorPhoto} alt={msg.from ?? ""} className="w-full h-full object-cover" />
-                          ) : (
-                            <div
-                              className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white"
-                              style={{ backgroundColor: authorColor }}
-                            >
-                              {authorInitial}
-                            </div>
-                          )}
+                        <div className="relative w-7 h-7 shrink-0 mt-1 mr-2">
+                          <div
+                            className="w-full h-full rounded-full overflow-hidden"
+                            title={msg.from}
+                          >
+                            {authorPhoto ? (
+                              <img src={authorPhoto} alt={msg.from ?? ""} className="w-full h-full object-cover" />
+                            ) : (
+                              <div
+                                className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white"
+                                style={{ backgroundColor: authorColor }}
+                              >
+                                {authorInitial}
+                              </div>
+                            )}
+                          </div>
+                          {/* Status dot overlay — green = online, amber = away */}
+                          {senderStatusMap && (() => {
+                            const st = senderStatusMap[msg.from ?? ""];
+                            if (!st || st === "offline") return null;
+                            return (
+                              <span
+                                className={cn(
+                                  "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white",
+                                  st === "online" ? "bg-green-500" : "bg-amber-400"
+                                )}
+                                title={st === "online" ? "Online" : "Away"}
+                              />
+                            );
+                          })()}
                         </div>
                       )}
 
@@ -1942,39 +1964,56 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             >
               Pin Note
             </button>
-            <Popover open={awayOpen} onOpenChange={setAwayOpen}>
-              <PopoverTrigger asChild>
-                <button className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
-                  Away
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-52 p-1.5" align="end">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Set status</p>
-                {([
-                  { key: "away_sec",  label: "Away for a sec",  sub: "Quick break",       emoji: "☕",  accent: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
-                  { key: "lunch",     label: "Lunch break",     sub: "Quick munch",       emoji: "🍔",  accent: "#10b981", bg: "#ecfdf5", border: "#a7f3d0" },
-                  { key: "back15",    label: "Back in 15",      sub: "Short defined break",emoji: "⏰",  accent: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
-                  { key: "eod",       label: "Signing off",     sub: "End of day",        emoji: "🌙",  accent: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd" },
-                ] as const).map(({ key, label, sub, emoji, accent, bg, border }) => (
-                  <button
-                    key={key}
-                    className="w-full text-left px-3 py-2.5 rounded-lg hover:opacity-90 transition flex items-center gap-3 mb-1"
-                    style={{ background: bg, border: `1px solid ${border}` }}
-                    onClick={() => {
-                      onSendMessage(`${emoji} ${callerName} — ${label}`, undefined, undefined, `away_status:${key}`);
-                      setAwayOpen(false);
-                    }}
-                  >
-                    <span className="text-xl leading-none">{emoji}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold leading-tight" style={{ color: accent }}>{label}</p>
-                      <p className="text-[11px] text-slate-400 leading-tight">{sub}</p>
-                    </div>
+{/* Away / I'm Back toggle */}
+            {awayStatus ? (
+              // Currently away — show "I'm Back" button to clear status
+              <button
+                className="text-xs font-semibold rounded-full px-4 py-2 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5"
+                onClick={() => {
+                  onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
+                  onSetAwayStatus?.(null);
+                }}
+              >
+                <span className="inline-block w-2 h-2 rounded-full bg-white" />
+                I'm Back
+              </button>
+            ) : (
+              // Not away — show Away picker
+              <Popover open={awayOpen} onOpenChange={setAwayOpen}>
+                <PopoverTrigger asChild>
+                  <button className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                    Away
                   </button>
-                ))}
-              </PopoverContent>
-            </Popover>
+                </PopoverTrigger>
+                <PopoverContent className="w-52 p-1.5" align="end">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Set status</p>
+                  {([
+                    { key: "away_sec",  label: "Away for a sec",  sub: "Quick break",        emoji: "☕",  accent: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
+                    { key: "lunch",     label: "Lunch break",     sub: "Quick munch",        emoji: "🍔",  accent: "#10b981", bg: "#ecfdf5", border: "#a7f3d0" },
+                    { key: "back15",    label: "Back in 15",      sub: "Short defined break", emoji: "⏰",  accent: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
+                    { key: "eod",       label: "Signing off",     sub: "End of day",         emoji: "🌙",  accent: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd" },
+                  ] as const).map(({ key, label, sub, emoji, accent, bg, border }) => (
+                    <button
+                      key={key}
+                      className="w-full text-left px-3 py-2.5 rounded-lg hover:opacity-90 transition flex items-center gap-3 mb-1"
+                      style={{ background: bg, border: `1px solid ${border}` }}
+                      onClick={() => {
+                        onSendMessage(`${emoji} ${callerName} — ${label}`, undefined, undefined, `away_status:${key}`);
+                        onSetAwayStatus?.(key);
+                        setAwayOpen(false);
+                      }}
+                    >
+                      <span className="text-xl leading-none">{emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-tight" style={{ color: accent }}>{label}</p>
+                        <p className="text-[11px] text-slate-400 leading-tight">{sub}</p>
+                      </div>
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
 
           {/* Staged photo preview strip */}
@@ -2059,6 +2098,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
+                // Auto-return: first keystroke while away clears status and posts "I'm Back"
+                if (awayStatus && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                  onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
+                  onSetAwayStatus?.(null);
+                }
                 onCmdKeyPress();
               }}
               onBlur={onCmdBlur}

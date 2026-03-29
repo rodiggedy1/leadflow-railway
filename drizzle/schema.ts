@@ -340,6 +340,8 @@ export const agents = mysqlTable("agents", {
   pagePermissions: text("pagePermissions"), // JSON string | null — null = no restrictions
   profilePhotoUrl: varchar("profilePhotoUrl", { length: 1024 }), // S3 CDN URL for profile photo
   lastSeenAt: timestamp("lastSeenAt"), // Updated on every authenticated request — used for online status
+  /** Current away status: null = available, or one of: away_sec | lunch | back15 | eod */
+  awayStatus: varchar("awayStatus", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

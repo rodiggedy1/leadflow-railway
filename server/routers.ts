@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -3187,6 +3187,44 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const unreadCount = trimmed.filter(n => n.createdAt > oneDayAgo).length;
         return { notifications: trimmed, unreadCount };
       }),
+
+    /**
+     * agents.setAwayStatus — set or clear the current agent's away status.
+     * Pass null to mark as available (I'm Back).
+     * Valid values: "away_sec" | "lunch" | "back15" | "eod" | null
+     */
+    setAwayStatus: publicProcedure
+      .input(z.object({ status: z.enum(["away_sec", "lunch", "back15", "eod"]).nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(agents)
+          .set({ awayStatus: input.status })
+          .where(eq(agents.id, agentSession.agentId));
+        return { ok: true };
+      }),
+
+    /**
+     * agents.getStatuses — return id + name + awayStatus + profilePhotoUrl for all active agents.
+     * Used by OpsChat sidebar to render coloured status dots.
+     */
+    getStatuses: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          awayStatus: agents.awayStatus,
+          profilePhotoUrl: agents.profilePhotoUrl,
+        })
+        .from(agents)
+        .where(eq(agents.isActive, 1))
+        .orderBy(agents.name);
+      return rows;
+    }),
   }),
 
   /**

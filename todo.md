@@ -549,3 +549,6 @@
 - [x] Add Wistia video embed under title on QuoteForm with world-class UI
 - [x] CommandChat: hide Announce Booking button, add Away status popover that posts status to chat
 - [x] Away status: 4 options with styled chat cards (Away for a sec, Lunch break, Back in 15, EOD/Signing off)
+- [x] Away/I'm Back toggle: button changes after Away selected, I'm Back posts card and resets
+- [x] Auto-post I'm Back card on first keystroke while Away
+- [x] Coloured status dot on agent avatars in Command Chat sidebar (agentStatus in DB)
