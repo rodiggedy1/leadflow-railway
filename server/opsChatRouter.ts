@@ -764,7 +764,7 @@ export const opsChatRouter = router({
    */
   getSeenByBulk: opsChatProcedure
     .input(z.object({
-      messageIds: z.array(z.number().int().positive()).max(200),
+      messageIds: z.array(z.number().int().positive()).max(1000),
       channel: z.string().optional(),
       cleanerJobId: z.number().int().positive().optional(),
     }))
@@ -1395,7 +1395,7 @@ export const opsChatRouter = router({
    */
   getReactions: opsChatProcedure
     .input(z.object({
-      messageIds: z.array(z.number().int().positive()).max(200),
+      messageIds: z.array(z.number().int().positive()).max(1000),
     }))
     .query(async ({ input }) => {
       const db = await getDb();
