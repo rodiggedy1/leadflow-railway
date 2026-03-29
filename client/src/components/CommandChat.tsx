@@ -893,7 +893,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelMsgs.length, callerName, playNotification, osNotify]);
 
-  // ── Repeating sound every 60 seconds while any unclaimed lead exists ─────────
+   // ── Unclaimed leads (badge/highlight only — repeating sound removed) ───────
   const unclaimedLeads = useMemo(() => {
     return channelMsgs.filter(m => {
       if (m.quickAction !== "new_lead") return false;
@@ -903,14 +903,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       } catch { return false; }
     });
   }, [channelMsgs]);
-
-  useEffect(() => {
-    if (unclaimedLeads.length === 0) return;
-    const interval = setInterval(() => {
-      playNotification();
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [unclaimedLeads.length, playNotification]);
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];

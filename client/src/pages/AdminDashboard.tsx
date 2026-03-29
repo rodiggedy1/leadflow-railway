@@ -475,7 +475,8 @@ type Stage =
   | "VOICEMAIL"
   | "WIDGET_SIZING"
   | "COLD"
-  | "LOST";
+  | "LOST"
+  | "YELP_CONTACTED";
 const STAGE_CONFIG: Record<
   Stage,
   { label: string; textColor: string; bgColor: string; borderColor: string; order: number }
@@ -578,6 +579,13 @@ const STAGE_CONFIG: Record<
     borderColor: "#d1d5db",
     order: 13,
   },
+  YELP_CONTACTED: {
+    label: "✅ Contacted via Yelp",
+    textColor: "#b91c1c",
+    bgColor: "#fff1f2",
+    borderColor: "#fecdd3",
+    order: 14,
+  },
 };
 
 const ALL_STAGES = (Object.keys(STAGE_CONFIG) as Stage[]).sort(
@@ -591,6 +599,7 @@ const OUTCOME_STAGES: Stage[] = [
   "VOICEMAIL",
   "COLD",
   "LOST",
+  "YELP_CONTACTED",
 ];
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -984,7 +993,7 @@ function ConversationDrawer({
     if (isAdmin) {
       adminUpdateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
     } else {
-      agentUpdateStageMutation.mutate({ sessionId: session.id, stage: val as ("BOOKED" | "FOLLOW_UP_SCHEDULED" | "VOICEMAIL" | "COLD" | "LOST") });
+      agentUpdateStageMutation.mutate({ sessionId: session.id, stage: val as ("BOOKED" | "FOLLOW_UP_SCHEDULED" | "VOICEMAIL" | "COLD" | "LOST" | "YELP_CONTACTED") });
     }
   }
 

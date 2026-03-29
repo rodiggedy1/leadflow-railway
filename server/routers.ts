@@ -682,6 +682,7 @@ export const appRouter = router({
           "VOICEMAIL",
           "COLD",
           "LOST",
+          "YELP_CONTACTED",
         ]),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -758,6 +759,7 @@ export const appRouter = router({
           "VOICEMAIL",
           "COLD",
           "LOST",
+          "YELP_CONTACTED",
         ]),
         lostReason: z.string().max(100).optional(),
       }))
@@ -2340,6 +2342,33 @@ STAGE DETECTION — return the stage the conversation is currently in:
 
         console.log(`[OutboundCallAssist] Appended call to sessionId=${input.sessionId}, stage=${newStage}`);
         return { success: true as const, sessionId: input.sessionId };
+      }),
+    /**
+     * leads.markYelpContacted — mark a Yelp lead as contacted via Yelp Biz.
+     * Sets stage to DONE and turns off AI mode (no SMS to send).
+     */
+    markYelpContacted: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const rows = await db
+          .select({ leadName: conversationSessions.leadName, leadPhone: conversationSessions.leadPhone })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        const sess = rows[0];
+        await db
+          .update(conversationSessions)
+          .set({ stage: "DONE" as any, aiMode: 0 })
+          .where(eq(conversationSessions.id, input.sessionId));
+        logActivity({
+          eventType: "new_lead",
+          title: `${sess?.leadName ?? "Yelp Lead"} contacted via Yelp Biz`,
+          body: "Agent marked this Yelp lead as contacted via Yelp Biz.",
+          meta: { sessionId: input.sessionId, leadName: sess?.leadName, source: "yelp" },
+        }).catch(() => {});
+        return { success: true };
       }),
   }),
   /**

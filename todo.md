@@ -544,3 +544,5 @@
 - [x] Fix OpsChat scroll position not restoring on re-open (still jumps to top)
 - [x] Yelp lead flow: parse Yelp inquiry emails via Zapier, post Command Chat alert card (no SMS — no phone number from Yelp)
 - [x] Yelp leads: create placeholder conversationSession (no phone) so they appear in Leads list with Yelp badge
+- [x] "Contacted via Yelp Biz" button in Admin and Agent lead drawers for Yelp sessions (YELP_CONTACTED stage)
+- [x] Fix notification sound firing every few seconds (removed 60s repeating interval in CommandChat)

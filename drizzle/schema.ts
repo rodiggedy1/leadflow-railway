@@ -124,6 +124,10 @@ export const conversationStages = [
    * VOICEMAIL → Agent left a voicemail; waiting for callback.
    */
   "VOICEMAIL",
+  /**
+   * YELP_CONTACTED → Agent has contacted this Yelp lead via Yelp Biz.
+   */
+  "YELP_CONTACTED",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
