@@ -436,7 +436,7 @@ export const opsChatRouter = router({
         .from(opsChatMessages)
         .where(eq(opsChatMessages.channel, input.channel))
         .orderBy(desc(opsChatMessages.createdAt))
-        .limit(100);
+        .limit(500);
 
       return msgs.reverse().map((m) => ({
         id: m.id,

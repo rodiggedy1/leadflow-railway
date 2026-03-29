@@ -539,3 +539,5 @@
 - [x] Fix agent drawer: stage dropdown hidden behind isAdmin guard — show to all agents via agentUpdateStage procedure
 - [x] Delete lead from drawer should also remove the corresponding hot_lead card from the command channel tray
 - [x] Fix CommandChat + OpsChat bug: navigating back to command chat fires notification sound and fast-scrolls the page
+- [x] CommandChat: restore scroll position when re-opening chat (currently jumps to top)
+- [x] CommandChat: message history cut off — load more messages beyond the current limit (raised to 500)

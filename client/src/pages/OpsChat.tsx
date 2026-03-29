@@ -718,8 +718,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     retry: false,
   });
 
-  const { minimize: minimizeFromHook } = useOpsChatWindow();
+  const { minimize: minimizeFromHook, state: opsChatState } = useOpsChatWindow();
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
+  // Save scroll position when widget hides; restore it when widget re-opens
+  const savedScrollTopRef = useRef<number | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
@@ -1250,6 +1252,29 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       });
     });
   }, []);
+  // Save scroll position when widget hides; restore it when widget re-opens.
+  const prevOpsChatStateRef = useRef(opsChatState);
+  useEffect(() => {
+    const prev = prevOpsChatStateRef.current;
+    const curr = opsChatState;
+    prevOpsChatStateRef.current = curr;
+    if (prev === "open" && curr !== "open") {
+      // Widget is hiding — save current scroll position
+      const container = threadScrollRef.current;
+      if (container) savedScrollTopRef.current = container.scrollTop;
+    } else if (prev !== "open" && curr === "open") {
+      // Widget is re-opening — restore saved scroll position
+      const saved = savedScrollTopRef.current;
+      if (saved !== null) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const container = threadScrollRef.current;
+            if (container) container.scrollTop = saved;
+          });
+        });
+      }
+    }
+  }, [opsChatState]);
   // Track whether we've done the initial scroll for the current view.
   // On first load/re-entry: jump instantly. On subsequent new messages: smooth scroll.
   const initialScrollDoneRef = useRef(false);
@@ -1263,7 +1288,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       initialScrollDoneRef.current = false;
     }
     if (!initialScrollDoneRef.current) {
-      scrollToBottom(true); // instant on first load
+      // Only jump to bottom on first load if we don't have a saved position to restore
+      if (savedScrollTopRef.current === null) {
+        scrollToBottom(true);
+      }
       initialScrollDoneRef.current = true;
     } else {
       scrollToBottom(false); // smooth for new messages
