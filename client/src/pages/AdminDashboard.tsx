@@ -941,7 +941,7 @@ function ConversationDrawer({
   }
 
   const [pendingLostSession, setPendingLostSession] = useState<{ id: number; name: string | null } | null>(null);
-  const updateStageMutation = trpc.leads.adminUpdateStage.useMutation({
+  const adminUpdateStageMutation = trpc.leads.adminUpdateStage.useMutation({
     onSuccess: (_, vars) => {
       onSessionUpdate({ stage: vars.stage });
       utils.leads.list.invalidate();
@@ -951,6 +951,17 @@ function ConversationDrawer({
     },
     onError: (e) => toast.error(e.message),
   });
+  const agentUpdateStageMutation = trpc.leads.agentUpdateStage.useMutation({
+    onSuccess: (_, vars) => {
+      onSessionUpdate({ stage: vars.stage as Stage });
+      utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
+      onRefresh();
+      toast.success("Stage updated");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateStageMutation = isAdmin ? adminUpdateStageMutation : agentUpdateStageMutation;
   const markAsLostMutation = trpc.leads.markAsLost.useMutation({
     onSuccess: () => {
       onSessionUpdate({ stage: "LOST" as Stage });
@@ -967,7 +978,11 @@ function ConversationDrawer({
       setPendingLostSession({ id: session.id, name: session.leadName ?? session.leadPhone ?? null });
       return;
     }
-    updateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
+    if (isAdmin) {
+      adminUpdateStageMutation.mutate({ sessionId: session.id, stage: val as Stage });
+    } else {
+      agentUpdateStageMutation.mutate({ sessionId: session.id, stage: val as ("BOOKED" | "FOLLOW_UP_SCHEDULED" | "VOICEMAIL" | "COLD" | "LOST") });
+    }
   }
 
   const assignAgentMutation = trpc.leads.adminAssignAgent.useMutation({
@@ -1885,33 +1900,31 @@ function ConversationDrawer({
                   </div>
                 );
               })()}
-              {isAdmin && (
-                <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-2">
-                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Move Stage</div>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={session.stage}
-                      onValueChange={handleStageSelect}
-                      disabled={updateStageMutation.isPending || markAsLostMutation.isPending}
-                    >
-                      <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {OUTCOME_STAGES.map(s => (
-                          <SelectItem key={s} value={s} className="text-xs">
-                            <span
-                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
-                              style={{ backgroundColor: STAGE_CONFIG[s]?.bgColor, color: STAGE_CONFIG[s]?.textColor }}
-                            >
-                              {STAGE_CONFIG[s]?.label ?? s}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
-                  </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-2">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Move Stage</div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={session.stage}
+                    onValueChange={handleStageSelect}
+                    disabled={updateStageMutation.isPending || markAsLostMutation.isPending}
+                  >
+                    <SelectTrigger className="h-8 text-xs flex-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {OUTCOME_STAGES.map(s => (
+                        <SelectItem key={s} value={s} className="text-xs">
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{ backgroundColor: STAGE_CONFIG[s]?.bgColor, color: STAGE_CONFIG[s]?.textColor }}
+                          >
+                            {STAGE_CONFIG[s]?.label ?? s}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {updateStageMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                 </div>
-              )}
+              </div>
               <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">AI Playbook</div>
                 <div className="space-y-2">

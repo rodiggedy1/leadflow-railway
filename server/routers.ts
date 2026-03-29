@@ -745,6 +745,83 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.agentUpdateStage — any logged-in agent can update outcome-level stages.
+     * Mirrors adminUpdateStage but uses agentProcedure (no isAdmin required).
+     * Restricted to outcome stages only — mid-conversation AI stages are excluded.
+     */
+    agentUpdateStage: agentProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        stage: z.enum([
+          "BOOKED",
+          "FOLLOW_UP_SCHEDULED",
+          "VOICEMAIL",
+          "COLD",
+          "LOST",
+        ]),
+        lostReason: z.string().max(100).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const stageUpdates: Record<string, unknown> = { stage: input.stage };
+        if (input.stage === "BOOKED") {
+          stageUpdates.isBooked = 1;
+          stageUpdates.bookedAt = new Date();
+        } else {
+          stageUpdates.isBooked = 0;
+        }
+        if (input.stage === "LOST") {
+          stageUpdates.lostReason = input.lostReason ?? null;
+        }
+        await db
+          .update(conversationSessions)
+          .set(stageUpdates)
+          .where(eq(conversationSessions.id, input.sessionId));
+        if (input.stage === "BOOKED") {
+          await markReactivationContactBooked(input.sessionId).catch(console.error);
+          // Auto-fire booking announcement into the command channel
+          try {
+            const [session] = await db
+              .select({
+                leadName: conversationSessions.leadName,
+                quotedPrice: conversationSessions.quotedPrice,
+                serviceType: conversationSessions.serviceType,
+                bookedAmount: conversationSessions.bookedAmount,
+              })
+              .from(conversationSessions)
+              .where(eq(conversationSessions.id, input.sessionId))
+              .limit(1);
+            const personName = session?.leadName ?? "Lead";
+            const rawAmount = session?.bookedAmount
+              ? `$${session.bookedAmount}`
+              : session?.quotedPrice ?? null;
+            const note = session?.serviceType ?? null;
+            const authorName = ctx.agent.agentName;
+            const meta = JSON.stringify({
+              personName,
+              amount: rawAmount ?? undefined,
+              note: note ?? undefined,
+            });
+            const body = rawAmount
+              ? `🎉 New booking! ${personName} — ${rawAmount}${note ? ` · ${note}` : ""}`
+              : `🎉 New booking! ${personName}${note ? ` · ${note}` : ""}`;
+            await db.insert(opsChatMessages).values({
+              channel: "command",
+              authorName,
+              authorRole: "office",
+              body,
+              quickAction: "announce_booking",
+              metadata: meta,
+            });
+          } catch (err) {
+            console.error("[agentUpdateStage] Failed to post booking announcement:", err);
+          }
+        }
+        return { success: true };
+      }),
+
+    /**
      * leads.adminSetFollowUp — set or clear a scheduled follow-up date and message.
      * Setting a date moves the session to FOLLOW_UP_SCHEDULED stage.
      * Clearing (date = null) reverts to AVAILABILITY.
