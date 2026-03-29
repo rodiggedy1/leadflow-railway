@@ -129,20 +129,170 @@ type ClaimMutation = {
   isPending: boolean;
 };
 
-function HotLeadClaimTimer({ arrivedAt }: { arrivedAt: number }) {
+/** Returns elapsed seconds since arrivedAt, ticking every second. */
+function useElapsedSecs(arrivedAt: number) {
   const [secs, setSecs] = useState(() => Math.floor((Date.now() - arrivedAt) / 1000));
   useEffect(() => {
     const id = setInterval(() => setSecs(Math.floor((Date.now() - arrivedAt) / 1000)), 1000);
     return () => clearInterval(id);
   }, [arrivedAt]);
+  return secs;
+}
+
+function HotLeadClaimTimer({ arrivedAt }: { arrivedAt: number }) {
+  const secs = useElapsedSecs(arrivedAt);
   const mins = Math.floor(secs / 60);
-  const urgency = mins < 2 ? "text-emerald-600" : mins < 5 ? "text-amber-600" : "text-red-600";
   const label = mins < 1
     ? `${secs}s`
     : mins < 60
     ? `${mins}m ${secs % 60}s`
     : `${Math.floor(mins / 60)}h ${mins % 60}m`;
-  return <span className={cn("font-mono font-bold tabular-nums", urgency)}>{label}</span>;
+  // Color: green < 2 min, amber 2-5 min, red ≥ 5 min
+  const colorClass = mins < 2 ? "text-emerald-300" : mins < 5 ? "text-yellow-200" : "text-red-200";
+  return <span className={cn("font-mono font-bold tabular-nums", colorClass)}>{label}</span>;
+}
+
+function HotLeadCard({
+  msg,
+  claimLeadMutation,
+}: {
+  msg: LeadMsg;
+  claimLeadMutation: ClaimMutation;
+}) {
+  let meta: Record<string, unknown> = {};
+  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch {}
+  const leadName    = (meta.leadName    as string)         ?? msg.from;
+  const leadPhone   = (meta.leadPhone   as string)         ?? "";
+  const serviceType = (meta.serviceType as string)         ?? "";
+  const price       = (meta.price       as number | string) ?? "";
+  const sessionId   = (meta.sessionId   as number | null)  ?? null;
+  const arrivedAt   = (meta.arrivedAt   as number)         ?? msg.createdAt.getTime();
+  const claimedBy   = (meta.claimedBy   as string | null)  ?? null;
+  const claimedAt   = (meta.claimedAt   as number | null)  ?? null;
+  const isClaimed   = Boolean(claimedBy);
+
+  // Live elapsed seconds — drives both timer label and urgency colors
+  const secs = useElapsedSecs(isClaimed ? arrivedAt : arrivedAt); // always ticking for unclaimed
+  const mins = Math.floor(secs / 60);
+
+  const urgencyBand = isClaimed
+    ? "bg-emerald-600 border-emerald-200"
+    : mins < 2  ? "bg-amber-500  border-amber-300"
+    : mins < 5  ? "bg-orange-500 border-orange-400"
+    :             "bg-red-600    border-red-400";
+  const urgencyRing = isClaimed ? "" :
+    mins < 2  ? "ring-amber-400"
+    : mins < 5 ? "ring-orange-500"
+    :            "ring-red-500";
+  const timerColor = mins < 2 ? "text-emerald-200" : mins < 5 ? "text-yellow-200" : "text-red-200";
+  const timerLabel = mins < 1
+    ? `${secs}s`
+    : mins < 60
+    ? `${mins}m ${secs % 60}s`
+    : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+
+  const [bandBg, borderColor] = urgencyBand.split(" ");
+
+  return (
+    <div
+      className={cn(
+        "relative rounded-xl border overflow-hidden transition-all",
+        isClaimed ? "border-emerald-200 bg-white shadow-sm" : cn("bg-white shadow-md", borderColor),
+      )}
+    >
+      {/* Pulsing glow ring for unclaimed — color shifts with urgency */}
+      {!isClaimed && (
+        <span className={cn("absolute inset-0 rounded-xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
+      )}
+
+      {/* Status band */}
+      <div className={cn("flex items-center gap-1.5 px-3 py-1.5", bandBg)}>
+        {isClaimed ? (
+          <>
+            <UserCheck className="h-3 w-3 text-white shrink-0" />
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
+              Claimed · {claimedBy}
+            </span>
+            {claimedAt && (
+              <span className="ml-auto text-[10px] text-emerald-100 shrink-0">
+                {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <Zap className="h-3 w-3 text-white shrink-0" />
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Unclaimed</span>
+            <span className={cn("ml-auto font-mono font-bold tabular-nums text-[10px]", timerColor)}>
+              {timerLabel}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Lead info */}
+      <div className="px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-bold text-slate-900 leading-tight truncate">{leadName}</p>
+          {price && <p className="text-sm font-bold text-emerald-700 shrink-0">${price}</p>}
+        </div>
+        {leadPhone   && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
+        {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
+
+        {/* Action row */}
+        <div className="flex items-center gap-2 mt-2.5">
+          {leadPhone && (
+            <a
+              href={`tel:${leadPhone}`}
+              title={`Call ${leadName}`}
+              className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0"
+            >
+              <Phone className="h-3.5 w-3.5" />
+            </a>
+          )}
+          {sessionId && (
+            <a
+              href={`/admin/leads?session=${sessionId}&tab=sms`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open SMS conversation"
+              className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors shrink-0"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+            </a>
+          )}
+          <button
+            title="Open outbound Call Assist for this lead"
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (sessionId)   params.set("sessionId",   String(sessionId));
+              if (leadName)    params.set("name",        leadName);
+              if (leadPhone)   params.set("phone",       leadPhone);
+              if (serviceType) params.set("serviceType", serviceType);
+              window.open(`/call-assist?${params.toString()}`, "_blank");
+            }}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors shrink-0"
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex-1" />
+          {isClaimed ? (
+            <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
+          ) : (
+            <button
+              onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+              disabled={claimLeadMutation.isPending}
+              className="h-7 px-3 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+            >
+              {claimLeadMutation.isPending
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <>⚡ Claim</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HotLeadsTray({
@@ -195,128 +345,9 @@ function HotLeadsTray({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {leads.map((msg) => {
-            let meta: Record<string, unknown> = {};
-            try { meta = JSON.parse(msg.metadata ?? "{}"); } catch {}
-            const leadName = (meta.leadName as string) ?? msg.from;
-            const leadPhone = (meta.leadPhone as string) ?? "";
-            const serviceType = (meta.serviceType as string) ?? "";
-            const price = (meta.price as number | string) ?? "";
-            const sessionId = (meta.sessionId as number | null) ?? null;
-            const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();
-            const claimedBy = (meta.claimedBy as string | null) ?? null;
-            const claimedAt = (meta.claimedAt as number | null) ?? null;
-            const isClaimed = Boolean(claimedBy);
-
-            return (
-              <div
-                key={msg.id}
-                className={cn(
-                  "relative rounded-xl border overflow-hidden transition-shadow",
-                  isClaimed
-                    ? "border-emerald-200 bg-white shadow-sm"
-                    : "border-amber-300 bg-white shadow-md",
-                )}
-              >
-                {/* Pulsing amber glow ring for unclaimed */}
-                {!isClaimed && (
-                  <span className="absolute inset-0 rounded-xl ring-2 ring-amber-400 ring-offset-0 animate-pulse pointer-events-none" />
-                )}
-
-                {/* Status band */}
-                <div className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5",
-                  isClaimed ? "bg-emerald-600" : "bg-amber-500"
-                )}>
-                  {isClaimed ? (
-                    <>
-                      <UserCheck className="h-3 w-3 text-white shrink-0" />
-                      <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
-                        Claimed · {claimedBy}
-                      </span>
-                      {claimedAt && (
-                        <span className="ml-auto text-[10px] text-emerald-100 shrink-0">
-                          {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="h-3 w-3 text-white shrink-0" />
-                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">Unclaimed</span>
-                      <span className="ml-auto text-[10px] text-amber-100 shrink-0">
-                        <HotLeadClaimTimer arrivedAt={arrivedAt} />
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {/* Lead info */}
-                <div className="px-3 py-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-bold text-slate-900 leading-tight truncate">{leadName}</p>
-                    {price && <p className="text-sm font-bold text-emerald-700 shrink-0">${price}</p>}
-                  </div>
-                  {leadPhone && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
-                  {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
-
-                  {/* Action row */}
-                  <div className="flex items-center gap-2 mt-2.5">
-                    {leadPhone && (
-                      <a
-                        href={`tel:${leadPhone}`}
-                        title={`Call ${leadName}`}
-                        className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0"
-                      >
-                        <Phone className="h-3.5 w-3.5" />
-                      </a>
-                    )}
-                    {/* SMS — opens drawer directly on the lead via ?session=<id>&tab=sms */}
-                    {sessionId && (
-                      <a
-                        href={`/admin/leads?session=${sessionId}&tab=sms`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open SMS conversation"
-                        className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors shrink-0"
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" />
-                      </a>
-                    )}
-                    {/* Call Assist — outbound mode: pass sessionId so it appends to existing session */}
-                    <button
-                      title="Open outbound Call Assist for this lead"
-                      onClick={() => {
-                        const params = new URLSearchParams();
-                        if (sessionId) params.set("sessionId", String(sessionId));
-                        if (leadName)    params.set("name",    leadName);
-                        if (leadPhone)   params.set("phone",   leadPhone);
-                        if (serviceType) params.set("serviceType", serviceType);
-                        window.open(`/call-assist?${params.toString()}`, "_blank");
-                      }}
-                      className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors shrink-0"
-                    >
-                      <Wand2 className="h-3.5 w-3.5" />
-                    </button>
-                    <div className="flex-1" />
-                    {isClaimed ? (
-                      <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
-                    ) : (
-                      <button
-                        onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
-                        disabled={claimLeadMutation.isPending}
-                        className="h-7 px-3 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {claimLeadMutation.isPending
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <>⚡ Claim</>}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {leads.map((msg) => (
+            <HotLeadCard key={msg.id} msg={msg} claimLeadMutation={claimLeadMutation} />
+          ))}
         </div>
       )}
     </div>

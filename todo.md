@@ -520,3 +520,4 @@
 - [x] Fix emailLeadWebhook: look up sessionId after session insert and include it in new_lead metadata (email/form leads)
 - [x] Fix emailLeadWebhook: look up sessionId for missed call leads and include in new_lead metadata
 - [x] Fix barkWebhook: post new_lead card to command channel after session creation (Bark leads never appear in tray)
+- [x] Hot Leads tray: time-to-claim timer turns amber at 2 min, red at 5 min on unclaimed cards
