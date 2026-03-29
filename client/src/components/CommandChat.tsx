@@ -1601,11 +1601,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <div className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-400 to-pink-400 flex items-center justify-center text-white font-bold text-base shrink-0">
-                              {personName.charAt(0).toUpperCase()}
+                              {(msg.from ?? "?").charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="text-base font-bold text-slate-900">Congrats to {personName}!</p>
+                              <p className="text-base font-bold text-slate-900">Congrats to {msg.from}!</p>
                               {amount && <p className="text-sm font-semibold text-violet-700 mt-0.5">{amount}</p>}
+                              {personName && <p className="text-xs text-slate-500 mt-0.5">Client: {personName}</p>}
                             </div>
                           </div>
                           {note && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{note}</p>}
