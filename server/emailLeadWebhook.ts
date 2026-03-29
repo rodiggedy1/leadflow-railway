@@ -149,6 +149,7 @@ export function detectEmailType(body: string, subject?: string, fromAddress?: st
   if (
     fromLower.includes("messaging.yelp.com") ||
     fromLower.includes("yelp.com") ||
+    subjectLower.startsWith("new lead: reply to") ||
     (bodyLower.includes("reply to") && bodyLower.includes("yelp biz")) ||
     subjectLower.includes("yelp") ||
     bodyLower.includes("yelp.com") ||
