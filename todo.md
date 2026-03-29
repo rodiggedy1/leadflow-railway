@@ -561,3 +561,5 @@
 - [x] Fix: notification sound leaking — (1) OpsChat only mounts after first eligible route visit so quote form never gets sound hooks; (2) SW PLAY_SOUND now filtered to /admin|/agent|/call-assist tabs only
 - [x] Fix: "📞 Call received" SMS firing on outbound FieldMgmt/LeadAlert calls — added phoneNumberId + business number guard to status-update handler
 - [x] Vite manualChunks: split index vendor bundle from 1.36MB into 7 named chunks, largest is now 384KB
+- [ ] Fix: notification sound not playing when OpsChat tab is closed (regression from sound-leak fix)
+- [x] URGENT: quote form broken — vendor-react chunk caused dual-React conflict with Manus runtime injection; React moved back into index chunk

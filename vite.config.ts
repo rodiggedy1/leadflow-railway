@@ -170,10 +170,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // React core — tiny, must load first, keep together
-          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
-            return "vendor-react";
-          }
+          // NOTE: React is intentionally NOT split into its own chunk.
+          // The Manus runtime injects its own bundled React copy into the page before
+          // the app loads. Splitting React into a separate async chunk causes a dual-React
+          // conflict that silently breaks createRoot. Keeping React in the main index
+          // chunk ensures it loads synchronously and wins the module registry race.
+          //
           // tRPC + React Query — always needed for data fetching
           if (
             id.includes("node_modules/@trpc/") ||
