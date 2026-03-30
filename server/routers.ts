@@ -2434,6 +2434,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           leadPhone:   input.phone,
           serviceType: input.serviceType,
           source:      input.source,
+          price:       input.amount ?? "",
           sessionId,
           arrivedAt:   Date.now(),
           claimedBy:   agentName,
@@ -2449,7 +2450,26 @@ STAGE DETECTION — return the stage the conversation is currently in:
           quickAction:  "new_lead",
           metadata,
         } as any);
-        // 4. Broadcast so all agents see the new lead card immediately
+        // 4. If status indicates a booking, also post a booking announcement card
+        const BOOKED_STAGES = ["BOOKED", "BOOKING_CONFIRMED", "BOOKING_COMPLETE"];
+        if (BOOKED_STAGES.includes(stage) && input.amount) {
+          const bookingMeta = JSON.stringify({
+            personName: input.name,
+            amount:     `$${input.amount}`,
+            note:       input.notes ?? null,
+          });
+          await db.insert(opsChatMessages).values({
+            cleanerJobId: null,
+            channel:      "command",
+            authorName:   agentName,
+            authorRole:   "agent",
+            body:         `🎉 New booking: ${input.name} · $${input.amount}`,
+            mediaUrl:     null,
+            quickAction:  "announce_booking",
+            metadata:     bookingMeta,
+          } as any);
+        }
+        // 5. Broadcast so all agents see the new lead card immediately
         const { broadcastOpsUpdate } = await import("./sseBroadcast");
         broadcastOpsUpdate("lead_update");
         return { success: true, leadId, sessionId };
