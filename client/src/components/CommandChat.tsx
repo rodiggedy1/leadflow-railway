@@ -992,21 +992,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         });
       });
     } else if (len > prevMsgLen.current) {
-      const newest = channelMsgs[channelMsgs.length - 1];
       prevMsgLen.current = len;
-      const isMine = newest?.from === callerName;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          const container = threadScrollRef.current;
-          if (!container || !threadBottomRef.current) return;
-          if (isMine || isCmdNearBottom(container)) {
-            // Own message OR already near bottom — always scroll down
-            setCmdNewMsgToast(null);
-            threadBottomRef.current.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
-          } else if (newest && !isMine) {
-            // Scrolled up and a message from someone else arrived — show toast
-            showCmdToast(newest.from);
-          }
+          if (!threadBottomRef.current) return;
+          setCmdNewMsgToast(null);
+          threadBottomRef.current.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
         });
       });
     }
