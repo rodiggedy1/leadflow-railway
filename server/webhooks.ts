@@ -21,7 +21,7 @@
  */
 
 import type { Express } from "express";
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
@@ -171,6 +171,45 @@ export function registerWebhookRoutes(app: Express) {
           // Extract the short URL (thmtk.com/... or any URL in the text)
           const urlMatch  = inboundText.match(/https?:\/\/\S+|thmtk\.com\/\S+/);
           const ttUrl     = urlMatch?.[0] ?? null;
+
+          // ── Duplicate detection ─────────────────────────────────────────────
+          // If the same name + service + city arrived within the last 24 hours,
+          // skip creating a new session and just add a note to the existing one.
+          const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+          const cutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
+          const existingDupes = await dbTT
+            .select()
+            .from(conversationSessions)
+            .where(
+              and(
+                eq(conversationSessions.leadName, ttName),
+                eq(conversationSessions.serviceType, ttService),
+                eq(conversationSessions.leadSource, "thumbtack-sms"),
+                gte(conversationSessions.createdAt, cutoff)
+              )
+            )
+            .limit(1);
+
+          if (existingDupes.length > 0) {
+            const dupe = existingDupes[0];
+            console.log(`[Webhook] Thumbtack SMS duplicate detected — skipping, existing sessionId=${dupe.id}`);
+            // Append a note to the existing session's message history
+            try {
+              const existing = dupe.messageHistory ? JSON.parse(dupe.messageHistory as string) : [];
+              existing.push({
+                role: "system",
+                content: `[Duplicate Thumbtack alert received] ${inboundText}`,
+                ts: Date.now(),
+              });
+              await dbTT
+                .update(conversationSessions)
+                .set({ messageHistory: JSON.stringify(existing) })
+                .where(eq(conversationSessions.id, dupe.id));
+            } catch (err) {
+              console.error("[Webhook] Failed to append duplicate note:", err);
+            }
+            return; // Do not create a new session
+          }
 
           const placeholderPhone = `thumbtack-sms-${Date.now()}`;
           const now = Date.now();
