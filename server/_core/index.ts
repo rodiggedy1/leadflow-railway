@@ -12,6 +12,7 @@ import { registerVapiWebhookRoute } from "../vapiWebhook";
 import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
+import { registerSseTestRoutes } from "../sseTest";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -74,6 +75,8 @@ async function startServer() {
   registerWebhookRoutes(app);
   // Embeddable widget script for external websites
   registerWidgetEmbedRoute(app);
+  // SSE proof-of-concept test routes
+  registerSseTestRoutes(app);
   // Nightly cron endpoint for Launch27 auto-sync
   registerCronRoutes(app);
   // Follow-up cron endpoints (5-min silence nudge + scheduled circle-back)

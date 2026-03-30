@@ -598,3 +598,11 @@
 - [x] Web Push: trigger push when new ops/job/command message saved
 - [x] Web Push: SW push event handler — show notification + play reminder chime
 - [x] Web Push: client-side subscription registration on ops pages only (not quote page)
+
+## SSE Real-Time Migration
+
+- [x] Add SSE proof-of-concept test endpoint (/api/sse-test) to Express server
+- [x] Add SSE test UI page (/sse-test) to frontend to verify proxy compatibility
+- [ ] Deploy and verify SSE events flow through Manus hosting proxy
+- [ ] If proxy confirmed: full SSE migration for Command Chat (getCommandChatData, listChannelMessages, listTodayJobs)
+- [ ] Add live "Today's Revenue" ticker to Command Chat header
