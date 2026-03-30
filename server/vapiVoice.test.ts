@@ -57,7 +57,7 @@ describe("handleGetQuote — pricing correctness", () => {
     expect(result.summary).toContain("Studio");
   });
 
-  it("applies deep cleaning multiplier (1.5x standard)", () => {
+  it("applies deep cleaning flat surcharge (+$60)", () => {
     const standard = handleGetQuote({
       bedrooms: "2 Bedrooms",
       bathrooms: "1 Bathroom",
@@ -68,10 +68,11 @@ describe("handleGetQuote — pricing correctness", () => {
       bathrooms: "1 Bathroom",
       serviceType: "Deep Cleaning",
     });
-    expect(deep.price).toBe(Math.round(standard.price * 1.5));
+    // Flat +$60 surcharge: 2bed/1bath standard = $239, deep = $299
+    expect(deep.price).toBe(standard.price + 60);
   });
 
-  it("applies move-in/move-out multiplier (1.75x standard)", () => {
+  it("applies move-in/move-out flat surcharge (+$60)", () => {
     const standard = handleGetQuote({
       bedrooms: "3 Bedrooms",
       bathrooms: "2 Bathrooms",
@@ -82,7 +83,8 @@ describe("handleGetQuote — pricing correctness", () => {
       bathrooms: "2 Bathrooms",
       serviceType: "Move-In/Move-Out",
     });
-    expect(moveOut.price).toBe(Math.round(standard.price * 1.75));
+    // Flat +$60 surcharge: 3bed/2bath standard = $289, move-out = $349
+    expect(moveOut.price).toBe(standard.price + 60);
   });
 
   it("normalizes bare number inputs (LLM may pass '3' instead of '3 Bedrooms')", () => {

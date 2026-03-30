@@ -582,3 +582,7 @@
 - [x] Relabel "thumbtack-sms" as "Thumbtack Opportunity" in Lead List and lead cards display labels
 - [x] Lead drawer: make Thumbtack short URL in system message clickable (auto-linkify URLs in message history)
 - [x] Lead drawer: add First Message Generator wand button pre-filled with lead details
+- [x] Fix 2 bed/2 bath quote calculation (currently showing $404, needs to be corrected)
+- [x] When client says "today" for availability, AI should offer only afternoon slot (not morning), and phrase naturally
+- [x] Fix quote pricing: align engine/pricing.ts to use flat surcharge model (same as openphone.ts estimatePrice), quote base price only with no extras/add-ons
+- [x] When client says "today" for availability, AI should offer only afternoon slot (not morning), phrased naturally

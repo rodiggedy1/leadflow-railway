@@ -44,7 +44,17 @@ export const RECURRING_DISCOUNTS = {
   monthly:   { label: "Monthly",   pct: 10 },
 } as const;
 
-// ─── Service Type Multipliers ─────────────────────────────────────────────────
+// ─── Service Type Flat Surcharges ────────────────────────────────────────────
+// Matches openphone.ts estimatePrice() — flat add-on, no multiplier
+export const SERVICE_SURCHARGES: Record<string, number> = {
+  "Standard Cleaning":          0,
+  "Deep Cleaning":              60,
+  "Move-In/Move-Out":           60,
+  "Move-In / Move-Out Cleaning": 60,
+  "Post-Construction Cleaning": 60,
+};
+
+// Keep for backward compat (vapiService imports this)
 export const SERVICE_MULTIPLIERS: Record<string, number> = {
   "Standard Cleaning": 1.0,
   "Deep Cleaning":     1.5,
@@ -56,8 +66,8 @@ export const SERVICE_MULTIPLIERS: Record<string, number> = {
 export function calculatePrice(bedrooms: string, bathrooms: string, serviceType = "Standard Cleaning"): number {
   const base = BEDROOM_BASE[bedrooms] ?? 119;
   const baths = BATHROOM_COUNT[bathrooms] ?? 1;
-  const multiplier = SERVICE_MULTIPLIERS[serviceType] ?? 1.0;
-  return Math.round((base + baths * BATH_PRICE) * multiplier);
+  const surcharge = SERVICE_SURCHARGES[serviceType] ?? 0;
+  return Math.round(base + baths * BATH_PRICE + surcharge);
 }
 
 export function calculateRecurringPrice(basePrice: number, frequency: keyof typeof RECURRING_DISCOUNTS): number {
@@ -87,7 +97,7 @@ export function buildPricingSummary(bedrooms: string, bathrooms: string, service
  * Full pricing table as a string for the LLM system prompt.
  */
 export const PRICING_TABLE = `
-PRICING TABLE (bedroom base + $30 per bathroom, all bathrooms charged):
+PRICING TABLE (bedroom base + $30 per bathroom):
 - Studio / 1 Bedroom base: $119
 - 2 Bedrooms base: $209
 - 3 Bedrooms base: $229
@@ -96,19 +106,24 @@ PRICING TABLE (bedroom base + $30 per bathroom, all bathrooms charged):
 - 6 Bedrooms base: $379
 - 7+ Bedrooms base: $419
 
-BATHROOM ADD-ON: +$30 per bathroom (every bathroom is charged)
-Examples:
+BATHROOM ADD-ON: +$30 per bathroom
+Examples (Standard Cleaning):
 - 1 bed / 1 bath = $119 + $30 = $149
 - 1 bed / 2 bath = $119 + $60 = $179
 - 2 bed / 1 bath = $209 + $30 = $239
 - 2 bed / 2 bath = $209 + $60 = $269
 - 3 bed / 2 bath = $229 + $60 = $289
 
+SERVICE TYPE SURCHARGE (flat add-on):
+- Standard Cleaning: +$0
+- Deep Cleaning: +$60 (e.g. 2bed/2bath = $329)
+- Move-In/Move-Out: +$60 (e.g. 2bed/2bath = $329)
+- Post-Construction: +$60
+
+IMPORTANT: Always quote the BASE price only — do NOT add extras or add-ons to the quoted price. Quote one clean number.
+
 RECURRING DISCOUNTS (applied to standard cleaning price):
 - Weekly: 20% off → e.g. 2bed/2bath = $${calculateRecurringPrice(calculatePrice("2 Bedrooms", "2 Bathrooms"), "weekly")}/clean
 - Bi-weekly: 15% off → e.g. 2bed/2bath = $${calculateRecurringPrice(calculatePrice("2 Bedrooms", "2 Bathrooms"), "biweekly")}/clean
 - Monthly: 10% off → e.g. 2bed/2bath = $${calculateRecurringPrice(calculatePrice("2 Bedrooms", "2 Bathrooms"), "monthly")}/clean
-
-DEEP CLEANING: 1.5x standard price
-MOVE-IN/MOVE-OUT: 1.75x standard price
 `.trim();
