@@ -123,7 +123,7 @@ export interface ZapierEmailPayload {
 
 // ── Email type detection ──────────────────────────────────────────────────────
 
-export type EmailType = "form_submission" | "phone_call" | "yelp_inquiry" | "unknown";
+export type EmailType = "form_submission" | "phone_call" | "yelp_inquiry" | "thumbtack_lead" | "unknown";
 
 /**
  * Detects whether an email is a form submission or a Google Voice/Fi call notification.
@@ -156,6 +156,19 @@ export function detectEmailType(body: string, subject?: string, fromAddress?: st
     (bodyLower.includes("sent to") && bodyLower.includes("maids in black") && bodyLower.includes("bedroom"))
   ) {
     return "yelp_inquiry";
+  }
+
+  // Thumbtack lead: subject contains "New direct lead" or "New lead" from Thumbtack,
+  // or sender is from thumbtack.com, or body contains Thumbtack-specific phrasing
+  if (
+    fromLower.includes("thumbtack.com") ||
+    subjectLower.includes("new direct lead") ||
+    (subjectLower.includes("new lead") && bodyLower.includes("thumbtack")) ||
+    bodyLower.includes("thumbtack.com") ||
+    (bodyLower.includes("direct lead") && bodyLower.includes("dates:")) ||
+    (bodyLower.includes("travel preferences") && bodyLower.includes("professionals may travel"))
+  ) {
+    return "thumbtack_lead";
   }
 
   // Form submission: has at least a Phone field and one of the service fields
@@ -683,6 +696,318 @@ export async function handleYelpInquiryEmail(
   }
 }
 
+// ── Thumbtack Lead Parser ────────────────────────────────────────────────────
+
+export interface ThumbtackLeadParsed {
+  clientName: string | null;
+  phone: string | null;
+  serviceType: string;
+  description: string | null;
+  location: string | null;
+  requestedDates: string | null;
+  bedrooms: string | null;
+  bathrooms: string | null;
+  rooms: string | null;
+}
+
+/**
+ * Parses a Thumbtack "New direct lead" email body.
+ *
+ * Example format:
+ *   Baiju C.
+ *   Direct lead
+ *
+ *   Carpet Cleaning
+ *
+ *   Manassas, VA 20110
+ *
+ *   Dates: Mar 27-29
+ *   Open to other dates you suggest
+ *
+ *   571-xxx-xxxx
+ *
+ *   I have a town house that needs carpet cleaned...
+ *
+ *   Number of rooms: 3 rooms
+ *   Property type: Two-story house
+ *   Cleaning method: Steam cleaning
+ */
+export function parseThumbtackLeadBody(body: string, subject?: string): ThumbtackLeadParsed {
+  const lines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // Extract name from subject: "🎉 New direct lead! Baiju C."
+  let clientName: string | null = null;
+  if (subject) {
+    const subjectMatch = subject.match(/new direct lead[!.]?\s+(.+)/i);
+    if (subjectMatch) {
+      clientName = subjectMatch[1].trim();
+    }
+  }
+  // Fallback: first line that looks like a name (e.g. "Baiju C.")
+  if (!clientName) {
+    for (const line of lines) {
+      if (/^[A-Z][a-z]+\s+[A-Z]\.?$/.test(line) || /^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line)) {
+        clientName = line;
+        break;
+      }
+    }
+  }
+
+  // Extract phone — look for a line that is just a phone number
+  let phone: string | null = null;
+  for (const line of lines) {
+    // Matches: 571-xxx-xxxx, (571) 234-5678, +15712345678, 571 234 5678
+    if (/^[\+\(]?[\d\s\-\(\)x]{7,15}$/.test(line.replace(/[^\d\+\-\(\)\s]/g, ''))) {
+      const digits = line.replace(/\D/g, '');
+      if (digits.length >= 7 && digits.length <= 15) {
+        phone = line;
+        break;
+      }
+    }
+  }
+
+  // Extract service type — typically the first short line after "Direct lead"
+  let serviceType = "Home Cleaning";
+  let foundDirectLead = false;
+  for (const line of lines) {
+    if (line.toLowerCase() === "direct lead") {
+      foundDirectLead = true;
+      continue;
+    }
+    if (foundDirectLead && line.length > 2 && line.length < 60 && !line.includes(":")) {
+      // Skip location lines (contain comma + state abbreviation)
+      if (!/,\s*[A-Z]{2}/.test(line)) {
+        serviceType = line;
+        break;
+      }
+    }
+  }
+
+  // Map Thumbtack service names to our canonical service types
+  const serviceTypeLower = serviceType.toLowerCase();
+  let canonicalServiceType = "Standard Cleaning";
+  if (serviceTypeLower.includes("carpet")) {
+    canonicalServiceType = "Carpet Cleaning";
+  } else if (serviceTypeLower.includes("deep")) {
+    canonicalServiceType = "Deep Cleaning";
+  } else if (serviceTypeLower.includes("move")) {
+    canonicalServiceType = "Move-In/Out Cleaning";
+  } else if (serviceTypeLower.includes("office") || serviceTypeLower.includes("commercial")) {
+    canonicalServiceType = "Office Cleaning";
+  } else if (serviceTypeLower.includes("post") && serviceTypeLower.includes("construct")) {
+    canonicalServiceType = "Post Construction Cleaning";
+  } else if (serviceTypeLower.includes("standard") || serviceTypeLower.includes("house") || serviceTypeLower.includes("home")) {
+    canonicalServiceType = "Standard Cleaning";
+  }
+
+  // Extract location — line with ", VA" or ", MD" or ", DC" pattern
+  let location: string | null = null;
+  for (const line of lines) {
+    if (/,\s*[A-Z]{2}\s+\d{5}/.test(line) || /,\s*(VA|MD|DC|Virginia|Maryland)/.test(line)) {
+      location = line;
+      break;
+    }
+  }
+
+  // Extract requested dates — line starting with "Dates:"
+  let requestedDates: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().startsWith("dates:")) {
+      requestedDates = lines[i].replace(/^dates:\s*/i, "").trim();
+      // Include the next line if it says "Open to other dates"
+      if (i + 1 < lines.length && lines[i + 1].toLowerCase().includes("open to other dates")) {
+        requestedDates += " (flexible)";
+      }
+      break;
+    }
+  }
+
+  // Extract description — the longest free-text line (not a label:value pair)
+  let description: string | null = null;
+  for (const line of lines) {
+    if (line.includes(":") && line.indexOf(":") < 40) continue; // skip label:value lines
+    if (line.toLowerCase() === "direct lead") continue;
+    if (line === clientName) continue;
+    if (line === serviceType) continue;
+    if (line === location) continue;
+    if (phone && line.includes(phone.replace(/\D/g, '').slice(0, 6))) continue;
+    if (line.length > 30 && !line.match(/^[A-Z][a-z]+\s+[A-Z]\.?$/)) {
+      description = line;
+      break;
+    }
+  }
+
+  // Extract structured Q&A fields ("Number of rooms:", "Property type:", etc.)
+  const fields: Record<string, string> = {};
+  for (const line of lines) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx > 0 && colonIdx < 50) {
+      const key = line.slice(0, colonIdx).trim().toLowerCase();
+      const value = line.slice(colonIdx + 1).trim();
+      if (key && value) fields[key] = value;
+    }
+  }
+
+  // Bedrooms/bathrooms from structured fields or description
+  const rawBedrooms = fields["number of bedrooms"] ?? fields["bedrooms"] ?? fields["bedroom"] ?? null;
+  const rawBathrooms = fields["number of bathrooms"] ?? fields["bathrooms"] ?? fields["bathroom"] ?? null;
+  const rawRooms = fields["number of rooms"] ?? fields["rooms"] ?? null;
+
+  return {
+    clientName,
+    phone,
+    serviceType: canonicalServiceType,
+    description,
+    location,
+    requestedDates,
+    bedrooms: rawBedrooms ? parseBedroomCount(rawBedrooms) : null,
+    bathrooms: rawBathrooms ? parseBathroomCount(rawBathrooms) : null,
+    rooms: rawRooms,
+  };
+}
+
+// ── Handler: Thumbtack Lead ───────────────────────────────────────────────────
+
+export async function handleThumbtackEmail(
+  body: string,
+  fromAddress: string,
+  subject?: string
+): Promise<void> {
+  console.log(`[Thumbtack] Processing Thumbtack lead from: ${fromAddress}`);
+
+  const parsed = parseThumbtackLeadBody(body, subject);
+  console.log(`[Thumbtack] Parsed: name=${parsed.clientName}, phone=${parsed.phone}, service=${parsed.serviceType}, location=${parsed.location}`);
+
+  const db = await getDb();
+  if (!db) {
+    console.error("[Thumbtack] No DB connection — skipping");
+    return;
+  }
+
+  const displayName = parsed.clientName ?? "Thumbtack Lead";
+  const locationDisplay = parsed.location ?? "Not specified";
+  const datesDisplay = parsed.requestedDates ?? "Not specified";
+  const descDisplay = parsed.description ?? "";
+  const roomsDisplay = parsed.rooms ?? null;
+
+  // If we have a phone number, normalize it and send SMS
+  const normalizedPhone = parsed.phone ? normalizePhone(parsed.phone) : null;
+
+  if (normalizedPhone) {
+    const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
+    const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
+    const price = estimatePrice({ bedrooms, bathrooms, serviceType: parsed.serviceType });
+
+    const introSms = await buildEmailLeadIntroSms(
+      displayName.split(" ")[0],
+      parsed.serviceType,
+      bedrooms,
+      bathrooms,
+      price,
+      null
+    );
+    const schedulingSms = buildEmailLeadSchedulingSms();
+
+    const sms1 = await sendSms({ to: normalizedPhone, content: introSms, mediaUrl: MADISON_PHOTO_URL });
+    console.log(`[Thumbtack] Intro SMS sent: ${sms1.success}`);
+
+    await new Promise((r) => setTimeout(r, 2000));
+    const sms2 = await sendSms({ to: normalizedPhone, content: schedulingSms });
+    console.log(`[Thumbtack] Scheduling SMS sent: ${sms2.success}`);
+
+    // Create conversation session
+    const now = Date.now();
+    const initialHistory = JSON.stringify([
+      { role: "assistant", content: introSms, ts: now },
+      { role: "assistant", content: schedulingSms, ts: now + 1 },
+    ]);
+
+    const barkQA = [
+      `Service: ${parsed.serviceType}`,
+      parsed.location ? `Location: ${parsed.location}` : null,
+      parsed.requestedDates ? `Dates: ${parsed.requestedDates}` : null,
+      parsed.rooms ? `Rooms: ${parsed.rooms}` : null,
+      parsed.description ? `Notes: ${parsed.description}` : null,
+    ].filter(Boolean).join(" | ");
+
+    try {
+      await db.insert(conversationSessions).values({
+        leadPhone: normalizedPhone,
+        leadName: displayName,
+        stage: "AVAILABILITY",
+        quotedPrice: estimatePrice({ bedrooms: parsed.bedrooms ?? "3 Bedrooms", bathrooms: parsed.bathrooms ?? "2 Bathrooms", serviceType: parsed.serviceType }),
+        serviceType: parsed.serviceType,
+        bedrooms: parsed.bedrooms,
+        bathrooms: parsed.bathrooms,
+        messageHistory: initialHistory,
+        leadSource: "thumbtack",
+        smsFlow: "B",
+        barkQA,
+      });
+      console.log(`[Thumbtack] Session created for ${normalizedPhone}`);
+    } catch (dbErr) {
+      console.error("[Thumbtack] Failed to create session:", dbErr);
+    }
+  }
+
+  // Build Command Chat card
+  const cardLines = [
+    `📌 **Thumbtack Lead** · ${displayName}${normalizedPhone ? ` · ${normalizedPhone}` : " · No phone"}`,
+    `🏠 **${parsed.serviceType}** · ${locationDisplay}`,
+    parsed.requestedDates ? `📅 Dates: **${datesDisplay}**` : null,
+    roomsDisplay ? `🛏 ${roomsDisplay}` : null,
+    descDisplay ? `💬 "${descDisplay.slice(0, 120)}${descDisplay.length > 120 ? "..." : ""}"` : null,
+    !normalizedPhone ? `⚠️ No phone number — follow up via Thumbtack` : null,
+  ].filter(Boolean).join("\n");
+
+  const metadata = JSON.stringify({
+    leadName: displayName,
+    leadPhone: normalizedPhone ?? null,
+    serviceType: parsed.serviceType,
+    location: parsed.location,
+    requestedDates: parsed.requestedDates,
+    utmSource: "thumbtack",
+    arrivedAt: Date.now(),
+  });
+
+  try {
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "📌 Thumbtack Lead",
+      authorRole: "system",
+      body: cardLines,
+      mediaUrl: null,
+      quickAction: "new_lead",
+      metadata,
+    });
+    console.log(`[Thumbtack] Posted lead card to Command Chat`);
+  } catch (err) {
+    console.error("[Thumbtack] Failed to post lead card:", err);
+  }
+
+  // Alert CS team
+  const alertMsg = `📌 New Thumbtack lead: ${displayName}${normalizedPhone ? ` · ${normalizedPhone}` : " (no phone)"} · ${parsed.serviceType} · ${locationDisplay}${datesDisplay !== "Not specified" ? ` · Dates: ${datesDisplay}` : ""}`;
+  sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch((err) =>
+    console.error("[Thumbtack] CS alert SMS failed:", err)
+  );
+  sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch((err) =>
+    console.error("[Thumbtack] Secondary alert SMS failed:", err)
+  );
+
+  notifyOwner({
+    title: `New Thumbtack Lead: ${displayName}`,
+    content: `${parsed.serviceType} · ${locationDisplay}\nDates: ${datesDisplay}${descDisplay ? `\n\n"${descDisplay.slice(0, 200)}"` : ""}${normalizedPhone ? `\n\nPhone: ${normalizedPhone}` : "\n\nNo phone — follow up via Thumbtack."}`,
+  }).catch(() => {});
+
+  logActivity({
+    eventType: "new_lead",
+    title: `New Thumbtack lead: ${displayName}`,
+    body: `${parsed.serviceType} · ${locationDisplay} · ${datesDisplay}`,
+    meta: { leadName: displayName, leadPhone: normalizedPhone, serviceType: parsed.serviceType, source: "thumbtack" },
+  }).catch(() => {});
+}
+
 // ── Handler: Form Submission Lead ─────────────────────────────────────────────
 
 export async function handleFormSubmissionEmail(
@@ -997,6 +1322,8 @@ export async function handleEmailLead(payload: ZapierEmailPayload): Promise<void
     await handleCallNotificationEmail(emailBody, fromAddress);
   } else if (emailType === "yelp_inquiry") {
     await handleYelpInquiryEmail(emailBody, fromAddress, subject);
+  } else if (emailType === "thumbtack_lead") {
+    await handleThumbtackEmail(emailBody, fromAddress, subject);
   } else {
     console.warn(`[EmailLead] Unknown email type — subject="${subject}", body preview="${emailBody.slice(0, 100)}". Dropping.`);
   }

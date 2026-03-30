@@ -572,3 +572,4 @@
 - [x] Auto-dismiss away status banner after 15 min for eod and back15 statuses only; other statuses stay until manually cleared. Added awaySetAt column to agents table, set it on setAwayStatus, returned it from getAgentStatusList, and filter in AwayBanner with 30s tick interval.
 - [x] Restyle Photo/Voice/emoji buttons in CommandChat and OpsChat to pill-shaped with border and emoji+label treatment
 - [x] Add Thumbtack Zapier webhook connection — POST /api/webhooks/thumbtack, mirrors Bark handler, AI extracts job details, sends intro+scheduling SMS, creates session with leadSource="thumbtack", posts 📌 card to command channel
+- [x] Parse Thumbtack "New direct lead" email notifications — detect subject "New direct lead", extract name/phone/service/description from email body, route into lead pipeline with leadSource="thumbtack"
