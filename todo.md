@@ -587,3 +587,5 @@
 - [x] Fix quote pricing: align engine/pricing.ts to use flat surcharge model (same as openphone.ts estimatePrice), quote base price only with no extras/add-ons
 - [x] When client says "today" for availability, AI should offer only afternoon slot (not morning), phrased naturally
 - [x] Thumbtack SMS duplicate detection: if same name+service+city arrives within 24h, drop the duplicate and add a note to the existing session instead of creating a new one
+- [x] Command Chat: thumbtack-sms new_lead card header should say "New Thumbtack Opportunity" not "NEW LEAD"
+- [x] Command Chat Hot Leads tray: show city for thumbtack-sms leads (currently missing)

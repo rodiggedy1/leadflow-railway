@@ -189,11 +189,14 @@ function HotLeadCard({
   const leadPhone   = (meta.leadPhone   as string)         ?? "";
   const serviceType = (meta.serviceType as string)         ?? "";
   const price       = (meta.price       as number | string) ?? "";
+  const size        = (meta.size        as string)         ?? ""; // city for thumbtack-sms, home size for others
+  const utmSource   = (meta.utmSource   as string | null)  ?? null;
   const sessionId   = (meta.sessionId   as number | null)  ?? null;
   const arrivedAt   = (meta.arrivedAt   as number)         ?? msg.createdAt.getTime();
   const claimedBy   = (meta.claimedBy   as string | null)  ?? null;
   const claimedAt   = (meta.claimedAt   as number | null)  ?? null;
   const isClaimed   = Boolean(claimedBy);
+  const isThumbSms  = utmSource === "thumbtack-sms";
 
   // Derive live status from sessionStatus prop
   const isBooked  = sessionStatus?.isBooked ?? false;
@@ -330,6 +333,7 @@ function HotLeadCard({
         </div>
         {leadPhone   && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
         {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
+        {isThumbSms && size && <p className="text-[10px] text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
 
         {/* Action row */}
         <div className="flex items-center gap-2 mt-2.5">
@@ -1441,13 +1445,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const claimedBy = (meta.claimedBy as string | null) ?? null;
                   const claimedAt = (meta.claimedAt as number | null) ?? null;
 
+                  const isThumbSms = utmSource === "thumbtack-sms";
                   return (
                     <div key={msg.id} className="flex justify-start">
                       <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
                         {/* Header band */}
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-700">
-                          <Zap className="h-3 w-3 text-emerald-200" />
-                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">New Lead</span>
+                        <div className={cn("flex items-center gap-2 px-3 py-1.5", isThumbSms ? "bg-sky-700" : "bg-emerald-700")}>
+                          {isThumbSms ? <span className="text-emerald-100 text-xs shrink-0">📌</span> : <Zap className="h-3 w-3 text-emerald-200" />}
+                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">{isThumbSms ? "New Thumbtack Opportunity" : "New Lead"}</span>
                           <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Lead info */}
@@ -1463,7 +1468,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             </div>
                           </div>
                           {size && (
-                            <p className="text-xs text-slate-500 mt-1.5">🛏️ {size} &nbsp;·&nbsp; {serviceType}</p>
+                            isThumbSms
+                              ? <p className="text-xs text-slate-500 mt-1.5">📍 {size} &nbsp;·&nbsp; {serviceType}</p>
+                              : <p className="text-xs text-slate-500 mt-1.5">🛏️ {size} &nbsp;·&nbsp; {serviceType}</p>
                           )}
                           {extras.length > 0 && (
                             <p className="text-xs text-slate-400 mt-0.5">📦 {extras.join(", ")}</p>
