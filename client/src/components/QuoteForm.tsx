@@ -46,6 +46,61 @@ function WistiaPlayer() {
   );
 }
 
+// ── Wistia Player for Thank You page (media-id: jtv8f50ale) ─────────────────
+function WistiaPlayerThankYou() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || el.querySelector("wistia-player")) return;
+    const player = document.createElement("wistia-player");
+    player.setAttribute("media-id", "jtv8f50ale");
+    player.setAttribute("seo", "false");
+    player.setAttribute("aspect", "1.7777777777777777");
+    player.style.display = "block";
+    player.style.width = "100%";
+    el.appendChild(player);
+  }, []);
+
+  return (
+    <div className="w-full max-w-sm mx-auto mb-6">
+      {/* Label */}
+      <div className="flex items-center gap-2 mb-2.5">
+        <div
+          className="h-px flex-1"
+          style={{ background: "linear-gradient(90deg, transparent, rgba(232,96,60,0.3))" }}
+        />
+        <span
+          className="text-[11px] font-semibold tracking-widest uppercase"
+          style={{ color: "#E8603C", fontFamily: "'DM Sans', sans-serif" }}
+        >
+          Watch while you wait
+        </span>
+        <div
+          className="h-px flex-1"
+          style={{ background: "linear-gradient(90deg, rgba(232,96,60,0.3), transparent)" }}
+        />
+      </div>
+      {/* Player wrapper */}
+      <div
+        ref={containerRef}
+        className="relative w-full rounded-2xl overflow-hidden"
+        style={{
+          boxShadow: "0 4px 24px rgba(232,96,60,0.14), 0 1px 6px rgba(0,0,0,0.07)",
+          border: "1px solid rgba(232,96,60,0.18)",
+          background: "#1a1a1a",
+        }}
+      />
+      <p
+        className="text-center text-xs mt-2"
+        style={{ color: "#B07060", fontFamily: "'DM Sans', sans-serif" }}
+      >
+        See what makes us different — 60 seconds
+      </p>
+    </div>
+  );
+}
+
 // ── Static Testimonial ───────────────────────────────────────────────────────
 
 function TrustStrip() {
@@ -199,6 +254,9 @@ function SuccessState({ name, smsSent }: { name: string; smsSent: boolean }) {
 
       {/* Divider */}
       <div className="h-px w-12 mx-auto mb-6" style={{ background: "linear-gradient(90deg, transparent, #E8603C, transparent)" }} />
+
+      {/* Thank-you video */}
+      <WistiaPlayerThankYou />
 
       {/* Madison card */}
       <div
