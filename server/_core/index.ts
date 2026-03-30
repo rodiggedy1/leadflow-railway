@@ -13,6 +13,7 @@ import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { registerSseTestRoutes } from "../sseTest";
+import { registerOpsStreamRoute } from "../opsStream";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -77,6 +78,8 @@ async function startServer() {
   registerWidgetEmbedRoute(app);
   // SSE proof-of-concept test routes
   registerSseTestRoutes(app);
+  // Production SSE stream for OpsChat real-time updates
+  registerOpsStreamRoute(app);
   // Nightly cron endpoint for Launch27 auto-sync
   registerCronRoutes(app);
   // Follow-up cron endpoints (5-min silence nudge + scheduled circle-back)

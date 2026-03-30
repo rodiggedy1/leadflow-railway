@@ -15,6 +15,7 @@ import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { useOsNotification } from "@/hooks/useOsNotification";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { TypingBubble } from "@/components/TypingBubble";
 import { trpc } from "@/lib/trpc";
 import { senderHex } from "@/lib/senderColor";
@@ -431,7 +432,7 @@ function HotLeadsTray({
 
   const { data: sessionStatuses } = trpc.opsChat.getLeadSessionStatuses.useQuery(
     { sessionIds },
-    { enabled: sessionIds.length > 0, refetchInterval: 30_000 }
+    { enabled: sessionIds.length > 0, refetchInterval: 60_000 }
   );
 
   // Build a map from sessionId -> status for O(1) lookup
@@ -513,8 +514,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
 
+  const utils = trpc.useUtils();
+
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
-    refetchInterval: 20_000,
+    refetchInterval: 60_000, // SSE triggers immediate refetch; interval is fallback only
+  });
+
+  // ── SSE real-time updates (CommandChat owns its own stream connection) ──────────────
+  // CommandChat is rendered inside OpsChat which also calls useOpsStream.
+  // Both hooks open separate SSE connections; the server handles multiple clients.
+  useOpsStream({
+    onNewMessage: (channel) => {
+      if (channel === "command" || !channel) {
+        utils.opsChat.getCommandChatData.invalidate();
+      }
+    },
+    onJobUpdate: () => {
+      utils.opsChat.getCommandChatData.invalidate();
+    },
+    onLeadUpdate: () => {
+      utils.opsChat.getCommandChatData.invalidate();
+    },
+    onReactionUpdate: () => {
+      refetchReactions();
+    },
   });
 
   // Load all agent photo URLs for message bubble avatars
@@ -595,7 +618,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Pin Note modal state ───────────────────────────────────────────────────
   const [pinOpen, setPinOpen] = useState(false);
   const [pinBody, setPinBody] = useState("");
-  const { data: activePin, refetch: refetchPin } = trpc.opsChat.getChannelPin.useQuery({ channel: "command" }, { refetchInterval: 30_000 });
+  const { data: activePin, refetch: refetchPin } = trpc.opsChat.getChannelPin.useQuery({ channel: "command" }, { refetchInterval: 60_000 });
   const { data: todayJobsData } = trpc.opsChat.listTodayJobs.useQuery(undefined, { staleTime: 60_000 });
   const pinNoteMutation = trpc.opsChat.pinNote.useMutation({
     onSuccess: () => {
@@ -632,7 +655,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   );
   const { data: commandSeenByBulk } = trpc.opsChat.getSeenByBulk.useQuery(
     { messageIds: myCommandMsgIds, channel: "command" },
-    { enabled: myCommandMsgIds.length > 0, refetchInterval: 10_000 }
+    { enabled: myCommandMsgIds.length > 0, refetchInterval: 60_000 }
   );
   const commandSeenByMap = useMemo(() => {
     const map: Record<number, string[]> = {};
@@ -725,6 +748,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Poll every 3s; when a new announce_booking message appears that we haven't
   // seen yet, fire glitter + sound on every agent's screen simultaneously.
   const lastSeenCelebrationId = useRef<number | null>(null);
+  // Celebration polling kept at 3s because it drives the glitter animation
+  // and is a lightweight single-row query. SSE also invalidates it via onNewMessage.
   const { data: latestCelebration } = trpc.opsChat.getLatestCelebration.useQuery(undefined, {
     refetchInterval: 3000,
     refetchIntervalInBackground: true,
@@ -947,6 +972,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       } catch { return false; }
     });
   }, [channelMsgs]);
+
+  // ── Today's Revenue ticker ────────────────────────────────────────────────
+  const { data: revenueData } = trpc.opsChat.getTodayRevenue.useQuery(undefined, {
+    refetchInterval: 60_000, // SSE invalidates on new booking
+  });
+  const todayRevenue = revenueData?.total ?? 0;
+  const todayBookingCount = revenueData?.count ?? 0;
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];
@@ -1222,6 +1254,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <Megaphone className="h-4 w-4 text-slate-500 shrink-0" />
             <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">MIB Command Chat</h2>
             <span className="hidden sm:inline text-[10px] font-medium bg-red-50 text-red-500 border border-red-100 rounded-full px-2 py-0.5 whitespace-nowrap">Priority alerts from job threads</span>
+            {/* Live revenue ticker */}
+            {todayRevenue > 0 && (
+              <span
+                title={`${todayBookingCount} booking${todayBookingCount !== 1 ? "s" : ""} confirmed today`}
+                className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 whitespace-nowrap animate-in fade-in duration-500"
+              >
+                <span className="text-emerald-500">&#x1F4B0;</span>
+                ${todayRevenue.toLocaleString()} today
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {pendingReminderCount > 0 && (

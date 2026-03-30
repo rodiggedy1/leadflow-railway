@@ -603,6 +603,18 @@
 
 - [x] Add SSE proof-of-concept test endpoint (/api/sse-test) to Express server
 - [x] Add SSE test UI page (/sse-test) to frontend to verify proxy compatibility
-- [ ] Deploy and verify SSE events flow through Manus hosting proxy
-- [ ] If proxy confirmed: full SSE migration for Command Chat (getCommandChatData, listChannelMessages, listTodayJobs)
-- [ ] Add live "Today's Revenue" ticker to Command Chat header
+- [x] Deploy and verify SSE events flow through Manus hosting proxy (PASS — pings every 2s, no buffering)
+- [x] Full SSE migration for Command Chat (getCommandChatData, listChannelMessages, listTodayJobs)
+- [x] Add live "Today's Revenue" ticker to Command Chat header
+
+## SSE Full Migration (proxy confirmed PASS)
+
+- [x] Build SSE broadcast hub (server/sseBroadcast.ts) — typed event emitter + client registry
+- [x] Add GET /api/ops-stream SSE endpoint — streams ops_update events to authenticated agents
+- [x] Wire broadcast calls into sendMessage, flagIssue, resolveIssue, claimLead, markComplete mutations
+- [x] Replace getCommandChatData polling (20s) with SSE-triggered refetch
+- [x] Replace listChannelMessages polling (15s) with SSE-triggered refetch
+- [x] Replace listTodayJobs polling (30s) with SSE-triggered refetch
+- [x] Replace getReactions polling (10s) with SSE-triggered refetch
+- [x] Add useOpsStream hook — manages EventSource lifecycle, reconnect, and refetch dispatch
+- [x] Add live Today's Revenue ticker to Command Chat header

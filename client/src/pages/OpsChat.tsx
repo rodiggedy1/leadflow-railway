@@ -9,6 +9,7 @@ import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
 import { useWebPushSubscription } from "@/hooks/useWebPushSubscription";
 import { useTabLeader } from "@/hooks/useTabLeader";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
@@ -1059,7 +1060,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // enabled fires as soon as either the owner OAuth session OR the agent session resolves.
   // staleTime is 0 so the data is always considered stale and refetches on schedule.
   const { data: agentStatusData, refetch: refetchAgentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
-    refetchInterval: 15_000,
+    refetchInterval: 15_000, // keep at 15s — away status is not SSE-broadcast (ephemeral)
     enabled: Boolean(user) || Boolean(agentMe),
     retry: false,
     staleTime: 0,
@@ -1107,7 +1108,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const prevDmUnreadRef = useRef<Record<string, number>>({});
   const { data: dmUnreadData } = trpc.opsChat.getDmUnreadCounts.useQuery(
     { myName: callerName, myKey: myDmKey.includes("@") ? myDmKey : undefined },
-    { enabled: Boolean(callerName && callerName !== "Office"), refetchInterval: 5_000 }
+    { enabled: Boolean(callerName && callerName !== "Office"), refetchInterval: 30_000 } // SSE triggers on new DM
   );
   const dmUnreadMap: Record<string, number> = dmUnreadData?.unread ?? {};
   const totalDmUnread = Object.values(dmUnreadMap).reduce((a, b) => a + b, 0);
@@ -1168,28 +1169,58 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // ── Data queries ────────────────────────────────────────────────────────────
   const { data: jobs = [], isLoading: jobsLoading } = trpc.opsChat.listTodayJobs.useQuery(undefined, {
     enabled: isAuthenticated,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000, // SSE will trigger immediate refetch; interval is fallback only
   });
 
   const { data: jobDetail, isLoading: detailLoading } = trpc.opsChat.getJobDetail.useQuery(
     { jobId: selectedJobId! },
-    { enabled: isAuthenticated && selectedJobId !== null, refetchInterval: 15_000 }
+    { enabled: isAuthenticated && selectedJobId !== null, refetchInterval: 60_000 }
   );
 
   const { data: channelMsgs = [], isLoading: channelLoading } = trpc.opsChat.listChannelMessages.useQuery(
     { channel: activeChannel },
-    { enabled: isAuthenticated && activeTab === "channels", refetchInterval: 15_000 }
+    { enabled: isAuthenticated && activeTab === "channels", refetchInterval: 60_000 }
   );
 
   const { data: channelCounts } = trpc.opsChat.getChannelCounts.useQuery(undefined, {
     enabled: isAuthenticated,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 
   // Unread counts (per-caller, for badge)
   const { data: unreadCounts, refetch: refetchUnread } = trpc.opsChat.getUnreadCounts.useQuery(undefined, {
     enabled: isAuthenticated,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  // ── SSE real-time updates ───────────────────────────────────────────────────
+  // The SSE stream fires ops_update events whenever the server writes data.
+  // We immediately invalidate the relevant queries so React Query refetches.
+  useOpsStream({
+    onNewMessage: (channel, jobId) => {
+      if (jobId) {
+        utils.opsChat.getJobDetail.invalidate({ jobId });
+      }
+      if (channel) {
+        utils.opsChat.listChannelMessages.invalidate({ channel });
+        utils.opsChat.getChannelCounts.invalidate();
+        utils.opsChat.getUnreadCounts.invalidate();
+        utils.opsChat.getDmUnreadCounts.invalidate();
+      }
+    },
+    onJobUpdate: (jobId) => {
+      utils.opsChat.listTodayJobs.invalidate();
+      if (jobId) utils.opsChat.getJobDetail.invalidate({ jobId });
+      utils.opsChat.getCommandChatData.invalidate();
+    },
+    onLeadUpdate: () => {
+      utils.opsChat.getCommandChatData.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
+    onReactionUpdate: () => {
+      // reactions are fetched via mutation; trigger refetch via the callback
+      refetchReactions();
+    },
   });
 
   // markRead mutation — called when opening a channel or job thread
@@ -1275,7 +1306,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   }, [isAuthenticated, activeMsgIds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     refetchReactions();
-    const interval = setInterval(refetchReactions, 10_000);
+    const interval = setInterval(refetchReactions, 60_000); // SSE triggers immediate refetch
     return () => clearInterval(interval);
   }, [refetchReactions]);
 

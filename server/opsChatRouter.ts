@@ -35,6 +35,7 @@ import {
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -460,6 +461,12 @@ export const opsChatRouter = router({
         });
       }
 
+      // Broadcast to all connected SSE clients so they refetch immediately
+      broadcastOpsUpdate("new_message", {
+        channel: input.channel,
+        jobId: input.cleanerJobId,
+      });
+
       return { success: true };
     }),
 
@@ -580,6 +587,9 @@ export const opsChatRouter = router({
         quickAction: "issue",
       });
 
+      // Broadcast job + command channel update
+      broadcastOpsUpdate("job_update", { jobId: input.cleanerJobId });
+
       return { success: true };
     }),
 
@@ -680,6 +690,9 @@ export const opsChatRouter = router({
         quickAction: "issue_resolved",
         metadata: resolvedCmdMeta,
       });
+
+      // Broadcast job update so all agents see the resolution immediately
+      broadcastOpsUpdate("job_update", { jobId: flag.cleanerJobId });
 
       return { success: true };
     }),
@@ -1133,6 +1146,9 @@ export const opsChatRouter = router({
           .catch(() => {}); // non-fatal
       }
 
+      // Broadcast lead update so all agents see the claim immediately
+      broadcastOpsUpdate("lead_update");
+
       return { success: true, claimedBy, claimedAt };
     }),
 
@@ -1353,6 +1369,9 @@ export const opsChatRouter = router({
         metadata: meta,
       });
 
+      // Broadcast so all agents see the celebration card immediately
+      broadcastOpsUpdate("new_message", { channel: input.channel });
+
       return { success: true };
     }),
 
@@ -1428,6 +1447,7 @@ export const opsChatRouter = router({
         .limit(1);
       if (existing.length > 0) {
         await db.delete(opsChatReactions).where(eq(opsChatReactions.id, existing[0].id));
+        broadcastOpsUpdate("reaction_update");
         return { action: "removed" };
       } else {
         await db.insert(opsChatReactions).values({
@@ -1436,6 +1456,7 @@ export const opsChatRouter = router({
           callerName,
           emoji: input.emoji,
         });
+        broadcastOpsUpdate("reaction_update");
         return { action: "added" };
       }
     }),
@@ -1810,6 +1831,8 @@ export const opsChatRouter = router({
         authorRole: "office",
         body: input.body,
       });
+      // Broadcast DM as a new_message so the recipient's unread count updates
+      broadcastOpsUpdate("new_message");
       return { id: (result as any).insertId as number, dmThread };
     }),
   /**
@@ -1980,6 +2003,33 @@ export const opsChatRouter = router({
         lostReason: r.lostReason ?? null,
       }));
     }),
+
+  /**
+   * getTodayRevenue — sum of bookedAmount for all bookings confirmed today.
+   * Used by the live revenue ticker in the Command Chat header.
+   */
+  getTodayRevenue: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { total: 0, count: 0 };
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const rows = await db
+      .select({
+        bookedAmount: conversationSessions.bookedAmount,
+      })
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.isBooked, 1),
+          gte(conversationSessions.bookedAt, startOfDay)
+        )
+      );
+
+    const total = rows.reduce((sum, r) => sum + (r.bookedAmount ?? 0), 0);
+    return { total, count: rows.length };
+  }),
 
   markDmRead: opsChatProcedure
     .input(z.object({ myName: z.string().min(1), dmThread: z.string().min(1), lastMessageId: z.number().int() }))

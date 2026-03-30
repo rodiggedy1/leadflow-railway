@@ -1,0 +1,111 @@
+/**
+ * useOpsStream — manages the /api/ops-stream SSE connection.
+ *
+ * Usage:
+ *   useOpsStream({
+ *     onNewMessage: () => refetchMessages(),
+ *     onJobUpdate:  () => refetchJobs(),
+ *     onLeadUpdate: () => refetchCommandData(),
+ *     onReactionUpdate: () => refetchReactions(),
+ *   });
+ *
+ * The hook:
+ *   - Opens an EventSource to /api/ops-stream on mount
+ *   - Calls the appropriate callback when an ops_update event arrives
+ *   - Automatically reconnects with exponential back-off (max 30s) on disconnect
+ *   - Closes the connection on unmount
+ *   - Falls back gracefully if EventSource is not supported
+ */
+
+import { useEffect, useRef } from "react";
+
+export type OpsStreamCallbacks = {
+  onNewMessage?: (channel?: string, jobId?: number) => void;
+  onJobUpdate?: (jobId?: number) => void;
+  onLeadUpdate?: () => void;
+  onReactionUpdate?: () => void;
+  onReminderUpdate?: () => void;
+  /** Called when the SSE connection is established or re-established */
+  onConnected?: () => void;
+};
+
+const MIN_RETRY_MS = 1_000;
+const MAX_RETRY_MS = 30_000;
+
+export function useOpsStream(callbacks: OpsStreamCallbacks) {
+  const cbRef = useRef(callbacks);
+  cbRef.current = callbacks; // always up-to-date without re-running the effect
+
+  useEffect(() => {
+    if (typeof EventSource === "undefined") return; // SSR / old browser guard
+
+    let es: EventSource | null = null;
+    let retryDelay = MIN_RETRY_MS;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let unmounted = false;
+
+    function connect() {
+      if (unmounted) return;
+
+      es = new EventSource("/api/ops-stream", { withCredentials: true });
+
+      es.addEventListener("connected", () => {
+        retryDelay = MIN_RETRY_MS; // reset back-off on successful connect
+        cbRef.current.onConnected?.();
+      });
+
+      es.addEventListener("ops_update", (e: MessageEvent) => {
+        try {
+          const event = JSON.parse(e.data) as {
+            type: string;
+            channel?: string;
+            jobId?: number;
+          };
+
+          switch (event.type) {
+            case "new_message":
+              cbRef.current.onNewMessage?.(event.channel, event.jobId);
+              break;
+            case "job_update":
+              cbRef.current.onJobUpdate?.(event.jobId);
+              break;
+            case "lead_update":
+              cbRef.current.onLeadUpdate?.();
+              break;
+            case "reaction_update":
+              cbRef.current.onReactionUpdate?.();
+              break;
+            case "reminder_update":
+              cbRef.current.onReminderUpdate?.();
+              break;
+            case "ping":
+              // keepalive — no action needed
+              break;
+          }
+        } catch {
+          // malformed event — ignore
+        }
+      });
+
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (unmounted) return;
+
+        // Exponential back-off reconnect
+        retryTimer = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
+          connect();
+        }, retryDelay);
+      };
+    }
+
+    connect();
+
+    return () => {
+      unmounted = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      es?.close();
+    };
+  }, []); // mount/unmount only — callbacks are read via ref
+}
