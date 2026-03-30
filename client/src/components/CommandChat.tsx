@@ -953,58 +953,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   // When the composer textarea grows (multi-line typing) OR when the scroll container
-  // itself shrinks (e.g. photo previews, reply bar), the user appears to scroll up
-  // even though they haven't moved. Observe BOTH the composer and the scroll container
-  // so either resize re-pins to the bottom as long as the user was already near it.
+  // Single source of truth for scrolling: a MutationObserver on the messages container.
+  // Whenever a child node is added (new message), immediately set scrollTop = scrollHeight.
+  // This fires synchronously after DOM mutation, before paint, so it's always accurate.
+  const msgsContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const composer = composerRef.current;
     const container = threadScrollRef.current;
-    const sentinel = threadBottomRef.current;
-    if (!container || !sentinel) return;
-    const repinIfNearBottom = () => {
-      // Use a generous threshold (400px) because clientHeight may have just shrunk
-      const gap = container.scrollHeight - container.scrollTop - container.clientHeight;
-      if (gap < 400) {
-        sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
-      }
-    };
-    const ro = new ResizeObserver(repinIfNearBottom);
-    // Watch the scroll container itself — catches any height change (photo strip, reply bar, etc.)
-    ro.observe(container);
-    // Also watch the composer textarea if it exists
-    if (composer) ro.observe(composer);
-    return () => ro.disconnect();
+    const msgsDiv = msgsContainerRef.current;
+    if (!container || !msgsDiv) return;
+    // Initial scroll to bottom
+    container.scrollTop = container.scrollHeight;
+    // Observe child additions (new messages)
+    const mo = new MutationObserver(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+    mo.observe(msgsDiv, { childList: true, subtree: false });
+    return () => mo.disconnect();
   }, []);
-
-  useEffect(() => {
-    // opsChatState guard removed — scroll must fire regardless of window state
-    const el = threadScrollRef.current;
-    const sentinel = threadBottomRef.current;
-    if (!el || !sentinel) return;
-    const len = channelMsgs.length;
-    if (!initialScrollDone.current) {
-      // First open: jump instantly to bottom via sentinel
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (el) el.scrollTop = el.scrollHeight;
-          initialScrollDone.current = true;
-          prevMsgLen.current = len;
-        });
-      });
-    } else if (len > prevMsgLen.current) {
-      prevMsgLen.current = len;
-      const scrollToBottom = () => {
-        const container = threadScrollRef.current;
-        if (!container) return;
-        setCmdNewMsgToast(null);
-        container.scrollTop = container.scrollHeight;
-      };
-      requestAnimationFrame(() => {
-        scrollToBottom();
-        setTimeout(scrollToBottom, 50);
-      });
-    }
-  }, [channelMsgs.length]);
 
   // NOTE: Notification sound + OS notification for command channel messages is handled
   // exclusively by OpsChat.tsx (the parent) via useTabLeader to prevent duplicates.
@@ -1453,7 +1418,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
             <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
           </div>
-          <div className="space-y-4 pb-48">
+          <div ref={msgsContainerRef} className="space-y-4 pb-48">
             {channelLoading ? (
               <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
             ) : channelMsgs.length === 0 ? (
