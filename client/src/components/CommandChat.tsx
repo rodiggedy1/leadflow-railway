@@ -2255,7 +2255,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <Textarea
               ref={composerRef}
               value={composer}
-              onChange={(e) => setComposer(e.target.value)}
+              onChange={(e) => {
+                setComposer(e.target.value);
+                requestAnimationFrame(() => {
+                  threadBottomRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+                });
+              }}
               placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Type a message or drop photos…"}
               rows={2}
               className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
