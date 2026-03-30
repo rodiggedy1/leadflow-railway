@@ -18,7 +18,7 @@ import type { Express } from "express";
 //   <script src="https://quote.maidinblack.com/api/widget.js?v=WIDGET_VERSION" async></script>
 // The version is also embedded in the script itself so you can verify
 // which build is running via the browser console.
-const WIDGET_VERSION = "2.3.0";
+const WIDGET_VERSION = "2.4.0";
 
 export function registerWidgetEmbedRoute(app: Express) {
   app.get("/api/widget.js", (_req, res) => {
@@ -368,11 +368,77 @@ function buildWidgetScript(apiBase: string, version: string): string {
       var timeEl = el('p', { fontSize: '11px', color: '#9CA3AF', margin: '4px 0 0 4px' });
       timeEl.textContent = timeLabel();
 
-      var note = el('p', { fontSize: '12px', color: '#9CA3AF', textAlign: 'center', marginTop: '8px' });
+      // ── Wistia video ─────────────────────────────────────────────────────────
+      // Label row
+      var vidLabelRow = el('div', {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        margin: '12px 0 6px',
+      });
+      var vidLineL = el('div', { flex: '1', height: '1px', background: 'linear-gradient(90deg,transparent,rgba(232,115,90,0.35))' });
+      var vidLabel = el('span', { fontSize: '10px', fontWeight: '600', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#E8735A', whiteSpace: 'nowrap' });
+      vidLabel.textContent = 'Watch while you wait';
+      var vidLineR = el('div', { flex: '1', height: '1px', background: 'linear-gradient(90deg,rgba(232,115,90,0.35),transparent)' });
+      vidLabelRow.appendChild(vidLineL);
+      vidLabelRow.appendChild(vidLabel);
+      vidLabelRow.appendChild(vidLineR);
+
+      // Player wrapper
+      var vidWrap = el('div', {
+        width: '100%',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        boxShadow: '0 3px 16px rgba(232,115,90,0.18)',
+        border: '1px solid rgba(232,115,90,0.2)',
+        background: '#1a1a1a',
+        position: 'relative',
+      });
+
+      // Inject Wistia SDK scripts if not already present
+      if (!document.getElementById('mib-wistia-player-js')) {
+        var sdkScript = document.createElement('script');
+        sdkScript.id = 'mib-wistia-player-js';
+        sdkScript.src = 'https://fast.wistia.com/player.js';
+        sdkScript.async = true;
+        document.head.appendChild(sdkScript);
+      }
+      if (!document.getElementById('mib-wistia-embed-jtv8f50ale')) {
+        var embedScript = document.createElement('script');
+        embedScript.id = 'mib-wistia-embed-jtv8f50ale';
+        embedScript.src = 'https://fast.wistia.com/embed/jtv8f50ale.js';
+        embedScript.async = true;
+        embedScript.setAttribute('type', 'module');
+        document.head.appendChild(embedScript);
+      }
+      // Swatch style for loading placeholder
+      if (!document.getElementById('mib-wistia-swatch-jtv8f50ale')) {
+        var swatchStyle = document.createElement('style');
+        swatchStyle.id = 'mib-wistia-swatch-jtv8f50ale';
+        swatchStyle.textContent = "wistia-player[media-id='jtv8f50ale']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/jtv8f50ale/swatch');display:block;filter:blur(5px);padding-top:56.25%;}";
+        document.head.appendChild(swatchStyle);
+      }
+
+      // Create the wistia-player web component
+      var wistiaPlayer = document.createElement('wistia-player');
+      wistiaPlayer.setAttribute('media-id', 'jtv8f50ale');
+      wistiaPlayer.setAttribute('seo', 'false');
+      wistiaPlayer.setAttribute('aspect', '1.7777777777777777');
+      wistiaPlayer.style.display = 'block';
+      wistiaPlayer.style.width = '100%';
+      vidWrap.appendChild(wistiaPlayer);
+
+      var vidCaption = el('p', { fontSize: '11px', color: '#B07060', textAlign: 'center', margin: '5px 0 0' });
+      vidCaption.textContent = 'See what makes us different \u2014 60 seconds';
+
+      var note = el('p', { fontSize: '12px', color: '#9CA3AF', textAlign: 'center', marginTop: '10px' });
       note.textContent = 'Did not get a text? Make sure your number is correct or call us directly.';
 
       body.appendChild(bubble);
       body.appendChild(timeEl);
+      body.appendChild(vidLabelRow);
+      body.appendChild(vidWrap);
+      body.appendChild(vidCaption);
       body.appendChild(note);
       return;
     }
