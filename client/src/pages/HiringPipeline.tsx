@@ -644,17 +644,20 @@ export default function HiringPipeline() {
             <div className="h-full w-1/3 rounded-full" style={{ backgroundColor: "#cbd5e1" }} />
           </div>
 
-          {/* 2-column grid of stage cards */}
-          <div className="grid grid-cols-2 gap-4">
-            {visibleStages.map(stage => (
-              <StageCard
-                key={stage}
-                stage={stage}
-                candidates={filteredCandidates.filter(c => c.stage === stage)}
-                selectedId={selectedCandidate?.id ?? null}
-                onSelect={c => setSelectedCandidate(c)}
-              />
-            ))}
+          {/* Horizontally scrollable stage columns */}
+          <div className="overflow-x-auto -mx-6 px-6 pb-4">
+            <div className="flex gap-4" style={{ minWidth: "max-content" }}>
+              {visibleStages.map(stage => (
+                <div key={stage} className="w-[280px] shrink-0">
+                  <StageCard
+                    stage={stage}
+                    candidates={filteredCandidates.filter(c => c.stage === stage)}
+                    selectedId={selectedCandidate?.id ?? null}
+                    onSelect={c => setSelectedCandidate(c)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
