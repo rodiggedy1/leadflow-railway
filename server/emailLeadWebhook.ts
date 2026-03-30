@@ -890,14 +890,24 @@ export async function handleThumbtackEmail(
   const descDisplay = parsed.description ?? "";
   const roomsDisplay = parsed.rooms ?? null;
 
-  // If we have a phone number, normalize it and send SMS
+  // Normalize phone if present
   const normalizedPhone = parsed.phone ? normalizePhone(parsed.phone) : null;
 
-  if (normalizedPhone) {
-    const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
-    const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
-    const price = estimatePrice({ bedrooms, bathrooms, serviceType: parsed.serviceType });
+  const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
+  const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
+  const price = estimatePrice({ bedrooms, bathrooms, serviceType: parsed.serviceType });
 
+  const barkQA = [
+    `Service: ${parsed.serviceType}`,
+    parsed.location ? `Location: ${parsed.location}` : null,
+    parsed.requestedDates ? `Dates: ${parsed.requestedDates}` : null,
+    parsed.rooms ? `Rooms: ${parsed.rooms}` : null,
+    parsed.description ? `Notes: ${parsed.description}` : null,
+  ].filter(Boolean).join(" | ");
+
+  let initialHistory: string | null = null;
+
+  if (normalizedPhone) {
     const introSms = await buildEmailLeadIntroSms(
       displayName.split(" ")[0],
       parsed.serviceType,
@@ -915,39 +925,34 @@ export async function handleThumbtackEmail(
     const sms2 = await sendSms({ to: normalizedPhone, content: schedulingSms });
     console.log(`[Thumbtack] Scheduling SMS sent: ${sms2.success}`);
 
-    // Create conversation session
     const now = Date.now();
-    const initialHistory = JSON.stringify([
+    initialHistory = JSON.stringify([
       { role: "assistant", content: introSms, ts: now },
       { role: "assistant", content: schedulingSms, ts: now + 1 },
     ]);
+  }
 
-    const barkQA = [
-      `Service: ${parsed.serviceType}`,
-      parsed.location ? `Location: ${parsed.location}` : null,
-      parsed.requestedDates ? `Dates: ${parsed.requestedDates}` : null,
-      parsed.rooms ? `Rooms: ${parsed.rooms}` : null,
-      parsed.description ? `Notes: ${parsed.description}` : null,
-    ].filter(Boolean).join(" | ");
-
-    try {
-      await db.insert(conversationSessions).values({
-        leadPhone: normalizedPhone,
-        leadName: displayName,
-        stage: "AVAILABILITY",
-        quotedPrice: estimatePrice({ bedrooms: parsed.bedrooms ?? "3 Bedrooms", bathrooms: parsed.bathrooms ?? "2 Bathrooms", serviceType: parsed.serviceType }),
-        serviceType: parsed.serviceType,
-        bedrooms: parsed.bedrooms,
-        bathrooms: parsed.bathrooms,
-        messageHistory: initialHistory,
-        leadSource: "thumbtack",
-        smsFlow: "B",
-        barkQA,
-      });
-      console.log(`[Thumbtack] Session created for ${normalizedPhone}`);
-    } catch (dbErr) {
-      console.error("[Thumbtack] Failed to create session:", dbErr);
-    }
+  // Always create a session so the lead appears on the Leads page.
+  // Use a placeholder phone key when no phone is available (same pattern as Yelp).
+  const sessionPhone = normalizedPhone ?? `thumbtack-${Date.now()}`;
+  try {
+    await db.insert(conversationSessions).values({
+      leadPhone: sessionPhone,
+      leadName: displayName,
+      stage: normalizedPhone ? "AVAILABILITY" : ("QUOTE_SENT" as any),
+      quotedPrice: price,
+      serviceType: parsed.serviceType,
+      bedrooms: parsed.bedrooms,
+      bathrooms: parsed.bathrooms,
+      messageHistory: initialHistory,
+      leadSource: "thumbtack",
+      smsFlow: normalizedPhone ? "B" : null,
+      aiMode: normalizedPhone ? undefined : 0,
+      barkQA,
+    } as any);
+    console.log(`[Thumbtack] Session created — phone=${sessionPhone}`);
+  } catch (dbErr) {
+    console.error("[Thumbtack] Failed to create session:", dbErr);
   }
 
   // Build Command Chat card

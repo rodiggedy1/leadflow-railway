@@ -573,3 +573,4 @@
 - [x] Restyle Photo/Voice/emoji buttons in CommandChat and OpsChat to pill-shaped with border and emoji+label treatment
 - [x] Add Thumbtack Zapier webhook connection — POST /api/webhooks/thumbtack, mirrors Bark handler, AI extracts job details, sends intro+scheduling SMS, creates session with leadSource="thumbtack", posts 📌 card to command channel
 - [x] Parse Thumbtack "New direct lead" email notifications — detect subject "New direct lead", extract name/phone/service/description from email body, route into lead pipeline with leadSource="thumbtack"
+- [x] Thumbtack leads must appear on the Leads page — session now always created regardless of phone; no-phone case uses thumbtack-{timestamp} placeholder key and aiMode=0 so AI doesn't try to SMS
