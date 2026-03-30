@@ -507,7 +507,16 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
 
 // ── Filter tabs ───────────────────────────────────────────────────────────────
 
-const FILTER_TABS = ["All", "Application Submitted", "AI Interview", "Real Interview"] as const;
+const FILTER_TABS = [
+  "All",
+  "Application Submitted",
+  "AI Interview",
+  "Real Interview",
+  "Background Check",
+  "Paid Test Clean",
+  "Onboarding",
+  "Active",
+] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
