@@ -1094,11 +1094,21 @@ export const opsChatRouter = router({
         .where(eq(opsChatMessages.id, input.messageId));
 
       // Also stamp the conversation session if sessionId provided
+      // This syncs the claim to the Lead List (which reads assignedAgentId + assignedAgentName).
       if (input.sessionId) {
+        // Resolve the integer agentId from the agents table so the Lead List
+        // agent-filter (which uses assignedAgentId) works correctly.
+        let agentIntId: number | null = null;
+        if (!ctx.opsCaller.isOwner) {
+          // opsCaller.id is String(agent.agentId) for agent sessions
+          const parsed = parseInt(ctx.opsCaller.id, 10);
+          if (!isNaN(parsed)) agentIntId = parsed;
+        }
         await db
           .update(conversationSessions)
           .set({
             assignedAgentName: claimedBy,
+            ...(agentIntId !== null ? { assignedAgentId: agentIntId } : {}),
           })
           .where(eq(conversationSessions.id, input.sessionId))
           .catch(() => {}); // non-fatal
