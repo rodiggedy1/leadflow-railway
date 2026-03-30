@@ -193,7 +193,7 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   utmContent: varchar("utmContent", { length: 255 }),
   /** Google Ads click ID for exact ad attribution */
   gclid: varchar("gclid", { length: 255 }),
-  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com, "reactivation" = reactivation campaign, "bark" = Bark.com Zapier webhook */
+  /** Lead source: "form" = full quote form, "widget" = floating chat widget on maidsinblack.com, "reactivation" = reactivation campaign, "bark" = Bark.com Zapier webhook, "thumbtack" = Thumbtack Zapier webhook */
   leadSource: varchar("leadSource", { length: 50 }).$default(() => "form"),
   /** For reactivation leads: the last price they paid (dollars) */
   reactivationLastPrice: int("reactivationLastPrice"),

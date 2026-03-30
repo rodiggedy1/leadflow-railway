@@ -39,11 +39,15 @@ import { processLeadReply as processReactivationReply } from "./conversationEngi
 import { logActivity } from "./activityLogger";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
+import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { ENV } from "./_core/env";
 
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
   registerBarkWebhookRoute(app);
+
+  // Thumbtack lead integration (Zapier webhook)
+  registerThumbTackWebhookRoute(app);
 
   // Email lead integration (Mailgun inbound)
   registerEmailLeadWebhookRoute(app);
