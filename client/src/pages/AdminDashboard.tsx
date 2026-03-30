@@ -3910,7 +3910,19 @@ export default function AdminDashboard() {
                 </div>
                 <div className="space-y-1">
                   <Label>Phone *</Label>
-                  <Input value={addLeadForm.phone} onChange={e => setAddLeadForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" />
+                  <Input
+                    value={addLeadForm.phone}
+                    onChange={e => setAddLeadForm(f => ({ ...f, phone: e.target.value }))}
+                    onBlur={e => {
+                      const digits = e.target.value.replace(/\D/g, '');
+                      if (digits.length === 10) {
+                        setAddLeadForm(f => ({ ...f, phone: `+1${digits}` }));
+                      } else if (digits.length === 11 && digits.startsWith('1')) {
+                        setAddLeadForm(f => ({ ...f, phone: `+${digits}` }));
+                      }
+                    }}
+                    placeholder="+1 555 000 0000"
+                  />
                 </div>
               </div>
               <div className="space-y-1">
@@ -4119,7 +4131,7 @@ export default function AdminDashboard() {
                         </div>
                       </TableCell>
 
-                      {/* Quote — quoted price for form leads, last booking price for campaign leads */}
+                      {/* Quote — quotedPrice for form leads, bookedAmount for manual leads, reactivationLastPrice for campaigns */}
                       <TableCell className="py-2">
                         {(session.quotedPrice && parseInt(session.quotedPrice, 10) > 0) ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
@@ -4128,7 +4140,11 @@ export default function AdminDashboard() {
                               ${total}
                             </span>
                           );
-                        })() : session.reactivationLastPrice ? (
+                        })() : (session.bookedAmount !== null && session.bookedAmount !== undefined && session.bookedAmount > 0) ? (
+                          <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
+                            ${session.bookedAmount}
+                          </span>
+                        ) : session.reactivationLastPrice ? (
                           <span className="text-sm font-bold tabular-nums" style={{ color: '#7c3aed' }}>
                             ${session.reactivationLastPrice}
                           </span>
