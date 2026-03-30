@@ -3319,6 +3319,57 @@ STAGE DETECTION — return the stage the conversation is currently in:
   fieldMgmt: fieldMgmtRouter,
   opsChat: opsChatRouter,
 
+  tools: router({
+    generateFirstMessage: agentProcedure
+      .input(
+        z.object({
+          bookingDetails: z.string().min(1).max(4000),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const template = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
+
+A little about us: we're fully insured, background-checked, and we've served [X] homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
+
+For your [home size / job type], I'm estimating [X]–[X]. That includes [list 2-3 specific things they'll get].
+
+I have availability as soon as [specific day, e.g., 'this Thursday or Saturday morning']. Want me to lock in a time for you?
+
+Either way, feel free to ask me anything — happy to help! 😊`;
+
+        const llmResult = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
+
+Your job: fill in the following message template using the booking details provided. Rules:
+- Replace [Name] with the lead's first name only
+- Replace [Your Name] with "Madison"
+- Replace [Business] with "Maid in Black"
+- Replace [X] homes with a realistic number like "hundreds of"
+- Replace [City] with the city from the booking details
+- Replace [home size / job type] with a natural description based on the details (e.g., "3-bedroom home", "carpet cleaning", etc.)
+- Replace the price estimate with a realistic range based on the job type and size. For house cleaning: standard 3BR is $180–$220, deep clean adds 30–40%. For carpet cleaning, specialty jobs: use a reasonable range.
+- Replace the 2-3 specific things with relevant items for the job type (e.g., for house cleaning: "all rooms, kitchen deep clean, and bathroom sanitization"; for carpet cleaning: "all carpeted rooms, stairs, and spot treatment")
+- Replace the availability with "this week" or "early next week" unless specific dates are mentioned in the details
+- Keep the tone warm, human, and professional — not salesy
+- Output ONLY the message text, no preamble, no quotes around it`,
+            },
+            {
+              role: "user",
+              content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}`,
+            },
+          ],
+        });
+
+        const raw = llmResult?.choices?.[0]?.message?.content;
+        const message = typeof raw === "string" ? raw : "";
+        if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
+        return { message: message.trim() };
+      }),
+  }),
+
   simulator: router({
     chat: publicProcedure
       .input(

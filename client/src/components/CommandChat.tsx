@@ -25,7 +25,7 @@ import {
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
-  CheckCircle2, XCircle } from "lucide-react";
+  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -595,6 +595,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [showGlitter, setShowGlitter] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  // ── First Message Generator modal state ─────────────────────────────────────
+  const [firstMsgOpen, setFirstMsgOpen] = useState(false);
+  const [firstMsgDetails, setFirstMsgDetails] = useState("");
+  const [firstMsgResult, setFirstMsgResult] = useState("");
+  const [firstMsgCopied, setFirstMsgCopied] = useState(false);
+  const generateFirstMessageMutation = trpc.tools.generateFirstMessage.useMutation({
+    onSuccess: (data) => { setFirstMsgResult(data.message); setFirstMsgCopied(false); },
+    onError: (err) => toast.error("Failed to generate message", { description: err.message }),
+  });
+
   // ── Quote-reply state ─────────────────────────────────────────────────────
   const [replyTo, setReplyTo] = useState<{ id: number; body: string; author: string } | null>(null);
 
@@ -1162,6 +1172,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 })}
               </div>
             )}
+          </div>
+
+          {/* ── First Message Generator button ── */}
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => { setFirstMsgOpen(true); setFirstMsgDetails(""); setFirstMsgResult(""); setFirstMsgCopied(false); }}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white text-xs font-semibold py-2.5 px-3 shadow-sm transition-all"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              First Message Generator
+            </button>
           </div>
         </div>
       </div>
@@ -2661,6 +2683,106 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 {resolveIssueSubmitting
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <><CheckCheck className="h-4 w-4 mr-1.5" /> Mark Resolved</>
+                }
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── First Message Generator Modal ── */}
+      {firstMsgOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setFirstMsgOpen(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+                  <Wand2 className="h-4 w-4 text-white" />
+                </div>
+                <h2 className="text-base font-bold text-slate-900">First Message Generator</h2>
+              </div>
+              <button
+                className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                onClick={() => setFirstMsgOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Input */}
+              <div>
+                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">
+                  Paste Booking Details
+                </label>
+                <p className="text-xs text-slate-400 mb-2 leading-relaxed">
+                  Paste the raw booking info (name, city, home size, services, pricing, availability, etc.) and the AI will craft a personalized first outreach message.
+                </p>
+                <Textarea
+                  value={firstMsgDetails}
+                  onChange={(e) => setFirstMsgDetails(e.target.value)}
+                  placeholder={`e.g.\nName: Sarah Johnson\nCity: Arlington, VA\nHome: 3 bed / 2 bath\nService: Deep clean\nQuote: $220\u2013$260\nAvailability: Tue or Thu this week`}
+                  rows={6}
+                  className="resize-none rounded-xl border-slate-200 text-sm font-mono"
+                  autoFocus
+                />
+              </div>
+
+              {/* Generated result */}
+              {firstMsgResult && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-semibold text-slate-700">Generated Message</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(firstMsgResult).then(() => {
+                          setFirstMsgCopied(true);
+                          setTimeout(() => setFirstMsgCopied(false), 2500);
+                        });
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition",
+                        firstMsgCopied
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      )}
+                    >
+                      {firstMsgCopied
+                        ? <><CheckCheck className="h-3.5 w-3.5" /> Copied!</>
+                        : <><MessageSquare className="h-3.5 w-3.5" /> Copy Message</>
+                      }
+                    </button>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                    {firstMsgResult}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl border-slate-200 text-slate-700"
+                onClick={() => setFirstMsgOpen(false)}
+              >
+                Close
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white"
+                disabled={!firstMsgDetails.trim() || generateFirstMessageMutation.isPending}
+                onClick={() => generateFirstMessageMutation.mutate({ bookingDetails: firstMsgDetails.trim() })}
+              >
+                {generateFirstMessageMutation.isPending
+                  ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Generating…</>
+                  : <><Wand2 className="h-4 w-4 mr-1.5" /> Generate Message</>
                 }
               </Button>
             </div>
