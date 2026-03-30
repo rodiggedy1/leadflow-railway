@@ -762,7 +762,7 @@ export default function HiringPipeline() {
         </div>
 
         {/* ── Right panel ── */}
-        <div className="w-[340px] shrink-0 space-y-4">
+        <div className="w-[420px] shrink-0 space-y-4">
           {/* Candidate detail */}
           <div
             className="rounded-2xl border p-5"
