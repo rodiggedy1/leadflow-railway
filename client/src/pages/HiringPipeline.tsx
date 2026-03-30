@@ -42,8 +42,8 @@ interface Candidate {
   zip: string;
   stage: Stage;
   score: number;
-  tag?: string; // "A Player" | "Fast-track" | "Needs review" | "Ready for test clean" | "Hire pending"
-  availability?: string; // e.g. "Mon–Fri"
+  tag?: string;
+  availability?: string;
   aiSummary?: string;
   scores?: {
     communication: number;
@@ -165,14 +165,15 @@ const STAGES: Stage[] = [
   "Active",
 ];
 
-const STAGE_COLORS: Record<Stage, string> = {
-  "Application Submitted": "#6366f1",
-  "AI Interview": "#8b5cf6",
-  "Real Interview": "#3b82f6",
-  "Background Check": "#f59e0b",
-  "Paid Test Clean": "#10b981",
-  "Onboarding": "#10b981",
-  "Active": "#22c55e",
+// Badge color per stage — matches the screenshot's colored dots
+const STAGE_BADGE: Record<Stage, { bg: string; text: string }> = {
+  "Application Submitted": { bg: "#e0e7ff", text: "#4f46e5" },
+  "AI Interview":          { bg: "#ede9fe", text: "#7c3aed" },
+  "Real Interview":        { bg: "#dbeafe", text: "#2563eb" },
+  "Background Check":      { bg: "#fef3c7", text: "#d97706" },
+  "Paid Test Clean":       { bg: "#fee2e2", text: "#dc2626" },
+  "Onboarding":            { bg: "#d1fae5", text: "#059669" },
+  "Active":                { bg: "#dcfce7", text: "#16a34a" },
 };
 
 const AUTOMATIONS = [
@@ -196,15 +197,15 @@ function ChecklistIcon({ status }: { status: "done" | "pending" | "in-progress" 
   return <CheckCircle2 className="w-5 h-5 text-gray-200" />;
 }
 
-function ScoreBar({ value, color = "#0f172a" }: { value: number; color?: string }) {
+function ScoreBar({ value }: { value: number }) {
   return (
     <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
-      <div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: color }} />
+      <div className="h-full rounded-full bg-gray-900" style={{ width: `${value}%` }} />
     </div>
   );
 }
 
-// ── Candidate Card ─────────────────────────────────────────────────────────────
+// ── Candidate Card (inside a stage column) ────────────────────────────────────
 
 function CandidateCard({
   candidate,
@@ -215,58 +216,72 @@ function CandidateCard({
   isSelected: boolean;
   onClick: () => void;
 }) {
+  const hasTransport = candidate.transport !== "No car";
+
   return (
     <div
       onClick={onClick}
-      className="rounded-xl border p-3 cursor-pointer transition-all"
+      className="rounded-2xl border cursor-pointer transition-all p-4"
       style={{
         backgroundColor: "#ffffff",
-        borderColor: isSelected ? "#3b82f6" : "#e5e7eb",
-        boxShadow: isSelected ? "0 0 0 2px #bfdbfe" : "none",
+        borderColor: isSelected ? "#0f172a" : "#e5e7eb",
+        boxShadow: isSelected ? "0 0 0 1.5px #0f172a" : "none",
       }}
     >
-      <div className="flex items-center gap-2.5">
+      {/* Name row */}
+      <div className="flex items-center gap-3">
         <div
-          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-          style={{ backgroundColor: "#f1f5f9", color: "#334155" }}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
+          style={{ backgroundColor: "#e2e8f0", color: "#475569" }}
         >
           {candidate.initials}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-sm text-gray-900 truncate">{candidate.name}</span>
-            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="font-bold text-base text-gray-900 leading-tight">{candidate.name}</span>
+            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 ml-1" />
           </div>
-          <p className="text-xs text-gray-500 truncate">{candidate.subtitle}</p>
+          <p className="text-sm text-gray-400 mt-0.5">{candidate.subtitle}</p>
         </div>
       </div>
-      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-        <span className="flex items-center gap-1">
-          <Car className="w-3.5 h-3.5" />
-          {candidate.transport}
-        </span>
-        <span className="flex items-center gap-1">
-          <MapPin className="w-3.5 h-3.5" />
+
+      {/* Pills row */}
+      <div className="flex items-center gap-2 mt-3 flex-wrap">
+        {hasTransport && (
+          <span
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border"
+            style={{ borderColor: "#e5e7eb", color: "#374151", backgroundColor: "#f9fafb" }}
+          >
+            <Car className="w-3.5 h-3.5" />
+            Car
+          </span>
+        )}
+        <span
+          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border"
+          style={{ borderColor: "#e5e7eb", color: "#374151", backgroundColor: "#f9fafb" }}
+        >
           ZIP {candidate.zip}
         </span>
       </div>
+
+      {/* Tag + Score row */}
       {(candidate.tag || candidate.score) && (
-        <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center justify-between mt-3">
           {candidate.tag ? (
-            <span className="text-xs text-gray-500">{candidate.tag}</span>
+            <span className="text-sm text-gray-400">{candidate.tag}</span>
           ) : (
             <span />
           )}
-          <span className="text-sm font-bold text-gray-900">Score {candidate.score}</span>
+          <span className="text-base font-bold text-gray-900">Score {candidate.score}</span>
         </div>
       )}
     </div>
   );
 }
 
-// ── Stage Column ──────────────────────────────────────────────────────────────
+// ── Stage Card (the large rounded container) ──────────────────────────────────
 
-function StageColumn({
+function StageCard({
   stage,
   candidates,
   selectedId,
@@ -277,27 +292,33 @@ function StageColumn({
   selectedId: number | null;
   onSelect: (c: Candidate) => void;
 }) {
-  const color = STAGE_COLORS[stage];
+  const badge = STAGE_BADGE[stage];
+
   return (
-    <div className="min-w-[220px] w-[220px] shrink-0">
-      <div className="flex items-center justify-between mb-2">
+    <div
+      className="rounded-2xl border p-5"
+      style={{ backgroundColor: "#f8fafc", borderColor: "#e5e7eb" }}
+    >
+      {/* Stage header */}
+      <div className="flex items-start justify-between mb-1">
         <div>
-          <p className="font-semibold text-sm text-gray-900">{stage}</p>
-          <p className="text-xs text-gray-400">{candidates.length} candidate{candidates.length !== 1 ? "s" : ""}</p>
+          <p className="font-bold text-base text-gray-900">{stage}</p>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}
+          </p>
         </div>
         <span
-          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-          style={{ backgroundColor: color }}
+          className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+          style={{ backgroundColor: badge.bg, color: badge.text }}
         >
           {candidates.length}
         </span>
       </div>
-      <div className="space-y-2">
+
+      {/* Candidate cards */}
+      <div className="mt-3 space-y-3">
         {candidates.length === 0 ? (
-          <div
-            className="rounded-xl border border-dashed p-4 text-center text-xs text-gray-400"
-            style={{ borderColor: "#e5e7eb" }}
-          >
+          <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-300" style={{ borderColor: "#e5e7eb" }}>
             No candidates here.
           </div>
         ) : (
@@ -331,6 +352,7 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
 
   const cl = candidate.checklistStatus;
   const sc = candidate.scores;
+  const badge = STAGE_BADGE[candidate.stage];
 
   return (
     <div className="space-y-5">
@@ -339,12 +361,12 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
         <div className="flex items-center gap-3">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold shrink-0"
-            style={{ backgroundColor: "#f1f5f9", color: "#334155" }}
+            style={{ backgroundColor: "#e2e8f0", color: "#475569" }}
           >
             {candidate.initials}
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xl font-bold text-gray-900">{candidate.name}</h3>
               <span
                 className="px-2 py-0.5 rounded-full text-xs font-semibold text-white"
@@ -353,7 +375,7 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
                 Score {candidate.score}
               </span>
             </div>
-            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
               <span className="flex items-center gap-1">
                 <Car className="w-3.5 h-3.5" />
                 {candidate.transport}
@@ -372,8 +394,8 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
           </div>
         </div>
         <span
-          className="px-2.5 py-1 rounded-full text-xs font-semibold"
-          style={{ backgroundColor: "#ede9fe", color: "#7c3aed" }}
+          className="px-2.5 py-1 rounded-full text-xs font-semibold shrink-0"
+          style={{ backgroundColor: badge.bg, color: badge.text }}
         >
           {candidate.stage}
         </span>
@@ -403,7 +425,7 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
                   <span className="text-xs text-gray-500">{label}</span>
                   <span className="text-xs font-semibold" style={{ color }}>{lbl}</span>
                 </div>
-                <ScoreBar value={value} color="#0f172a" />
+                <ScoreBar value={value} />
                 <span className="text-xs text-gray-400">{value}/100</span>
               </div>
             );
@@ -415,14 +437,14 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
       {cl && (
         <div>
           <p className="text-sm font-semibold text-gray-900 mb-2">Pipeline checklist</p>
-          <div className="space-y-2">
+          <div className="space-y-0">
             {[
               { label: "Application submitted", status: cl.applicationSubmitted },
               { label: "AI interview started", status: cl.aiInterviewStarted },
               { label: "AI interview completed", status: cl.aiInterviewCompleted },
               { label: "Nudge scheduled", status: cl.nudgeScheduled },
             ].map(({ label, status }) => (
-              <div key={label} className="flex items-center justify-between py-2 border-b border-gray-100">
+              <div key={label} className="flex items-center justify-between py-2.5 border-b border-gray-100">
                 <span className="text-sm text-gray-700">{label}</span>
                 <ChecklistIcon status={status} />
               </div>
@@ -483,10 +505,12 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Filter tabs ───────────────────────────────────────────────────────────────
 
 const FILTER_TABS = ["All", "Application Submitted", "AI Interview", "Real Interview"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function HiringPipeline() {
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
@@ -504,7 +528,8 @@ export default function HiringPipeline() {
     return matchesTab && matchesSearch;
   });
 
-  const visibleStages = filterTab === "All" ? STAGES : ([filterTab] as Stage[]);
+  const visibleStages: Stage[] =
+    filterTab === "All" ? STAGES : ([filterTab] as Stage[]);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#f8fafc", fontFamily: "Inter, sans-serif" }}>
@@ -580,30 +605,32 @@ export default function HiringPipeline() {
 
       {/* ── Body: Pipeline board + Detail panel ── */}
       <div className="max-w-[1400px] mx-auto px-6 py-6 flex gap-6 items-start">
-        {/* Pipeline board */}
+
+        {/* ── Pipeline board ── */}
         <div
-          className="flex-1 rounded-2xl border p-5 min-w-0"
+          className="flex-1 rounded-2xl border p-6 min-w-0"
           style={{ backgroundColor: "#ffffff", borderColor: "#e5e7eb" }}
         >
-          {/* Board header */}
-          <div className="flex flex-col sm:flex-row sm:items-start gap-4 mb-4">
+          {/* Board header row */}
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4 mb-1">
             <div className="shrink-0">
-              <h2 className="text-lg font-bold text-gray-900">Pipeline board</h2>
-              <p className="text-xs text-gray-400 mt-0.5 max-w-[160px]">
+              <h2 className="text-xl font-bold text-gray-900">Pipeline board</h2>
+              <p className="text-sm text-gray-400 mt-0.5 max-w-[180px] leading-snug">
                 Click any lane or candidate to inspect the workflow.
               </p>
             </div>
-            {/* Filter tabs */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+
+            {/* Filter pill tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 flex-wrap">
               {FILTER_TABS.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setFilterTab(tab)}
-                  className="px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all"
+                  className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all"
                   style={
                     filterTab === tab
-                      ? { backgroundColor: "#0f172a", color: "#ffffff" }
-                      : { backgroundColor: "#f1f5f9", color: "#6b7280" }
+                      ? { backgroundColor: "#0f172a", color: "#ffffff", borderColor: "#0f172a" }
+                      : { backgroundColor: "#ffffff", color: "#374151", borderColor: "#e5e7eb" }
                   }
                 >
                   {tab}
@@ -612,23 +639,26 @@ export default function HiringPipeline() {
             </div>
           </div>
 
-          {/* Columns */}
-          <div className="overflow-x-auto pb-2">
-            <div className="flex gap-4" style={{ minWidth: "max-content" }}>
-              {visibleStages.map(stage => (
-                <StageColumn
-                  key={stage}
-                  stage={stage}
-                  candidates={filteredCandidates.filter(c => c.stage === stage)}
-                  selectedId={selectedCandidate?.id ?? null}
-                  onSelect={c => setSelectedCandidate(c)}
-                />
-              ))}
-            </div>
+          {/* Scroll indicator bar */}
+          <div className="mt-3 mb-5 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#f1f5f9" }}>
+            <div className="h-full w-1/3 rounded-full" style={{ backgroundColor: "#cbd5e1" }} />
+          </div>
+
+          {/* 2-column grid of stage cards */}
+          <div className="grid grid-cols-2 gap-4">
+            {visibleStages.map(stage => (
+              <StageCard
+                key={stage}
+                stage={stage}
+                candidates={filteredCandidates.filter(c => c.stage === stage)}
+                selectedId={selectedCandidate?.id ?? null}
+                onSelect={c => setSelectedCandidate(c)}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Right panel */}
+        {/* ── Right panel ── */}
         <div className="w-[340px] shrink-0 space-y-4">
           {/* Candidate detail */}
           <div
