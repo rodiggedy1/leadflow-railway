@@ -538,13 +538,35 @@ function ConversationDrawer({
   );
   const [bookedAmountSaved, setBookedAmountSaved] = useState(false);
   const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation({
+    onMutate: async (vars) => {
+      // Cancel any in-flight refetches so they don't overwrite the optimistic value
+      await utils.leads.list.cancel();
+      // Snapshot previous cache for rollback
+      const prev = utils.leads.list.getData(undefined);
+      // Optimistically patch the matching session in the list cache
+      utils.leads.list.setData(undefined, (old) =>
+        old
+          ? old.map((s: any) =>
+              s.id === vars.sessionId ? { ...s, bookedAmount: vars.bookedAmount } : s
+            )
+          : old
+      );
+      return { prev };
+    },
     onSuccess: (_, vars) => {
-      utils.leads.list.invalidate();
       setBookedAmountSaved(true);
       setTimeout(() => setBookedAmountSaved(false), 2000);
       toast.success(vars.bookedAmount === null ? "Booked amount cleared" : `Booked amount set to $${vars.bookedAmount}`);
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err, _vars, ctx) => {
+      // Roll back the optimistic update on failure
+      if (ctx?.prev) utils.leads.list.setData(undefined, ctx.prev);
+      toast.error(err.message);
+    },
+    onSettled: () => {
+      // Sync with server to confirm the write
+      utils.leads.list.invalidate();
+    },
   });
 
   // Stage update
