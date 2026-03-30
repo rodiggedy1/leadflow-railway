@@ -403,11 +403,15 @@ function StageCard({
 // ── Candidate Detail Panel ────────────────────────────────────────────────────
 
 function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
-  const [notes, setNotes] = useState(candidate?.notes ?? []);
+  const [editableNotes, setEditableNotes] = React.useState<string[]>(candidate?.notes ?? []);
+
+  React.useEffect(() => {
+    setEditableNotes(candidate?.notes ?? []);
+  }, [candidate?.id]);
 
   if (!candidate) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-400 text-sm">
+      <div className="flex flex-col items-center justify-center h-64 text-slate-400 text-sm">
         <User className="w-8 h-8 mb-2 opacity-30" />
         Click any candidate to inspect the workflow.
       </div>
@@ -420,96 +424,116 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+      {/* Header: name + score badge + stage badge */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold shrink-0"
-            style={{ backgroundColor: "#e2e8f0", color: "#475569" }}
+            className="rounded-full flex items-center justify-center font-semibold shrink-0"
+            style={{ width: 56, height: 56, backgroundColor: "#f1f5f9", color: "#64748b", fontSize: 15, border: "1px solid #e2e8f0" }}
           >
             {candidate.initials}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-xl font-bold text-gray-900">{candidate.name}</h3>
-              <span
-                className="px-2 py-0.5 rounded-full text-xs font-semibold text-white"
-                style={{ backgroundColor: "#0f172a" }}
-              >
-                Score {candidate.score}
-              </span>
+              <h3 style={{ fontSize: 20, fontWeight: 600, color: "#0f172a", lineHeight: 1.2 }}>
+                {candidate.name}
+              </h3>
+              {candidate.score > 0 && (
+                <span
+                  className="rounded-full text-white"
+                  style={{ backgroundColor: "#0f172a", fontSize: 12, fontWeight: 600, padding: "3px 10px" }}
+                >
+                  Score {candidate.score}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
-              <span className="flex items-center gap-1">
-                <Car className="w-3.5 h-3.5" />
+            <div className="flex flex-wrap gap-3 mt-1.5" style={{ fontSize: 13, color: "#64748b" }}>
+              <span className="inline-flex items-center gap-1">
+                <Car style={{ width: 14, height: 14 }} />
                 {candidate.transport}
               </span>
               {candidate.availability && (
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5" />
+                <span className="inline-flex items-center gap-1">
+                  <Calendar style={{ width: 14, height: 14 }} />
                   {candidate.availability}
                 </span>
               )}
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5" />
-                ZIP {candidate.zip}
-              </span>
+              <span>ZIP {candidate.zip}</span>
             </div>
           </div>
         </div>
         <span
-          className="px-2.5 py-1 rounded-full text-xs font-semibold shrink-0"
-          style={{ backgroundColor: badge.bg, color: badge.text }}
+          className="rounded-full border shrink-0"
+          style={{
+            backgroundColor: badge.bg,
+            color: badge.text,
+            borderColor: badge.bg,
+            fontSize: 12,
+            fontWeight: 600,
+            padding: "4px 12px",
+            whiteSpace: "nowrap",
+          }}
         >
           {candidate.stage}
         </span>
       </div>
 
-      {/* AI Summary */}
+      {/* AI Summary — soft bordered card */}
       {candidate.aiSummary && (
-        <div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">AI summary</p>
-          <p className="text-sm text-gray-600 leading-relaxed">{candidate.aiSummary}</p>
+        <div
+          className="rounded-2xl"
+          style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px 16px" }}
+        >
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 6 }}>AI summary</p>
+          <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.65 }}>{candidate.aiSummary}</p>
         </div>
       )}
 
-      {/* Score grid */}
+      {/* Metric score boxes — 2-col grid, each in a soft bordered card */}
       {sc && (
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-          {[
-            { label: "Communication", value: sc.communication },
-            { label: "Reliability", value: sc.reliability },
-            { label: "Quality", value: sc.quality },
-            { label: "Professionalism", value: sc.professionalism },
-          ].map(({ label, value }) => {
-            const { label: lbl, color } = scoreLabel(value);
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            ["Communication", sc.communication],
+            ["Reliability", sc.reliability],
+            ["Quality", sc.quality],
+            ["Professionalism", sc.professionalism],
+          ] as [string, number][]).map(([label, value]) => {
+            const { label: lbl } = scoreLabel(value);
             return (
-              <div key={label}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-500">{label}</span>
-                  <span className="text-xs font-semibold" style={{ color }}>{lbl}</span>
+              <div
+                key={label}
+                className="rounded-2xl"
+                style={{ border: "1px solid #e2e8f0", padding: "12px 14px" }}
+              >
+                <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: "#64748b" }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{lbl}</span>
                 </div>
                 <ScoreBar value={value} />
-                <span className="text-xs text-gray-400">{value}/100</span>
+                <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>{value}/100</p>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Pipeline checklist */}
+      {/* Pipeline checklist — each row in its own bordered card */}
       {cl && (
         <div>
-          <p className="text-sm font-semibold text-gray-900 mb-2">Pipeline checklist</p>
-          <div className="space-y-0">
-            {[
-              { label: "Application submitted", status: cl.applicationSubmitted },
-              { label: "AI interview started", status: cl.aiInterviewStarted },
-              { label: "AI interview completed", status: cl.aiInterviewCompleted },
-              { label: "Nudge scheduled", status: cl.nudgeScheduled },
-            ].map(({ label, status }) => (
-              <div key={label} className="flex items-center justify-between py-2.5 border-b border-gray-100">
-                <span className="text-sm text-gray-700">{label}</span>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a", marginBottom: 10 }}>Pipeline checklist</p>
+          <div className="space-y-2">
+            {([
+              ["Application submitted", cl.applicationSubmitted],
+              ["AI interview started", cl.aiInterviewStarted],
+              ["AI interview completed", cl.aiInterviewCompleted],
+              ["Nudge scheduled", cl.nudgeScheduled],
+            ] as [string, "done" | "pending" | "in-progress"][]).map(([label, status]) => (
+              <div
+                key={label}
+                className="flex items-center justify-between rounded-2xl"
+                style={{ border: "1px solid #e2e8f0", padding: "10px 14px" }}
+              >
+                <span style={{ fontSize: 14, color: "#0f172a" }}>{label}</span>
                 <ChecklistIcon status={status} />
               </div>
             ))}
@@ -517,49 +541,55 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
         </div>
       )}
 
-      {/* Interviewer notes */}
+      {/* Interviewer notes — each note in its own bordered card */}
       <div>
-        <p className="text-sm font-semibold text-gray-900 mb-2">Interviewer notes</p>
+        <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a", marginBottom: 10 }}>Interviewer notes</p>
         <div className="space-y-2">
-          {(notes.length > 0 ? notes : [""]).map((note, i) => (
-            <input
+          {(editableNotes.length > 0 ? editableNotes : [""]).map((note, i) => (
+            <div
               key={i}
-              type="text"
-              value={note}
-              onChange={e => {
-                const updated = [...notes];
-                updated[i] = e.target.value;
-                setNotes(updated);
-              }}
-              placeholder="Add a note…"
-              className="w-full border-b border-gray-200 py-1.5 text-sm text-gray-700 bg-transparent outline-none focus:border-gray-400 transition-colors"
-            />
+              className="rounded-2xl"
+              style={{ border: "1px solid #e2e8f0", backgroundColor: "#ffffff", padding: "10px 14px" }}
+            >
+              <input
+                type="text"
+                value={note}
+                onChange={e => {
+                  const updated = [...editableNotes];
+                  updated[i] = e.target.value;
+                  setEditableNotes(updated);
+                }}
+                placeholder="Add a note…"
+                className="w-full bg-transparent outline-none"
+                style={{ fontSize: 13, color: "#475569" }}
+              />
+            </div>
           ))}
         </div>
       </div>
 
       {/* Action buttons */}
-      <div className="grid grid-cols-2 gap-2 pt-1">
+      <div className="grid grid-cols-2 gap-2.5 pt-1">
         <button
-          className="col-span-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
           style={{ backgroundColor: "#0f172a" }}
         >
           Advance stage
         </button>
         <button
-          className="col-span-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors hover:bg-gray-50"
-          style={{ borderColor: "#e5e7eb", color: "#374151" }}
+          className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50"
+          style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
         >
           Send message
         </button>
         <button
-          className="col-span-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors hover:bg-gray-50"
-          style={{ borderColor: "#e5e7eb", color: "#374151" }}
+          className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50"
+          style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
         >
           Book interview
         </button>
         <button
-          className="col-span-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
           style={{ backgroundColor: "#ef4444" }}
         >
           Reject
