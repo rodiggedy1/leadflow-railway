@@ -3,7 +3,7 @@
  * Pixel-perfect match to the provided design screenshots.
  * Data is static/mock for now; will be wired to backend in a future phase.
  */
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   User,
   MessageSquare,
