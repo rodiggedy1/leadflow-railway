@@ -1058,14 +1058,38 @@ function ConversationDrawer({
   );
   const [bookedAmountSaved, setBookedAmountSaved] = useState(false);
   const updateBookedAmountMutation = trpc.leads.updateBookedAmount.useMutation({
+    onMutate: async (vars) => {
+      // Cancel any in-flight refetches so they don't overwrite the optimistic value
+      await utils.leads.list.cancel();
+      // Snapshot previous cache for rollback
+      const prev = utils.leads.list.getData({});
+      // Optimistically patch the matching session in the list cache
+      utils.leads.list.setData({}, (old) =>
+        old
+          ? old.map((s: any) =>
+              s.id === vars.sessionId ? { ...s, bookedAmount: vars.bookedAmount } : s
+            )
+          : old
+      );
+      return { prev };
+    },
     onSuccess: (_, vars) => {
+      // Also update the open drawer session so the hint text refreshes
       onSessionUpdate({ bookedAmount: vars.bookedAmount });
       utils.leads.stats.invalidate();
       setBookedAmountSaved(true);
       setTimeout(() => setBookedAmountSaved(false), 2000);
       toast.success(vars.bookedAmount === null ? "Booked amount cleared" : `Booked amount set to $${vars.bookedAmount}`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e, _vars, ctx) => {
+      // Roll back the optimistic update on failure
+      if (ctx?.prev) utils.leads.list.setData({}, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      // Sync with server to confirm the write
+      utils.leads.list.invalidate();
+    },
   });
 
   // Assign fallback timestamps to messages that don't have one.
