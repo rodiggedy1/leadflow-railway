@@ -930,6 +930,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const initialScrollDone = useRef(false);
   const prevMsgLen = useRef(0);
 
+  // "New message" toast — shown when a message arrives while scrolled up
+  const [cmdNewMsgToast, setCmdNewMsgToast] = useState<{ from: string } | null>(null);
+  const cmdToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showCmdToast(from: string) {
+    if (cmdToastTimer.current) clearTimeout(cmdToastTimer.current);
+    setCmdNewMsgToast({ from });
+    cmdToastTimer.current = setTimeout(() => setCmdNewMsgToast(null), 6000);
+  }
+
+  function dismissCmdToast() {
+    if (cmdToastTimer.current) clearTimeout(cmdToastTimer.current);
+    setCmdNewMsgToast(null);
+    threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
   // Returns true if the scroll container is within 250px of the bottom.
   // 250px threshold (vs old 150px) ensures we catch cases where the compose
   // box is tall or the last message is partially visible.
@@ -953,16 +969,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         });
       });
     } else if (len > prevMsgLen.current) {
+      const newest = channelMsgs[channelMsgs.length - 1];
       prevMsgLen.current = len;
-      // New message: scroll into view if user is near the bottom.
-      // scrollIntoView is immune to stale scrollHeight — the browser resolves
-      // the sentinel position at paint time, not at effect time.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const container = threadScrollRef.current;
           if (!container || !threadBottomRef.current) return;
           if (isCmdNearBottom(container)) {
+            // Near bottom — scroll down and dismiss any existing toast
+            setCmdNewMsgToast(null);
             threadBottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+          } else if (newest && newest.from !== callerName) {
+            // Scrolled up and a message from someone else arrived — show toast
+            showCmdToast(newest.from);
           }
         });
       });
@@ -1393,7 +1412,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           );
         })()}
 
-        {/* Conversation thread */}
+        {/* Conversation thread — relative wrapper for toast overlay */}
+        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* New-message toast — WhatsApp pattern */}
+          {cmdNewMsgToast && (
+            <button
+              onClick={dismissCmdToast}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600 active:scale-95 transition-all animate-in slide-in-from-bottom-2 duration-200"
+            >
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              New message from {cmdNewMsgToast.from}
+            </button>
+          )}
         <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
@@ -2034,6 +2064,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <div ref={threadBottomRef} />
           </div>
         </div>
+        </div>{/* end relative wrapper */}
 
         {/* Composer */}
         <div className="px-6 py-3 border-t border-slate-100 bg-white">

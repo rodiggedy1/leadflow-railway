@@ -631,3 +631,9 @@
 - [x] Fix OpsChat channel scroll: same sentinel pattern
 - [x] Fix OpsChat job thread scroll: same sentinel pattern
 - [x] Increase isNearBottom threshold to 250px so it catches more "close enough" cases
+
+## New Message Toast (WhatsApp pattern)
+
+- [x] Add floating "↓ New message from X" toast to CommandChat when scrolled up
+- [x] Add same toast to OpsChat job thread view
+- [x] Add same toast to OpsChat channel view

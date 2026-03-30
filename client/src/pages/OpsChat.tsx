@@ -1389,9 +1389,37 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const prevJobThreadLen = useRef(0);
   const prevChannelMsgLen = useRef(0);
 
-  // Returns true if the scroll container is within 120px of the bottom.
+  // "New message" toasts — WhatsApp pattern
+  const [jobNewMsgToast, setJobNewMsgToast] = useState<{ from: string } | null>(null);
+  const [chanNewMsgToast, setChanNewMsgToast] = useState<{ from: string } | null>(null);
+  const jobToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chanToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showJobToast(from: string) {
+    if (jobToastTimer.current) clearTimeout(jobToastTimer.current);
+    setJobNewMsgToast({ from });
+    jobToastTimer.current = setTimeout(() => setJobNewMsgToast(null), 6000);
+  }
+  function dismissJobToast() {
+    if (jobToastTimer.current) clearTimeout(jobToastTimer.current);
+    setJobNewMsgToast(null);
+    threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  function showChanToast(from: string) {
+    if (chanToastTimer.current) clearTimeout(chanToastTimer.current);
+    setChanNewMsgToast({ from });
+    chanToastTimer.current = setTimeout(() => setChanNewMsgToast(null), 6000);
+  }
+  function dismissChanToast() {
+    if (chanToastTimer.current) clearTimeout(chanToastTimer.current);
+    setChanNewMsgToast(null);
+    threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  // Returns true if the scroll container is within 250px of the bottom.
   function isNearBottom(el: HTMLDivElement) {
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 250;
   }
 
   // Job thread scroll behaviour:
@@ -1416,13 +1444,19 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         });
       });
     } else if (threadLen > prevJobThreadLen.current) {
+      const newest = jobDetail?.thread?.[threadLen - 1];
       prevJobThreadLen.current = threadLen;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const el = jobScrollRef.current;
           const sentinel = threadBottomRef.current;
           if (!el || !sentinel) return;
-          if (isNearBottom(el)) sentinel.scrollIntoView({ behavior: "smooth", block: "end" });
+          if (isNearBottom(el)) {
+            setJobNewMsgToast(null);
+            sentinel.scrollIntoView({ behavior: "smooth", block: "end" });
+          } else if (newest && !myNames.has(newest.from)) {
+            showJobToast(newest.from);
+          }
         });
       });
     }
@@ -1444,15 +1478,19 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         });
       });
     } else if (msgLen > prevChannelMsgLen.current) {
+      const newest = channelMsgs[msgLen - 1];
       prevChannelMsgLen.current = msgLen;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const el = channelScrollRef.current;
           const sentinel = threadBottomRef.current;
           if (!el || !sentinel) return;
-          // 250px threshold — wider than old 120px to catch tall compose boxes
-          const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 250;
-          if (nearBottom) sentinel.scrollIntoView({ behavior: "smooth", block: "end" });
+          if (isNearBottom(el)) {
+            setChanNewMsgToast(null);
+            sentinel.scrollIntoView({ behavior: "smooth", block: "end" });
+          } else if (newest && !myNames.has(newest.from)) {
+            showChanToast(newest.from);
+          }
         });
       });
     }
@@ -2147,6 +2185,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <span className="text-xs font-semibold text-red-600">Requires response</span>
                       )}
                     </div>
+                    {/* Relative wrapper for new-message toast */}
+                    <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+                      {jobNewMsgToast && (
+                        <button
+                          onClick={dismissJobToast}
+                          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600 active:scale-95 transition-all animate-in slide-in-from-bottom-2 duration-200"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                          New message from {jobNewMsgToast.from}
+                        </button>
+                      )}
                     <div ref={jobScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                       <div className="space-y-4">
                         {jobDetail.thread.length === 0 ? (
@@ -2184,6 +2233,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                         <div ref={threadBottomRef} />
                       </div>
                     </div>
+                    </div>{/* end relative wrapper */}
                   </div>
 
                   {/* Quick actions + Composer */}
@@ -2420,6 +2470,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 {notifMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
               </button>
             </div>
+            {/* Relative wrapper for new-message toast */}
+            <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+              {chanNewMsgToast && (
+                <button
+                  onClick={dismissChanToast}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600 active:scale-95 transition-all animate-in slide-in-from-bottom-2 duration-200"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                  New message from {chanNewMsgToast.from}
+                </button>
+              )}
             <div ref={channelScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <div className="space-y-4">
                 {channelLoading ? (
@@ -2457,6 +2518,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 <div ref={threadBottomRef} />
               </div>
             </div>
+            </div>{/* end relative wrapper */}
             <div className="px-6 py-3 border-t border-slate-100 bg-white">
               {/* Staged photo preview strip */}
               {stagedPhotos.length > 0 && (
