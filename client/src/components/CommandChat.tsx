@@ -953,6 +953,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     return el.scrollHeight - el.scrollTop - el.clientHeight < 250;
   }
 
+  // When the composer textarea grows (multi-line typing), the scroll container
+  // shrinks and the user appears to scroll up even though they haven't moved.
+  // A ResizeObserver on the composer re-pins to the bottom whenever it resizes,
+  // as long as the user was already near the bottom before the resize.
+  useEffect(() => {
+    const composer = composerRef.current;
+    const container = threadScrollRef.current;
+    const sentinel = threadBottomRef.current;
+    if (!composer || !container || !sentinel) return;
+    const ro = new ResizeObserver(() => {
+      // Only auto-scroll if we're near the bottom (within 350px — wider to account for the
+      // growing composer itself shrinking clientHeight)
+      const gap = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (gap < 350) {
+        sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+      }
+    });
+    ro.observe(composer);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     if (opsChatState !== "open") return;
     const el = threadScrollRef.current;

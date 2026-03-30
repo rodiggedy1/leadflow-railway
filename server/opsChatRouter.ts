@@ -825,32 +825,38 @@ export const opsChatRouter = router({
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db || input.messageIds.length === 0) return { reads: [] as { messageId: number; callerName: string }[] };
-      // Fetch all read rows for this channel/thread in one query
-      const rows = await db
-        .select({
-          callerName: opsChatReads.callerName,
-          callerId: opsChatReads.callerId,
-          lastReadMessageId: opsChatReads.lastReadMessageId,
-        })
-        .from(opsChatReads)
-        .where(
-          and(
-            input.channel ? eq(opsChatReads.channel, input.channel) : isNull(opsChatReads.channel),
-            input.cleanerJobId ? eq(opsChatReads.cleanerJobId, input.cleanerJobId) : isNull(opsChatReads.cleanerJobId),
-          )
-        );
-      // Return flat list: (msgId, readerName) for every reader whose lastRead >= msgId
-      // Excludes self. Client builds the map.
-      const myCallerId = ctx.opsCaller.id;
-      const reads: { messageId: number; callerName: string }[] = [];
-      for (const msgId of input.messageIds) {
-        for (const r of rows) {
-          if (r.callerId !== myCallerId && r.lastReadMessageId >= msgId) {
-            reads.push({ messageId: msgId, callerName: r.callerName });
+      try {
+        // Fetch all read rows for this channel/thread in one query
+        const rows = await db
+          .select({
+            callerName: opsChatReads.callerName,
+            callerId: opsChatReads.callerId,
+            lastReadMessageId: opsChatReads.lastReadMessageId,
+          })
+          .from(opsChatReads)
+          .where(
+            and(
+              input.channel ? eq(opsChatReads.channel, input.channel) : isNull(opsChatReads.channel),
+              input.cleanerJobId ? eq(opsChatReads.cleanerJobId, input.cleanerJobId) : isNull(opsChatReads.cleanerJobId),
+            )
+          );
+        // Return flat list: (msgId, readerName) for every reader whose lastRead >= msgId
+        // Excludes self. Client builds the map.
+        const myCallerId = ctx.opsCaller.id;
+        const reads: { messageId: number; callerName: string }[] = [];
+        for (const msgId of input.messageIds) {
+          for (const r of rows) {
+            if (r.callerId !== myCallerId && r.lastReadMessageId >= msgId) {
+              reads.push({ messageId: msgId, callerName: r.callerName });
+            }
           }
         }
+        return { reads };
+      } catch (e) {
+        // DB hiccup — return empty rather than crashing the server
+        console.error('[getSeenByBulk] DB error, returning empty:', e);
+        return { reads: [] as { messageId: number; callerName: string }[] };
       }
-      return { reads };
     }),
 
   /**
@@ -1577,19 +1583,25 @@ export const opsChatRouter = router({
       if (!db) return { reminders: [] };
       const callerId = ctx.opsCaller.id;
       const now = Date.now();
-      const rows = await db
-        .select()
-        .from(opsReminders)
-        .where(
-          and(
-            eq(opsReminders.callerId, callerId),
-            lte(opsReminders.triggerAt, now),
-            isNull(opsReminders.dismissedAt),
-            // not snoozed or snooze has expired
-            or(isNull(opsReminders.snoozedUntil), lte(opsReminders.snoozedUntil, now))
-          )
-        );
-      return { reminders: rows };
+      try {
+        const rows = await db
+          .select()
+          .from(opsReminders)
+          .where(
+            and(
+              eq(opsReminders.callerId, callerId),
+              lte(opsReminders.triggerAt, now),
+              isNull(opsReminders.dismissedAt),
+              // not snoozed or snooze has expired
+              or(isNull(opsReminders.snoozedUntil), lte(opsReminders.snoozedUntil, now))
+            )
+          );
+        return { reminders: rows };
+      } catch (e) {
+        // DB hiccup — return empty rather than crashing the server
+        console.error('[getDueReminders] DB error, returning empty:', e);
+        return { reminders: [] };
+      }
     }),
 
   /**

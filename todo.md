@@ -637,3 +637,8 @@
 - [x] Add floating "↓ New message from X" toast to CommandChat when scrolled up
 - [x] Add same toast to OpsChat job thread view
 - [x] Add same toast to OpsChat channel view
+
+## Bug Fixes (2026-03-30)
+
+- [x] Fix server crash returning HTML instead of JSON — wrapped getSeenByBulk + getDueReminders in try/catch
+- [x] Fix chat scroll-on-entry: added ResizeObserver on composer textarea to re-pin scroll when typing

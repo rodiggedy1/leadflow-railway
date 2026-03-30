@@ -1497,6 +1497,29 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelMsgs.length, activeChannel, opsChatState]);
 
+  // When the composer textarea grows (multi-line typing), the scroll container shrinks.
+  // ResizeObserver re-pins to bottom whenever the composer resizes, if already near bottom.
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+    const ro = new ResizeObserver(() => {
+      // Job thread view
+      const jobEl = jobScrollRef.current;
+      const chanEl = channelScrollRef.current;
+      const sentinel = threadBottomRef.current;
+      if (!sentinel) return;
+      // Check whichever scroll container is currently visible
+      const activeEl = jobEl && jobEl.clientHeight > 0 ? jobEl : chanEl;
+      if (!activeEl) return;
+      const gap = activeEl.scrollHeight - activeEl.scrollTop - activeEl.clientHeight;
+      if (gap < 350) {
+        sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+      }
+    });
+    ro.observe(composer);
+    return () => ro.disconnect();
+  }, []);
+
   // Play notification sound when new job thread messages arrive from others.
   // Use .length as the dep (not the array object) so we only fire when count changes,
   // not on every 15-second refetch that returns a new array reference.
