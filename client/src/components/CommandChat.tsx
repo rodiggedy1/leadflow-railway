@@ -1437,7 +1437,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         })()}
 
         {/* Conversation thread — relative wrapper for toast overlay */}
-        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="relative flex-1 min-h-0 flex flex-col">
           {/* New-message toast — WhatsApp pattern */}
           {cmdNewMsgToast && (
             <button
@@ -2091,7 +2091,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>{/* end relative wrapper */}
 
         {/* Composer */}
-        <div className="px-6 py-3 border-t border-slate-100 bg-white">
+        <div className="px-6 py-3 border-t border-slate-100 bg-white shrink-0">
           {/* Quick-action chips */}
           <div className="flex gap-2 mb-3 flex-wrap">
             <button

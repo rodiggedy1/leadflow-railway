@@ -2264,7 +2264,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   </div>
 
                   {/* Quick actions + Composer */}
-                  <div className="px-6 py-3 border-t border-slate-100 bg-white">
+                   <div className="px-6 py-3 border-t border-slate-100 bg-white shrink-0">
                     {/* Reply preview bar */}
                     {jobReplyTo && (
                       <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
@@ -2546,7 +2546,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </div>
             </div>
             </div>{/* end relative wrapper */}
-            <div className="px-6 py-3 border-t border-slate-100 bg-white">
+            <div className="px-6 py-3 border-t border-slate-100 bg-white shrink-0">
               {/* Staged photo preview strip */}
               {stagedPhotos.length > 0 && (
                 <div className="flex gap-2 mb-3 flex-wrap">
