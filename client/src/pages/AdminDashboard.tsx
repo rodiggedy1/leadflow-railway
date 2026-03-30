@@ -3184,7 +3184,7 @@ export default function AdminDashboard() {
     return "all";
   });
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
-  const [statsMode, setStatsMode] = useState<'organic' | 'campaign'>('organic');
+  const [statsMode, setStatsMode] = useState<'all' | 'organic' | 'campaign'>('all');
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [agentFilter, setAgentFilter] = useState<string>("all");
@@ -3681,8 +3681,17 @@ export default function AdminDashboard() {
         {/* Summary + date filter row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
           <div className="flex items-center gap-3">
-            {/* Organic / Campaign toggle */}
+            {/* All / Organic / Campaign toggle */}
             <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: '#E5E5E5' }}>
+              <button
+                onClick={() => setStatsMode('all')}
+                className="px-3 py-1.5 text-sm font-medium transition-colors"
+                style={statsMode === 'all'
+                  ? { backgroundColor: '#000000', color: '#FFFFFF' }
+                  : { backgroundColor: '#FFFFFF', color: '#666666' }}
+              >
+                All
+              </button>
               <button
                 onClick={() => setStatsMode('organic')}
                 className="px-3 py-1.5 text-sm font-medium transition-colors"
@@ -3704,7 +3713,11 @@ export default function AdminDashboard() {
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif' }}>
-                {statsMode === 'organic' ? (stats?.organic?.total ?? 0) : (stats?.campaign?.total ?? 0)}
+                {statsMode === 'all'
+                  ? (stats?.total ?? 0)
+                  : statsMode === 'organic'
+                    ? (stats?.organic?.total ?? 0)
+                    : (stats?.campaign?.total ?? 0)}
               </span>
               <span className="text-sm" style={{ color: '#888888' }}>leads</span>
             </div>
@@ -3769,16 +3782,20 @@ export default function AdminDashboard() {
             </div>
             {/* Leads — scoped to statsMode */}
             {(() => {
-              const view = statsMode === 'organic' ? stats.organic : stats.campaign;
+              const view = statsMode === 'all'
+                ? { total: stats.total, bookedCount: stats.bookedCount, bookedRevenue: stats.bookedRevenue, conversionRate: stats.conversionRate }
+                : statsMode === 'organic' ? stats.organic : stats.campaign;
               const leadsTotal = view?.total ?? 0;
               return (
                 <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
                   <span className="hj-metric-label">Leads</span>
                   <span className="hj-metric-value hj-metric-value--accent">{leadsTotal.toLocaleString()}</span>
                   <span className="hj-metric-sub">
-                    {statsMode === 'organic' && visitorStats?.visitors
-                      ? `${((leadsTotal / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
-                      : statsMode === 'campaign' ? 'campaign replies' : 'form submissions'}
+                    {statsMode === 'all'
+                      ? 'all sources'
+                      : statsMode === 'organic' && visitorStats?.visitors
+                        ? `${((leadsTotal / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
+                        : statsMode === 'campaign' ? 'campaign replies' : 'form submissions'}
                   </span>
                   <Sparkline data={dailyTrend.map(d => d.leads)} color="#f59e0b" />
                 </div>
@@ -3787,7 +3804,9 @@ export default function AdminDashboard() {
 
             {/* Jobs Booked — scoped to statsMode */}
             {(() => {
-              const view = statsMode === 'organic' ? stats.organic : stats.campaign;
+              const view = statsMode === 'all'
+                ? { total: stats.total, bookedCount: stats.bookedCount, bookedRevenue: stats.bookedRevenue, conversionRate: stats.conversionRate }
+                : statsMode === 'organic' ? stats.organic : stats.campaign;
               const bookedCnt = view?.bookedCount ?? 0;
               const leadsTotal = view?.total ?? 0;
               const convRate = view?.conversionRate ?? 0;
@@ -3803,7 +3822,9 @@ export default function AdminDashboard() {
 
             {/* Booked Revenue — scoped to statsMode */}
             {(() => {
-              const view = statsMode === 'organic' ? stats.organic : stats.campaign;
+              const view = statsMode === 'all'
+                ? { total: stats.total, bookedCount: stats.bookedCount, bookedRevenue: stats.bookedRevenue, conversionRate: stats.conversionRate }
+                : statsMode === 'organic' ? stats.organic : stats.campaign;
               const rev = view?.bookedRevenue ?? 0;
               const bookedCnt = view?.bookedCount ?? 0;
               // Source breakdown: for organic mode use revenueBySource; for campaign show single bar
