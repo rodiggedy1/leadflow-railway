@@ -618,3 +618,9 @@
 - [x] Replace getReactions polling (10s) with SSE-triggered refetch
 - [x] Add useOpsStream hook — manages EventSource lifecycle, reconnect, and refetch dispatch
 - [x] Add live Today's Revenue ticker to Command Chat header
+
+## SSE Rate Limit Fix
+
+- [x] Fix SSE auth to use local JWT verification only (no OAuth server round-trip)
+- [x] Add exponential backoff reconnect with jitter on the client useOpsStream hook (5s min, 60s max)
+- [x] Verify no rate limit errors after fix

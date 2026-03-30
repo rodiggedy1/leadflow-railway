@@ -29,8 +29,10 @@ export type OpsStreamCallbacks = {
   onConnected?: () => void;
 };
 
-const MIN_RETRY_MS = 1_000;
-const MAX_RETRY_MS = 30_000;
+// Minimum 5s before first reconnect attempt — prevents thundering herd when
+// multiple tabs reconnect simultaneously after a deploy or server restart.
+const MIN_RETRY_MS = 5_000;
+const MAX_RETRY_MS = 60_000;
 
 export function useOpsStream(callbacks: OpsStreamCallbacks) {
   const cbRef = useRef(callbacks);
@@ -92,11 +94,14 @@ export function useOpsStream(callbacks: OpsStreamCallbacks) {
         es = null;
         if (unmounted) return;
 
-        // Exponential back-off reconnect
+        // Exponential back-off with ±20% jitter — spreads reconnects across
+        // multiple tabs so they don't all hit the server simultaneously.
+        const jitter = retryDelay * 0.2 * (Math.random() * 2 - 1);
+        const delay = Math.round(retryDelay + jitter);
         retryTimer = setTimeout(() => {
           retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
           connect();
-        }, retryDelay);
+        }, delay);
       };
     }
 
