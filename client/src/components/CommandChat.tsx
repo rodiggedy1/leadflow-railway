@@ -994,15 +994,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     } else if (len > prevMsgLen.current) {
       const newest = channelMsgs[channelMsgs.length - 1];
       prevMsgLen.current = len;
+      const isMine = newest?.from === callerName;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const container = threadScrollRef.current;
           if (!container || !threadBottomRef.current) return;
-          if (isCmdNearBottom(container)) {
-            // Near bottom — scroll down and dismiss any existing toast
+          if (isMine || isCmdNearBottom(container)) {
+            // Own message OR already near bottom — always scroll down
             setCmdNewMsgToast(null);
-            threadBottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-          } else if (newest && newest.from !== callerName) {
+            threadBottomRef.current.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+          } else if (newest && !isMine) {
             // Scrolled up and a message from someone else arrived — show toast
             showCmdToast(newest.from);
           }
@@ -2255,12 +2256,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <Textarea
               ref={composerRef}
               value={composer}
-              onChange={(e) => {
-                setComposer(e.target.value);
-                requestAnimationFrame(() => {
-                  threadBottomRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
-                });
-              }}
+              onChange={(e) => setComposer(e.target.value)}
               placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Type a message or drop photos…"}
               rows={2}
               className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
