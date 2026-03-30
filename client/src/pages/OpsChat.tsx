@@ -1395,21 +1395,22 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   }
 
   // Job thread scroll behaviour:
-  //   - First open: jump to bottom instantly.
+  //   - First open: jump to bottom instantly via sentinel scrollIntoView.
   //   - New message arrives: only scroll if already near bottom (don't interrupt reading).
   //   - Switching back to a view: do nothing — DOM node was never destroyed, position preserved.
   //
-  // Double-rAF: first frame = React DOM commit, second frame = browser layout complete.
-  // This prevents the "last message half-hidden" bug caused by stale scrollHeight.
+  // WHY scrollIntoView instead of scrollTo(scrollHeight):
+  //   scrollHeight is stale at effect time when new messages are tall (lead cards, images).
+  //   scrollIntoView resolves the sentinel position at paint time — immune to this race.
   useEffect(() => {
     if (opsChatState !== "open") return;
     const threadLen = jobDetail?.thread?.length ?? 0;
     if (!jobInitialScrollDone.current) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          const el = jobScrollRef.current;
-          if (!el) return;
-          el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+          const sentinel = threadBottomRef.current;
+          if (!sentinel) return;
+          sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
           jobInitialScrollDone.current = true;
           prevJobThreadLen.current = threadLen;
         });
@@ -1419,24 +1420,25 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const el = jobScrollRef.current;
-          if (!el) return;
-          if (isNearBottom(el)) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          const sentinel = threadBottomRef.current;
+          if (!el || !sentinel) return;
+          if (isNearBottom(el)) sentinel.scrollIntoView({ behavior: "smooth", block: "end" });
         });
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobDetail?.thread?.length, selectedJobId, opsChatState]);
 
-  // Channel view scroll behaviour (same logic, double-rAF for correct scrollHeight).
+  // Channel view scroll behaviour — uses sentinel scrollIntoView (same as job thread).
   useEffect(() => {
     if (opsChatState !== "open") return;
     const msgLen = channelMsgs.length;
     if (!channelInitialScrollDone.current) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          const el = channelScrollRef.current;
-          if (!el) return;
-          el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+          const sentinel = threadBottomRef.current;
+          if (!sentinel) return;
+          sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
           channelInitialScrollDone.current = true;
           prevChannelMsgLen.current = msgLen;
         });
@@ -1446,8 +1448,11 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const el = channelScrollRef.current;
-          if (!el) return;
-          if (isNearBottom(el)) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          const sentinel = threadBottomRef.current;
+          if (!el || !sentinel) return;
+          // 250px threshold — wider than old 120px to catch tall compose boxes
+          const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 250;
+          if (nearBottom) sentinel.scrollIntoView({ behavior: "smooth", block: "end" });
         });
       });
     }

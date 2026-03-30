@@ -929,30 +929,41 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const { state: opsChatState } = useOpsChatWindow();
   const initialScrollDone = useRef(false);
   const prevMsgLen = useRef(0);
+
+  // Returns true if the scroll container is within 250px of the bottom.
+  // 250px threshold (vs old 150px) ensures we catch cases where the compose
+  // box is tall or the last message is partially visible.
+  function isCmdNearBottom(el: HTMLDivElement) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 250;
+  }
+
   useEffect(() => {
     if (opsChatState !== "open") return;
     const el = threadScrollRef.current;
-    if (!el) return;
+    const sentinel = threadBottomRef.current;
+    if (!el || !sentinel) return;
     const len = channelMsgs.length;
     if (!initialScrollDone.current) {
-      // First open: double-rAF then jump instantly to bottom
+      // First open: jump instantly to bottom via sentinel
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (!threadScrollRef.current) return;
-          threadScrollRef.current.scrollTo({ top: threadScrollRef.current.scrollHeight, behavior: "instant" as ScrollBehavior });
+          sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior });
           initialScrollDone.current = true;
           prevMsgLen.current = len;
         });
       });
     } else if (len > prevMsgLen.current) {
       prevMsgLen.current = len;
-      // New message: double-rAF then smooth-scroll if near bottom
+      // New message: scroll into view if user is near the bottom.
+      // scrollIntoView is immune to stale scrollHeight — the browser resolves
+      // the sentinel position at paint time, not at effect time.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const container = threadScrollRef.current;
-          if (!container) return;
-          const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-          if (nearBottom) container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+          if (!container || !threadBottomRef.current) return;
+          if (isCmdNearBottom(container)) {
+            threadBottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+          }
         });
       });
     }

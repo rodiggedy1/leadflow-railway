@@ -624,3 +624,10 @@
 - [x] Fix SSE auth to use local JWT verification only (no OAuth server round-trip)
 - [x] Add exponential backoff reconnect with jitter on the client useOpsStream hook (5s min, 60s max)
 - [x] Verify no rate limit errors after fix
+
+## Auto-Scroll Fix
+
+- [x] Fix CommandChat scroll: replace double-rAF + scrollHeight with sentinel div + scrollIntoView
+- [x] Fix OpsChat channel scroll: same sentinel pattern
+- [x] Fix OpsChat job thread scroll: same sentinel pattern
+- [x] Increase isNearBottom threshold to 250px so it catches more "close enough" cases
