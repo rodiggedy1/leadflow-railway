@@ -1263,49 +1263,53 @@ function ConversationDrawer({
                 </SelectContent>
               </Select>
             </div>
-            {/* Booked Amount */}
-            {session.isBooked === 1 && (
-              <div className="px-4 py-3 border-b" style={{ borderColor: "#bbf7d0", backgroundColor: "#f0fdf4" }}>
-                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Booked Amount</p>
-                <div className="flex items-center gap-1.5">
-                  <div className="relative flex-1">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder={computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}
-                      value={bookedAmountInput}
-                      onChange={e => setBookedAmountInput(e.target.value)}
-                      className="pl-5 h-8 text-xs bg-white"
-                    />
-                  </div>
-                  {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">✓</span>}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 px-2.5 text-xs shrink-0 bg-white"
-                    disabled={setBookedAmountMutation.isPending}
-                    onClick={() => {
-                      const val = bookedAmountInput.trim();
-                      const parsed = val === "" ? null : parseInt(val, 10);
-                      if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
-                        toast.error("Enter a valid dollar amount");
-                        return;
-                      }
-                      setBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
-                    }}
-                  >
-                    {setBookedAmountMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-                  </Button>
+            {/* Booked Amount — always shown so agents can set/override the price for any lead type */}
+            <div className="px-4 py-3 border-b" style={{ borderColor: "#bbf7d0", backgroundColor: "#f0fdf4" }}>
+              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Booked Amount</p>
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder={
+                      session.bookedAmount != null
+                        ? String(session.bookedAmount)
+                        : computeTotalQuote(session.quotedPrice, session.extras) ?? "0"
+                    }
+                    value={bookedAmountInput}
+                    onChange={e => setBookedAmountInput(e.target.value)}
+                    className="pl-5 h-8 text-xs bg-white"
+                  />
                 </div>
-                <p className="text-xs text-green-600 mt-1">
-                  {session.bookedAmount !== null && session.bookedAmount !== undefined
-                    ? `Override: $${session.bookedAmount}`
-                    : `Using quote: $${computeTotalQuote(session.quotedPrice, session.extras) ?? "0"}`
-                  }
-                </p>
+                {bookedAmountSaved && <span className="text-xs text-green-600 font-medium shrink-0">✓</span>}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2.5 text-xs shrink-0 bg-white"
+                  disabled={setBookedAmountMutation.isPending}
+                  onClick={() => {
+                    const val = bookedAmountInput.trim();
+                    const parsed = val === "" ? null : parseInt(val, 10);
+                    if (val !== "" && (isNaN(parsed!) || parsed! < 0)) {
+                      toast.error("Enter a valid dollar amount");
+                      return;
+                    }
+                    setBookedAmountMutation.mutate({ sessionId: session.id, bookedAmount: parsed });
+                  }}
+                >
+                  {setBookedAmountMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                </Button>
               </div>
-            )}
+              <p className="text-xs text-green-600 mt-1">
+                {session.bookedAmount !== null && session.bookedAmount !== undefined
+                  ? `Set to $${session.bookedAmount} — also updates the lead row`
+                  : computeTotalQuote(session.quotedPrice, session.extras)
+                    ? `Using quoted price: $${computeTotalQuote(session.quotedPrice, session.extras)}`
+                    : "Enter amount to set the price for this lead"
+                }
+              </p>
+            </div>
 
             {/* Call History */}
             {callLogs.length > 0 && (
