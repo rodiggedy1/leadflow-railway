@@ -580,3 +580,5 @@
 - [x] Claiming a lead in Command Chat should also mark it as claimed in the Lead List (sync claimedBy/claimedAt to conversation_sessions or leads table)
 - [x] Parse inbound Thumbtack SMS opportunity alerts ("New Thumbtack opportunity: ...") and auto-create a lead in the pipeline with leadSource="thumbtack-sms"
 - [x] Relabel "thumbtack-sms" as "Thumbtack Opportunity" in Lead List and lead cards display labels
+- [x] Lead drawer: make Thumbtack short URL in system message clickable (auto-linkify URLs in message history)
+- [x] Lead drawer: add First Message Generator wand button pre-filled with lead details

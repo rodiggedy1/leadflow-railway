@@ -82,6 +82,9 @@ import {
   ChevronRight,
   Headphones,
   XCircle,
+  Wand2,
+  CheckCheck,
+  ExternalLink,
 } from "lucide-react";
 import {
   Dialog,
@@ -940,6 +943,7 @@ function ConversationDrawer({
   onRefresh,
   currentAgentName,
   initialTab,
+  onOpenFirstMsg,
 }: {
   session: DrawerSession;
   onClose: () => void;
@@ -949,6 +953,7 @@ function ConversationDrawer({
   onRefresh: () => void;
   currentAgentName?: string;
   initialTab?: "conversation" | "flow" | "performance";
+  onOpenFirstMsg?: (details: string) => void;
 }) {
   const utils = trpc.useUtils();
   let messages: { role: string; content: string }[] = [];
@@ -1454,6 +1459,22 @@ function ConversationDrawer({
                   ))}
                 </SelectContent>
               </Select>
+              {/* First Message Generator wand */}
+              <button
+                title="Generate first outreach message"
+                onClick={() => {
+                  const parts: string[] = [];
+                  if (session.leadName) parts.push(`Name: ${session.leadName}`);
+                  if (session.leadPhone && !session.leadPhone.startsWith("thumbtack-sms-")) parts.push(`Phone: ${session.leadPhone}`);
+                  if (session.serviceType) parts.push(`Service: ${session.serviceType}`);
+                  if (session.quotedPrice) parts.push(`Quote: $${session.quotedPrice}`);
+                  if (session.barkQA) parts.push(session.barkQA);
+                  onOpenFirstMsg?.(parts.join("\n"));
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors"
+              >
+                <Wand2 className="w-4 h-4" />
+              </button>
               <button
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
@@ -1688,7 +1709,13 @@ function ConversationDrawer({
                         {/* System event pill */}
                         {isSystem ? (
                           <div className="flex justify-center my-1">
-                            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">{msg.content}</span>
+                            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">
+                              {msg.content.split(/(https?:\/\/\S+|thmtk\.com\/\S+|[a-z0-9-]+\.com\/\S+)/gi).map((part, pi) =>
+                                /^(https?:\/\/|thmtk\.com\/|[a-z0-9-]+\.com\/)/i.test(part)
+                                  ? <a key={pi} href={part.startsWith("http") ? part : `https://${part}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-500 hover:text-blue-700 break-all">{part}</a>
+                                  : part
+                              )}
+                            </span>
                           </div>
                         ) : isOutbound ? (
                           /* ── Outbound ── */
@@ -3128,6 +3155,16 @@ export default function AdminDashboard() {
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
 
+  // ── First Message Generator modal (shared across lead drawer wand buttons) ──
+  const [firstMsgOpen, setFirstMsgOpen] = useState(false);
+  const [firstMsgDetails, setFirstMsgDetails] = useState("");
+  const [firstMsgResult, setFirstMsgResult] = useState("");
+  const [firstMsgCopied, setFirstMsgCopied] = useState(false);
+  const generateFirstMessageMutation = trpc.tools.generateFirstMessage.useMutation({
+    onSuccess: (data) => { setFirstMsgResult(data.message); setFirstMsgCopied(false); },
+    onError: () => toast.error("Failed to generate message. Try again."),
+  });
+
   const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("month");
 
   // Compute the active date range to send to the backend
@@ -4097,6 +4134,12 @@ export default function AdminDashboard() {
           onRefresh={() => refetch()}
           currentAgentName={meQuery.data?.name ?? "Admin"}
           initialTab={drawerInitialTab}
+          onOpenFirstMsg={(details) => {
+            setFirstMsgDetails(details);
+            setFirstMsgResult("");
+            setFirstMsgCopied(false);
+            setFirstMsgOpen(true);
+          }}
         />
       )}
 
@@ -4121,6 +4164,67 @@ export default function AdminDashboard() {
             </div>
             <div className="p-4">
               <CallGuide />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── First Message Generator Modal (Lead List) ── */}
+      {firstMsgOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setFirstMsgOpen(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+                  <Wand2 className="h-4 w-4 text-white" />
+                </div>
+                <h2 className="text-base font-bold text-slate-900">First Message Generator</h2>
+              </div>
+              <button className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" onClick={() => setFirstMsgOpen(false)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div>
+                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Paste Booking Details</label>
+                <p className="text-xs text-slate-400 mb-2 leading-relaxed">Paste the raw booking info and the AI will craft a personalized first outreach message.</p>
+                <Textarea
+                  value={firstMsgDetails}
+                  onChange={(e) => setFirstMsgDetails(e.target.value)}
+                  placeholder={`e.g.\nName: Sarah Johnson\nCity: Arlington, VA\nHome: 3 bed / 2 bath\nService: Deep clean\nQuote: $220\u2013$260`}
+                  rows={6}
+                  className="resize-none rounded-xl border-slate-200 text-sm font-mono"
+                  autoFocus
+                />
+              </div>
+              {firstMsgResult && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-semibold text-slate-700">Generated Message</label>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(firstMsgResult).then(() => { setFirstMsgCopied(true); setTimeout(() => setFirstMsgCopied(false), 2500); }); }}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition ${ firstMsgCopied ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200" }`}
+                    >
+                      {firstMsgCopied ? <><CheckCheck className="h-3.5 w-3.5" /> Copied!</> : <><MessageSquare className="h-3.5 w-3.5" /> Copy Message</>}
+                    </button>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{firstMsgResult}</div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+              <Button variant="outline" className="flex-1 rounded-xl border-slate-200 text-slate-700" onClick={() => setFirstMsgOpen(false)}>Close</Button>
+              <Button
+                className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white"
+                disabled={!firstMsgDetails.trim() || generateFirstMessageMutation.isPending}
+                onClick={() => generateFirstMessageMutation.mutate({ bookingDetails: firstMsgDetails.trim() })}
+              >
+                {generateFirstMessageMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Generating…</> : <><Wand2 className="h-4 w-4 mr-1.5" /> Generate Message</>}
+              </Button>
             </div>
           </div>
         </div>
