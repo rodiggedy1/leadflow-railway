@@ -591,3 +591,4 @@
 - [x] Command Chat Hot Leads tray: show city for thumbtack-sms leads (currently missing)
 - [x] Hot Leads tray card: show "New Thumbtack Opportunity" label for thumbtack-sms leads (currently missing from the card header)
 - [x] Deleting a lead from the Lead List should also remove its card from the Command Chat Hot Leads tray
+- [x] Fix bug: replying to long messages fails in Command Chat and Job Chat

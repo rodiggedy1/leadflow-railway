@@ -1516,7 +1516,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         quickAction: selectedQuickAction ?? undefined,
         mediaUrl,
         replyToId: jobReplyTo?.id,
-        replyToBody: jobReplyTo?.body,
+        replyToBody: jobReplyTo?.body ? jobReplyTo.body.slice(0, 512) : undefined,
         replyToAuthor: jobReplyTo?.author,
       });
       setJobReplyTo(null);
@@ -2337,7 +2337,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 mediaUrl,
                 quickAction: quickAction ?? undefined,
                 replyToId: replyTo?.id,
-                replyToBody: replyTo?.body,
+                replyToBody: replyTo?.body ? replyTo.body.slice(0, 512) : undefined,
                 replyToAuthor: replyTo?.author,
               });
             }}
