@@ -953,24 +953,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     return el.scrollHeight - el.scrollTop - el.clientHeight < 250;
   }
 
-  // When the composer textarea grows (multi-line typing), the scroll container
-  // shrinks and the user appears to scroll up even though they haven't moved.
-  // A ResizeObserver on the composer re-pins to the bottom whenever it resizes,
-  // as long as the user was already near the bottom before the resize.
+  // When the composer textarea grows (multi-line typing) OR when the scroll container
+  // itself shrinks (e.g. photo previews, reply bar), the user appears to scroll up
+  // even though they haven't moved. Observe BOTH the composer and the scroll container
+  // so either resize re-pins to the bottom as long as the user was already near it.
   useEffect(() => {
     const composer = composerRef.current;
     const container = threadScrollRef.current;
     const sentinel = threadBottomRef.current;
-    if (!composer || !container || !sentinel) return;
-    const ro = new ResizeObserver(() => {
-      // Only auto-scroll if we're near the bottom (within 350px — wider to account for the
-      // growing composer itself shrinking clientHeight)
+    if (!container || !sentinel) return;
+    const repinIfNearBottom = () => {
+      // Use a generous threshold (400px) because clientHeight may have just shrunk
       const gap = container.scrollHeight - container.scrollTop - container.clientHeight;
-      if (gap < 350) {
+      if (gap < 400) {
         sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
       }
-    });
-    ro.observe(composer);
+    };
+    const ro = new ResizeObserver(repinIfNearBottom);
+    // Watch the scroll container itself — catches any height change (photo strip, reply bar, etc.)
+    ro.observe(container);
+    // Also watch the composer textarea if it exists
+    if (composer) ro.observe(composer);
     return () => ro.disconnect();
   }, []);
 

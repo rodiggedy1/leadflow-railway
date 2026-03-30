@@ -642,3 +642,10 @@
 
 - [x] Fix server crash returning HTML instead of JSON — wrapped getSeenByBulk + getDueReminders in try/catch
 - [x] Fix chat scroll-on-entry: added ResizeObserver on composer textarea to re-pin scroll when typing
+
+## Scroll Sentinel Fix (Pin Note / Away pills blocking bottom)
+
+- [x] Fix CommandChat scroll: observe scroll container itself (not just composer) so any height change re-pins to bottom
+- [x] Fix OpsChat job thread scroll: same fix — observe both scroll containers + composer
+- [x] Fix OpsChat channel scroll: same fix
+- [x] Raise near-bottom threshold to 400px to account for composer growth
