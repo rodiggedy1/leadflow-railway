@@ -986,7 +986,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // First open: jump instantly to bottom via sentinel
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          sentinel.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+          if (el) el.scrollTop = el.scrollHeight;
           initialScrollDone.current = true;
           prevMsgLen.current = len;
         });
@@ -995,9 +995,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       prevMsgLen.current = len;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (!threadBottomRef.current) return;
+          const container = threadScrollRef.current;
+          if (!container) return;
           setCmdNewMsgToast(null);
-          threadBottomRef.current.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+          container.scrollTop = container.scrollHeight;
         });
       });
     }
@@ -1450,7 +1451,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
             <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-4 pb-4">
             {channelLoading ? (
               <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
             ) : channelMsgs.length === 0 ? (
