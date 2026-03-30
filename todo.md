@@ -578,3 +578,4 @@
 - [x] First Message Generator — AI tool in Command Chat left column: paste booking details, generate personalized first outreach message, copy to clipboard
 - [x] Replace Call Assist Wand2 icon on Yelp/Thumbtack lead cards with First Message Generator modal (pre-filled with lead details); remove standalone button from left column
 - [x] Claiming a lead in Command Chat should also mark it as claimed in the Lead List (sync claimedBy/claimedAt to conversation_sessions or leads table)
+- [x] Parse inbound Thumbtack SMS opportunity alerts ("New Thumbtack opportunity: ...") and auto-create a lead in the pipeline with leadSource="thumbtack-sms"

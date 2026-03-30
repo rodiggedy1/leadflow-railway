@@ -37,6 +37,7 @@ import { handleReviewReplyForJob } from "./reviewRouter";
 import { handleRatingReply } from "./qualityRouter";
 import { processLeadReply as processReactivationReply } from "./conversationEngine";
 import { logActivity } from "./activityLogger";
+import { notifyOwner } from "./_core/notification";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
@@ -145,6 +146,108 @@ export function registerWebhookRoutes(app: Express) {
           });
         }
         return; // Skip all AI processing
+      }
+
+      // ── Thumbtack SMS opportunity alert ─────────────────────────────────────
+      // Thumbtack sends automated opportunity alerts from +16505164957.
+      // Format: "New Thumbtack opportunity: B. P. needs Junk Removal in Lanham. Reply STOP..."
+      // We parse the name, service, and city, then create a lead with a placeholder phone
+      // so the agent can add the real customer number later and SMS them from the drawer.
+      const THUMBTACK_ALERT_NUMBER = "+16505164957";
+      if (
+        fromPhone === THUMBTACK_ALERT_NUMBER &&
+        /new thumbtack opportunity/i.test(inboundText)
+      ) {
+        console.log(`[Webhook] Thumbtack SMS opportunity detected: "${inboundText}"`);
+        const dbTT = await getDb();
+        if (dbTT) {
+          // Parse: "New Thumbtack opportunity: <Name> needs <Service> in <City>."
+          const match = inboundText.match(
+            /new thumbtack opportunity[:\s]+(.+?)\s+needs\s+(.+?)\s+in\s+([^.]+)/i
+          );
+          const ttName    = match?.[1]?.trim() ?? "Thumbtack Lead";
+          const ttService = match?.[2]?.trim() ?? "Cleaning";
+          const ttCity    = match?.[3]?.trim() ?? "";
+          // Extract the short URL (thmtk.com/... or any URL in the text)
+          const urlMatch  = inboundText.match(/https?:\/\/\S+|thmtk\.com\/\S+/);
+          const ttUrl     = urlMatch?.[0] ?? null;
+
+          const placeholderPhone = `thumbtack-sms-${Date.now()}`;
+          const now = Date.now();
+          const initialHistory = JSON.stringify([
+            { role: "system", content: `Thumbtack SMS opportunity: ${inboundText}`, ts: now },
+          ]);
+
+          let ttSessionId: number | null = null;
+          try {
+            const [ins] = await dbTT.insert(conversationSessions).values({
+              leadPhone: placeholderPhone,
+              leadName: ttName,
+              stage: "QUOTE_SENT" as any,
+              serviceType: ttService,
+              messageHistory: initialHistory,
+              leadSource: "thumbtack-sms",
+              aiMode: 0, // no AI — no real customer phone yet
+              barkQA: ttCity ? `City: ${ttCity}${ttUrl ? ` | Link: ${ttUrl}` : ""}` : (ttUrl ?? null),
+            } as any);
+            ttSessionId = (ins as any).insertId ?? null;
+            console.log(`[Webhook] Thumbtack SMS lead created — sessionId=${ttSessionId}, name=${ttName}, service=${ttService}, city=${ttCity}`);
+          } catch (err) {
+            console.error("[Webhook] Failed to create Thumbtack SMS session:", err);
+          }
+
+          // Post new_lead card to Command Chat
+          const cardLines = [
+            `📌 **Thumbtack Opportunity** · ${ttName}`,
+            `🏠 **${ttService}**${ttCity ? ` · ${ttCity}` : ""}`,
+            ttUrl ? `🔗 ${ttUrl}` : null,
+            `⚠️ No phone yet — add customer number in lead to start SMS`,
+          ].filter(Boolean).join("\n");
+
+          const cardMeta = JSON.stringify({
+            leadName: ttName,
+            leadPhone: null,
+            serviceType: ttService,
+            size: ttCity || "",
+            price: null,
+            utmSource: "thumbtack-sms",
+            sessionId: ttSessionId,
+            arrivedAt: now,
+          });
+
+          try {
+            await dbTT.insert(opsChatMessages).values({
+              cleanerJobId: null,
+              channel: "command",
+              authorName: "📌 Thumbtack Opportunity",
+              authorRole: "system",
+              body: cardLines,
+              mediaUrl: null,
+              quickAction: "new_lead",
+              metadata: cardMeta,
+            });
+          } catch (err) {
+            console.error("[Webhook] Failed to post Thumbtack SMS card:", err);
+          }
+
+          // Alert CS team
+          const alertMsg = `📌 Thumbtack Opportunity: ${ttName} needs ${ttService}${ttCity ? ` in ${ttCity}` : ""}${ttUrl ? ` — ${ttUrl}` : ""}`;
+          sendSms({ to: "+12028885362", content: alertMsg }).catch(() => {});
+          sendSms({ to: "+13029816191", content: alertMsg }).catch(() => {});
+
+          notifyOwner({
+            title: `New Thumbtack Opportunity: ${ttName}`,
+            content: `${ttService}${ttCity ? ` in ${ttCity}` : ""}${ttUrl ? `\n${ttUrl}` : ""}`,
+          }).catch(() => {});
+
+          logActivity({
+            eventType: "new_lead",
+            title: `Thumbtack Opportunity: ${ttName}`,
+            body: `${ttService}${ttCity ? ` in ${ttCity}` : ""}`,
+            meta: { leadName: ttName, serviceType: ttService, city: ttCity, url: ttUrl, source: "thumbtack-sms" },
+          }).catch(() => {});
+        }
+        return; // Do not process as a regular inbound SMS
       }
 
       const db = await getDb();
