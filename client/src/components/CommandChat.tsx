@@ -967,7 +967,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const mo = new MutationObserver(() => {
       container.scrollTop = container.scrollHeight;
     });
-    mo.observe(msgsDiv, { childList: true, subtree: false });
+    mo.observe(msgsDiv, { childList: true, subtree: true });
     return () => mo.disconnect();
   }, []);
 
@@ -1418,7 +1418,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
             <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
           </div>
-          <div ref={msgsContainerRef} className="space-y-4 pb-6">
+          <div ref={msgsContainerRef} className="space-y-4" style={{ paddingBottom: '160px' }}>
             {channelLoading ? (
               <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
             ) : channelMsgs.length === 0 ? (
