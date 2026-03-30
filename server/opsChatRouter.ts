@@ -14,6 +14,7 @@ import { TRPCError } from "@trpc/server";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { storagePut } from "./storage";
 import { getDb } from "./db";
+import { sendPushToAll } from "./webPush";
 import {
   cleanerJobs,
   cleanerProfiles,
@@ -440,6 +441,24 @@ export const opsChatRouter = router({
         replyToBody: input.replyToBody ?? null,
         replyToAuthor: input.replyToAuthor ?? null,
       });
+
+      // Fire Web Push to all agents for real messages (skip system/away status noise)
+      const isSystemNoise = input.quickAction?.startsWith("away_status") || input.authorRole === "system";
+      if (!isSystemNoise) {
+        const context = input.cleanerJobId
+          ? `Job #${input.cleanerJobId}`
+          : input.channel
+          ? `#${input.channel}`
+          : "Command Chat";
+        const bodyPreview = input.body.length > 120 ? input.body.slice(0, 117) + "..." : input.body;
+        void sendPushToAll({
+          title: `${input.authorName} · ${context}`,
+          body: bodyPreview,
+          tag: `ops-msg-${input.cleanerJobId ?? input.channel ?? "cmd"}`,
+          url: "/ops-chat",
+          playSound: true,
+        });
+      }
 
       return { success: true };
     }),

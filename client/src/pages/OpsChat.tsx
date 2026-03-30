@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
+import { useWebPushSubscription } from "@/hooks/useWebPushSubscription";
 import { useTabLeader } from "@/hooks/useTabLeader";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
@@ -1046,6 +1047,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // agentMe uses publicProcedure so it always resolves even before opsChatProcedure auth.
   // myProfile returns email for both owner and agents.
   const myDmKey = (myProfile as any)?.email ?? agentMe?.email ?? callerName;
+
+  // Web Push: register this browser for background push notifications.
+  // Only active on OpsChat (never on the customer quote page).
+  useWebPushSubscription({
+    agentKey: myDmKey,
+    enabled: Boolean(callerName && callerName !== "Office"),
+  });
 
   // Poll every 15 s so all team members see away status changes promptly.
   // enabled fires as soon as either the owner OAuth session OR the agent session resolves.

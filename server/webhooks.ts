@@ -38,6 +38,7 @@ import { handleRatingReply } from "./qualityRouter";
 import { processLeadReply as processReactivationReply } from "./conversationEngine";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
+import { sendPushToAll } from "./webPush";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
@@ -278,6 +279,13 @@ export function registerWebhookRoutes(app: Express) {
             title: `New Thumbtack Opportunity: ${ttName}`,
             content: `${ttService}${ttCity ? ` in ${ttCity}` : ""}${ttUrl ? `\n${ttUrl}` : ""}`,
           }).catch(() => {});
+          void sendPushToAll({
+            title: `📌 New Thumbtack Opportunity`,
+            body: `${ttName} needs ${ttService}${ttCity ? ` in ${ttCity}` : ""}`,
+            tag: `new-lead-thumbtack-${ttSessionId}`,
+            url: "/ops-chat",
+            playSound: true,
+          });
 
           logActivity({
             eventType: "new_lead",

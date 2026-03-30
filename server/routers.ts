@@ -32,6 +32,8 @@ import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { opsChatRouter } from "./opsChatRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
+import { sendPushToAgent, sendPushToAll } from "./webPush";
+import { pushSubscriptions } from "../drizzle/schema";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -3367,6 +3369,53 @@ Your job: fill in the following message template using the booking details provi
         const message = typeof raw === "string" ? raw : "";
         if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
         return { message: message.trim() };
+      }),
+  }),
+
+  push: router({
+    /** Return the VAPID public key so the client can subscribe */
+    getVapidPublicKey: agentProcedure.query(() => {
+      return { publicKey: process.env.VAPID_PUBLIC_KEY ?? "" };
+    }),
+
+    /** Register or update a push subscription for the current agent */
+    subscribe: agentProcedure
+      .input(z.object({
+        agentKey: z.string().min(1).max(128),
+        endpoint: z.string().url(),
+        p256dh: z.string(),
+        auth: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        // Upsert: if endpoint already exists, update keys; otherwise insert
+        const existing = await db.select({ id: pushSubscriptions.id })
+          .from(pushSubscriptions)
+          .where(eq(pushSubscriptions.endpoint, input.endpoint))
+          .limit(1);
+        if (existing.length > 0) {
+          await db.update(pushSubscriptions)
+            .set({ agentKey: input.agentKey, keys: JSON.stringify({ p256dh: input.p256dh, auth: input.auth }), lastUsedAt: new Date() })
+            .where(eq(pushSubscriptions.endpoint, input.endpoint));
+        } else {
+          await db.insert(pushSubscriptions).values({
+            agentKey: input.agentKey,
+            endpoint: input.endpoint,
+            keys: JSON.stringify({ p256dh: input.p256dh, auth: input.auth }),
+          });
+        }
+        return { ok: true };
+      }),
+
+    /** Remove a push subscription (called when agent logs out or revokes permission) */
+    unsubscribe: agentProcedure
+      .input(z.object({ endpoint: z.string().url() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { ok: true };
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, input.endpoint));
+        return { ok: true };
       }),
   }),
 

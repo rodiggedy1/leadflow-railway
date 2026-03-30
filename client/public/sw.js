@@ -1,12 +1,11 @@
 /**
  * LeadFlow Service Worker
- * Handles background notifications using self.registration.showNotification()
- * which works even when the tab is hidden — unlike window.Notification().
+ * Handles background notifications two ways:
+ *   1. postMessage({ type: 'NOTIFY', ... }) — from the page (existing path)
+ *   2. Web Push 'push' event — from the server via VAPID (new reliable path)
  *
- * WhatsApp / Slack pattern:
- *   1. Page posts a message to the SW via postMessage({ type: 'NOTIFY', ... })
- *   2. SW calls self.registration.showNotification() — OS banner + sound fires
- *   3. On notificationclick, SW focuses the existing tab or opens a new one
+ * Both paths call showNotification() which fires even when ALL tabs are closed.
+ * Sound is relayed only to ops-eligible tabs (never to the customer quote page).
  */
 
 const CHIME_URL =
@@ -20,48 +19,75 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Listen for messages from the page
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function showAndSound({ title, body, tag, icon, url, playSound }) {
+  const targetUrl = url || (self.location.origin + "/ops-chat");
+
+  const notifPromise = self.registration.showNotification(title, {
+    body: body ?? "",
+    icon: icon ?? "/favicon.ico",
+    badge: "/favicon.ico",
+    tag: tag ?? "leadflow-msg",
+    renotify: true,
+    silent: false,
+    vibrate: [200, 100, 200],
+    data: { url: targetUrl },
+  });
+
+  // Relay PLAY_SOUND only to OpsChat-eligible tabs.
+  // This prevents the chime from playing on the public quote form at / or any
+  // other non-ops page that happens to be open in the same browser.
+  const soundPromise = playSound !== false
+    ? self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clients) => {
+          for (const client of clients) {
+            const u = client.url || "";
+            const isOpsTab =
+              u.includes("/admin") ||
+              u.includes("/agent") ||
+              u.includes("/ops-chat") ||
+              u.includes("/call-assist");
+            if (isOpsTab) {
+              client.postMessage({ type: "PLAY_SOUND" });
+            }
+          }
+        })
+    : Promise.resolve();
+
+  return Promise.all([notifPromise, soundPromise]);
+}
+
+// ─── Web Push event (server-sent, works even with zero tabs open) ─────────────
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "LeadFlow", body: event.data.text() };
+  }
+
+  const { title = "LeadFlow", body = "", tag, icon, url, playSound } = payload;
+  event.waitUntil(showAndSound({ title, body, tag, icon, url, playSound }));
+});
+
+// ─── postMessage path (existing — page posts NOTIFY when it's open) ───────────
+
 self.addEventListener("message", (event) => {
   if (!event.data) return;
 
   if (event.data.type === "NOTIFY") {
-    const { title, body, tag, icon } = event.data;
-
-    // Show OS notification banner
-    const notifPromise = self.registration.showNotification(title, {
-      body: body ?? "",
-      icon: icon ?? "/favicon.ico",
-      badge: "/favicon.ico",
-      tag: tag ?? "leadflow-msg",
-      renotify: true,
-      silent: false,
-      vibrate: [200, 100, 200],
-      data: { url: self.location.origin + "/ops-chat" },
-    });
-
-    // Relay PLAY_SOUND only to OpsChat-eligible tabs (admin / agent / call-assist).
-    // This prevents the chime from playing on the public quote form at / or any
-    // other non-ops page that happens to be open in the same browser.
-    const soundPromise = self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) => {
-        for (const client of clients) {
-          const url = client.url || "";
-          const isOpsTab =
-            url.includes("/admin") ||
-            url.includes("/agent") ||
-            url.includes("/call-assist");
-          if (isOpsTab) {
-            client.postMessage({ type: "PLAY_SOUND" });
-          }
-        }
-      });
-
-    event.waitUntil(Promise.all([notifPromise, soundPromise]));
+    const { title, body, tag, icon, url, playSound } = event.data;
+    event.waitUntil(showAndSound({ title, body, tag, icon, url, playSound }));
   }
 });
 
-// When user clicks the notification banner — focus or open the tab
+// ─── Notification click — focus or open the ops tab ──────────────────────────
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url)
@@ -72,13 +98,14 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clientList) => {
-        // If a tab is already open, focus it
         for (const client of clientList) {
-          if ((client.url.includes("/ops-chat") || client.url.includes("/admin")) && "focus" in client) {
+          if (
+            (client.url.includes("/ops-chat") || client.url.includes("/admin")) &&
+            "focus" in client
+          ) {
             return client.focus();
           }
         }
-        // Otherwise open a new tab
         if (self.clients.openWindow) {
           return self.clients.openWindow(targetUrl);
         }

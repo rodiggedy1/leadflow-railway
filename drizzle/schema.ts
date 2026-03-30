@@ -1705,3 +1705,28 @@ export const cleanerRatingSmsLog = mysqlTable("cleaner_rating_sms_log", {
 }));
 export type CleanerRatingSmsLog = typeof cleanerRatingSmsLog.$inferSelect;
 export type InsertCleanerRatingSmsLog = typeof cleanerRatingSmsLog.$inferInsert;
+
+// ── Web Push Subscriptions ────────────────────────────────────────────────────
+/**
+ * Stores browser push subscriptions for ops agents.
+ * One row per browser/device per agent. Used to send Web Push notifications
+ * when new messages arrive, even when the tab is closed.
+ */
+export const pushSubscriptions = mysqlTable("push_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Agent identifier (callerName slug) */
+  agentKey: varchar("agentKey", { length: 128 }).notNull(),
+  /** The push endpoint URL (unique per browser/device) */
+  endpoint: varchar("endpoint", { length: 2048 }).notNull(),
+  /** JSON: { p256dh: string, auth: string } */
+  keys: text("keys").notNull(),
+  /** When this subscription was registered */
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** When this subscription was last used successfully */
+  lastUsedAt: timestamp("lastUsedAt"),
+}, (table) => ({
+  idxAgent: index("idx_ps_agent").on(table.agentKey),
+  idxEndpoint: index("idx_ps_endpoint").on(table.endpoint),
+}));
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;

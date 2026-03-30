@@ -592,3 +592,9 @@
 - [x] Hot Leads tray card: show "New Thumbtack Opportunity" label for thumbtack-sms leads (currently missing from the card header)
 - [x] Deleting a lead from the Lead List should also remove its card from the Command Chat Hot Leads tray
 - [x] Fix bug: replying to long messages fails in Command Chat and Job Chat
+- [x] Web Push: generate VAPID keys and store as secrets
+- [x] Web Push: push_subscriptions table in schema + db push
+- [x] Web Push: server endpoints to save/delete subscriptions
+- [x] Web Push: trigger push when new ops/job/command message saved
+- [x] Web Push: SW push event handler — show notification + play reminder chime
+- [x] Web Push: client-side subscription registration on ops pages only (not quote page)

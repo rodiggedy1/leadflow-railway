@@ -39,6 +39,7 @@ import { sendSms, estimatePrice } from "./openphone";
 import { getNextAvailableSlots, formatAvailabilityQuestion } from "./availability";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
+import { sendPushToAll } from "./webPush";
 import { normalizePhone } from "./routers";
 import { getSetting, getFlowTemplate } from "./settingsRouter";
 import { ENV } from "./_core/env";
@@ -662,11 +663,17 @@ export async function handleYelpInquiryEmail(
     console.error("[YelpLead] Secondary alert SMS failed:", err)
   );
 
-  notifyOwner({
+   notifyOwner({
     title: `New Yelp Lead: ${displayName}`,
     content: `${parsed.serviceType} · ${bedroomsDisplay} / ${bathroomsDisplay}\nDate: ${dateDisplay} · Zip: ${zipDisplay}\n\nNo phone number — follow up via Yelp Biz.`,
   }).catch(() => {});
-
+  void sendPushToAll({
+    title: `⭐ New Yelp Lead`,
+    body: `${displayName} · ${parsed.serviceType}`,
+    tag: `new-lead-yelp-${Date.now()}`,
+    url: "/ops-chat",
+    playSound: true,
+  });
   logActivity({
     eventType: "new_lead",
     title: `New Yelp lead: ${displayName}`,
@@ -1000,11 +1007,17 @@ export async function handleThumbtackEmail(
     console.error("[Thumbtack] Secondary alert SMS failed:", err)
   );
 
-  notifyOwner({
+   notifyOwner({
     title: `New Thumbtack Lead: ${displayName}`,
     content: `${parsed.serviceType} · ${locationDisplay}\nDates: ${datesDisplay}${descDisplay ? `\n\n"${descDisplay.slice(0, 200)}"` : ""}${normalizedPhone ? `\n\nPhone: ${normalizedPhone}` : "\n\nNo phone — follow up via Thumbtack."}`,
   }).catch(() => {});
-
+  void sendPushToAll({
+    title: `📌 New Thumbtack Lead`,
+    body: `${displayName} · ${parsed.serviceType}`,
+    tag: `new-lead-thumbtack-${Date.now()}`,
+    url: "/ops-chat",
+    playSound: true,
+  });
   logActivity({
     eventType: "new_lead",
     title: `New Thumbtack lead: ${displayName}`,
@@ -1123,8 +1136,14 @@ export async function handleFormSubmissionEmail(
     title: `New Form Lead: ${normalizedPhone}`,
     content: `${serviceType}${freqLabel} · ${bedrooms} / ${bathrooms} · $${price}\n\nFrom: ${fromAddress}${parsed.email ? `\nEmail: ${parsed.email}` : ""}`,
   }).catch(() => {});
-
-  // ── Post new lead card to MIB Command Chat ────────────────────────────────
+  void sendPushToAll({
+    title: `📝 New Form Lead`,
+    body: `${normalizedPhone} · ${serviceType} · $${price}`,
+    tag: `new-lead-form-${Date.now()}`,
+    url: "/ops-chat",
+    playSound: true,
+  });
+  // ── Post new lead card to MIB Command Chatt ────────────────────────────────
   try {
     // Look up the session we just created to get its ID
     const [emailSession] = await db
