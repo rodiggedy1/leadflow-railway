@@ -205,6 +205,8 @@ function getSourceInfo(source: string | null): { label: string; icon: React.Reac
   if (source === "widget") return { label: "widget", icon: <Globe className="w-2.5 h-2.5" /> };
   if (source === "voice") return { label: "voice", icon: <Mic className="w-2.5 h-2.5" /> };
   if (source === "bark") return { label: "bark", icon: <MessageSquare className="w-2.5 h-2.5" /> };
+  if (source === "thumbtack") return { label: "Thumbtack", icon: <MessageSquare className="w-2.5 h-2.5" /> };
+  if (source === "thumbtack-sms") return { label: "Thumbtack Opportunity", icon: <MessageSquare className="w-2.5 h-2.5" /> };
   // Campaign blast sources: campaign:{id}
   if (source.startsWith("campaign:")) {
     const id = source.replace("campaign:", "");

@@ -826,6 +826,12 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "bark") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Bark</span>;
   }
+  if (leadSource === "thumbtack") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-700">Thumbtack</span>;
+  }
+  if (leadSource === "thumbtack-sms") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-700">Thumbtack Opportunity</span>;
+  }
   // campaign:tomorrow_slots, campaign:reactivation, campaign:quote_followup, etc.
   if (leadSource.startsWith("campaign:")) {
     const campaignId = leadSource.replace("campaign:", "");
