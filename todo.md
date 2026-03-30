@@ -589,3 +589,4 @@
 - [x] Thumbtack SMS duplicate detection: if same name+service+city arrives within 24h, drop the duplicate and add a note to the existing session instead of creating a new one
 - [x] Command Chat: thumbtack-sms new_lead card header should say "New Thumbtack Opportunity" not "NEW LEAD"
 - [x] Command Chat Hot Leads tray: show city for thumbtack-sms leads (currently missing)
+- [x] Hot Leads tray card: show "New Thumbtack Opportunity" label for thumbtack-sms leads (currently missing from the card header)

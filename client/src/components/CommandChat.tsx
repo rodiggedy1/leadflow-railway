@@ -325,6 +325,14 @@ function HotLeadCard({
         )}
       </div>
 
+      {/* Thumbtack Opportunity label row */}
+      {isThumbSms && (
+        <div className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 border-b border-sky-100">
+          <span className="text-sky-600 text-[10px]">📌</span>
+          <span className="text-[10px] font-semibold text-sky-700 uppercase tracking-widest">New Thumbtack Opportunity</span>
+        </div>
+      )}
+
       {/* Lead info */}
       <div className="px-3 py-2.5">
         <div className="flex items-start justify-between gap-2">
