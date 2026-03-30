@@ -4167,18 +4167,19 @@ export default function AdminDashboard() {
 
                       {/* Quote — quotedPrice for form leads, bookedAmount for manual leads, reactivationLastPrice for campaigns */}
                       <TableCell className="py-2">
-                        {(session.quotedPrice && parseInt(session.quotedPrice, 10) > 0) ? (() => {
+                        {/* Priority: bookedAmount (manual override) > quotedPrice > reactivationLastPrice */}
+                        {(session.bookedAmount !== null && session.bookedAmount !== undefined && session.bookedAmount > 0) ? (
+                          <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
+                            ${session.bookedAmount}
+                          </span>
+                        ) : (session.quotedPrice && parseInt(session.quotedPrice, 10) > 0) ? (() => {
                           const total = computeTotalQuote(session.quotedPrice, session.extras);
                           return (
                             <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
                               ${total}
                             </span>
                           );
-                        })() : (session.bookedAmount !== null && session.bookedAmount !== undefined && session.bookedAmount > 0) ? (
-                          <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
-                            ${session.bookedAmount}
-                          </span>
-                        ) : session.reactivationLastPrice ? (
+                        })() : session.reactivationLastPrice ? (
                           <span className="text-sm font-bold tabular-nums" style={{ color: '#7c3aed' }}>
                             ${session.reactivationLastPrice}
                           </span>
