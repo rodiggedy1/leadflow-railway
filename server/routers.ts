@@ -2407,6 +2407,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const leadId = (leadResult as any).insertId as number;
         // 2. Insert conversation_session row
         const stage = (input.status as any) ?? "QUOTE_SENT";
+        const BOOKED_STAGES_SET = ["BOOKED", "BOOKING_CONFIRMED", "BOOKING_COMPLETE"];
+        const isBookedFlag = BOOKED_STAGES_SET.includes(stage) ? 1 : 0;
         const [sessionResult] = await db.insert(conversationSessions).values({
           leadPhone:          input.phone,
           leadName:           input.name,
@@ -2416,6 +2418,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           messageHistory:     "[]",
           internalNotes:      input.notes ?? null,
           bookedAmount:       input.amount ?? null,
+          isBooked:           isBookedFlag,
           assignedAgentId:    agentId,
           assignedAgentName:  agentName,
           quoteLeadId:        leadId,
