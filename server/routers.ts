@@ -2372,6 +2372,88 @@ STAGE DETECTION — return the stage the conversation is currently in:
         }).catch(() => {});
         return { success: true };
       }),
+
+    /**
+     * leads.createManual — create a manual lead from the admin UI.
+     * Inserts quoteLeads + conversationSession, posts a new_lead card to CommandChat,
+     * and auto-claims it for the calling agent.
+     */
+    createManual: agentProcedure
+      .input(z.object({
+        name:        z.string().min(1).max(255),
+        phone:       z.string().min(7).max(30),
+        email:       z.string().optional(),
+        serviceType: z.string().max(100).default("Standard Cleaning"),
+        notes:       z.string().max(2000).optional(),
+        amount:      z.number().int().min(0).optional(),
+        status:      z.string().max(50).default("QUOTE_SENT"),
+        source:      z.enum(["yelp", "google", "thumbtack", "bark", "phone", "other"]).default("phone"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const agentName = ctx.agent.agentName;
+        const agentId   = ctx.agent.agentId;
+        // 1. Insert quote_leads row (bedrooms/bathrooms not collected for manual leads)
+        const [leadResult] = await db.insert(quoteLeads).values({
+          name:        input.name,
+          phone:       input.phone,
+          email:       input.email || null,
+          serviceType: input.serviceType,
+          bedrooms:    "",
+          bathrooms:   "",
+          smsSent:     0,
+        } as any);
+        const leadId = (leadResult as any).insertId as number;
+        // 2. Insert conversation_session row
+        const stage = (input.status as any) ?? "QUOTE_SENT";
+        const [sessionResult] = await db.insert(conversationSessions).values({
+          leadPhone:          input.phone,
+          leadName:           input.name,
+          stage,
+          serviceType:        input.serviceType,
+          leadSource:         input.source,
+          messageHistory:     "[]",
+          internalNotes:      input.notes ?? null,
+          bookedAmount:       input.amount ?? null,
+          assignedAgentId:    agentId,
+          assignedAgentName:  agentName,
+          quoteLeadId:        leadId,
+          aiMode:             0,
+        } as any);
+        const sessionId = (sessionResult as any).insertId as number;
+        // 3. Post new_lead card to CommandChat
+        const sourceLabel: Record<string, string> = {
+          yelp: "Yelp", google: "Google", thumbtack: "Thumbtack",
+          bark: "Bark", phone: "Phone", other: "Manual",
+        };
+        const amountDisplay = input.amount ? ` · **$${input.amount}**` : "";
+        const leadBody = `📋 **${input.serviceType}** · ${sourceLabel[input.source] ?? input.source}${amountDisplay}`;
+        const metadata = JSON.stringify({
+          leadName:    input.name,
+          leadPhone:   input.phone,
+          serviceType: input.serviceType,
+          source:      input.source,
+          sessionId,
+          arrivedAt:   Date.now(),
+          claimedBy:   agentName,
+          claimedAt:   Date.now(),
+        });
+        await db.insert(opsChatMessages).values({
+          cleanerJobId: null,
+          channel:      "command",
+          authorName:   "📋 Manual Lead",
+          authorRole:   "system",
+          body:         leadBody,
+          mediaUrl:     null,
+          quickAction:  "new_lead",
+          metadata,
+        } as any);
+        // 4. Broadcast so all agents see the new lead card immediately
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("lead_update");
+        return { success: true, leadId, sessionId };
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..

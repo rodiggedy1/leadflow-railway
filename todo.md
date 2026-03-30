@@ -656,3 +656,5 @@
 - [x] Fix OpsChat job thread scroll: same fix — observe both scroll containers + composer
 - [x] Fix OpsChat channel scroll: same fix
 - [x] Raise near-bottom threshold to 400px to account for composer growth
+
+- [ ] Add manual lead creation: modal with name, phone, email, service type, notes, amount, status, source (Yelp/Google/Thumbtack/Bark/Phone/Other); creates lead + conversationSession, posts new_lead card to CommandChat, auto-claims for adding user, invalidates leads.list

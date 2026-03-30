@@ -3157,6 +3157,23 @@ export default function AdminDashboard() {
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedSession, setSelectedSession] = useState<DrawerSession | null>(null);
 
+  // ── Add Manual Lead modal ─────────────────────────────────────────────────
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [addLeadForm, setAddLeadForm] = useState({
+    name: "", phone: "", email: "", serviceType: "Standard Cleaning",
+    notes: "", amount: "", status: "QUOTE_SENT",
+    source: "phone" as "yelp" | "google" | "thumbtack" | "bark" | "phone" | "other",
+  });
+  const createManualLeadMutation = trpc.leads.createManual.useMutation({
+    onSuccess: () => {
+      toast.success("Lead added and claimed!");
+      setAddLeadOpen(false);
+      setAddLeadForm({ name: "", phone: "", email: "", serviceType: "Standard Cleaning", notes: "", amount: "", status: "QUOTE_SENT", source: "phone" });
+      trpcUtils.leads.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // ── First Message Generator modal (shared across lead drawer wand buttons) ──
   const [firstMsgOpen, setFirstMsgOpen] = useState(false);
   const [firstMsgDetails, setFirstMsgDetails] = useState("");
@@ -3869,7 +3886,101 @@ export default function AdminDashboard() {
           <span className="text-sm self-center" style={{ color: '#888888' }}>
             {filtered.length} result{filtered.length !== 1 ? 's' : ''}
           </span>
+          <Button
+            size="sm"
+            className="ml-auto gap-1.5 shrink-0"
+            style={{ background: '#111', color: '#fff' }}
+            onClick={() => setAddLeadOpen(true)}
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Add Lead
+          </Button>
         </div>
+
+        {/* Add Manual Lead Dialog */}
+        <Dialog open={addLeadOpen} onOpenChange={setAddLeadOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add Manual Lead</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Name *</Label>
+                  <Input value={addLeadForm.name} onChange={e => setAddLeadForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Phone *</Label>
+                  <Input value={addLeadForm.phone} onChange={e => setAddLeadForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input value={addLeadForm.email} onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Service Type</Label>
+                  <Input value={addLeadForm.serviceType} onChange={e => setAddLeadForm(f => ({ ...f, serviceType: e.target.value }))} placeholder="Standard Cleaning" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Amount ($)</Label>
+                  <Input type="number" min={0} value={addLeadForm.amount} onChange={e => setAddLeadForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Source</Label>
+                  <Select value={addLeadForm.source} onValueChange={v => setAddLeadForm(f => ({ ...f, source: v as typeof f.source }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yelp">Yelp</SelectItem>
+                      <SelectItem value="google">Google</SelectItem>
+                      <SelectItem value="thumbtack">Thumbtack</SelectItem>
+                      <SelectItem value="bark">Bark</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Status</Label>
+                  <Select value={addLeadForm.status} onValueChange={v => setAddLeadForm(f => ({ ...f, status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="QUOTE_SENT">Quote Sent</SelectItem>
+                      <SelectItem value="AVAILABILITY">Availability</SelectItem>
+                      <SelectItem value="BOOKED">Booked</SelectItem>
+                      <SelectItem value="COLD">Cold</SelectItem>
+                      <SelectItem value="DONE">Done</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Notes</Label>
+                <Textarea rows={3} value={addLeadForm.notes} onChange={e => setAddLeadForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any additional notes…" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddLeadOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!addLeadForm.name.trim() || !addLeadForm.phone.trim() || createManualLeadMutation.isPending}
+                onClick={() => createManualLeadMutation.mutate({
+                  name: addLeadForm.name.trim(),
+                  phone: addLeadForm.phone.trim(),
+                  email: addLeadForm.email.trim() || undefined,
+                  serviceType: addLeadForm.serviceType.trim() || "Standard Cleaning",
+                  notes: addLeadForm.notes.trim() || undefined,
+                  amount: addLeadForm.amount ? parseInt(addLeadForm.amount, 10) : undefined,
+                  status: addLeadForm.status,
+                  source: addLeadForm.source,
+                })}
+              >
+                {createManualLeadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Lead"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Table */}
         <div className="hj-table-wrap">
