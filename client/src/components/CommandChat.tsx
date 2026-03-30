@@ -993,13 +993,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       });
     } else if (len > prevMsgLen.current) {
       prevMsgLen.current = len;
+      const scrollToBottom = () => {
+        const container = threadScrollRef.current;
+        if (!container) return;
+        setCmdNewMsgToast(null);
+        container.scrollTop = container.scrollHeight;
+      };
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const container = threadScrollRef.current;
-          if (!container) return;
-          setCmdNewMsgToast(null);
-          container.scrollTop = container.scrollHeight;
-        });
+        scrollToBottom();
+        setTimeout(scrollToBottom, 50);
       });
     }
   }, [channelMsgs.length]);
