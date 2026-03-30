@@ -174,10 +174,12 @@ function HotLeadCard({
   msg,
   claimLeadMutation,
   sessionStatus,
+  onOpenFirstMsg,
 }: {
   msg: LeadMsg;
   claimLeadMutation: ClaimMutation;
   sessionStatus?: SessionStatus | null;
+  onOpenFirstMsg?: (details: string) => void;
 }) {
   // Shake state: fires every 8 seconds while unclaimed
   const [shaking, setShaking] = useState(false);
@@ -352,14 +354,14 @@ function HotLeadCard({
             </a>
           )}
           <button
-            title="Open outbound Call Assist for this lead"
+            title="Generate first outreach message for this lead"
             onClick={() => {
-              const params = new URLSearchParams();
-              if (sessionId)   params.set("sessionId",   String(sessionId));
-              if (leadName)    params.set("name",        leadName);
-              if (leadPhone)   params.set("phone",       leadPhone);
-              if (serviceType) params.set("serviceType", serviceType);
-              window.open(`/call-assist?${params.toString()}`, "_blank");
+              const parts: string[] = [];
+              if (leadName)    parts.push(`Name: ${leadName}`);
+              if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
+              if (serviceType) parts.push(`Service: ${serviceType}`);
+              if (price)       parts.push(`Estimated price: $${price}`);
+              onOpenFirstMsg?.(parts.join("\n"));
             }}
             className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors shrink-0"
           >
@@ -389,10 +391,12 @@ function HotLeadsTray({
   channelMsgs,
   claimLeadMutation,
   onCollapse,
+  onOpenFirstMsg,
 }: {
   channelMsgs: LeadMsg[];
   claimLeadMutation: ClaimMutation;
   onCollapse: () => void;
+  onOpenFirstMsg?: (details: string) => void;
 }) {
   // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
   const cutoff = Date.now() - 8 * 60 * 60 * 1000;
@@ -464,6 +468,7 @@ function HotLeadsTray({
               key={msg.id}
               msg={msg}
               claimLeadMutation={claimLeadMutation}
+              onOpenFirstMsg={onOpenFirstMsg}
               sessionStatus={(() => {
                 try {
                   const meta = JSON.parse(msg.metadata ?? "{}");
@@ -1174,17 +1179,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             )}
           </div>
 
-          {/* ── First Message Generator button ── */}
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => { setFirstMsgOpen(true); setFirstMsgDetails(""); setFirstMsgResult(""); setFirstMsgCopied(false); }}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white text-xs font-semibold py-2.5 px-3 shadow-sm transition-all"
-            >
-              <Wand2 className="h-3.5 w-3.5" />
-              First Message Generator
-            </button>
-          </div>
         </div>
       </div>
 
@@ -1507,16 +1501,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 <MessageCircle className="h-4 w-4" />
                               </a>
                             )}
-                            {/* Call Assist icon — open call assist page pre-filled */}
+                            {/* First Message Generator icon */}
                             <button
-                              title="Open Call Assist for this lead"
+                              title="Generate first outreach message for this lead"
                               onClick={() => {
-                                const params = new URLSearchParams();
-                                if (sessionId) params.set("sessionId", String(sessionId));
-                                if (leadName)    params.set("name",        encodeURIComponent(leadName));
-                                if (leadPhone)   params.set("phone",       encodeURIComponent(leadPhone));
-                                if (serviceType) params.set("serviceType", encodeURIComponent(serviceType));
-                                window.open(`/call-assist?${params.toString()}`, "_blank");
+                                const parts: string[] = [];
+                                if (leadName)    parts.push(`Name: ${leadName}`);
+                                if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
+                                if (serviceType) parts.push(`Service: ${serviceType}`);
+                                if (size)        parts.push(`Home size: ${size}`);
+                                if (price)       parts.push(`Estimated price: $${price}`);
+                                if (extras.length > 0) parts.push(`Extras: ${extras.join(", ")}`);
+                                setFirstMsgDetails(parts.join("\n"));
+                                setFirstMsgResult("");
+                                setFirstMsgCopied(false);
+                                setFirstMsgOpen(true);
                               }}
                               className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors shrink-0"
                             >
@@ -2242,6 +2241,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             channelMsgs={channelMsgs}
             claimLeadMutation={claimLeadMutation}
             onCollapse={() => setRightCollapsed(true)}
+            onOpenFirstMsg={(details) => {
+              setFirstMsgDetails(details);
+              setFirstMsgResult("");
+              setFirstMsgCopied(false);
+              setFirstMsgOpen(true);
+            }}
           />
 
           <div className="border-t border-slate-200" />
