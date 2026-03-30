@@ -1182,6 +1182,8 @@ function ConversationDrawer({
       toast.success("Lead deleted");
       utils.leads.list.invalidate();
       utils.leads.stats.invalidate();
+      // Also refresh the Command Chat Hot Leads tray so the card disappears immediately
+      utils.opsChat.getCommandChatData.invalidate();
       onClose();
     },
     onError: (e) => toast.error(e.message),

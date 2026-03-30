@@ -590,3 +590,4 @@
 - [x] Command Chat: thumbtack-sms new_lead card header should say "New Thumbtack Opportunity" not "NEW LEAD"
 - [x] Command Chat Hot Leads tray: show city for thumbtack-sms leads (currently missing)
 - [x] Hot Leads tray card: show "New Thumbtack Opportunity" label for thumbtack-sms leads (currently missing from the card header)
+- [x] Deleting a lead from the Lead List should also remove its card from the Command Chat Hot Leads tray
