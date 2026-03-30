@@ -370,6 +370,10 @@ function AdminDashboardNav({
       <a href="/admin/quality" className={tabCls} style={tabStyle(false)}>
         <ClipboardCheck className="w-3.5 h-3.5" /> Jobs
       </a>
+      {/* Hiring */}
+      <a href="/admin/hiring" className={tabCls} style={tabStyle(false)}>
+        <User className="w-3.5 h-3.5" /> Hiring
+      </a>
       {/* Settings */}
       <a href="/admin/settings" className={tabCls} style={tabStyle(false)}>
         <Settings className="w-3.5 h-3.5" /> Settings

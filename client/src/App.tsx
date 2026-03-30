@@ -34,6 +34,7 @@ const CleanerAuthCallback = lazy(() => import("./pages/CleanerAuthCallback"));
 const LiveCallAssist = lazy(() => import("./pages/LiveCallAssist"));
 const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 const SseTest = lazy(() => import("./pages/SseTest"));
+const HiringPipeline = lazy(() => import("./pages/HiringPipeline"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -86,6 +87,7 @@ function Router() {
         <Route path={"/admin/review-tracker"} component={ReviewTracker} />
         <Route path={"/call-assist"} component={LiveCallAssist} />
         <Route path={"/sse-test"} component={SseTest} />
+        <Route path={"/admin/hiring"} component={HiringPipeline} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
