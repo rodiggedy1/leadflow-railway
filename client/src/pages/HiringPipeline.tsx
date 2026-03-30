@@ -221,60 +221,103 @@ function CandidateCard({
   return (
     <div
       onClick={onClick}
-      className="rounded-2xl border cursor-pointer transition-all p-4"
+      className="rounded-2xl cursor-pointer transition-all"
       style={{
         backgroundColor: "#ffffff",
-        borderColor: isSelected ? "#0f172a" : "#e5e7eb",
-        boxShadow: isSelected ? "0 0 0 1.5px #0f172a" : "none",
+        border: isSelected ? "1.5px solid #0f172a" : "1px solid #e8ecf0",
+        boxShadow: isSelected
+          ? "0 0 0 1px #0f172a"
+          : "0 1px 3px 0 rgba(0,0,0,0.04), 0 1px 2px -1px rgba(0,0,0,0.04)",
+        padding: "14px 16px 12px",
       }}
     >
       {/* Name row */}
       <div className="flex items-center gap-3">
         <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-          style={{ backgroundColor: "#e2e8f0", color: "#475569" }}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
+          style={{ backgroundColor: "#edf0f4", color: "#64748b", fontSize: "12px", letterSpacing: "0.02em" }}
         >
           {candidate.initials}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-base text-gray-900 leading-tight">{candidate.name}</span>
-            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 ml-1" />
+          <div className="flex items-center justify-between gap-1">
+            <span
+              className="font-bold leading-snug truncate"
+              style={{ fontSize: "15px", color: "#0f172a" }}
+            >
+              {candidate.name}
+            </span>
+            <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#94a3b8" }} />
           </div>
-          <p className="text-sm text-gray-400 mt-0.5">{candidate.subtitle}</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: "#94a3b8" }}>
+            {candidate.subtitle}
+          </p>
         </div>
       </div>
 
       {/* Pills row */}
-      <div className="flex items-center gap-2 mt-3 flex-wrap">
+      <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
         {hasTransport && (
           <span
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border"
-            style={{ borderColor: "#e5e7eb", color: "#374151", backgroundColor: "#f9fafb" }}
+            className="inline-flex items-center gap-1 rounded-full border"
+            style={{
+              borderColor: "#e2e8f0",
+              backgroundColor: "#f8fafc",
+              color: "#475569",
+              fontSize: "12px",
+              fontWeight: 500,
+              padding: "3px 10px 3px 8px",
+              lineHeight: 1.4,
+            }}
           >
-            <Car className="w-3.5 h-3.5" />
+            <Car style={{ width: 12, height: 12, strokeWidth: 1.8 }} />
             Car
           </span>
         )}
+        {!hasTransport && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border"
+            style={{
+              borderColor: "#e2e8f0",
+              backgroundColor: "#f8fafc",
+              color: "#475569",
+              fontSize: "12px",
+              fontWeight: 500,
+              padding: "3px 10px 3px 8px",
+              lineHeight: 1.4,
+            }}
+          >
+            <Car style={{ width: 12, height: 12, strokeWidth: 1.8 }} />
+            No car
+          </span>
+        )}
         <span
-          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border"
-          style={{ borderColor: "#e5e7eb", color: "#374151", backgroundColor: "#f9fafb" }}
+          className="inline-flex items-center rounded-full border"
+          style={{
+            borderColor: "#e2e8f0",
+            backgroundColor: "#f8fafc",
+            color: "#475569",
+            fontSize: "12px",
+            fontWeight: 500,
+            padding: "3px 10px",
+            lineHeight: 1.4,
+          }}
         >
           ZIP {candidate.zip}
         </span>
       </div>
 
       {/* Tag + Score row */}
-      {(candidate.tag || candidate.score) && (
-        <div className="flex items-center justify-between mt-3">
-          {candidate.tag ? (
-            <span className="text-sm text-gray-400">{candidate.tag}</span>
-          ) : (
-            <span />
-          )}
-          <span className="text-base font-bold text-gray-900">Score {candidate.score}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between mt-2.5">
+        {candidate.tag ? (
+          <span style={{ fontSize: "12px", color: "#94a3b8" }}>{candidate.tag}</span>
+        ) : (
+          <span />
+        )}
+        <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
+          Score {candidate.score}
+        </span>
+      </div>
     </div>
   );
 }
@@ -296,29 +339,50 @@ function StageCard({
 
   return (
     <div
-      className="rounded-2xl border p-5"
-      style={{ backgroundColor: "#f8fafc", borderColor: "#e5e7eb" }}
+      className="rounded-3xl"
+      style={{
+        backgroundColor: "#f7f9fb",
+        border: "1px solid #eaecf0",
+        padding: "20px 18px 18px",
+      }}
     >
       {/* Stage header */}
-      <div className="flex items-start justify-between mb-1">
+      <div className="flex items-start justify-between" style={{ marginBottom: 4 }}>
         <div>
-          <p className="font-bold text-base text-gray-900">{stage}</p>
-          <p className="text-sm text-gray-400 mt-0.5">
+          <p style={{ fontWeight: 700, fontSize: "15px", color: "#0f172a", lineHeight: 1.3 }}>
+            {stage}
+          </p>
+          <p style={{ fontSize: "13px", color: "#94a3b8", marginTop: 2 }}>
             {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}
           </p>
         </div>
         <span
-          className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-          style={{ backgroundColor: badge.bg, color: badge.text }}
+          className="flex items-center justify-center rounded-full shrink-0"
+          style={{
+            width: 28,
+            height: 28,
+            backgroundColor: badge.bg,
+            color: badge.text,
+            fontSize: "13px",
+            fontWeight: 700,
+          }}
         >
           {candidates.length}
         </span>
       </div>
 
       {/* Candidate cards */}
-      <div className="mt-3 space-y-3">
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
         {candidates.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-300" style={{ borderColor: "#e5e7eb" }}>
+          <div
+            className="rounded-xl text-center"
+            style={{
+              border: "1px dashed #dde1e7",
+              padding: "18px 12px",
+              fontSize: "13px",
+              color: "#c0c8d2",
+            }}
+          >
             No candidates here.
           </div>
         ) : (
