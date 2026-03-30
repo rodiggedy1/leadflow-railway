@@ -12,7 +12,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
-import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { useOsNotification } from "@/hooks/useOsNotification";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { useOpsStream } from "@/hooks/useOpsStream";
@@ -926,7 +925,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // The first rAF fires after React commits the new DOM node.
   // The second rAF fires after the browser has finished layout/paint for that frame,
   // so scrollHeight is fully updated and the scroll lands with the message fully visible.
-  const { state: opsChatState } = useOpsChatWindow();
+
   const initialScrollDone = useRef(false);
   const prevMsgLen = useRef(0);
 
@@ -978,7 +977,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }, []);
 
   useEffect(() => {
-    if (opsChatState !== "open") return;
+    // opsChatState guard removed — scroll must fire regardless of window state
     const el = threadScrollRef.current;
     const sentinel = threadBottomRef.current;
     if (!el || !sentinel) return;
@@ -1010,7 +1009,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         });
       });
     }
-  }, [channelMsgs.length, opsChatState]);
+  }, [channelMsgs.length]);
 
   // NOTE: Notification sound + OS notification for command channel messages is handled
   // exclusively by OpsChat.tsx (the parent) via useTabLeader to prevent duplicates.
@@ -1058,6 +1057,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     setComposer("");
     setReplyTo(null);
     setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
+    // Always scroll to bottom after sending
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      });
+    });
   }
 
   // ── Panel resize & collapse ──────────────────────────────────────────────
@@ -1301,7 +1306,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </div>
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-white" style={{ minWidth: MIN_CENTER }}>
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-white min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* Header — compact single-line bar */}
         <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">

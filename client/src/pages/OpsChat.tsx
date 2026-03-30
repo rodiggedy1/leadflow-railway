@@ -2115,13 +2115,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       )} {/* end sidebarCollapsed ternary */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
              This keeps scrollTop, refs, and query caches alive across tab switches.
              No save/restore needed — the DOM node simply never dies. ── */}
 
         {/* VIEW: Job Thread */}
-        <div style={{ display: activeTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden">
+        <div style={{ display: activeTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           {selectedJob ? (
           <>
             {/* Center header */}
@@ -2167,7 +2167,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
               {detailLoading ? (
                 <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading…</div>
               ) : jobDetail ? (
@@ -2205,7 +2205,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   </div>
 
                   {/* Thread */}
-                  <div className="flex-1 overflow-hidden flex flex-col">
+                  <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                     <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
                       <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Thread</p>
                       {jobDetail.thread.some(m => m.role === "cleaner" || m.role === "client") && (
@@ -2445,7 +2445,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         </div>
 
         {/* VIEW: Command Chat */}
-        <div style={{ display: activeTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden">
+        <div style={{ display: activeTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CommandChat
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
@@ -2476,7 +2476,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         </div>
 
         {/* VIEW: Regular channel */}
-        <div style={{ display: activeTab === "channels" && activeChannel !== "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden">
+        <div style={{ display: activeTab === "channels" && activeChannel !== "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           <>
             <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between">
               <div>
