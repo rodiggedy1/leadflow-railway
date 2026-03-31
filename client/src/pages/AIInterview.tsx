@@ -225,7 +225,6 @@ export default function AIInterview() {
   useEffect(() => { statusRef.current = status; }, [status]);
   // Ref to always-latest stopRecordingAndUpload — prevents stale closure in call-end handler
   const stopRecordingAndUploadRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  // Keep the ref in sync after stopRecordingAndUpload is defined (done below after its useCallback)
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
 
@@ -236,6 +235,13 @@ export default function AIInterview() {
 
   const saveCallId = trpc.hiring.saveInterviewCallId.useMutation();
   const saveInterviewVideo = trpc.hiring.saveInterviewVideo.useMutation();
+
+  // Refs for values used inside stopRecordingAndUpload — avoids stale closures entirely
+  const candidateIdRef = useRef<number>(candidateId);
+  const saveInterviewVideoRef = useRef(saveInterviewVideo);
+  // Keep candidateIdRef and saveInterviewVideoRef always current
+  useEffect(() => { candidateIdRef.current = candidateId; }, [candidateId]);
+  useEffect(() => { saveInterviewVideoRef.current = saveInterviewVideo; }, [saveInterviewVideo]);
 
   // When config loads, move to "ready"
   useEffect(() => {
@@ -294,12 +300,18 @@ export default function AIInterview() {
 
   const stopRecordingAndUpload = useCallback(async () => {
     const mr = mediaRecorderRef.current;
-    if (!mr || mr.state === "inactive") return;
+    if (!mr || mr.state === "inactive") {
+      console.log("[Interview] stopRecordingAndUpload: recorder not active, skipping");
+      return;
+    }
 
     return new Promise<void>((resolve) => {
       mr.onstop = async () => {
         const chunks = recordedChunksRef.current;
-        if (chunks.length === 0 || candidateId <= 0) {
+        const cid = candidateIdRef.current;
+        console.log(`[Interview] onstop fired — chunks: ${chunks.length}, candidateId: ${cid}`);
+        if (chunks.length === 0 || cid <= 0) {
+          console.warn("[Interview] Skipping upload — no chunks or invalid candidateId");
           resolve();
           return;
         }
@@ -307,18 +319,21 @@ export default function AIInterview() {
           setUploadProgress("Saving your interview video…");
           const mimeType = chunks[0].type || "video/webm";
           const blob = new Blob(chunks, { type: mimeType });
+          console.log(`[Interview] Uploading blob — size: ${blob.size}, type: ${mimeType}`);
           const res = await fetch("/api/upload/video", {
             method: "POST",
             headers: { "Content-Type": mimeType },
             body: blob,
             credentials: "include",
           });
-          if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+          if (!res.ok) throw new Error(`Upload failed: ${res.status} ${await res.text()}`);
           const { url } = (await res.json()) as { url: string };
-          await saveInterviewVideo.mutateAsync({
-            candidateId,
+          console.log("[Interview] Upload succeeded, saving URL to DB:", url);
+          await saveInterviewVideoRef.current.mutateAsync({
+            candidateId: cid,
             interviewVideoUrl: url,
           });
+          console.log("[Interview] DB save succeeded");
           setUploadProgress("");
         } catch (err) {
           console.error("[Interview] Video upload failed:", err);
@@ -328,7 +343,7 @@ export default function AIInterview() {
       };
       mr.stop();
     });
-  }, [candidateId, saveInterviewVideo]);
+  }, []);
 
   // Keep the ref in sync so call-end handler always calls the latest version
   useEffect(() => {
