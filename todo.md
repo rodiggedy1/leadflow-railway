@@ -668,3 +668,10 @@
 - [x] Create getCandidates tRPC query (protectedProcedure)
 - [x] Wire Apply form to call submitApplication on final step
 - [x] Display real candidates from DB in /admin/hiring pipeline board
+
+## Apply Form — Validation + Video Interview
+
+- [x] Basic Info: require firstName, lastName, phone before Continue (inline error messages)
+- [x] Requirements: require at least one Yes/No answer before Continue
+- [x] Video step: real browser MediaRecorder — countdown, live preview, stop, playback, re-record
+- [x] Video step: upload recorded blob to S3 and save URL on submitApplication

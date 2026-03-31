@@ -3,7 +3,7 @@
  * Steps: Welcome → Basic Info → Requirements → Specialties → Your Bio → Video → Thank You
  * World-class design: clean white layout, green accent, soft shadows, MIB brand feel.
  */
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Home,
   User,
@@ -241,24 +241,47 @@ function BasicInfoStep({
   onChange: (patch: Partial<FormData>) => void;
   onNext: () => void;
 }) {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!data.firstName.trim()) e.firstName = "First name is required";
+    if (!data.lastName.trim()) e.lastName = "Last name is required";
+    if (!data.phone.trim()) e.phone = "Phone number is required";
+    else if (!/^[\d\s\-\+\(\)]{7,}$/.test(data.phone.trim())) e.phone = "Enter a valid phone number";
+    return e;
+  };
+
+  const handleContinue = () => {
+    const e = validate();
+    setErrors(e);
+    if (Object.keys(e).length === 0) onNext();
+  };
+
   return (
     <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-1">Tell us about yourself</h2>
       <p className="text-sm text-gray-400 mb-8">Basic contact and address information</p>
 
       <div className="grid grid-cols-2 gap-4 mb-4">
-        <InputField
-          label="First Name"
-          placeholder="Enter your first name"
-          value={data.firstName}
-          onChange={v => onChange({ firstName: v })}
-        />
-        <InputField
-          label="Last Name"
-          placeholder="Enter your last name"
-          value={data.lastName}
-          onChange={v => onChange({ lastName: v })}
-        />
+        <div>
+          <InputField
+            label="First Name *"
+            placeholder="Enter your first name"
+            value={data.firstName}
+            onChange={v => { onChange({ firstName: v }); setErrors(p => ({ ...p, firstName: "" })); }}
+          />
+          {errors.firstName && <p className="text-xs text-red-500 mt-1">{errors.firstName}</p>}
+        </div>
+        <div>
+          <InputField
+            label="Last Name *"
+            placeholder="Enter your last name"
+            value={data.lastName}
+            onChange={v => { onChange({ lastName: v }); setErrors(p => ({ ...p, lastName: "" })); }}
+          />
+          {errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
@@ -270,14 +293,17 @@ function BasicInfoStep({
           onChange={v => onChange({ email: v })}
           icon={<Mail size={15} />}
         />
-        <InputField
-          label="Phone Number"
-          placeholder="302-123-4567"
-          type="tel"
-          value={data.phone}
-          onChange={v => onChange({ phone: v })}
-          icon={<Phone size={15} />}
-        />
+        <div>
+          <InputField
+            label="Phone Number *"
+            placeholder="302-123-4567"
+            type="tel"
+            value={data.phone}
+            onChange={v => { onChange({ phone: v }); setErrors(p => ({ ...p, phone: "" })); }}
+            icon={<Phone size={15} />}
+          />
+          {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+        </div>
       </div>
 
       <div className="mb-1">
@@ -327,7 +353,7 @@ function BasicInfoStep({
 
       <div className="flex justify-end mt-8">
         <button
-          onClick={onNext}
+          onClick={handleContinue}
           className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
@@ -347,6 +373,20 @@ function RequirementsStep({
   onChange: (patch: Partial<FormData>) => void;
   onNext: () => void;
 }) {
+  const [showError, setShowError] = useState(false);
+
+  const answeredCount = [data.hasCleaning, data.hasBankAccount, data.isAuthorized, data.consentBackground]
+    .filter(v => v !== null).length;
+
+  const handleContinue = () => {
+    if (answeredCount < 1) {
+      setShowError(true);
+      return;
+    }
+    setShowError(false);
+    onNext();
+  };
+
   return (
     <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-1">Requirements</h2>
@@ -355,23 +395,29 @@ function RequirementsStep({
       <YesNoField
         question="Do you have professional cleaning experience?"
         value={data.hasCleaning}
-        onChange={v => onChange({ hasCleaning: v })}
+        onChange={v => { onChange({ hasCleaning: v }); setShowError(false); }}
       />
       <YesNoField
         question="Do you have a bank account for direct deposit?"
         value={data.hasBankAccount}
-        onChange={v => onChange({ hasBankAccount: v })}
+        onChange={v => { onChange({ hasBankAccount: v }); setShowError(false); }}
       />
       <YesNoField
         question="Are you legally authorized to work in the United States?"
         value={data.isAuthorized}
-        onChange={v => onChange({ isAuthorized: v })}
+        onChange={v => { onChange({ isAuthorized: v }); setShowError(false); }}
       />
       <YesNoField
         question="Do you consent to a background check?"
         value={data.consentBackground}
-        onChange={v => onChange({ consentBackground: v })}
+        onChange={v => { onChange({ consentBackground: v }); setShowError(false); }}
       />
+
+      {showError && (
+        <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">
+          Please answer at least one question before continuing.
+        </div>
+      )}
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -388,7 +434,7 @@ function RequirementsStep({
 
       <div className="flex justify-end">
         <button
-          onClick={onNext}
+          onClick={handleContinue}
           className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
@@ -566,129 +612,322 @@ function BioStep({
   );
 }
 
-function VideoStep({ onNext, onSubmit, isSubmitting }: { onNext: () => void; onSubmit: () => void; isSubmitting: boolean }) {
+type RecordState = "idle" | "countdown" | "recording" | "preview" | "uploading";
+
+function VideoStep({
+  onSubmit,
+  onSkip,
+  isSubmitting,
+}: {
+  onSubmit: (videoUrl?: string) => void;
+  onSkip: () => void;
+  isSubmitting: boolean;
+}) {
+  const [recState, setRecState] = useState<RecordState>("idle");
+  const [countdown, setCountdown] = useState(3);
+  const [elapsed, setElapsed] = useState(0); // seconds recorded
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null); // local blob URL for preview
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null); // S3 URL after upload
+
+  const liveVideoRef = useRef<HTMLVideoElement>(null);
+  const playbackVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const MAX_SECONDS = 120;
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      stopStream();
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    };
+  }, []);
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }
+
+  async function startCountdown() {
+    setUploadError(null);
+    setRecordedUrl(null);
+    setUploadedUrl(null);
+    setElapsed(0);
+    setCountdown(3);
+    setRecState("countdown");
+
+    // Request camera+mic
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      if (liveVideoRef.current) {
+        liveVideoRef.current.srcObject = stream;
+        liveVideoRef.current.muted = true;
+        liveVideoRef.current.play().catch(() => {});
+      }
+    } catch {
+      setUploadError("Camera/microphone access denied. Please allow permissions and try again.");
+      setRecState("idle");
+      return;
+    }
+
+    let c = 3;
+    const cdTimer = setInterval(() => {
+      c -= 1;
+      setCountdown(c);
+      if (c <= 0) {
+        clearInterval(cdTimer);
+        beginRecording();
+      }
+    }, 1000);
+  }
+
+  function beginRecording() {
+    if (!streamRef.current) return;
+    chunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : MediaRecorder.isTypeSupported("video/webm")
+      ? "video/webm"
+      : "";
+    const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    recorder.onstop = handleRecordingStop;
+    recorder.start(250);
+    recorderRef.current = recorder;
+    setRecState("recording");
+    setElapsed(0);
+    timerRef.current = setInterval(() => {
+      setElapsed(prev => {
+        if (prev + 1 >= MAX_SECONDS) {
+          stopRecording();
+          return prev + 1;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+  }
+
+  function stopRecording() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    recorderRef.current?.stop();
+  }
+
+  function handleRecordingStop() {
+    stopStream();
+    const blob = new Blob(chunksRef.current, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    setRecordedUrl(url);
+    setRecState("preview");
+    if (playbackVideoRef.current) {
+      playbackVideoRef.current.src = url;
+    }
+  }
+
+  function reRecord() {
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    setRecordedUrl(null);
+    setUploadedUrl(null);
+    setElapsed(0);
+    setRecState("idle");
+  }
+
+  async function handleSubmitWithVideo() {
+    if (!recordedUrl) { onSubmit(undefined); return; }
+    setUploadError(null);
+    setRecState("uploading");
+    try {
+      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const res = await fetch("/api/upload/video", {
+        method: "POST",
+        headers: { "Content-Type": "video/webm" },
+        body: blob,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { url } = await res.json();
+      setUploadedUrl(url);
+      onSubmit(url);
+    } catch (err: any) {
+      setUploadError(err.message || "Upload failed. Please try again.");
+      setRecState("preview");
+    }
+  }
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const remaining = MAX_SECONDS - elapsed;
+
   return (
     <div className="max-w-2xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Video</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-1">Video Interview</h2>
+      <p className="text-sm text-gray-400 mb-6">Answer the question below on camera — up to 2 minutes</p>
 
-      <div className="grid grid-cols-[1fr_1fr] gap-5">
-        {/* Left: prompt + tips */}
-        <div className="space-y-4">
-          {/* Prompt card */}
+      {/* Question card */}
+      <div
+        className="rounded-2xl p-5 mb-5"
+        style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+      >
+        <div className="flex items-center gap-3 mb-3">
           <div
-            className="rounded-2xl p-5"
-            style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
           >
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
-              >
-                <Sparkles size={18} color="#fff" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-gray-900">Your Moment to Shine</p>
-                <p className="text-xs text-gray-400">Take 60 seconds to showcase your expertise</p>
-              </div>
-            </div>
-            <div className="border-l-4 pl-4" style={{ borderColor: "#7c3aed" }}>
-              <p className="text-sm font-semibold text-gray-800 leading-relaxed">
-                Tell us about a time when you had to solve a complex problem at work. What was your approach, and what was the outcome?
-              </p>
-            </div>
+            <Sparkles size={18} color="#fff" />
           </div>
-
-          {/* Pro tips */}
-          <div
-            className="rounded-2xl p-4"
-            style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: GREEN_LIGHT }}
-              >
-                <CheckCircle2 size={16} color={GREEN} />
-              </div>
-              <p className="text-sm font-bold text-gray-900">Pro Tips</p>
-            </div>
-            <ul className="space-y-2">
-              {[
-                "Maintain eye contact with the camera",
-                "Use the STAR method (Situation, Task, Action, Result)",
-                "Speak with confidence and enthusiasm",
-              ].map(tip => (
-                <li key={tip} className="flex items-start gap-2">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                    style={{ backgroundColor: GREEN }}
-                  />
-                  <span className="text-xs text-gray-500">{tip}</span>
-                </li>
-              ))}
-            </ul>
+          <div>
+            <p className="text-sm font-bold text-gray-900">Interview Question</p>
+            <p className="text-xs text-gray-400">Take up to 2 minutes to answer</p>
           </div>
         </div>
+        <div className="border-l-4 pl-4" style={{ borderColor: "#7c3aed" }}>
+          <p className="text-sm font-semibold text-gray-800 leading-relaxed">
+            Tell us why you want to work as a professional cleaner and what makes you stand out from other applicants.
+          </p>
+        </div>
+      </div>
 
-        {/* Right: camera preview */}
-        <div>
-          <div
-            className="rounded-2xl flex flex-col items-center justify-center mb-4"
-            style={{
-              background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)",
-              aspectRatio: "4/3",
-              position: "relative",
-            }}
-          >
+      {/* Camera / playback area */}
+      <div
+        className="relative rounded-2xl overflow-hidden mb-4"
+        style={{
+          background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)",
+          aspectRatio: "16/9",
+        }}
+      >
+        {/* Live preview (idle / countdown / recording) */}
+        <video
+          ref={liveVideoRef}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ display: recState === "preview" || recState === "uploading" ? "none" : "block" }}
+          playsInline
+          muted
+        />
+
+        {/* Playback */}
+        <video
+          ref={playbackVideoRef}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ display: recState === "preview" || recState === "uploading" ? "block" : "none" }}
+          controls
+          playsInline
+        />
+
+        {/* Idle overlay */}
+        {recState === "idle" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
             <div
-              className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-              style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-            >
-              <span className="text-white text-xs">⏱</span>
-              <span className="text-white text-xs font-semibold">1:00</span>
-            </div>
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
               style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
             >
               <Camera size={28} color="rgba(255,255,255,0.7)" />
             </div>
             <p className="text-white text-sm font-semibold">Ready to record?</p>
-            <p className="text-white/50 text-xs mt-1">Your camera will activate when you start</p>
+            <p className="text-white/50 text-xs mt-1">Your camera will activate when you click Start</p>
           </div>
+        )}
 
-          <button
-            className="w-full h-12 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90 mb-2"
-            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
-          >
-            <ChevronRight size={18} />
-            Start Recording
-          </button>
-          <p className="text-center text-xs text-gray-400">
-            Ensure your camera and microphone permissions are enabled
-          </p>
-        </div>
+        {/* Countdown overlay */}
+        {recState === "countdown" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
+            <p className="text-white/70 text-sm mb-2 font-medium">Recording in…</p>
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
+            >
+              <span className="text-white text-4xl font-bold">{countdown}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Recording HUD */}
+        {recState === "recording" && (
+          <>
+            <div
+              className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+              style={{ backgroundColor: "rgba(220,38,38,0.85)" }}
+            >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span className="text-white text-xs font-semibold">REC</span>
+            </div>
+            <div
+              className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+              style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+            >
+              <span className="text-white text-xs font-semibold">{fmtTime(remaining)} left</span>
+            </div>
+          </>
+        )}
+
+        {/* Uploading overlay */}
+        {recState === "uploading" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+            <Loader2 size={36} color="#fff" className="animate-spin mb-3" />
+            <p className="text-white text-sm font-semibold">Uploading your video…</p>
+          </div>
+        )}
       </div>
 
-      <div className="flex justify-between items-center mt-6">
+      {/* Error */}
+      {uploadError && (
+        <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{uploadError}</div>
+      )}
+
+      {/* Controls */}
+      <div className="flex flex-col gap-3 mb-6">
+        {(recState === "idle") && (
+          <button
+            onClick={startCountdown}
+            className="w-full h-12 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
+          >
+            <Camera size={16} /> Start Recording
+          </button>
+        )}
+        {recState === "recording" && (
+          <button
+            onClick={stopRecording}
+            className="w-full h-12 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90"
+            style={{ backgroundColor: "#dc2626" }}
+          >
+            <span className="w-3 h-3 rounded bg-white" /> Stop Recording
+          </button>
+        )}
+        {recState === "preview" && (
+          <button
+            onClick={reRecord}
+            className="w-full h-12 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90"
+            style={{ border: "1.5px solid #e5e7eb", backgroundColor: "#fff", color: "#374151" }}
+          >
+            <Video size={16} /> Re-record
+          </button>
+        )}
+        <p className="text-center text-xs text-gray-400">Ensure your camera and microphone permissions are enabled</p>
+      </div>
+
+      {/* Submit row */}
+      <div className="flex justify-between items-center">
         <button
-          onClick={onSubmit}
-          disabled={isSubmitting}
-          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-60"
+          onClick={handleSubmitWithVideo}
+          disabled={isSubmitting || recState === "uploading" || recState === "recording" || recState === "countdown"}
+          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: ACCENT }}
         >
-          {isSubmitting ? (
-            <><Loader2 size={16} className="animate-spin" /> Submitting...</>
+          {(isSubmitting || recState === "uploading") ? (
+            <><Loader2 size={16} className="animate-spin" /> Submitting…</>
           ) : (
             <>Submit Application <ChevronRight size={16} /></>
           )}
         </button>
         <button
-          onClick={onSubmit}
-          disabled={isSubmitting}
+          onClick={() => onSubmit(undefined)}
+          disabled={isSubmitting || recState === "uploading"}
           className="text-sm text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
         >
-          Record Later
+          Skip video
         </button>
       </div>
     </div>
@@ -755,7 +994,7 @@ export default function Apply() {
     onError: (err) => setSubmitError(err.message || "Something went wrong. Please try again."),
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = (videoUrl?: string) => {
     setSubmitError(null);
     submitMutation.mutate({
       firstName: formData.firstName || "Applicant",
@@ -773,6 +1012,7 @@ export default function Apply() {
       consentBackground: formData.consentBackground,
       experience: formData.experience || undefined,
       specialties: formData.specialties,
+      videoUrl: videoUrl || undefined,
     });
   };
 
@@ -883,7 +1123,7 @@ export default function Apply() {
           {submitError && (
             <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{submitError}</div>
           )}
-          {step === "video" && <VideoStep onNext={next} onSubmit={handleSubmit} isSubmitting={submitMutation.isPending} />}
+          {step === "video" && <VideoStep onSubmit={handleSubmit} onSkip={() => handleSubmit(undefined)} isSubmitting={submitMutation.isPending} />}
           {step === "done" && <ThankYouStep />}
         </div>
       </main>

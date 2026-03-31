@@ -1759,6 +1759,7 @@ export const candidates = mysqlTable("candidates", {
   specialties: text("specialties"),
   // Pipeline stage
   stage: varchar("stage", { length: 64 }).notNull().default("Application Submitted"),
+  videoUrl: text("videoUrl"),
   // Metadata
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
