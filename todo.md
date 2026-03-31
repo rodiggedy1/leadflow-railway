@@ -724,3 +724,10 @@
 ## Navigation
 
 - [x] Add Hiring link to top nav bar (admin-only, links to /admin/hiring)
+
+## Hiring Pipeline — Drag & Drop
+
+- [x] Install @dnd-kit/core and @dnd-kit/utilities
+- [x] Wrap kanban board in DndContext with column drop zones
+- [x] Make candidate cards draggable (useDraggable with 8px activation distance)
+- [x] On drop, call updateStage mutation and optimistically update UI (with rollback on error)

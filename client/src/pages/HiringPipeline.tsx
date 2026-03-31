@@ -7,6 +7,18 @@ import React, { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import {
   User,
   MessageSquare,
   Phone,
@@ -240,21 +252,36 @@ function CandidateCard({
   candidate,
   isSelected,
   onClick,
+  isDragOverlay,
 }: {
   candidate: Candidate;
   isSelected: boolean;
   onClick: () => void;
+  isDragOverlay?: boolean;
 }) {
   const hasTransport = candidate.transport !== "No car";
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: candidate.id,
+    data: { candidate },
+    disabled: isDragOverlay,
+  });
 
   return (
     <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       onClick={onClick}
-      className="rounded-2xl cursor-pointer transition-all"
+      className="rounded-2xl transition-all"
       style={{
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.4 : 1,
+        cursor: isDragging ? "grabbing" : "grab",
         backgroundColor: "#ffffff",
         border: isSelected ? "1.5px solid #0f172a" : "1px solid #e8ecf0",
-        boxShadow: isSelected
+        boxShadow: isDragOverlay
+          ? "0 8px 24px rgba(0,0,0,0.15)"
+          : isSelected
           ? "0 0 0 1px #0f172a"
           : "0 1px 3px 0 rgba(0,0,0,0.04), 0 1px 2px -1px rgba(0,0,0,0.04)",
         padding: "14px 16px 12px",
@@ -381,13 +408,15 @@ function StageCard({
   onSelect: (c: Candidate) => void;
 }) {
   const badge = STAGE_BADGE[stage];
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
 
   return (
     <div
-      className="rounded-3xl"
+      ref={setNodeRef}
+      className="rounded-3xl transition-colors"
       style={{
-        backgroundColor: "#f7f9fb",
-        border: "1px solid #eaecf0",
+        backgroundColor: isOver ? "#eef2ff" : "#f7f9fb",
+        border: isOver ? "1.5px dashed #6366f1" : "1px solid #eaecf0",
         padding: "20px 18px 18px",
       }}
     >
@@ -998,10 +1027,45 @@ export default function HiringPipeline() {
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
+  // Optimistic stage overrides: candidateId -> new stage
+  const [stageOverrides, setStageOverrides] = useState<Record<number, Stage>>({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const updateStageMutation = trpc.hiring.updateStage.useMutation({
     onSuccess: () => candidatesQuery.refetch(),
+    onError: (_err, vars) => {
+      // Roll back optimistic update on error
+      setStageOverrides(prev => {
+        const next = { ...prev };
+        delete next[vars.id];
+        return next;
+      });
+    },
   });
+
+  function handleDragStart(event: DragStartEvent) {
+    const candidate = event.active.data.current?.candidate as Candidate | undefined;
+    setActiveCandidate(candidate ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveCandidate(null);
+    const { active, over } = event;
+    if (!over) return;
+    const candidate = active.data.current?.candidate as Candidate | undefined;
+    if (!candidate) return;
+    const newStage = over.id as Stage;
+    if (newStage === candidate.stage) return;
+    // Only DB candidates (id < 10000) can be moved
+    if (candidate.id >= 10000) return;
+    // Optimistic update
+    setStageOverrides(prev => ({ ...prev, [candidate.id]: newStage }));
+    updateStageMutation.mutate({ id: candidate.id, stage: newStage });
+  }
 
   const candidatesQuery = trpc.hiring.getCandidates.useQuery(undefined, {
     // Poll more frequently when any candidate is still awaiting AI scoring
@@ -1012,7 +1076,7 @@ export default function HiringPipeline() {
     },
   });
 
-  // Merge real DB candidates with mock data (real candidates take precedence)
+  // Merge real DB candidates with mock data, applying optimistic stage overrides
   const allCandidates: Candidate[] = useMemo(() => {
     const dbRows = candidatesQuery.data ?? [];
     const dbCandidates: Candidate[] = dbRows.map(r => ({
@@ -1042,8 +1106,12 @@ export default function HiringPipeline() {
       specialtiesList: r.specialties ?? [],
     }));
     // Prepend real DB candidates before mock ones
-    return [...dbCandidates, ...MOCK_CANDIDATES];
-  }, [candidatesQuery.data]);
+    const merged = [...dbCandidates, ...MOCK_CANDIDATES];
+    // Apply optimistic stage overrides
+    return merged.map(c =>
+      stageOverrides[c.id] ? { ...c, stage: stageOverrides[c.id] } : c
+    );
+  }, [candidatesQuery.data, stageOverrides]);
 
   const filteredCandidates = allCandidates.filter(c => {
     const matchesTab = filterTab === "All" || c.stage === filterTab;
@@ -1173,18 +1241,34 @@ export default function HiringPipeline() {
             <div className="h-full w-1/3 rounded-full" style={{ backgroundColor: "#cbd5e1" }} />
           </div>
 
-          {/* 2-column grid of stage cards */}
-          <div className="grid grid-cols-2 gap-4">
-            {visibleStages.map(stage => (
-              <StageCard
-                key={stage}
-                stage={stage}
-                candidates={filteredCandidates.filter(c => c.stage === stage)}
-                selectedId={selectedCandidate?.id ?? null}
-                onSelect={c => setSelectedCandidate(c)}
-              />
-            ))}
-          </div>
+          {/* 2-column grid of stage cards — wrapped in DndContext for drag-and-drop */}
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              {visibleStages.map(stage => (
+                <StageCard
+                  key={stage}
+                  stage={stage}
+                  candidates={filteredCandidates.filter(c => c.stage === stage)}
+                  selectedId={selectedCandidate?.id ?? null}
+                  onSelect={c => setSelectedCandidate(c)}
+                />
+              ))}
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {activeCandidate ? (
+                <CandidateCard
+                  candidate={activeCandidate}
+                  isSelected={false}
+                  onClick={() => {}}
+                  isDragOverlay
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         </div>
 
         {/* ── Right panel ── */}
