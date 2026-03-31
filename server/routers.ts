@@ -3928,7 +3928,10 @@ Your job: fill in the following message template using the booking details provi
           });
           if (!resp.ok) return { recordingUrl: null };
           const data = await resp.json() as { artifact?: { recordingUrl?: string } };
-          return { recordingUrl: data?.artifact?.recordingUrl ?? null };
+          const rawUrl = data?.artifact?.recordingUrl ?? null;
+          // VAPI returns the sentinel string "rawRecordingUploadDisabled" when recording was off
+          const recordingUrl = rawUrl && rawUrl !== "rawRecordingUploadDisabled" ? rawUrl : null;
+          return { recordingUrl };
         } catch {
           return { recordingUrl: null };
         }
