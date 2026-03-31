@@ -3859,6 +3859,24 @@ Your job: fill in the following message template using the booking details provi
           .where(eq(candidates.id, input.candidateId));
         return { success: true };
       }),
+
+    /**
+     * Public — saves the recorded camera video URL after interview ends.
+     */
+    saveInterviewVideo: publicProcedure
+      .input(z.object({
+        candidateId: z.number(),
+        interviewVideoUrl: z.string().url(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        await db.update(candidates)
+          .set({ videoUrl: input.interviewVideoUrl })
+          .where(eq(candidates.id, input.candidateId));
+        return { success: true };
+      }),
   }),
 });
 
