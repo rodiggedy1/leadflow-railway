@@ -3837,6 +3837,8 @@ Your job: fill in the following message template using the booking details provi
         const { ENV } = await import("./_core/env");
         return {
           vapiPublicKey: ENV.vapiPublicKey,
+          // Pre-created VAPI assistant — uses {{candidateName}} variable substitution
+          hiringAssistantId: "de069cb2-ca13-47d2-9464-c4e58b5bd686",
           candidateName: `${c.firstName} ${c.lastName}`,
           candidateId: c.id,
           alreadyInterviewed: !!c.interviewCallId,

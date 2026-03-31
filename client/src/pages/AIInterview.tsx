@@ -359,6 +359,7 @@ export default function AIInterview() {
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
+        console.log("[VAPI] ✅ call-start fired");
         setStatus("active");
         timerRef.current = setInterval(
           () => setCallDuration((d) => d + 1),
@@ -369,7 +370,12 @@ export default function AIInterview() {
       vapi.on("speech-start", () => setIsSpeaking(true));
       vapi.on("speech-end", () => setIsSpeaking(false));
 
+      vapi.on("call-start-progress", (event: unknown) => {
+        console.log("[VAPI] call-start-progress:", JSON.stringify(event));
+      });
+
       vapi.on("call-end", async () => {
+        console.log("[VAPI] ⚠️ call-end fired, statusRef.current =", statusRef.current);
         setIsSpeaking(false);
         if (timerRef.current) clearInterval(timerRef.current);
         setStatus("ending");
@@ -384,7 +390,7 @@ export default function AIInterview() {
       });
 
       vapi.on("error", (err: unknown) => {
-        console.error("[VAPI] error:", err);
+        console.error("[VAPI] ❌ error event:", JSON.stringify(err));
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "");
         const errMsg = String(errObj?.message ?? "");
@@ -424,7 +430,11 @@ export default function AIInterview() {
         if (timerRef.current) clearInterval(timerRef.current);
       });
 
-      const call = await vapi.start(buildAssistantConfig(config.candidateName));
+      // Use the pre-created VAPI assistant with candidateName injected via variableValues.
+      // This avoids the "Meeting has ended" ejection caused by inline config validation.
+      const call = await vapi.start(config.hiringAssistantId, {
+        variableValues: { candidateName: config.candidateName },
+      });
       if (call?.id) callIdRef.current = call.id;
     } catch (err) {
       console.error("[VAPI] start failed:", err);
