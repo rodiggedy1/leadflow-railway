@@ -1135,6 +1135,9 @@ export default function HiringPipeline() {
       const hasPending = rows.some((r: any) => r.aiScore == null);
       return hasPending ? 8_000 : 30_000;
     },
+    // Always treat data as stale so switching back to the tab triggers a refetch
+    staleTime: 0,
+    refetchOnWindowFocus: true,
     // Keep showing previous data during background refetch — prevents cards from
     // flashing out momentarily while a new fetch is in flight
     placeholderData: (prev) => prev,
