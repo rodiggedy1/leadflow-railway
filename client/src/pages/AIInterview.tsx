@@ -296,8 +296,6 @@ export default function AIInterview() {
         },
         body: chunkBlob,
         credentials: "include",
-        // keepalive: true allows the request to outlive the page
-        keepalive: true,
       });
       if (!res.ok) {
         console.error(`[Interview] Chunk ${index} upload failed: ${res.status}`);
