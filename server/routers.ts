@@ -3591,7 +3591,7 @@ Your job: fill in the following message template using the booking details provi
       .input(z.object({
         firstName: z.string().min(1),
         lastName: z.string().min(1),
-        email: z.string().email().optional().or(z.literal("")),
+        email: z.string().optional(),
         phone: z.string().min(7),
         streetAddress: z.string().optional(),
         apt: z.string().optional(),

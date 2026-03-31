@@ -222,12 +222,18 @@ function BasicInfoStep({
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const formatPhone = (raw: string) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0,3)}-${digits.slice(3)}`;
+    return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+  };
+
   const validate = () => {
     const e: Record<string, string> = {};
     if (!data.firstName.trim()) e.firstName = "First name is required";
     if (!data.lastName.trim()) e.lastName = "Last name is required";
     if (!data.phone.trim()) e.phone = "Phone number is required";
-    else if (!/^[\d\s\-\+\(\)]{7,}$/.test(data.phone.trim())) e.phone = "Enter a valid phone number";
     return e;
   };
 
@@ -278,7 +284,7 @@ function BasicInfoStep({
             placeholder="302-123-4567"
             type="tel"
             value={data.phone}
-            onChange={v => { onChange({ phone: v }); setErrors(p => ({ ...p, phone: "" })); }}
+            onChange={v => { onChange({ phone: formatPhone(v) }); setErrors(p => ({ ...p, phone: "" })); }}
             icon={<Phone size={15} />}
           />
           {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
