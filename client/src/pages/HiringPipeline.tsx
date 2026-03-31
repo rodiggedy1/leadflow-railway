@@ -856,17 +856,28 @@ function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate |
           <FileText size={15} />
           View Application
         </button>
-        <a
-          href={`/interview/${candidate.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 flex items-center justify-center gap-2 rounded-2xl transition-colors hover:opacity-90"
-          style={{ border: "1px solid #6366f1", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#fff", backgroundColor: "#6366f1", textDecoration: "none" }}
-        >
-          <Bot size={15} />
-          AI Interview
-          <ExternalLink size={12} />
-        </a>
+        {candidate.id < 10000 ? (
+          <a
+            href={`/interview/${candidate.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 rounded-2xl transition-colors hover:opacity-90"
+            style={{ border: "1px solid #6366f1", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#fff", backgroundColor: "#6366f1", textDecoration: "none" }}
+          >
+            <Bot size={15} />
+            AI Interview
+            <ExternalLink size={12} />
+          </a>
+        ) : (
+          <div
+            className="flex-1 flex items-center justify-center gap-2 rounded-2xl"
+            style={{ border: "1px solid #e2e8f0", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#94a3b8", backgroundColor: "#f8fafc", cursor: "not-allowed" }}
+            title="AI Interview is only available for real applicants submitted via the /apply form"
+          >
+            <Bot size={15} />
+            AI Interview
+          </div>
+        )}
       </div>
 
       {/* Application Details Modal */}

@@ -748,3 +748,4 @@
 - [x] Save transcript and AI score to candidate DB record
 - [x] Add "Start AI Interview" button in hiring pipeline detail panel
 - [x] Add route in App.tsx for /interview/:candidateId
+- [ ] Fix "Could not load interview configuration" error on deployed /interview/:candidateId page

@@ -313,6 +313,22 @@ export default function AIInterview() {
     const config = configQuery.data;
     if (!config) return;
 
+    // Check microphone permission before starting
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream.getTracks().forEach(t => t.stop()); // release immediately, VAPI will re-request
+    } catch (micErr) {
+      const errName = (micErr as Error)?.name ?? "";
+      if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+        setStatus("error");
+        setErrorMsg("No microphone found. Please connect a microphone and try again.");
+      } else {
+        setStatus("error");
+        setErrorMsg("Microphone access denied. Please allow microphone access in your browser settings and try again.");
+      }
+      return;
+    }
+
     setStatus("connecting");
     await startCamera();
 
@@ -341,8 +357,18 @@ export default function AIInterview() {
 
       vapi.on("error", (err: unknown) => {
         console.error("[VAPI] error:", err);
+        // Parse the error type to give a useful message
+        const errObj = err as Record<string, unknown>;
+        const errType = errObj?.type as string ?? "";
+        const innerErr = errObj?.error as Record<string, unknown> ?? {};
+        let msg = "Connection error. Please try again.";
+        if (errType === "daily-error" || String(innerErr?.message ?? "").toLowerCase().includes("mic") || String(innerErr?.message ?? "").toLowerCase().includes("device")) {
+          msg = "Could not access your microphone. Please allow microphone access in your browser and try again.";
+        } else if (String(innerErr?.message ?? "").toLowerCase().includes("permission")) {
+          msg = "Microphone permission denied. Please allow access in your browser settings and try again.";
+        }
         setStatus("error");
-        setErrorMsg("Connection error. Please try again.");
+        setErrorMsg(msg);
         stopCamera();
         if (timerRef.current) clearInterval(timerRef.current);
       });
