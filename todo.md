@@ -749,6 +749,6 @@
 - [x] Add "Start AI Interview" button in hiring pipeline detail panel
 - [x] Add route in App.tsx for /interview/:candidateId
 - [x] Fix "Could not load interview configuration" error on deployed /interview/:candidateId page
-- [x] Rebuild interview page: auto-start on load, animated waveform visualizer, camera recording + S3 upload
+- [x] Rebuild interview page: Start button (not auto-start), waveform visualizer, camera recording + S3 upload, allow retesting
 - [x] Add saveInterviewVideo tRPC procedure to save recorded camera video URL to candidate record
 - [x] Hide AI Interview button for mock demo candidates (id >= 10000)

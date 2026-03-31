@@ -1,31 +1,34 @@
 /**
- * AI Video Interview — /interview/:candidateId
+ * AI Interview — /interview/:candidateId
  *
- * Layout:
- *  - Full-screen dark background
- *  - Large animated waveform visualizer (AI speaking indicator)
- *  - Applicant's camera feed in a prominent center card
- *  - Auto-starts VAPI on page load (after mic permission granted)
- *  - Records applicant camera via MediaRecorder → uploads to S3 on call end
+ * Flow:
+ *  1. Page loads → fetches candidate config
+ *  2. Shows "Ready" screen with candidate name + Start button
+ *  3. User clicks Start → requests mic + camera → VAPI connects
+ *  4. Active: waveform visualizer + camera feed + mute/end controls
+ *  5. Call ends → uploads camera recording to S3 → "Done" screen
+ *
+ * No auto-start: browser mic permission requires a user gesture.
+ * alreadyInterviewed is intentionally ignored so retesting works.
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "wouter";
 import Vapi from "@vapi-ai/web";
 import { trpc } from "@/lib/trpc";
-import { Mic, MicOff, PhoneOff, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Loader2, CheckCircle2, AlertCircle, Video } from "lucide-react";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type InterviewStatus =
-  | "loading"       // fetching config
-  | "permission"    // asking for mic/camera permission
-  | "connecting"    // VAPI connecting
-  | "active"        // call in progress
-  | "ending"        // user clicked end / call ended, uploading video
-  | "done"          // upload complete
-  | "error";        // something went wrong
+  | "loading"     // fetching config from server
+  | "ready"       // config loaded, waiting for user to click Start
+  | "connecting"  // requesting mic/camera + VAPI connecting
+  | "active"      // call in progress
+  | "ending"      // call ended, uploading video
+  | "done"        // all done
+  | "error";      // something went wrong
 
-// ── Build VAPI assistant config inline ───────────────────────────────────────
+// ── Inline VAPI assistant config ──────────────────────────────────────────────
 
 function buildAssistantConfig(candidateName: string) {
   const firstName = candidateName.split(" ")[0] ?? candidateName;
@@ -33,7 +36,7 @@ function buildAssistantConfig(candidateName: string) {
     name: "Hiring Interview Assistant",
     voice: {
       provider: "playht" as const,
-      voiceId: "jennifer",
+      voiceId: "jennifer" as const,
     },
     model: {
       provider: "openai" as const,
@@ -41,7 +44,7 @@ function buildAssistantConfig(candidateName: string) {
       messages: [
         {
           role: "system" as const,
-          content: `You are a friendly, professional hiring interviewer for Maids in Black, a premium residential cleaning company. You are conducting a short screening interview with ${firstName}.
+          content: `You are a friendly, professional hiring interviewer for Maids in Black, a premium residential cleaning company in Washington DC. You are conducting a short screening interview with ${firstName}.
 
 Your goal is to assess their fit for a cleaning professional role. Ask the following 4 questions, one at a time, and listen carefully to each answer before moving on:
 
@@ -58,7 +61,7 @@ Start by greeting ${firstName} warmly and asking the first question.`,
     },
     firstMessage: `Hi ${firstName}! Welcome to your interview with Maids in Black. I'm your AI interviewer today. This will be a short, friendly conversation — about 5 to 8 minutes. Ready to get started?`,
     endCallMessage: `Thank you so much for your time today, ${firstName}. Our hiring team will review your application and be in touch within 2 business days. Have a great day!`,
-    endCallPhrases: ["goodbye", "bye", "that's all", "thank you, goodbye"],
+    endCallPhrases: ["goodbye", "bye", "that's all", "thank you goodbye"],
   };
 }
 
@@ -67,11 +70,9 @@ Start by greeting ${firstName} warmly and asking the first question.`,
 function WaveformVisualizer({
   isActive,
   isSpeaking,
-  analyserRef,
 }: {
   isActive: boolean;
   isSpeaking: boolean;
-  analyserRef: React.RefObject<AnalyserNode | null>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
@@ -82,8 +83,7 @@ function WaveformVisualizer({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const BAR_COUNT = 64;
-    const dataArray = new Uint8Array(BAR_COUNT * 2);
+    const BAR_COUNT = 48;
 
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
@@ -91,54 +91,62 @@ function WaveformVisualizer({
       const H = canvas.height;
       ctx.clearRect(0, 0, W, H);
 
-      const analyser = analyserRef.current;
-      if (analyser && isSpeaking) {
-        analyser.getByteFrequencyData(dataArray);
-      }
-
       const barW = W / BAR_COUNT;
       for (let i = 0; i < BAR_COUNT; i++) {
         let barH: number;
-        if (analyser && isSpeaking) {
-          barH = (dataArray[i] / 255) * H * 0.9;
+        const t = Date.now() / 1000;
+        if (isSpeaking) {
+          // Energetic wave when AI speaking
+          barH =
+            (Math.sin(t * 8 + i * 0.4) * 0.4 +
+              Math.sin(t * 5 + i * 0.7) * 0.3 +
+              0.3) *
+            H *
+            0.85;
         } else if (isActive) {
-          // Gentle idle pulse
-          barH = (Math.sin(Date.now() / 600 + i * 0.3) * 0.5 + 0.5) * H * 0.12 + H * 0.04;
+          // Gentle idle pulse when listening
+          barH =
+            (Math.sin(t * 1.5 + i * 0.3) * 0.5 + 0.5) * H * 0.12 + H * 0.04;
         } else {
-          barH = H * 0.04;
+          barH = H * 0.03;
         }
 
         const x = i * barW;
         const y = H / 2 - barH / 2;
 
-        // Gradient: blue → indigo
         const grad = ctx.createLinearGradient(x, y, x, y + barH);
-        grad.addColorStop(0, isSpeaking ? "rgba(99,102,241,0.9)" : "rgba(99,102,241,0.4)");
-        grad.addColorStop(1, isSpeaking ? "rgba(139,92,246,0.9)" : "rgba(139,92,246,0.4)");
+        grad.addColorStop(
+          0,
+          isSpeaking ? "rgba(99,102,241,0.95)" : "rgba(99,102,241,0.35)"
+        );
+        grad.addColorStop(
+          1,
+          isSpeaking ? "rgba(168,85,247,0.95)" : "rgba(168,85,247,0.35)"
+        );
 
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.roundRect(x + 1, y, barW - 2, barH, 3);
+        ctx.roundRect(x + 1.5, y, barW - 3, Math.max(barH, 2), 3);
         ctx.fill();
       }
     };
 
     draw();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [isActive, isSpeaking, analyserRef]);
+  }, [isActive, isSpeaking]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={600}
-      height={120}
-      className="w-full max-w-xl"
+      width={520}
+      height={100}
+      className="w-full max-w-lg"
       style={{ display: "block" }}
     />
   );
 }
 
-// ── Self-view Camera Feed ─────────────────────────────────────────────────────
+// ── Camera Feed ───────────────────────────────────────────────────────────────
 
 function CameraFeed({ stream }: { stream: MediaStream | null }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -154,11 +162,11 @@ function CameraFeed({ stream }: { stream: MediaStream | null }) {
       className="relative rounded-2xl overflow-hidden"
       style={{
         width: "100%",
-        maxWidth: 480,
+        maxWidth: 400,
         aspectRatio: "4/3",
         backgroundColor: "#1e293b",
-        border: "2px solid rgba(99,102,241,0.3)",
-        boxShadow: "0 0 40px rgba(99,102,241,0.15)",
+        border: "2px solid rgba(99,102,241,0.25)",
+        boxShadow: "0 0 32px rgba(99,102,241,0.12)",
       }}
     >
       {stream ? (
@@ -172,24 +180,15 @@ function CameraFeed({ stream }: { stream: MediaStream | null }) {
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3">
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: "#334155" }}
-          >
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5">
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-            </svg>
-          </div>
-          <span className="text-white/40 text-sm">Camera starting…</span>
+          <Video size={32} style={{ color: "rgba(255,255,255,0.2)" }} />
+          <span className="text-white/30 text-sm">Camera starting…</span>
         </div>
       )}
 
-      {/* REC indicator */}
       {stream && (
         <div
           className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+          style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
         >
           <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
           <span className="text-white text-xs font-semibold tracking-wide">REC</span>
@@ -219,8 +218,6 @@ export default function AIInterview() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
 
@@ -232,40 +229,40 @@ export default function AIInterview() {
   const saveCallId = trpc.hiring.saveInterviewCallId.useMutation();
   const saveInterviewVideo = trpc.hiring.saveInterviewVideo.useMutation();
 
-  // ── Camera + Mic setup ────────────────────────────────────────────────────
-
-  const startCameraAndMic = useCallback(async (): Promise<{ videoStream: MediaStream; micOk: boolean }> => {
-    // Start camera (video only for recording)
-    let videoStream: MediaStream | null = null;
-    try {
-      videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      cameraStreamRef.current = videoStream;
-      setCameraStream(videoStream);
-    } catch {
-      // Camera denied — continue without it
-      videoStream = new MediaStream();
+  // When config loads, move to "ready"
+  useEffect(() => {
+    if (configQuery.data && status === "loading") {
+      setStatus("ready");
     }
-
-    // Check mic
-    let micOk = false;
-    try {
-      const micTest = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micTest.getTracks().forEach(t => t.stop());
-      micOk = true;
-    } catch {
-      micOk = false;
+    if (configQuery.error && status === "loading") {
+      setStatus("error");
+      setErrorMsg("Could not load interview. Please check the link and try again.");
     }
+  }, [configQuery.data, configQuery.error, status]);
 
-    return { videoStream, micOk };
+  // ── Camera helpers ────────────────────────────────────────────────────────
+
+  const startCamera = useCallback(async (): Promise<MediaStream | null> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      setCameraStream(stream);
+      return stream;
+    } catch {
+      return null;
+    }
   }, []);
 
   const stopCamera = useCallback(() => {
-    cameraStreamRef.current?.getTracks().forEach(t => t.stop());
+    cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
     cameraStreamRef.current = null;
     setCameraStream(null);
   }, []);
 
-  // ── MediaRecorder: record camera video ───────────────────────────────────
+  // ── MediaRecorder ─────────────────────────────────────────────────────────
 
   const startRecording = useCallback((stream: MediaStream) => {
     if (!stream || stream.getVideoTracks().length === 0) return;
@@ -280,10 +277,10 @@ export default function AIInterview() {
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) recordedChunksRef.current.push(e.data);
       };
-      mr.start(1000); // collect chunks every 1s
+      mr.start(1000);
       mediaRecorderRef.current = mr;
     } catch (err) {
-      console.warn("[MediaRecorder] Could not start recording:", err);
+      console.warn("[Interview] MediaRecorder init failed:", err);
     }
   }, []);
 
@@ -294,14 +291,14 @@ export default function AIInterview() {
     return new Promise<void>((resolve) => {
       mr.onstop = async () => {
         const chunks = recordedChunksRef.current;
-        if (chunks.length === 0 || candidateId <= 0) { resolve(); return; }
-
+        if (chunks.length === 0 || candidateId <= 0) {
+          resolve();
+          return;
+        }
         try {
           setUploadProgress("Saving your interview video…");
           const mimeType = chunks[0].type || "video/webm";
           const blob = new Blob(chunks, { type: mimeType });
-          const ext = mimeType.includes("mp4") ? "mp4" : "webm";
-
           const arrayBuf = await blob.arrayBuffer();
           const res = await fetch("/api/upload/video", {
             method: "POST",
@@ -309,10 +306,11 @@ export default function AIInterview() {
             body: arrayBuf,
           });
           if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-          const { url } = await res.json() as { url: string };
-
-          // Save the interview video URL to the candidate record
-          await saveInterviewVideo.mutateAsync({ candidateId, interviewVideoUrl: url });
+          const { url } = (await res.json()) as { url: string };
+          await saveInterviewVideo.mutateAsync({
+            candidateId,
+            interviewVideoUrl: url,
+          });
           setUploadProgress("");
         } catch (err) {
           console.error("[Interview] Video upload failed:", err);
@@ -324,55 +322,43 @@ export default function AIInterview() {
     });
   }, [candidateId, saveInterviewVideo]);
 
-  // ── Audio analyser for waveform ───────────────────────────────────────────
+  // ── Start interview (triggered by button click) ───────────────────────────
 
-  const setupAudioAnalyser = useCallback(() => {
-    try {
-      const ctx = new AudioContext();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      audioCtxRef.current = ctx;
-      analyserRef.current = analyser;
-
-      // Connect to mic via getUserMedia
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        const src = ctx.createMediaStreamSource(stream);
-        src.connect(analyser);
-      }).catch(() => {/* no mic — waveform won't animate but that's ok */});
-    } catch {
-      // AudioContext not available
-    }
-  }, []);
-
-  // ── Auto-start VAPI when config loads ────────────────────────────────────
-
-  const launchInterview = useCallback(async (config: { vapiPublicKey: string; candidateName: string }) => {
-    setStatus("permission");
-
-    const { micOk, videoStream } = await startCameraAndMic();
-
-    if (!micOk) {
-      setStatus("error");
-      setErrorMsg("Microphone access is required for the interview. Please allow microphone access in your browser and refresh the page.");
-      stopCamera();
-      return;
-    }
-
-    // Start recording camera
-    startRecording(videoStream);
-
-    // Setup audio analyser for waveform
-    setupAudioAnalyser();
+  const startInterview = useCallback(async () => {
+    const config = configQuery.data;
+    if (!config) return;
 
     setStatus("connecting");
 
+    // 1. Request mic permission (required for VAPI)
+    try {
+      const micTest = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micTest.getTracks().forEach((t) => t.stop());
+    } catch {
+      setStatus("error");
+      setErrorMsg(
+        "Microphone access is required for the interview. Please allow microphone access in your browser settings and refresh the page."
+      );
+      return;
+    }
+
+    // 2. Start camera (optional — continue without it if denied)
+    const videoStream = await startCamera();
+    if (videoStream) {
+      startRecording(videoStream);
+    }
+
+    // 3. Launch VAPI
     try {
       const vapi = new Vapi(config.vapiPublicKey);
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
         setStatus("active");
-        timerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
+        timerRef.current = setInterval(
+          () => setCallDuration((d) => d + 1),
+          1000
+        );
       });
 
       vapi.on("speech-start", () => setIsSpeaking(true));
@@ -383,12 +369,10 @@ export default function AIInterview() {
         if (timerRef.current) clearInterval(timerRef.current);
         setStatus("ending");
 
-        // Save call ID
         if (callIdRef.current && candidateId > 0) {
           saveCallId.mutate({ candidateId, callId: callIdRef.current });
         }
 
-        // Stop recording and upload
         await stopRecordingAndUpload();
         stopCamera();
         setStatus("done");
@@ -398,9 +382,20 @@ export default function AIInterview() {
         console.error("[VAPI] error:", err);
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "");
-        let msg = "Connection error. Please refresh the page and try again.";
-        if (errType === "daily-error") {
-          msg = "Could not connect to the AI interviewer. Please ensure your microphone is working and try again.";
+        const errMsg = String(errObj?.message ?? "");
+        let msg =
+          "Connection error. Please refresh the page and try again.";
+        if (
+          errType.includes("mic") ||
+          errMsg.toLowerCase().includes("microphone") ||
+          errMsg.toLowerCase().includes("notfound") ||
+          errMsg.toLowerCase().includes("permission")
+        ) {
+          msg =
+            "Microphone not found or access denied. Please check your browser settings and try again.";
+        } else if (errType === "daily-error") {
+          msg =
+            "Could not connect to the AI interviewer. Please ensure your microphone is working and try again.";
         }
         setStatus("error");
         setErrorMsg(msg);
@@ -410,35 +405,32 @@ export default function AIInterview() {
 
       const call = await vapi.start(buildAssistantConfig(config.candidateName));
       if (call?.id) callIdRef.current = call.id;
-
     } catch (err) {
       console.error("[VAPI] start failed:", err);
       setStatus("error");
-      setErrorMsg("Could not start the interview. Please check your microphone and try again.");
+      setErrorMsg(
+        "Could not start the interview. Please check your microphone and try again."
+      );
       await stopRecordingAndUpload();
       stopCamera();
     }
-  }, [startCameraAndMic, stopCamera, startRecording, setupAudioAnalyser, stopRecordingAndUpload, candidateId, saveCallId]);
+  }, [
+    configQuery.data,
+    startCamera,
+    startRecording,
+    stopCamera,
+    stopRecordingAndUpload,
+    candidateId,
+    saveCallId,
+  ]);
 
-  // Auto-launch when config is ready
-  useEffect(() => {
-    if (configQuery.data && status === "loading") {
-      launchInterview(configQuery.data);
-    }
-    if (configQuery.error && status === "loading") {
-      setStatus("error");
-      setErrorMsg("Could not load interview. Please check the link and try again.");
-    }
-  }, [configQuery.data, configQuery.error, status, launchInterview]);
-
-  // ── Cleanup ───────────────────────────────────────────────────────────────
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
 
   useEffect(() => {
     return () => {
       vapiRef.current?.stop();
       stopCamera();
       if (timerRef.current) clearInterval(timerRef.current);
-      audioCtxRef.current?.close();
     };
   }, [stopCamera]);
 
@@ -465,16 +457,20 @@ export default function AIInterview() {
 
   const isCallActive = status === "active";
   const candidateName = configQuery.data?.candidateName ?? "";
+  const firstName = candidateName.split(" ")[0] || "there";
 
   return (
     <div
       className="relative w-screen h-screen overflow-hidden flex flex-col"
-      style={{ backgroundColor: "#0a0f1e" }}
+      style={{ backgroundColor: "#080d1a" }}
     >
-      {/* ── Top bar ── */}
+      {/* Top bar */}
       <div
         className="flex items-center justify-between px-6 py-4 shrink-0 z-20"
-        style={{ background: "linear-gradient(to bottom, rgba(10,15,30,0.95) 0%, transparent 100%)" }}
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(8,13,26,0.98) 0%, transparent 100%)",
+        }}
       >
         <div className="flex items-center gap-3">
           <div
@@ -484,7 +480,9 @@ export default function AIInterview() {
             <span className="text-white text-xs font-bold">MIB</span>
           </div>
           <div>
-            <p className="text-white text-sm font-semibold leading-none">AI Interview</p>
+            <p className="text-white text-sm font-semibold leading-none">
+              AI Interview
+            </p>
             <p className="text-white/40 text-xs mt-0.5">Maids in Black</p>
           </div>
         </div>
@@ -493,72 +491,131 @@ export default function AIInterview() {
         {isCallActive && (
           <div
             className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-            style={{ backgroundColor: "rgba(255,255,255,0.08)", backdropFilter: "blur(8px)" }}
+            style={{
+              backgroundColor: "rgba(255,255,255,0.07)",
+              backdropFilter: "blur(8px)",
+            }}
           >
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-white text-sm font-mono">{formatDuration(callDuration)}</span>
+            <span className="text-white text-sm font-mono">
+              {formatDuration(callDuration)}
+            </span>
           </div>
         )}
 
         {/* AI speaking badge */}
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-          style={{
-            backgroundColor: isSpeaking ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.06)",
-            border: isSpeaking ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.1)",
-            transition: "all 0.3s ease",
-          }}
-        >
-          <div className={`w-2 h-2 rounded-full ${isSpeaking ? "bg-indigo-400 animate-pulse" : "bg-white/30"}`} />
-          <span className={`text-xs font-medium ${isSpeaking ? "text-indigo-300" : "text-white/40"}`}>
-            {isSpeaking ? "AI speaking" : "AI Interviewer"}
-          </span>
-        </div>
+        {(isCallActive || status === "connecting") && (
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300"
+            style={{
+              backgroundColor: isSpeaking
+                ? "rgba(99,102,241,0.25)"
+                : "rgba(255,255,255,0.06)",
+              border: isSpeaking
+                ? "1px solid rgba(99,102,241,0.45)"
+                : "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isSpeaking ? "bg-indigo-400 animate-pulse" : "bg-white/25"
+              }`}
+            />
+            <span
+              className={`text-xs font-medium ${
+                isSpeaking ? "text-indigo-300" : "text-white/40"
+              }`}
+            >
+              {isSpeaking ? "AI speaking" : "AI Interviewer"}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* ── Main content area ── */}
+      {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6 pb-24">
 
-        {/* Loading / Permission / Connecting states */}
-        {(status === "loading" || status === "permission" || status === "connecting") && (
+        {/* Loading */}
+        {status === "loading" && (
           <div className="flex flex-col items-center gap-4">
-            <Loader2 size={48} className="animate-spin" style={{ color: "#6366f1" }} />
-            <p className="text-white/60 text-base">
-              {status === "loading" && "Loading your interview…"}
-              {status === "permission" && "Requesting camera & microphone…"}
-              {status === "connecting" && "Connecting to AI interviewer…"}
-            </p>
+            <Loader2 size={40} className="animate-spin" style={{ color: "#6366f1" }} />
+            <p className="text-white/50 text-base">Loading your interview…</p>
+          </div>
+        )}
+
+        {/* Ready — show Start button */}
+        {status === "ready" && (
+          <div className="flex flex-col items-center gap-8 max-w-sm text-center">
+            {/* Idle waveform */}
+            <WaveformVisualizer isActive={false} isSpeaking={false} />
+
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)" }}
+              >
+                <Mic size={28} style={{ color: "#818cf8" }} />
+              </div>
+              <p className="text-white text-xl font-semibold">
+                Ready to interview, {firstName}
+              </p>
+              <p className="text-white/45 text-sm leading-relaxed">
+                This is a short AI-powered voice interview — about 5 to 8 minutes.
+                Your camera will be recorded. Make sure your microphone is working.
+              </p>
+            </div>
+
+            <button
+              onClick={startInterview}
+              className="px-10 py-3.5 rounded-full text-white font-semibold text-base transition-all hover:opacity-90 active:scale-95"
+              style={{
+                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                boxShadow: "0 4px 24px rgba(99,102,241,0.45)",
+              }}
+            >
+              Start Interview
+            </button>
+          </div>
+        )}
+
+        {/* Connecting */}
+        {status === "connecting" && (
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 size={40} className="animate-spin" style={{ color: "#6366f1" }} />
+            <p className="text-white/55 text-base">Connecting to AI interviewer…</p>
           </div>
         )}
 
         {/* Active interview */}
         {(status === "active" || status === "ending") && (
           <>
-            {/* Waveform visualizer — AI audio */}
-            <div className="flex flex-col items-center gap-3 w-full">
-              <p className="text-white/40 text-xs uppercase tracking-widest font-medium">
+            {/* Waveform */}
+            <div className="flex flex-col items-center gap-2 w-full">
+              <p className="text-white/35 text-xs uppercase tracking-widest font-medium">
                 {isSpeaking ? "AI Interviewer Speaking" : "Listening…"}
               </p>
-              <WaveformVisualizer
-                isActive={true}
-                isSpeaking={isSpeaking}
-                analyserRef={analyserRef}
-              />
+              <WaveformVisualizer isActive={true} isSpeaking={isSpeaking} />
             </div>
 
-            {/* Applicant camera */}
+            {/* Camera */}
             <div className="flex flex-col items-center gap-2">
               <CameraFeed stream={cameraStream} />
               {candidateName && (
-                <p className="text-white/50 text-sm font-medium">{candidateName}</p>
+                <p className="text-white/40 text-sm font-medium">{candidateName}</p>
               )}
             </div>
           </>
         )}
 
-        {/* Ending — uploading */}
+        {/* Uploading progress */}
         {status === "ending" && uploadProgress && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ backgroundColor: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)" }}>
+          <div
+            className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{
+              backgroundColor: "rgba(99,102,241,0.12)",
+              border: "1px solid rgba(99,102,241,0.25)",
+            }}
+          >
             <Loader2 size={16} className="animate-spin text-indigo-400" />
             <span className="text-indigo-300 text-sm">{uploadProgress}</span>
           </div>
@@ -566,23 +623,25 @@ export default function AIInterview() {
 
         {/* Done */}
         {status === "done" && (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-5 text-center">
             <CheckCircle2 size={56} style={{ color: "#22c55e" }} />
-            <div className="text-center">
+            <div>
               <p className="text-white text-xl font-semibold">Interview Complete</p>
-              <p className="text-white/50 text-sm mt-1">Your responses have been saved. We'll be in touch within 2 business days.</p>
+              <p className="text-white/45 text-sm mt-2 max-w-xs leading-relaxed">
+                Your responses have been saved. We'll be in touch within 2 business days.
+              </p>
             </div>
           </div>
         )}
 
         {/* Error */}
         {status === "error" && (
-          <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+          <div className="flex flex-col items-center gap-5 max-w-sm text-center">
             <AlertCircle size={48} style={{ color: "#ef4444" }} />
-            <p className="text-white/80 text-base">{errorMsg}</p>
+            <p className="text-white/75 text-base leading-relaxed">{errorMsg}</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2.5 rounded-full text-white text-sm font-semibold transition-all hover:opacity-90"
+              className="px-7 py-2.5 rounded-full text-white text-sm font-semibold transition-all hover:opacity-90"
               style={{ backgroundColor: "#6366f1" }}
             >
               Try Again
@@ -591,30 +650,38 @@ export default function AIInterview() {
         )}
       </div>
 
-      {/* ── Bottom controls (active call only) ── */}
+      {/* Bottom controls — active call only */}
       {isCallActive && (
         <div
           className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-5 pb-8 pt-4 z-20"
-          style={{ background: "linear-gradient(to top, rgba(10,15,30,0.95) 0%, transparent 100%)" }}
+          style={{
+            background:
+              "linear-gradient(to top, rgba(8,13,26,0.95) 0%, transparent 100%)",
+          }}
         >
-          {/* Mute */}
           <button
             onClick={toggleMute}
             className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:opacity-90 active:scale-95"
             style={{
-              backgroundColor: isMuted ? "#ef4444" : "rgba(255,255,255,0.12)",
-              border: "1px solid rgba(255,255,255,0.15)",
+              backgroundColor: isMuted ? "#ef4444" : "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.12)",
             }}
             title={isMuted ? "Unmute" : "Mute"}
           >
-            {isMuted ? <MicOff size={22} color="white" /> : <Mic size={22} color="white" />}
+            {isMuted ? (
+              <MicOff size={22} color="white" />
+            ) : (
+              <Mic size={22} color="white" />
+            )}
           </button>
 
-          {/* End call */}
           <button
             onClick={endInterview}
             className="w-16 h-16 rounded-full flex items-center justify-center transition-all hover:opacity-90 active:scale-95"
-            style={{ backgroundColor: "#ef4444", boxShadow: "0 4px 20px rgba(239,68,68,0.5)" }}
+            style={{
+              backgroundColor: "#ef4444",
+              boxShadow: "0 4px 20px rgba(239,68,68,0.45)",
+            }}
             title="End interview"
           >
             <PhoneOff size={24} color="white" />
