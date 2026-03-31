@@ -403,6 +403,22 @@ export default function AIInterview() {
         if (timerRef.current) clearInterval(timerRef.current);
       });
 
+      // call-start-failed fires when VAPI cannot establish the call
+      // (bad API key, Daily.co room creation failure, network block, etc.)
+      vapi.on("call-start-failed", (event: unknown) => {
+        console.error("[VAPI] call-start-failed:", event);
+        const ev = event as Record<string, unknown> | null;
+        const reason = String(ev?.status ?? "");
+        let msg = "Could not connect to the AI interviewer. Please check your internet connection and try again.";
+        if (reason === "failed") {
+          msg = "Interview connection failed. Please refresh the page and try again.";
+        }
+        setStatus("error");
+        setErrorMsg(msg);
+        stopRecordingAndUpload().then(() => stopCamera());
+        if (timerRef.current) clearInterval(timerRef.current);
+      });
+
       const call = await vapi.start(buildAssistantConfig(config.candidateName));
       if (call?.id) callIdRef.current = call.id;
     } catch (err) {
