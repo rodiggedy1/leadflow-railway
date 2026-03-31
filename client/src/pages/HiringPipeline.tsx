@@ -3,7 +3,7 @@
  * Pixel-perfect match to the provided design screenshots.
  * Data is static/mock for now; will be wired to backend in a future phase.
  */
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   User,
@@ -21,6 +21,9 @@ import {
   XCircle,
   Clock,
   Star,
+  Play,
+  Pause,
+  Video,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -59,6 +62,7 @@ interface Candidate {
     nudgeScheduled: "done" | "pending" | "in-progress";
   };
   notes?: string[];
+  videoUrl?: string;
 }
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
@@ -401,6 +405,117 @@ function StageCard({
   );
 }
 
+// ── Video Interview Card ─────────────────────────────────────────────────────
+
+function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play();
+      setIsPlaying(true);
+    } else {
+      v.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  if (!showPlayer) {
+    return (
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{ border: "1px solid #e2e8f0" }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between"
+          style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
+            >
+              <Video size={13} color="#fff" />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Video Interview</span>
+          </div>
+          <span
+            className="rounded-full"
+            style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", backgroundColor: "#f5f3ff", padding: "3px 10px" }}
+          >
+            Recorded
+          </span>
+        </div>
+
+        {/* Thumbnail / play button */}
+        <div
+          className="relative flex items-center justify-center cursor-pointer group"
+          style={{ background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)", aspectRatio: "16/9" }}
+          onClick={() => setShowPlayer(true)}
+        >
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
+            style={{ backgroundColor: "rgba(255,255,255,0.15)", backdropFilter: "blur(4px)" }}
+          >
+            <Play size={24} color="#fff" fill="#fff" style={{ marginLeft: 3 }} />
+          </div>
+          <p style={{ position: "absolute", bottom: 12, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+            Click to watch interview response
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{ border: "1px solid #e2e8f0" }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between"
+        style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
+          >
+            <Video size={13} color="#fff" />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Video Interview</span>
+        </div>
+        <button
+          onClick={togglePlay}
+          className="flex items-center gap-1.5 rounded-lg transition-colors hover:bg-gray-100"
+          style={{ fontSize: 12, fontWeight: 500, color: "#7c3aed", padding: "4px 10px" }}
+        >
+          {isPlaying ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Play</>}
+        </button>
+      </div>
+
+      {/* Video player */}
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        className="w-full"
+        style={{ display: "block", backgroundColor: "#0f0f1a", maxHeight: 260 }}
+        controls
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        playsInline
+      />
+    </div>
+  );
+}
+
 // ── Candidate Detail Panel ────────────────────────────────────────────────────
 
 function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
@@ -478,6 +593,11 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
           {candidate.stage}
         </span>
       </div>
+
+      {/* Video Interview — plays the applicant's recorded answer */}
+      {candidate.videoUrl && (
+        <VideoInterviewCard videoUrl={candidate.videoUrl} />
+      )}
 
       {/* AI Summary — soft bordered card */}
       {candidate.aiSummary && (
@@ -643,6 +763,7 @@ export default function HiringPipeline() {
       score: 0,
       aiSummary: r.experience ?? undefined,
       notes: [],
+      videoUrl: r.videoUrl ?? undefined,
     }));
     // Prepend real DB candidates before mock ones
     return [...dbCandidates, ...MOCK_CANDIDATES];

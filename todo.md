@@ -675,3 +675,9 @@
 - [x] Requirements: require at least one Yes/No answer before Continue
 - [x] Video step: real browser MediaRecorder — countdown, live preview, stop, playback, re-record
 - [x] Video step: upload recorded blob to S3 and save URL on submitApplication
+
+## Hiring Pipeline — Video Playback
+
+- [x] Return videoUrl from getCandidates tRPC query
+- [x] Add videoUrl field to Candidate type in HiringPipeline.tsx
+- [x] Show video player in candidate detail panel when videoUrl is present
