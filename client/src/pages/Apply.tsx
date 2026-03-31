@@ -919,50 +919,174 @@ function VideoStep({
   );
 }
 
-function ThankYouStep() {
+function ThankYouStep({ candidateId }: { candidateId: number | null }) {
+  const interviewUrl = candidateId ? `/interview/${candidateId}` : null;
+
+  const questions = [
+    "Tell us about your cleaning experience",
+    "What does a great clean mean to you?",
+    "How do you handle client requests?",
+    "What days are you available?",
+    "When can you start?",
+  ];
+
+  const whyReasons = [
+    "Highest intent moment — you just applied",
+    "Zero friction — no waiting around",
+    "Can move you to the front faster",
+    "Feels like the next step, not extra work",
+  ];
+
+  const hiringSteps = [
+    { icon: <CheckCircle2 size={18} />, label: "Application submitted", sub: "Completed", done: true },
+    { icon: <PhoneCall size={18} />, label: "AI interview", sub: "Start now", done: false, cta: true },
+    { icon: <Phone size={18} />, label: "Real interview", sub: "Comes next", done: false },
+    { icon: <Sparkles size={18} />, label: "Background check", sub: "Comes next", done: false },
+  ];
+
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div
-        className="rounded-3xl p-10 text-center max-w-sm w-full"
-        style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}
-      >
-        {/* Icon */}
-        <div
-          className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-          style={{ backgroundColor: GREEN_LIGHT }}
-        >
-          <CheckCircle2 size={32} color={GREEN} />
-        </div>
+    <div className="min-h-screen w-full" style={{ backgroundColor: "#f4f6f9" }}>
+      <div className="max-w-6xl mx-auto px-4 py-10 md:py-16">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Thank You!</h2>
-        <p className="text-gray-500 text-sm mb-4">Your application has been successfully submitted.</p>
+          {/* ── Left column ── */}
+          <div className="flex flex-col gap-6">
 
-        {/* Green divider */}
-        <div className="w-12 h-1 rounded-full mx-auto mb-6" style={{ backgroundColor: GREEN }} />
+            {/* Header card */}
+            <div className="bg-white rounded-2xl p-8 md:p-10" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+              {/* Badge + step */}
+              <div className="flex items-center gap-3 mb-6">
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full" style={{ backgroundColor: "#dcfce7", color: "#16a34a", border: "1px solid #bbf7d0" }}>
+                  <CheckCircle2 size={13} /> Application received
+                </span>
+                <span className="text-sm text-gray-400">Step 2 of 4</span>
+              </div>
 
-        {/* Status items */}
-        <div className="space-y-3 mb-6">
-          <div className="flex items-center justify-center gap-2">
-            <Mail size={16} color={GREEN} />
-            <span className="text-sm text-gray-700">Application received</span>
+              {/* Headline */}
+              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-3">You're almost done.</h1>
+              <h2 className="text-3xl md:text-4xl font-extrabold leading-tight mb-6" style={{ color: "#94a3b8" }}>Start your 2-minute<br />interview now.</h2>
+              <p className="text-gray-500 text-base mb-8 max-w-lg">We're reviewing candidates today. This quick interview is required to move forward and helps us fast-track strong applicants.</p>
+
+              {/* CTAs */}
+              <div className="flex flex-wrap gap-3 mb-10">
+                {interviewUrl ? (
+                  <a
+                    href={interviewUrl}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: "#0f172a" }}
+                  >
+                    <span className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
+                      <span className="w-2 h-2 rounded-full bg-white" />
+                    </span>
+                    Start 2-minute interview
+                  </a>
+                ) : (
+                  <button
+                    disabled
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm opacity-60 cursor-not-allowed"
+                    style={{ backgroundColor: "#0f172a" }}
+                  >
+                    <Loader2 size={15} className="animate-spin" />
+                    Preparing interview...
+                  </button>
+                )}
+                <button
+                  className="px-6 py-3 rounded-xl text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100"
+                  style={{ border: "1.5px solid #e5e7eb", backgroundColor: "#fff" }}
+                  onClick={() => alert("We'll send you a text with the interview link shortly.")}
+                >
+                  Do it later by text
+                </button>
+              </div>
+
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { stat: "2 minutes", sub: "Super quick" },
+                  { stat: "5 questions", sub: "Simple answers" },
+                  { stat: "Reviewed today", sub: "Faster decisions" },
+                ].map(({ stat, sub }) => (
+                  <div key={stat} className="rounded-xl p-4" style={{ border: "1px solid #e5e7eb", backgroundColor: "#fafafa" }}>
+                    <p className="font-bold text-gray-900 text-sm">{stat}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Hiring path card */}
+            <div className="bg-white rounded-2xl p-6 md:p-8" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">What happens next</p>
+                  <p className="font-bold text-gray-900 text-lg">Your hiring path</p>
+                </div>
+                <span className="text-xs font-semibold px-3 py-1.5 rounded-full" style={{ backgroundColor: "#eff6ff", color: "#3b82f6" }}>Waiting to start</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {hiringSteps.map((s, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl p-4 flex flex-col gap-2"
+                    style={{
+                      border: s.done ? `1.5px solid #bbf7d0` : s.cta ? `1.5px solid #e2e8f0` : `1px solid #e5e7eb`,
+                      backgroundColor: s.done ? "#f0fdf4" : "#fafafa",
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span style={{ color: s.done ? "#16a34a" : "#94a3b8" }}>{s.icon}</span>
+                      {i < hiringSteps.length - 1 && <ChevronRight size={14} style={{ color: "#cbd5e1" }} />}
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 leading-tight">{s.label}</p>
+                    <p className="text-xs" style={{ color: s.done ? "#16a34a" : s.cta ? "#3b82f6" : "#94a3b8" }}>{s.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center justify-center gap-2">
-            <PhoneCall size={16} color={GREEN} />
-            <span className="text-sm text-gray-700">Interview coming soon</span>
+
+          {/* ── Right column ── */}
+          <div className="flex flex-col gap-6">
+
+            {/* Why do this now */}
+            <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+              <div className="flex items-start gap-3 mb-5">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#f1f5f9" }}>
+                  <Sparkles size={17} style={{ color: "#64748b" }} />
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">Why do this now?</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Best time to complete it is right after applying.</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                {whyReasons.map((r) => (
+                  <div key={r} className="flex items-start gap-2.5 py-2.5" style={{ borderTop: "1px solid #f1f5f9" }}>
+                    <span style={{ color: "#94a3b8", marginTop: 1 }}>★</span>
+                    <span className="text-sm text-gray-700">{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Interview preview */}
+            <div className="bg-white rounded-2xl p-6" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-bold text-gray-900 text-sm">Interview preview</p>
+                <span className="text-xs text-gray-400">~2 min</span>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">Simple, mobile-friendly, and short.</p>
+              <div className="flex flex-col gap-2">
+                {questions.map((q, i) => (
+                  <div key={i} className="rounded-xl p-3.5" style={{ border: "1px solid #e5e7eb", backgroundColor: "#fafafa" }}>
+                    <p className="text-xs font-semibold text-gray-400 mb-1">QUESTION {i + 1}</p>
+                    <p className="text-sm text-gray-800 font-medium">{q}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Info box */}
-        <div
-          className="rounded-2xl p-4 mb-6"
-          style={{ backgroundColor: GREEN_LIGHT, border: `1px solid ${GREEN_MID}` }}
-        >
-          <p className="text-sm text-gray-700 leading-relaxed">
-            Someone from our team will be in touch shortly to discuss the next steps in the process.
-          </p>
-        </div>
-
-        <p className="text-xs text-gray-400">We appreciate your interest in joining our team</p>
       </div>
     </div>
   );
@@ -973,9 +1097,10 @@ function ThankYouStep() {
 export default function Apply() {
   const [step, setStep] = useState<Step>("welcome");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [newCandidateId, setNewCandidateId] = useState<number | null>(null);
 
   const submitMutation = trpc.hiring.submitApplication.useMutation({
-    onSuccess: () => setStep("done"),
+    onSuccess: (data) => { setNewCandidateId(data?.id ?? null); setStep("done"); },
     onError: (err) => setSubmitError(err.message || "Something went wrong. Please try again."),
   });
 
@@ -1176,7 +1301,7 @@ export default function Apply() {
             <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{submitError}</div>
           )}
           {step === "video" && <VideoStep onSubmit={handleSubmit} onSkip={() => handleSubmit(undefined)} isSubmitting={submitMutation.isPending} />}
-          {step === "done" && <ThankYouStep />}
+          {step === "done" && <ThankYouStep candidateId={newCandidateId} />}
         </div>
       </main>
     </div>
