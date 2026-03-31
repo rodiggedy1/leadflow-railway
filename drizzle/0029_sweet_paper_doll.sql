@@ -1,0 +1,1 @@
+ALTER TABLE `candidates` ADD `archived` tinyint DEFAULT 0 NOT NULL;

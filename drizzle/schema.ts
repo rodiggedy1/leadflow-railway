@@ -1770,6 +1770,8 @@ export const candidates = mysqlTable("candidates", {
   interviewTranscript: longtext("interviewTranscript"),
   interviewScore: int("interviewScore"),
   interviewSummary: text("interviewSummary"),
+  // Archived (hidden from pipeline but not deleted)
+  archived: tinyint("archived").notNull().default(0),
   // Metadata
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

@@ -3711,6 +3711,7 @@ Your job: fill in the following message template using the booking details provi
         const rows = await db
           .select()
           .from(candidates)
+          .where(eq(candidates.archived, 0))
           .orderBy(desc(candidates.createdAt));
         return rows.map(r => ({
           id: r.id,
@@ -3891,6 +3892,18 @@ Your job: fill in the following message template using the booking details provi
         if (!db) throw new Error("DB unavailable");
         const { candidates } = await import("../drizzle/schema");
         await db.delete(candidates).where(eq(candidates.id, input.id));
+        return { success: true };
+      }),
+
+    archiveCandidate: protectedProcedure
+      .input(z.object({ id: z.number(), archived: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("DB unavailable");
+        const { candidates } = await import("../drizzle/schema");
+        await db.update(candidates)
+          .set({ archived: input.archived ? 1 : 0 })
+          .where(eq(candidates.id, input.id));
         return { success: true };
       }),
 

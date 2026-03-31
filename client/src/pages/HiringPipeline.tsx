@@ -49,6 +49,8 @@ import {
   Bot,
   ExternalLink,
   Trash2,
+  Archive,
+  MoreVertical,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -166,13 +168,31 @@ function CandidateCard({
   isSelected,
   onClick,
   isDragOverlay,
+  onArchive,
+  onDelete,
 }: {
   candidate: Candidate;
   isSelected: boolean;
   onClick: () => void;
   isDragOverlay?: boolean;
+  onArchive?: (id: number) => void;
+  onDelete?: (id: number) => void;
 }) {
   const hasTransport = candidate.transport !== "No car";
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: candidate.id,
     data: { candidate },
@@ -219,7 +239,39 @@ function CandidateCard({
             >
               {candidate.name}
             </span>
-            <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#94a3b8" }} />
+            {/* Action menu — stops propagation so card click doesn't fire */}
+            <div ref={menuRef} className="relative" onClick={e => e.stopPropagation()}>
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
+                className="p-0.5 rounded hover:bg-slate-100 transition-colors"
+                style={{ color: "#94a3b8" }}
+                aria-label="Candidate actions"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {menuOpen && (
+                <div
+                  className="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[130px]"
+                  style={{ fontSize: "13px" }}
+                >
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700 transition-colors"
+                    onClick={e => { e.stopPropagation(); setMenuOpen(false); onArchive?.(candidate.id); }}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Archive
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-600 transition-colors"
+                    onClick={e => { e.stopPropagation(); setMenuOpen(false); onDelete?.(candidate.id); }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <p className="text-xs mt-0.5 truncate" style={{ color: "#94a3b8" }}>
             {candidate.subtitle}
@@ -314,11 +366,15 @@ function StageCard({
   candidates,
   selectedId,
   onSelect,
+  onArchive,
+  onDelete,
 }: {
   stage: Stage;
   candidates: Candidate[];
   selectedId: number | null;
   onSelect: (c: Candidate) => void;
+  onArchive?: (id: number) => void;
+  onDelete?: (id: number) => void;
 }) {
   const badge = STAGE_BADGE[stage];
   const { setNodeRef, isOver } = useDroppable({ id: stage });
@@ -379,6 +435,8 @@ function StageCard({
               candidate={c}
               isSelected={selectedId === c.id}
               onClick={() => onSelect(c)}
+              onArchive={onArchive}
+              onDelete={onDelete}
             />
           ))
         )}
@@ -1118,6 +1176,13 @@ export default function HiringPipeline() {
     },
   });
 
+  const archiveCandidateMutation = trpc.hiring.archiveCandidate.useMutation({
+    onSuccess: () => {
+      setSelectedCandidate(null);
+      candidatesQuery.refetch();
+    },
+  });
+
   function handleDragStart(event: DragStartEvent) {
     const candidate = event.active.data.current?.candidate as Candidate | undefined;
     setActiveCandidate(candidate ?? null);
@@ -1333,6 +1398,8 @@ export default function HiringPipeline() {
                   candidates={filteredCandidates.filter(c => c.stage === stage)}
                   selectedId={selectedCandidate?.id ?? null}
                   onSelect={c => setSelectedCandidate(c)}
+                  onArchive={id => archiveCandidateMutation.mutate({ id, archived: true })}
+                  onDelete={id => setConfirmDeleteId(id)}
                 />
               ))}
             </div>
