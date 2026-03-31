@@ -1761,6 +1761,7 @@ export const candidates = mysqlTable("candidates", {
   stage: varchar("stage", { length: 64 }).notNull().default("Application Submitted"),
   bioPhotoUrl: text("bioPhotoUrl"),
   videoUrl: text("videoUrl"),
+  interviewVideoUrl: text("interviewVideoUrl"),
   // AI evaluation
   aiScore: int("aiScore"),
   aiSummary: text("aiSummary"),

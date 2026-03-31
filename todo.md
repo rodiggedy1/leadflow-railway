@@ -752,3 +752,6 @@
 - [x] Rebuild interview page: Start button (not auto-start), waveform visualizer, camera recording + S3 upload, allow retesting
 - [x] Add saveInterviewVideo tRPC procedure to save recorded camera video URL to candidate record
 - [x] Hide AI Interview button for mock demo candidates (id >= 10000)
+- [x] Show recorded interview video in hiring pipeline candidate detail panel (playable video player)
+- [x] Add separate interviewVideoUrl column to candidates table (distinct from application videoUrl)
+- [x] Show Interview Recording thumbnail in detail panel separate from application video

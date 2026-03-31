@@ -3727,6 +3727,7 @@ Your job: fill in the following message template using the booking details provi
           experience: r.experience ?? null,
           bioPhotoUrl: r.bioPhotoUrl ?? null,
           videoUrl: r.videoUrl ?? null,
+          interviewVideoUrl: r.interviewVideoUrl ?? null,
           specialties: r.specialties ? JSON.parse(r.specialties) as string[] : [],
           hasCleaning: r.hasCleaning === 1,
           hasBankAccount: r.hasBankAccount === 1,
@@ -3873,7 +3874,7 @@ Your job: fill in the following message template using the booking details provi
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
         const { candidates } = await import("../drizzle/schema");
         await db.update(candidates)
-          .set({ videoUrl: input.interviewVideoUrl })
+          .set({ interviewVideoUrl: input.interviewVideoUrl })
           .where(eq(candidates.id, input.candidateId));
         return { success: true };
       }),

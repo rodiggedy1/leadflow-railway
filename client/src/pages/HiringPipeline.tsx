@@ -88,6 +88,7 @@ interface Candidate {
   };
   notes?: string[];
   videoUrl?: string;
+  interviewVideoUrl?: string;
   bioPhotoUrl?: string;
   // Full application data
   phone?: string;
@@ -587,6 +588,86 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
   );
 }
 
+// ── Interview Recording Card ─────────────────────────────────────────────────
+// Distinct from VideoInterviewCard (application form video) — this shows the
+// camera recording captured during the VAPI AI interview session.
+function InterviewRecordingCard({ videoUrl }: { videoUrl: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setIsPlaying(true); }
+    else { v.pause(); setIsPlaying(false); }
+  };
+
+  if (!showPlayer) {
+    return (
+      <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
+        <div className="flex items-center justify-between" style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #0f766e, #0d9488)" }}>
+              <Video size={13} color="#fff" />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Interview Recording</span>
+          </div>
+          <span className="rounded-full" style={{ fontSize: 11, fontWeight: 600, color: "#0f766e", backgroundColor: "#f0fdfa", padding: "3px 10px" }}>
+            AI Interview
+          </span>
+        </div>
+        <div
+          className="relative flex items-center justify-center cursor-pointer group"
+          style={{ background: "linear-gradient(135deg, #042f2e 0%, #134e4a 100%)", aspectRatio: "16/9" }}
+          onClick={() => setShowPlayer(true)}
+        >
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
+            style={{ backgroundColor: "rgba(255,255,255,0.15)", backdropFilter: "blur(4px)" }}
+          >
+            <Play size={24} color="#fff" fill="#fff" style={{ marginLeft: 3 }} />
+          </div>
+          <p style={{ position: "absolute", bottom: 12, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+            Click to watch AI interview recording
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
+      <div className="flex items-center justify-between" style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #0f766e, #0d9488)" }}>
+            <Video size={13} color="#fff" />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Interview Recording</span>
+        </div>
+        <button
+          onClick={togglePlay}
+          className="flex items-center gap-1.5 rounded-lg transition-colors hover:bg-gray-100"
+          style={{ fontSize: 12, fontWeight: 500, color: "#0f766e", padding: "4px 10px" }}
+        >
+          {isPlaying ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Play</>}
+        </button>
+      </div>
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        className="w-full"
+        style={{ display: "block", backgroundColor: "#042f2e", maxHeight: 260 }}
+        controls
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        playsInline
+      />
+    </div>
+  );
+}
+
 // ── Application Details Modal ───────────────────────────────────────────────
 
 function AnswerBadge({ value }: { value: boolean | null | undefined }) {
@@ -885,9 +966,14 @@ function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate |
         <ApplicationDetailsModal candidate={candidate} onClose={() => setShowAppModal(false)} />
       )}
 
-      {/* Video Interview — plays the applicant's recorded answer */}
+      {/* Application Video — plays the applicant's recorded answer from the form */}
       {candidate.videoUrl && (
         <VideoInterviewCard videoUrl={candidate.videoUrl} />
+      )}
+
+      {/* Interview Recording — VAPI camera recording from the AI interview */}
+      {candidate.interviewVideoUrl && (
+        <InterviewRecordingCard videoUrl={candidate.interviewVideoUrl} />
       )}
 
       {/* AI Summary — soft bordered card */}
@@ -1118,6 +1204,7 @@ export default function HiringPipeline() {
       aiSummary: r.aiSummary ?? r.experience ?? undefined,
       notes: [],
       videoUrl: r.videoUrl ?? undefined,
+      interviewVideoUrl: r.interviewVideoUrl ?? undefined,
       bioPhotoUrl: r.bioPhotoUrl ?? undefined,
       phone: r.phone,
       email: r.email ?? undefined,
