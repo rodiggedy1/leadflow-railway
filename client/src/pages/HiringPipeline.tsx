@@ -24,6 +24,15 @@ import {
   Play,
   Pause,
   Video,
+  FileText,
+  X,
+  CheckCircle,
+  XCircle as XCircleIcon,
+  Minus,
+  Mail,
+  Phone as PhoneIcon,
+  MapPin as MapPinIcon,
+  Briefcase,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -63,6 +72,19 @@ interface Candidate {
   };
   notes?: string[];
   videoUrl?: string;
+  bioPhotoUrl?: string;
+  // Full application data
+  phone?: string;
+  email?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  hasCleaning?: boolean | null;
+  hasBankAccount?: boolean | null;
+  isAuthorized?: boolean | null;
+  consentBackground?: boolean | null;
+  experience?: string;
+  specialtiesList?: string[];
 }
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
@@ -239,10 +261,13 @@ function CandidateCard({
       {/* Name row */}
       <div className="flex items-center gap-3">
         <div
-          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-          style={{ backgroundColor: "#edf0f4", color: "#64748b", fontSize: "12px", letterSpacing: "0.02em" }}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0 overflow-hidden"
+          style={{ backgroundColor: "#edf0f4", color: "#64748b", fontSize: "12px", letterSpacing: "0.02em", border: "1px solid #e2e8f0" }}
         >
-          {candidate.initials}
+          {candidate.bioPhotoUrl
+            ? <img src={candidate.bioPhotoUrl} alt={candidate.name} className="w-full h-full object-cover" />
+            : candidate.initials
+          }
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
@@ -516,13 +541,172 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
   );
 }
 
+// ── Application Details Modal ───────────────────────────────────────────────
+
+function AnswerBadge({ value }: { value: boolean | null | undefined }) {
+  if (value === null || value === undefined) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full" style={{ backgroundColor: "#f1f5f9", color: "#94a3b8", fontSize: 12, fontWeight: 600, padding: "3px 10px" }}>
+        <Minus size={11} /> Not answered
+      </span>
+    );
+  }
+  if (value) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full" style={{ backgroundColor: "#dcfce7", color: "#16a34a", fontSize: 12, fontWeight: 600, padding: "3px 10px" }}>
+        <CheckCircle size={11} /> Yes
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full" style={{ backgroundColor: "#fee2e2", color: "#dc2626", fontSize: 12, fontWeight: 600, padding: "3px 10px" }}>
+      <XCircleIcon size={11} /> No
+    </span>
+  );
+}
+
+function ApplicationDetailsModal({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
+  // Close on backdrop click
+  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }}
+      onClick={handleBackdrop}
+    >
+      <div
+        className="relative rounded-3xl overflow-y-auto"
+        style={{
+          backgroundColor: "#fff",
+          width: "min(640px, 95vw)",
+          maxHeight: "88vh",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
+          padding: "28px 28px 32px",
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-gray-100"
+          style={{ color: "#64748b" }}
+        >
+          <X size={18} />
+        </button>
+
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-6">
+          <div
+            className="rounded-full overflow-hidden shrink-0 flex items-center justify-center font-semibold"
+            style={{ width: 64, height: 64, backgroundColor: "#f1f5f9", color: "#64748b", fontSize: 18, border: "1px solid #e2e8f0" }}
+          >
+            {candidate.bioPhotoUrl
+              ? <img src={candidate.bioPhotoUrl} alt={candidate.name} className="w-full h-full object-cover" />
+              : candidate.initials
+            }
+          </div>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", lineHeight: 1.2 }}>{candidate.name}</h2>
+            <p style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>Application Details</p>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          {/* Contact Info */}
+          <section>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Contact Information</p>
+            <div className="grid grid-cols-2 gap-3">
+              {candidate.phone && (
+                <div className="flex items-center gap-2.5 rounded-2xl" style={{ border: "1px solid #e2e8f0", padding: "10px 14px" }}>
+                  <PhoneIcon size={14} style={{ color: "#7c3aed", flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Phone</p>
+                    <p style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>{candidate.phone}</p>
+                  </div>
+                </div>
+              )}
+              {candidate.email && (
+                <div className="flex items-center gap-2.5 rounded-2xl" style={{ border: "1px solid #e2e8f0", padding: "10px 14px" }}>
+                  <Mail size={14} style={{ color: "#7c3aed", flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Email</p>
+                    <p style={{ fontSize: 13, color: "#0f172a", fontWeight: 600, wordBreak: "break-all" }}>{candidate.email}</p>
+                  </div>
+                </div>
+              )}
+              {(candidate.city || candidate.state) && (
+                <div className="flex items-center gap-2.5 rounded-2xl col-span-2" style={{ border: "1px solid #e2e8f0", padding: "10px 14px" }}>
+                  <MapPinIcon size={14} style={{ color: "#7c3aed", flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Address</p>
+                    <p style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
+                      {[candidate.streetAddress, candidate.city, candidate.state, candidate.zip].filter(Boolean).join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Requirements */}
+          <section>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Eligibility Questions</p>
+            <div className="space-y-2">
+              {([
+                ["Has cleaning experience", candidate.hasCleaning],
+                ["Has a bank account", candidate.hasBankAccount],
+                ["Authorized to work in the US", candidate.isAuthorized],
+                ["Consents to background check", candidate.consentBackground],
+              ] as [string, boolean | null | undefined][]).map(([label, val]) => (
+                <div key={label} className="flex items-center justify-between rounded-2xl" style={{ border: "1px solid #e2e8f0", padding: "10px 14px" }}>
+                  <span style={{ fontSize: 13, color: "#0f172a" }}>{label}</span>
+                  <AnswerBadge value={val} />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Specialties */}
+          {candidate.specialtiesList && candidate.specialtiesList.length > 0 && (
+            <section>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Specialties</p>
+              <div className="flex flex-wrap gap-2">
+                {candidate.specialtiesList.map(s => (
+                  <span key={s} className="rounded-full" style={{ backgroundColor: "#f5f3ff", color: "#7c3aed", fontSize: 12, fontWeight: 600, padding: "4px 12px" }}>{s}</span>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Experience / Bio */}
+          {candidate.experience && (
+            <section>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Experience &amp; Background</p>
+              <div className="rounded-2xl" style={{ border: "1px solid #e2e8f0", padding: "14px 16px" }}>
+                <div className="flex items-start gap-2">
+                  <Briefcase size={14} style={{ color: "#7c3aed", marginTop: 2, flexShrink: 0 }} />
+                  <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.65 }}>{candidate.experience}</p>
+                </div>
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Candidate Detail Panel ────────────────────────────────────────────────────
 
 function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
   const [editableNotes, setEditableNotes] = React.useState<string[]>(candidate?.notes ?? []);
+  const [showAppModal, setShowAppModal] = React.useState(false);
 
   React.useEffect(() => {
     setEditableNotes(candidate?.notes ?? []);
+    setShowAppModal(false);
   }, [candidate?.id]);
 
   if (!candidate) {
@@ -544,10 +728,13 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div
-            className="rounded-full flex items-center justify-center font-semibold shrink-0"
+            className="rounded-full flex items-center justify-center font-semibold shrink-0 overflow-hidden"
             style={{ width: 56, height: 56, backgroundColor: "#f1f5f9", color: "#64748b", fontSize: 15, border: "1px solid #e2e8f0" }}
           >
-            {candidate.initials}
+            {candidate.bioPhotoUrl
+              ? <img src={candidate.bioPhotoUrl} alt={candidate.name} className="w-full h-full object-cover" />
+              : candidate.initials
+            }
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -593,6 +780,21 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
           {candidate.stage}
         </span>
       </div>
+
+      {/* View Application button */}
+      <button
+        onClick={() => setShowAppModal(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-2xl transition-colors hover:bg-slate-100"
+        style={{ border: "1px solid #e2e8f0", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#0f172a", backgroundColor: "#f8fafc" }}
+      >
+        <FileText size={15} />
+        View Full Application
+      </button>
+
+      {/* Application Details Modal */}
+      {showAppModal && (
+        <ApplicationDetailsModal candidate={candidate} onClose={() => setShowAppModal(false)} />
+      )}
 
       {/* Video Interview — plays the applicant's recorded answer */}
       {candidate.videoUrl && (
@@ -764,6 +966,18 @@ export default function HiringPipeline() {
       aiSummary: r.experience ?? undefined,
       notes: [],
       videoUrl: r.videoUrl ?? undefined,
+      bioPhotoUrl: r.bioPhotoUrl ?? undefined,
+      phone: r.phone,
+      email: r.email ?? undefined,
+      streetAddress: r.streetAddress ?? undefined,
+      city: r.city ?? undefined,
+      state: r.state ?? undefined,
+      hasCleaning: r.hasCleaning,
+      hasBankAccount: r.hasBankAccount,
+      isAuthorized: r.isAuthorized,
+      consentBackground: r.consentBackground,
+      experience: r.experience ?? undefined,
+      specialtiesList: r.specialties ?? [],
     }));
     // Prepend real DB candidates before mock ones
     return [...dbCandidates, ...MOCK_CANDIDATES];

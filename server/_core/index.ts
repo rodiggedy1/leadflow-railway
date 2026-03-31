@@ -70,8 +70,8 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // Raw binary parser for video uploads (must be before tRPC middleware)
-  app.use("/api/upload/video", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "200mb" }));
+  // Raw binary parser for video/image uploads (must be before tRPC middleware)
+  app.use("/api/upload/video", express.raw({ type: ["video/webm", "video/mp4", "video/*", "image/*"], limit: "200mb" }));
 
   // Video upload for applicant recordings
   registerVideoUploadRoute(app as any);

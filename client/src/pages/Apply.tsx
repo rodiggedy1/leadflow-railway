@@ -994,8 +994,26 @@ export default function Apply() {
     onError: (err) => setSubmitError(err.message || "Something went wrong. Please try again."),
   });
 
-  const handleSubmit = (videoUrl?: string) => {
+  const handleSubmit = async (videoUrl?: string) => {
     setSubmitError(null);
+    // Upload bio photo if present
+    let bioPhotoUrl: string | undefined;
+    if (formData.bioPhoto) {
+      try {
+        const res = await fetch("/api/upload/video", {
+          method: "POST",
+          headers: { "Content-Type": formData.bioPhoto.type || "image/jpeg" },
+          body: formData.bioPhoto,
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          bioPhotoUrl = data.url;
+        }
+      } catch {
+        // Non-fatal: submit without photo
+      }
+    }
     submitMutation.mutate({
       firstName: formData.firstName || "Applicant",
       lastName: formData.lastName || "",
@@ -1013,6 +1031,7 @@ export default function Apply() {
       experience: formData.experience || undefined,
       specialties: formData.specialties,
       videoUrl: videoUrl || undefined,
+      bioPhotoUrl: bioPhotoUrl || undefined,
     });
   };
 

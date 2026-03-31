@@ -3605,6 +3605,7 @@ Your job: fill in the following message template using the booking details provi
         experience: z.string().optional(),
         specialties: z.array(z.string()),
         videoUrl: z.string().url().optional(),
+        bioPhotoUrl: z.string().url().optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -3627,6 +3628,7 @@ Your job: fill in the following message template using the booking details provi
           experience: input.experience || null,
           specialties: input.specialties.length > 0 ? JSON.stringify(input.specialties) : null,
           videoUrl: input.videoUrl || null,
+          bioPhotoUrl: input.bioPhotoUrl || null,
           stage: "Application Submitted",
         });
         return { success: true, id: (result as any).insertId };

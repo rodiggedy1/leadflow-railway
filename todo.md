@@ -681,3 +681,12 @@
 - [x] Return videoUrl from getCandidates tRPC query
 - [x] Add videoUrl field to Candidate type in HiringPipeline.tsx
 - [x] Show video player in candidate detail panel when videoUrl is present
+
+## Hiring Pipeline — Application Details Popup + Photo Avatar
+
+- [x] Add bioPhotoUrl, hasCleaning, hasBankAccount, isAuthorized, consentBackground, specialties, phone, email to getCandidates response
+- [x] Update Candidate type in HiringPipeline.tsx with all new fields
+- [x] Show bio photo (or initials fallback) on kanban card avatar
+- [x] Show bio photo (or initials fallback) on detail panel header avatar
+- [x] Add "View Application" button in detail panel that opens a popup modal
+- [x] Popup modal shows all submitted fields: contact info, Yes/No answers, specialties, experience
