@@ -46,6 +46,8 @@ import {
   Phone as PhoneIcon,
   MapPin as MapPinIcon,
   Briefcase,
+  Bot,
+  ExternalLink,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -844,15 +846,28 @@ function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate |
         </span>
       </div>
 
-      {/* View Application button */}
-      <button
-        onClick={() => setShowAppModal(true)}
-        className="w-full flex items-center justify-center gap-2 rounded-2xl transition-colors hover:bg-slate-100"
-        style={{ border: "1px solid #e2e8f0", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#0f172a", backgroundColor: "#f8fafc" }}
-      >
-        <FileText size={15} />
-        View Full Application
-      </button>
+      {/* Action buttons row */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowAppModal(true)}
+          className="flex-1 flex items-center justify-center gap-2 rounded-2xl transition-colors hover:bg-slate-100"
+          style={{ border: "1px solid #e2e8f0", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#0f172a", backgroundColor: "#f8fafc" }}
+        >
+          <FileText size={15} />
+          View Application
+        </button>
+        <a
+          href={`/interview/${candidate.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 flex items-center justify-center gap-2 rounded-2xl transition-colors hover:opacity-90"
+          style={{ border: "1px solid #6366f1", padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#fff", backgroundColor: "#6366f1", textDecoration: "none" }}
+        >
+          <Bot size={15} />
+          AI Interview
+          <ExternalLink size={12} />
+        </a>
+      </div>
 
       {/* Application Details Modal */}
       {showAppModal && (

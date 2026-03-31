@@ -36,6 +36,7 @@ const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 const SseTest = lazy(() => import("./pages/SseTest"));
 const HiringPipeline = lazy(() => import("./pages/HiringPipeline"));
 const Apply = lazy(() => import("./pages/Apply"));
+const AIInterview = lazy(() => import("./pages/AIInterview"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -90,6 +91,7 @@ function Router() {
         <Route path={"/sse-test"} component={SseTest} />
         <Route path={"/admin/hiring"} component={HiringPipeline} />
         <Route path={"/apply"} component={Apply} />
+        <Route path={"/interview/:candidateId"} component={AIInterview} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

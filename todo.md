@@ -740,3 +740,11 @@
 - [x] Fix Wistia video aspect ratio on mobile
 - [x] Fix specialty grid to single column on mobile
 - [x] Fix video recorder layout on mobile
+
+## AI Video Interview Page
+
+- [x] Create /interview/:candidateId page with Zoom-style layout (big AI video, PiP self-view)
+- [x] Integrate VAPI voice agent for conversational AI interview questions
+- [x] Save transcript and AI score to candidate DB record
+- [x] Add "Start AI Interview" button in hiring pipeline detail panel
+- [x] Add route in App.tsx for /interview/:candidateId

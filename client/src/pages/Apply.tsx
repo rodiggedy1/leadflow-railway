@@ -169,7 +169,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       <div className="rounded-2xl overflow-hidden mb-5" style={{ aspectRatio: "16/9" }}>
         <style>{`wistia-player[media-id='hwmi77abbz']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/hwmi77abbz/swatch');display:block;filter:blur(5px);padding-top:56.25%;}`}</style>
         {/* @ts-ignore — custom element registered by Wistia script */}
-        <wistia-player media-id="hwmi77abbz" seo="false" aspect="1.7777777777777777" style={{ width: "100%", height: "100%", display: "block" }} />
+        {/* @ts-ignore */}
+        <wistia-player media-id="hwmi77abbz" seo="false" aspect="1.7777777777777777" style={{ width: "100%", height: "100%", display: "block" }}></wistia-player>
       </div>
 
       {/* CTA directly below video */}
@@ -1175,3 +1176,4 @@ export default function Apply() {
     </div>
   );
 }
+

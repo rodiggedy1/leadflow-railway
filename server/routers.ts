@@ -3819,6 +3819,46 @@ Your job: fill in the following message template using the booking details provi
         await db.update(candidates).set({ stage: input.stage }).where(eq(candidates.id, input.id));
         return { success: true };
       }),
+
+    /**
+     * Public — returns VAPI public key + interview assistant config for a candidate.
+     * The interview assistant is created on-the-fly with the candidate's name.
+     */
+    getInterviewConfig: publicProcedure
+      .input(z.object({ candidateId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        const rows = await db.select().from(candidates).where(eq(candidates.id, input.candidateId)).limit(1);
+        if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+        const c = rows[0];
+        const { ENV } = await import("./_core/env");
+        return {
+          vapiPublicKey: ENV.vapiPublicKey,
+          candidateName: `${c.firstName} ${c.lastName}`,
+          candidateId: c.id,
+          alreadyInterviewed: !!c.interviewCallId,
+        };
+      }),
+
+    /**
+     * Public — saves the VAPI call ID after interview ends so we can fetch transcript later.
+     */
+    saveInterviewCallId: publicProcedure
+      .input(z.object({
+        candidateId: z.number(),
+        callId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        await db.update(candidates)
+          .set({ interviewCallId: input.callId, stage: "AI Interview" })
+          .where(eq(candidates.id, input.candidateId));
+        return { success: true };
+      }),
   }),
 });
 

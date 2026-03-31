@@ -1,4 +1,4 @@
-import { bigint, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, index, int, longtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -1764,6 +1764,11 @@ export const candidates = mysqlTable("candidates", {
   // AI evaluation
   aiScore: int("aiScore"),
   aiSummary: text("aiSummary"),
+  // AI interview
+  interviewCallId: varchar("interviewCallId", { length: 128 }),
+  interviewTranscript: longtext("interviewTranscript"),
+  interviewScore: int("interviewScore"),
+  interviewSummary: text("interviewSummary"),
   // Metadata
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
