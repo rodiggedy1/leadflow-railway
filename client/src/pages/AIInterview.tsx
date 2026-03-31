@@ -224,7 +224,7 @@ export default function AIInterview() {
   // Keep statusRef in sync with status state
   useEffect(() => { statusRef.current = status; }, [status]);
   // Ref to always-latest stopRecordingAndUpload — prevents stale closure in call-end handler
-  const stopRecordingAndUploadRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const stopRecordingAndUploadRef = useRef<() => void>(() => {});
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
 
@@ -278,6 +278,45 @@ export default function AIInterview() {
 
   // ── MediaRecorder ─────────────────────────────────────────────────────────
 
+  // uploadRecordedVideo — called from onstop, does the actual S3 upload + DB save.
+  // Defined as a standalone async function so it can be called from onstop which
+  // is assigned at recorder-creation time (not inside a Promise wrapper).
+  const uploadRecordedVideo = useCallback(async (chunks: Blob[], mimeType: string) => {
+    const cid = candidateIdRef.current;
+    console.log(`[Interview] uploadRecordedVideo — chunks: ${chunks.length}, size: ${chunks.reduce((s, c) => s + c.size, 0)}, candidateId: ${cid}`);
+    if (chunks.length === 0 || cid <= 0) {
+      console.warn("[Interview] Skipping upload — no chunks or invalid candidateId");
+      return;
+    }
+    try {
+      setUploadProgress("Saving your interview video…");
+      const blob = new Blob(chunks, { type: mimeType });
+      console.log(`[Interview] Uploading blob — size: ${blob.size}, type: ${mimeType}`);
+      const res = await fetch("/api/upload/video", {
+        method: "POST",
+        headers: { "Content-Type": mimeType },
+        body: blob,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`Upload failed: ${res.status} ${await res.text()}`);
+      const { url } = (await res.json()) as { url: string };
+      console.log("[Interview] Upload succeeded, saving URL to DB:", url);
+      await saveInterviewVideoRef.current.mutateAsync({
+        candidateId: cid,
+        interviewVideoUrl: url,
+      });
+      console.log("[Interview] DB save succeeded");
+      setUploadProgress("");
+    } catch (err) {
+      console.error("[Interview] Video upload failed:", err);
+      setUploadProgress("");
+    }
+  }, []);
+
+  // uploadRecordedVideoRef — keeps uploadRecordedVideo stable inside onstop closure
+  const uploadRecordedVideoRef = useRef(uploadRecordedVideo);
+  useEffect(() => { uploadRecordedVideoRef.current = uploadRecordedVideo; }, [uploadRecordedVideo]);
+
   const startRecording = useCallback((stream: MediaStream) => {
     if (!stream || stream.getVideoTracks().length === 0) return;
     recordedChunksRef.current = [];
@@ -291,6 +330,12 @@ export default function AIInterview() {
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) recordedChunksRef.current.push(e.data);
       };
+      // Assign onstop at creation time — NOT inside stopRecordingAndUpload.
+      // This avoids a race where mr.stop() fires before onstop is assigned.
+      // This is the same pattern Apply.tsx uses and is the correct approach.
+      mr.onstop = () => {
+        uploadRecordedVideoRef.current(recordedChunksRef.current, mimeType);
+      };
       mr.start(1000);
       mediaRecorderRef.current = mr;
     } catch (err) {
@@ -298,51 +343,16 @@ export default function AIInterview() {
     }
   }, []);
 
-  const stopRecordingAndUpload = useCallback(async () => {
+  // stopRecordingAndUpload — just stops the recorder.
+  // The actual upload runs via onstop which was assigned at creation time.
+  const stopRecordingAndUpload = useCallback(() => {
     const mr = mediaRecorderRef.current;
     if (!mr || mr.state === "inactive") {
       console.log("[Interview] stopRecordingAndUpload: recorder not active, skipping");
       return;
     }
-
-    return new Promise<void>((resolve) => {
-      mr.onstop = async () => {
-        const chunks = recordedChunksRef.current;
-        const cid = candidateIdRef.current;
-        console.log(`[Interview] onstop fired — chunks: ${chunks.length}, candidateId: ${cid}`);
-        if (chunks.length === 0 || cid <= 0) {
-          console.warn("[Interview] Skipping upload — no chunks or invalid candidateId");
-          resolve();
-          return;
-        }
-        try {
-          setUploadProgress("Saving your interview video…");
-          const mimeType = chunks[0].type || "video/webm";
-          const blob = new Blob(chunks, { type: mimeType });
-          console.log(`[Interview] Uploading blob — size: ${blob.size}, type: ${mimeType}`);
-          const res = await fetch("/api/upload/video", {
-            method: "POST",
-            headers: { "Content-Type": mimeType },
-            body: blob,
-            credentials: "include",
-          });
-          if (!res.ok) throw new Error(`Upload failed: ${res.status} ${await res.text()}`);
-          const { url } = (await res.json()) as { url: string };
-          console.log("[Interview] Upload succeeded, saving URL to DB:", url);
-          await saveInterviewVideoRef.current.mutateAsync({
-            candidateId: cid,
-            interviewVideoUrl: url,
-          });
-          console.log("[Interview] DB save succeeded");
-          setUploadProgress("");
-        } catch (err) {
-          console.error("[Interview] Video upload failed:", err);
-          setUploadProgress("");
-        }
-        resolve();
-      };
-      mr.stop();
-    });
+    console.log("[Interview] Stopping recorder, state:", mr.state);
+    mr.stop();
   }, []);
 
   // Keep the ref in sync so call-end handler always calls the latest version
@@ -435,7 +445,8 @@ export default function AIInterview() {
         }
         setStatus("error");
         setErrorMsg(msg);
-        stopRecordingAndUpload().then(() => stopCamera());
+        stopRecordingAndUpload();
+        stopCamera();
         if (timerRef.current) clearInterval(timerRef.current);
       });
 
@@ -451,7 +462,8 @@ export default function AIInterview() {
         }
         setStatus("error");
         setErrorMsg(msg);
-        stopRecordingAndUpload().then(() => stopCamera());
+        stopRecordingAndUpload();
+        stopCamera();
         if (timerRef.current) clearInterval(timerRef.current);
       });
 
@@ -467,7 +479,7 @@ export default function AIInterview() {
       setErrorMsg(
         "Could not start the interview. Please check your microphone and try again."
       );
-      await stopRecordingAndUpload();
+      stopRecordingAndUpload();
       stopCamera();
     }
   }, [
