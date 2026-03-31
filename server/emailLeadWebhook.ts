@@ -902,6 +902,14 @@ export async function handleThumbtackEmail(
 
   const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
   const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
+
+  // ── Silenced services — drop lead immediately ──────────────────────────────
+  const SILENCED_SERVICES = ["Window Cleaning", "Carpet Cleaning"];
+  if (SILENCED_SERVICES.some(s => parsed.serviceType.toLowerCase().includes(s.toLowerCase()))) {
+    console.log(`[EmailLead] Silenced service "${parsed.serviceType}" — dropping lead silently`);
+    return;
+  }
+
   const price = estimatePrice({ bedrooms, bathrooms, serviceType: parsed.serviceType });
 
   const barkQA = [

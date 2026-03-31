@@ -260,6 +260,13 @@ const DEFAULT_SETTINGS = [
     description: "Amount deducted from cleaner pay when a job requires a reclean due to poor service.",
     fieldType: "number",
   },
+  {
+    key: "silenced_services",
+    value: "Window Cleaning,Carpet Cleaning",
+    label: "Silenced Services",
+    description: "Comma-separated list of service types to completely suppress — no leads saved, no SMS sent, no alerts fired. Leave blank to allow all services.",
+    fieldType: "textarea",
+  },
 ] as const;
 
 async function seedDefaultSettings() {

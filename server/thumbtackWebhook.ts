@@ -290,6 +290,13 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
   const bathrooms = extracted.bathrooms ?? "2 Bathrooms";
   const serviceType = extracted.serviceType ?? "Standard Clean";
 
+  // ── Silenced services — drop lead immediately ──────────────────────────────
+  const SILENCED_SERVICES = ["Window Cleaning", "Carpet Cleaning"];
+  if (SILENCED_SERVICES.some(s => serviceType.toLowerCase().includes(s.toLowerCase()))) {
+    console.log(`[ThumbTackWebhook] Silenced service "${serviceType}" — dropping lead silently`);
+    return;
+  }
+
   const price = estimatePrice({ bedrooms, bathrooms, serviceType });
 
   // ── Step 3: Build SMS messages ─────────────────────────────────────────────
