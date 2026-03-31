@@ -3803,11 +3803,14 @@ Your job: fill in the following message template using the booking details provi
             await db.insert(opsChatMessages).values({
               authorName: "System",
               authorRole: "system",
-              channel: "general",
+              channel: "command",  // CommandChat listens to the "command" channel
               body: `New application from ${applicantName}`,
               quickAction: "new_application",
               metadata: cardMeta,
             });
+            // Broadcast so the card appears instantly without a page refresh
+            const { broadcastOpsUpdate } = await import("./sseBroadcast");
+            broadcastOpsUpdate("new_message");
           } catch (err: any) {
             console.error("[Hiring Card] Failed to post to Command Chat:", err.message);
           }

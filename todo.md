@@ -789,3 +789,7 @@
 ## Magic Link Tracker Stage Mapping Fix
 - [x] Fix HiringStatus.tsx STAGE_TO_STEP to use actual DB stage values (display names like "AI Interview", "Application Submitted", etc.) instead of uppercase enum keys
 - [x] Fix Stage type and getCtaContent switch to use the same display name values
+
+## New Application Card Not Appearing in Command Chat
+- [x] Fix submitApplication: insert new_application card into channel "command" not "general"
+- [x] Also broadcast lead_update SSE after inserting so the card appears instantly without a page refresh
