@@ -769,3 +769,11 @@
 - [ ] Update 2-hour nudge SMS copy to include "Jade from Maids in Black"
 - [ ] Update next-morning nudge SMS copy to include "Jade from Maids in Black"
 - [ ] Build hiring notification card in Command Chat (applicant photo, name, link to hiring page)
+
+## Applicant Magic Link Status Page
+- [x] Generate signed JWT status token on submitApplication (30-day expiry)
+- [x] Add hiring.getApplicantStatus(token) public tRPC procedure
+- [x] Build /hiring-status/:token page matching design (two-column layout)
+- [x] Send status page link SMS on submission (second SMS after interview link)
+- [x] Stage-change SMS confirmation popup in hiring pipeline
+- [x] Stage-change SMS messages for all stages (Real Interview, Background Check, Paid Test Clean, Onboarding, Rejected)

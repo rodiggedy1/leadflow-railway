@@ -1169,6 +1169,10 @@ export default function HiringPipeline() {
   });
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  // SMS confirmation popup state
+  const [smsPending, setSmsPending] = useState<{ id: number; name: string; stage: Stage } | null>(null);
+  // Stages that trigger an SMS confirmation popup
+  const SMS_STAGES: Stage[] = ["Real Interview", "Background Check", "Paid Test Clean", "Onboarding"];
   const deleteCandidateMutation = trpc.hiring.deleteCandidate.useMutation({
     onSuccess: () => {
       setSelectedCandidate(null);
@@ -1201,7 +1205,13 @@ export default function HiringPipeline() {
     if (candidate.id >= 10000) return;
     // Optimistic update
     setStageOverrides(prev => ({ ...prev, [candidate.id]: newStage }));
-    updateStageMutation.mutate({ id: candidate.id, stage: newStage });
+    // If this stage has an SMS notification, show the confirmation popup
+    if (SMS_STAGES.includes(newStage) && candidate.phone) {
+      setSmsPending({ id: candidate.id, name: candidate.name.split(" ")[0] ?? candidate.name, stage: newStage });
+      updateStageMutation.mutate({ id: candidate.id, stage: newStage, sendSmsNotification: false });
+    } else {
+      updateStageMutation.mutate({ id: candidate.id, stage: newStage });
+    }
   }
 
   const candidatesQuery = trpc.hiring.getCandidates.useQuery(undefined, {
@@ -1515,6 +1525,42 @@ export default function HiringPipeline() {
           </div>
         </div>
       </div>
+
+      {/* ── SMS Confirmation Popup ── */}
+      {smsPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-sm w-full mx-4">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <MessageSquare className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Send SMS to {smsPending.name}?</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Notify them about moving to <span className="font-semibold text-slate-700">{smsPending.stage}</span>.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  updateStageMutation.mutate({ id: smsPending.id, stage: smsPending.stage, sendSmsNotification: true });
+                  setSmsPending(null);
+                }}
+                className="flex-1 bg-[#E8735A] hover:bg-[#d4614a] text-white font-semibold text-sm rounded-xl py-2.5 transition-colors"
+              >
+                Yes, send SMS
+              </button>
+              <button
+                onClick={() => setSmsPending(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl py-2.5 transition-colors"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

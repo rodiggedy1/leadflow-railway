@@ -1780,6 +1780,8 @@ export const candidates = mysqlTable("candidates", {
   interviewTranscript: longtext("interviewTranscript"),
   interviewScore: int("interviewScore"),
   interviewSummary: text("interviewSummary"),
+  // Status page magic link token
+  statusToken: varchar("statusToken", { length: 64 }),
   // Archived (hidden from pipeline but not deleted)
   archived: tinyint("archived").notNull().default(0),
   // Metadata

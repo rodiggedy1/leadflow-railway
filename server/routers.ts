@@ -3633,6 +3633,12 @@ Your job: fill in the following message template using the booking details provi
         });
         const candidateId = (result as any).insertId;
 
+        // ── Generate status page token and save it ────────────────────────────
+        const { randomBytes } = await import("crypto");
+        const statusToken = randomBytes(24).toString("base64url");
+        await db.update(candidates).set({ statusToken }).where(eq(candidates.id, candidateId));
+        const statusLink = `https://quote.maidinblack.com/hiring-status/${statusToken}`;
+
         // ── AI scoring (non-blocking — runs after response is sent) ──────────
         setImmediate(async () => {
           try {
@@ -3721,6 +3727,11 @@ Your job: fill in the following message template using the booking details provi
             } else {
               console.log(`[Hiring SMS] Interview link sent to ${e164Phone}, candidate ${candidateId}, session ${sessionId}`);
             }
+
+            // Send status page link as second SMS
+            const statusSmsText = `Hey ${firstName} — you can track your application progress anytime here:\n${statusLink}`;
+            await sendSms({ to: e164Phone, content: statusSmsText });
+            console.log(`[Hiring SMS] Status page link sent to ${e164Phone}, candidate ${candidateId}`);
 
             // Schedule 2-hour nudge
             const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -3910,12 +3921,51 @@ Your job: fill in the following message template using the booking details provi
       .input(z.object({
         id: z.number(),
         stage: z.string(),
+        sendSmsNotification: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
         const { candidates } = await import("../drizzle/schema");
+
+        // Fetch candidate phone + name before updating
+        const rows = await db
+          .select({ firstName: candidates.firstName, phone: candidates.phone, statusToken: candidates.statusToken })
+          .from(candidates)
+          .where(eq(candidates.id, input.id))
+          .limit(1);
+        const candidate = rows[0];
+
         await db.update(candidates).set({ stage: input.stage }).where(eq(candidates.id, input.id));
+
+        // Optionally send stage-change SMS
+        if (input.sendSmsNotification && candidate?.phone) {
+          const rawPhone = candidate.phone.replace(/[^\d]/g, "");
+          const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+          const firstName = candidate.firstName || "there";
+
+          const stageMessages: Record<string, string> = {
+            // Display-name keys (what the pipeline sends)
+            "Real Interview": `Hey ${firstName} — great news from Maids in Black! 🎉 You've passed the AI interview and we'd love to schedule a real video interview with you. We'll be in touch shortly to confirm the time. — Jade`,
+            "Background Check": `Hey ${firstName} — Jade from Maids in Black here! You're moving forward to the background check stage. We'll send you a link shortly to complete it. Hang tight! 🙌`,
+            "Paid Test Clean": `Hey ${firstName} — exciting news! You've been selected for a paid test clean with Maids in Black. We'll reach out with scheduling details soon. — Jade 🧹`,
+            "Onboarding": `Hey ${firstName} — welcome to the Maids in Black family! 🎊 You've been hired! Our team will reach out with onboarding details and your first assignment. So excited to have you! — Jade`,
+            "Rejected": `Hey ${firstName} — Jade from Maids in Black here. Thank you so much for taking the time to apply and complete the interview. After careful review, we've decided to move forward with other candidates at this time. We truly appreciate your interest and wish you all the best in your job search! 💙`,
+          };
+
+          const smsText = stageMessages[input.stage];
+          if (smsText) {
+            setImmediate(async () => {
+              try {
+                await sendSms({ to: e164Phone, content: smsText });
+                console.log(`[Hiring SMS] Stage-change SMS sent to ${e164Phone} for stage ${input.stage}`);
+              } catch (err: any) {
+                console.error(`[Hiring SMS] Stage-change SMS failed for candidate ${input.id}:`, err.message);
+              }
+            });
+          }
+        }
+
         return { success: true };
       }),
 
@@ -4048,6 +4098,44 @@ Your job: fill in the following message template using the booking details provi
         } catch {
           return { recordingUrl: null, isStereo: false };
         }
+      }),
+
+    /**
+     * Public — get applicant status page data from a status token
+     */
+    getApplicantStatus: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        const rows = await db
+          .select({
+            id: candidates.id,
+            firstName: candidates.firstName,
+            lastName: candidates.lastName,
+            city: candidates.city,
+            state: candidates.state,
+            stage: candidates.stage,
+            createdAt: candidates.createdAt,
+            interviewCallId: candidates.interviewCallId,
+          })
+          .from(candidates)
+          .where(eq(candidates.statusToken, input.token))
+          .limit(1);
+        if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Invalid or expired link" });
+        const c = rows[0];
+        const interviewLink = `https://quote.maidinblack.com/interview/${c.id}`;
+        return {
+          firstName: c.firstName,
+          lastName: c.lastName,
+          city: c.city ?? null,
+          state: c.state ?? null,
+          stage: c.stage,
+          appliedAt: c.createdAt,
+          interviewLink,
+          hasCompletedInterview: !!c.interviewCallId,
+        };
       }),
   }),
 });

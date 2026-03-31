@@ -1,0 +1,1 @@
+ALTER TABLE `candidates` ADD `statusToken` varchar(64);
