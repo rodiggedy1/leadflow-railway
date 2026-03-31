@@ -3,7 +3,8 @@
  * Pixel-perfect match to the provided design screenshots.
  * Data is static/mock for now; will be wired to backend in a future phase.
  */
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { trpc } from "@/lib/trpc";
 import {
   User,
   MessageSquare,
@@ -620,7 +621,34 @@ export default function HiringPipeline() {
   const [search, setSearch] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(MOCK_CANDIDATES[1]);
 
-  const filteredCandidates = MOCK_CANDIDATES.filter(c => {
+  const updateStageMutation = trpc.hiring.updateStage.useMutation({
+    onSuccess: () => candidatesQuery.refetch(),
+  });
+
+  const candidatesQuery = trpc.hiring.getCandidates.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+
+  // Merge real DB candidates with mock data (real candidates take precedence)
+  const allCandidates: Candidate[] = useMemo(() => {
+    const dbRows = candidatesQuery.data ?? [];
+    const dbCandidates: Candidate[] = dbRows.map(r => ({
+      id: r.id,
+      initials: `${r.firstName[0] ?? "?"}${r.lastName[0] ?? "?"}`.toUpperCase(),
+      name: `${r.firstName} ${r.lastName}`.trim(),
+      subtitle: r.specialties?.length ? r.specialties.slice(0, 2).join(", ") : "New applicant",
+      transport: "Car" as const,
+      zip: r.zip ?? "—",
+      stage: (r.stage as Stage) ?? "Application Submitted",
+      score: 0,
+      aiSummary: r.experience ?? undefined,
+      notes: [],
+    }));
+    // Prepend real DB candidates before mock ones
+    return [...dbCandidates, ...MOCK_CANDIDATES];
+  }, [candidatesQuery.data]);
+
+  const filteredCandidates = allCandidates.filter(c => {
     const matchesTab = filterTab === "All" || c.stage === filterTab;
     const q = search.toLowerCase();
     const matchesSearch =

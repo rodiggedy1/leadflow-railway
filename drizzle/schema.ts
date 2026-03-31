@@ -1730,3 +1730,43 @@ export const pushSubscriptions = mysqlTable("push_subscriptions", {
 }));
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+// ── Hiring Pipeline — Candidates ──────────────────────────────────────────────
+/**
+ * Stores job applications submitted via the public /apply form.
+ * Each row represents one applicant moving through the 7-stage hiring pipeline.
+ */
+export const candidates = mysqlTable("candidates", {
+  id: int("id").autoincrement().primaryKey(),
+  // Basic info
+  firstName: varchar("firstName", { length: 128 }).notNull(),
+  lastName: varchar("lastName", { length: 128 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 30 }).notNull(),
+  // Address
+  streetAddress: varchar("streetAddress", { length: 255 }),
+  apt: varchar("apt", { length: 64 }),
+  city: varchar("city", { length: 128 }),
+  state: varchar("state", { length: 8 }),
+  zip: varchar("zip", { length: 16 }),
+  // Requirements
+  hasCleaning: tinyint("hasCleaning"),        // 1=yes, 0=no, null=unanswered
+  hasBankAccount: tinyint("hasBankAccount"),
+  isAuthorized: tinyint("isAuthorized"),
+  consentBackground: tinyint("consentBackground"),
+  experience: text("experience"),
+  // Specialties (JSON array of strings)
+  specialties: text("specialties"),
+  // Pipeline stage
+  stage: varchar("stage", { length: 64 }).notNull().default("Application Submitted"),
+  // Metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  idxPhone: index("idx_cand_phone").on(table.phone),
+  idxStage: index("idx_cand_stage").on(table.stage),
+  idxCreated: index("idx_cand_created").on(table.createdAt),
+}));
+
+export type Candidate = typeof candidates.$inferSelect;
+export type InsertCandidate = typeof candidates.$inferInsert;

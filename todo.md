@@ -658,3 +658,13 @@
 - [x] Raise near-bottom threshold to 400px to account for composer growth
 
 - [ ] Add manual lead creation: modal with name, phone, email, service type, notes, amount, status, source (Yelp/Google/Thumbtack/Bark/Phone/Other); creates lead + conversationSession, posts new_lead card to CommandChat, auto-claims for adding user, invalidates leads.list
+
+## Apply Form + Hiring Pipeline Integration
+
+- [x] Fix duplicate US state keys (VA, MD) in Apply.tsx US_STATES array
+- [x] Investigate and fix tRPC JSON parse error on /apply page (was missing trpc import)
+- [x] Create candidates table in DB schema (drizzle/schema.ts)
+- [x] Create submitApplication tRPC mutation (publicProcedure)
+- [x] Create getCandidates tRPC query (protectedProcedure)
+- [x] Wire Apply form to call submitApplication on final step
+- [x] Display real candidates from DB in /admin/hiring pipeline board

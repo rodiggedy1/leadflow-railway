@@ -3581,6 +3581,96 @@ Your job: fill in the following message template using the booking details provi
         return { reply, stage };
       }),
   }),
+
+  // ── Hiring Pipeline ──────────────────────────────────────────────────────────
+  hiring: router({
+    /**
+     * Public — submit a job application from /apply
+     */
+    submitApplication: publicProcedure
+      .input(z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        email: z.string().email().optional().or(z.literal("")),
+        phone: z.string().min(7),
+        streetAddress: z.string().optional(),
+        apt: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zip: z.string().optional(),
+        hasCleaning: z.boolean().nullable(),
+        hasBankAccount: z.boolean().nullable(),
+        isAuthorized: z.boolean().nullable(),
+        consentBackground: z.boolean().nullable(),
+        experience: z.string().optional(),
+        specialties: z.array(z.string()),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        const [result] = await db.insert(candidates).values({
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email || null,
+          phone: input.phone,
+          streetAddress: input.streetAddress || null,
+          apt: input.apt || null,
+          city: input.city || null,
+          state: input.state || null,
+          zip: input.zip || null,
+          hasCleaning: input.hasCleaning === null ? null : input.hasCleaning ? 1 : 0,
+          hasBankAccount: input.hasBankAccount === null ? null : input.hasBankAccount ? 1 : 0,
+          isAuthorized: input.isAuthorized === null ? null : input.isAuthorized ? 1 : 0,
+          consentBackground: input.consentBackground === null ? null : input.consentBackground ? 1 : 0,
+          experience: input.experience || null,
+          specialties: input.specialties.length > 0 ? JSON.stringify(input.specialties) : null,
+          stage: "Application Submitted",
+        });
+        return { success: true, id: (result as any).insertId };
+      }),
+
+    /**
+     * Protected — list candidates for the hiring pipeline board
+     */
+    getCandidates: adminAgentProcedure
+      .input(z.object({
+        stage: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const { candidates } = await import("../drizzle/schema");
+        const rows = await db
+          .select()
+          .from(candidates)
+          .orderBy(desc(candidates.createdAt));
+        return rows.map(r => ({
+          ...r,
+          specialties: r.specialties ? JSON.parse(r.specialties) as string[] : [],
+          hasCleaning: r.hasCleaning === 1,
+          hasBankAccount: r.hasBankAccount === 1,
+          isAuthorized: r.isAuthorized === 1,
+          consentBackground: r.consentBackground === 1,
+        }));
+      }),
+
+    /**
+     * Protected — advance a candidate to a new stage
+     */
+    updateStage: adminAgentProcedure
+      .input(z.object({
+        id: z.number(),
+        stage: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        await db.update(candidates).set({ stage: input.stage }).where(eq(candidates.id, input.id));
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

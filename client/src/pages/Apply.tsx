@@ -19,7 +19,9 @@ import {
   Sparkles,
   CheckCircle2,
   PhoneCall,
+  Loader2,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -71,10 +73,10 @@ const SPECIALTIES = [
 ];
 
 const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
-  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
-  "VA","WA","WV","WI","WY","DC","MD","VA",
+  "AL","AK","AZ","AR","CA","CO","CT","DC","DE","FL","GA","HI","ID","IL","IN",
+  "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH",
+  "NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT",
+  "VT","VA","WA","WV","WI","WY",
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -564,7 +566,7 @@ function BioStep({
   );
 }
 
-function VideoStep({ onNext }: { onNext: () => void }) {
+function VideoStep({ onNext, onSubmit, isSubmitting }: { onNext: () => void; onSubmit: () => void; isSubmitting: boolean }) {
   return (
     <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-6">Video</h2>
@@ -670,15 +672,21 @@ function VideoStep({ onNext }: { onNext: () => void }) {
 
       <div className="flex justify-between items-center mt-6">
         <button
-          onClick={onNext}
-          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
+          onClick={onSubmit}
+          disabled={isSubmitting}
+          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-60"
           style={{ backgroundColor: ACCENT }}
         >
-          Continue <ChevronRight size={16} />
+          {isSubmitting ? (
+            <><Loader2 size={16} className="animate-spin" /> Submitting...</>
+          ) : (
+            <>Submit Application <ChevronRight size={16} /></>
+          )}
         </button>
         <button
-          onClick={onNext}
-          className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          onClick={onSubmit}
+          disabled={isSubmitting}
+          className="text-sm text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
         >
           Record Later
         </button>
@@ -740,6 +748,34 @@ function ThankYouStep() {
 
 export default function Apply() {
   const [step, setStep] = useState<Step>("welcome");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const submitMutation = trpc.hiring.submitApplication.useMutation({
+    onSuccess: () => setStep("done"),
+    onError: (err) => setSubmitError(err.message || "Something went wrong. Please try again."),
+  });
+
+  const handleSubmit = () => {
+    setSubmitError(null);
+    submitMutation.mutate({
+      firstName: formData.firstName || "Applicant",
+      lastName: formData.lastName || "",
+      email: formData.email || undefined,
+      phone: formData.phone || "0000000000",
+      streetAddress: formData.streetAddress || undefined,
+      apt: formData.apt || undefined,
+      city: formData.city || undefined,
+      state: formData.state || undefined,
+      zip: formData.zip || undefined,
+      hasCleaning: formData.hasCleaning,
+      hasBankAccount: formData.hasBankAccount,
+      isAuthorized: formData.isAuthorized,
+      consentBackground: formData.consentBackground,
+      experience: formData.experience || undefined,
+      specialties: formData.specialties,
+    });
+  };
+
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -844,7 +880,10 @@ export default function Apply() {
           {step === "requirements" && <RequirementsStep data={formData} onChange={patch} onNext={next} />}
           {step === "specialties" && <SpecialtiesStep data={formData} onChange={patch} onNext={next} />}
           {step === "bio" && <BioStep data={formData} onChange={patch} onNext={next} />}
-          {step === "video" && <VideoStep onNext={next} />}
+          {submitError && (
+            <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{submitError}</div>
+          )}
+          {step === "video" && <VideoStep onNext={next} onSubmit={handleSubmit} isSubmitting={submitMutation.isPending} />}
           {step === "done" && <ThankYouStep />}
         </div>
       </main>
