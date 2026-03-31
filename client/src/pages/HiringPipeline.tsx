@@ -104,100 +104,9 @@ interface Candidate {
   specialtiesList?: string[];
 }
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
+// ── Mock data removed — only real DB candidates are shown ───────────────────
 
-const MOCK_CANDIDATES: Candidate[] = [
-  {
-    id: 10001,
-    initials: "TB",
-    name: "Tiana Brooks",
-    subtitle: "Application only",
-    transport: "Car",
-    zip: "20032",
-    stage: "Application Submitted",
-    score: 74,
-    aiSummary: "Strong application with good attention to detail. No prior professional cleaning experience but eager to learn.",
-    scores: { communication: 74, reliability: 68, quality: 70, professionalism: 72 },
-    checklistStatus: { applicationSubmitted: "done", aiInterviewStarted: "pending", aiInterviewCompleted: "pending", nudgeScheduled: "pending" },
-    notes: ["Applied via job board", "Available weekdays"],
-  },
-  {
-    id: 10002,
-    initials: "KR",
-    name: "Kevin Reed",
-    subtitle: "No pro experience",
-    transport: "No car",
-    zip: "20003",
-    stage: "AI Interview",
-    score: 63,
-    tag: "Needs review",
-    availability: "Mon–Fri",
-    aiSummary: "Friendly and coachable but low signal on reliability and independent transport.",
-    scores: { communication: 71, reliability: 55, quality: 60, professionalism: 66 },
-    checklistStatus: { applicationSubmitted: "done", aiInterviewStarted: "done", aiInterviewCompleted: "in-progress", nudgeScheduled: "done" },
-    notes: ["Good attitude", "No car currently", "May work as backup / team placement"],
-  },
-  {
-    id: 10003,
-    initials: "MS",
-    name: "Maria Santos",
-    subtitle: "3 years residential",
-    transport: "Car",
-    zip: "20011",
-    stage: "Real Interview",
-    score: 89,
-    tag: "A Player",
-    aiSummary: "Highly experienced residential cleaner. Strong references, reliable transport, excellent communication.",
-    scores: { communication: 91, reliability: 88, quality: 90, professionalism: 87 },
-    checklistStatus: { applicationSubmitted: "done", aiInterviewStarted: "done", aiInterviewCompleted: "done", nudgeScheduled: "done" },
-    notes: ["3 years residential experience", "Strong references"],
-  },
-  {
-    id: 10004,
-    initials: "JL",
-    name: "Jasmine Lee",
-    subtitle: "5 years contract cleaning",
-    transport: "Car",
-    zip: "20019",
-    stage: "Background Check",
-    score: 93,
-    tag: "Fast-track",
-    aiSummary: "Top-tier candidate. 5 years contract cleaning, own supplies, excellent availability.",
-    scores: { communication: 95, reliability: 92, quality: 94, professionalism: 91 },
-    checklistStatus: { applicationSubmitted: "done", aiInterviewStarted: "done", aiInterviewCompleted: "done", nudgeScheduled: "done" },
-    notes: ["5 years contract cleaning", "Own supplies"],
-  },
-  {
-    id: 10005,
-    initials: "AT",
-    name: "Ashley Turner",
-    subtitle: "1 year Airbnb turns",
-    transport: "Car",
-    zip: "22201",
-    stage: "Paid Test Clean",
-    score: 81,
-    tag: "Ready for test clean",
-    aiSummary: "Solid Airbnb turnaround experience. Punctual and detail-oriented.",
-    scores: { communication: 82, reliability: 80, quality: 83, professionalism: 79 },
-    checklistStatus: { applicationSubmitted: "done", aiInterviewStarted: "done", aiInterviewCompleted: "done", nudgeScheduled: "done" },
-    notes: ["1 year Airbnb turns", "Punctual"],
-  },
-  {
-    id: 10006,
-    initials: "DC",
-    name: "David Cole",
-    subtitle: "2 years move-out cleans",
-    transport: "Car",
-    zip: "22314",
-    stage: "Onboarding",
-    score: 86,
-    tag: "Hire pending",
-    aiSummary: "Experienced move-out specialist. Ready to onboard pending paperwork.",
-    scores: { communication: 85, reliability: 87, quality: 88, professionalism: 84 },
-    checklistStatus: { applicationSubmitted: "done", aiInterviewStarted: "done", aiInterviewCompleted: "done", nudgeScheduled: "done" },
-    notes: ["2 years move-out cleans", "Paperwork in progress"],
-  },
-];
+const MOCK_CANDIDATES: Candidate[] = [];
 
 const STAGES: Stage[] = [
   "Application Submitted",
@@ -1186,6 +1095,9 @@ export default function HiringPipeline() {
       const hasPending = rows.some((r: any) => r.aiScore == null);
       return hasPending ? 8_000 : 30_000;
     },
+    // Keep showing previous data during background refetch — prevents cards from
+    // flashing out momentarily while a new fetch is in flight
+    placeholderData: (prev) => prev,
   });
 
   // Merge real DB candidates with mock data, applying optimistic stage overrides
@@ -1219,7 +1131,7 @@ export default function HiringPipeline() {
       specialtiesList: r.specialties ?? [],
     }));
     // Prepend real DB candidates before mock ones
-    const merged = [...dbCandidates, ...MOCK_CANDIDATES];
+    const merged = [...dbCandidates];
     // Apply optimistic stage overrides
     return merged.map(c =>
       stageOverrides[c.id] ? { ...c, stage: stageOverrides[c.id] } : c
