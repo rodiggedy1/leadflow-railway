@@ -3884,6 +3884,16 @@ Your job: fill in the following message template using the booking details provi
      * Public — fetches the VAPI call recording URL for a candidate's AI interview.
      * Queries the VAPI API using the stored interviewCallId.
      */
+    deleteCandidate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("DB unavailable");
+        const { candidates } = await import("../drizzle/schema");
+        await db.delete(candidates).where(eq(candidates.id, input.id));
+        return { success: true };
+      }),
+
     getInterviewRecordingUrl: publicProcedure
       .input(z.object({ candidateId: z.number() }))
       .query(async ({ input }) => {

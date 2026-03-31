@@ -48,6 +48,7 @@ import {
   Briefcase,
   Bot,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1108,6 +1109,15 @@ export default function HiringPipeline() {
     },
   });
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const deleteCandidateMutation = trpc.hiring.deleteCandidate.useMutation({
+    onSuccess: () => {
+      setSelectedCandidate(null);
+      setConfirmDeleteId(null);
+      candidatesQuery.refetch();
+    },
+  });
+
   function handleDragStart(event: DragStartEvent) {
     const candidate = event.active.data.current?.candidate as Candidate | undefined;
     setActiveCandidate(candidate ?? null);
@@ -1346,9 +1356,39 @@ export default function HiringPipeline() {
             className="rounded-2xl border p-5"
             style={{ backgroundColor: "#ffffff", borderColor: "#e5e7eb" }}
           >
-            <div className="mb-3">
-              <h2 className="text-lg font-bold text-gray-900">Candidate detail</h2>
-              <p className="text-xs text-gray-400">Click around the board to switch profiles.</p>
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Candidate detail</h2>
+                <p className="text-xs text-gray-400">Click around the board to switch profiles.</p>
+              </div>
+              {selectedCandidate && (
+                confirmDeleteId === selectedCandidate.id ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-gray-500">Delete?</span>
+                    <button
+                      onClick={() => deleteCandidateMutation.mutate({ id: selectedCandidate.id })}
+                      disabled={deleteCandidateMutation.isPending}
+                      className="text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors"
+                    >
+                      {deleteCandidateMutation.isPending ? "Deleting…" : "Yes, delete"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteId(selectedCandidate.id)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                    title="Delete candidate"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )
+              )}
             </div>
             <CandidateDetail candidate={selectedCandidate} />
           </div>
