@@ -756,3 +756,4 @@
 - [x] Add separate interviewVideoUrl column to candidates table (distinct from application videoUrl)
 - [x] Show Interview Recording thumbnail in detail panel separate from application video
 - [x] Fix VAPI call connection on AI interview page so it actually connects and runs to completion
+- [x] Fix camera recording only saving 5 seconds — full interview duration not being captured

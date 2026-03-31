@@ -223,6 +223,9 @@ export default function AIInterview() {
   const statusRef = useRef<InterviewStatus>("loading");
   // Keep statusRef in sync with status state
   useEffect(() => { statusRef.current = status; }, [status]);
+  // Ref to always-latest stopRecordingAndUpload — prevents stale closure in call-end handler
+  const stopRecordingAndUploadRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  // Keep the ref in sync after stopRecordingAndUpload is defined (done below after its useCallback)
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
 
@@ -327,6 +330,11 @@ export default function AIInterview() {
     });
   }, [candidateId, saveInterviewVideo]);
 
+  // Keep the ref in sync so call-end handler always calls the latest version
+  useEffect(() => {
+    stopRecordingAndUploadRef.current = stopRecordingAndUpload;
+  }, [stopRecordingAndUpload]);
+
   // ── Start interview (triggered by button click) ───────────────────────────
 
   const startInterview = useCallback(async () => {
@@ -384,7 +392,9 @@ export default function AIInterview() {
           saveCallId.mutate({ candidateId, callId: callIdRef.current });
         }
 
-        await stopRecordingAndUpload();
+        // Use ref to get the latest version — avoids stale closure that would
+        // see mediaRecorderRef.current = null and skip the upload entirely
+        await stopRecordingAndUploadRef.current();
         stopCamera();
         setStatus("done");
       });
