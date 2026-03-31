@@ -1822,17 +1822,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               <Briefcase className="h-3.5 w-3.5" />
                               View in Hiring
                             </a>
-                            {candidateId && (
-                              <a
-                                href={`/interview/${candidateId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                                Interview Link
-                              </a>
-                            )}
+
                           </div>
                         </div>
                       </div>
