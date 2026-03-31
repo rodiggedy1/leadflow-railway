@@ -3700,7 +3700,7 @@ Your job: fill in the following message template using the booking details provi
     /**
      * Protected — list candidates for the hiring pipeline board
      */
-    getCandidates: adminAgentProcedure
+    getCandidates: agentProcedure
       .input(z.object({
         stage: z.string().optional(),
       }).optional())
@@ -3743,7 +3743,7 @@ Your job: fill in the following message template using the booking details provi
     /**
      * Protected — re-run AI scoring for a specific candidate
      */
-    rescoreCandidate: adminAgentProcedure
+    rescoreCandidate: agentProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -3809,7 +3809,7 @@ Your job: fill in the following message template using the booking details provi
     /**
      * Protected — advance a candidate to a new stage
      */
-    updateStage: adminAgentProcedure
+    updateStage: agentProcedure
       .input(z.object({
         id: z.number(),
         stage: z.string(),
@@ -3885,7 +3885,7 @@ Your job: fill in the following message template using the booking details provi
      * Public — fetches the VAPI call recording URL for a candidate's AI interview.
      * Queries the VAPI API using the stored interviewCallId.
      */
-    deleteCandidate: adminAgentProcedure
+    deleteCandidate: agentProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -3895,7 +3895,7 @@ Your job: fill in the following message template using the booking details provi
         return { success: true };
       }),
 
-    archiveCandidate: adminAgentProcedure
+    archiveCandidate: agentProcedure
       .input(z.object({ id: z.number(), archived: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
