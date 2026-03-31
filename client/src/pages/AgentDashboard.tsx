@@ -59,6 +59,7 @@ import {
   Check,
   X,
   StickyNote,
+  ExternalLink,
 } from "lucide-react";
 import CallGuide from "@/components/CallGuide";
 import { useLocation } from "wouter";
@@ -103,6 +104,8 @@ type Session = {
   bookedAmount: number | null;
   internalNotes: string | null;
   aiMode: number;
+  barkQA: string | null;
+  leadSource: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -1632,6 +1635,24 @@ function LeadCard({
             </div>
           )}
 
+          {/* ── Thumbtack link (parsed from barkQA) ── */}
+          {(() => {
+            if (!session.barkQA) return null;
+            const match = session.barkQA.match(/https?:\/\/[^\s]+/);
+            if (!match) return null;
+            return (
+              <a
+                href={match[0]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 font-medium mb-2.5"
+                onClick={e => e.stopPropagation()}
+              >
+                <ExternalLink className="w-3 h-3" /> View on Thumbtack
+              </a>
+            );
+          })()}
+
           {/* ── Actions ── */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Primary CTA */}
@@ -1949,6 +1970,7 @@ export default function AgentDashboard() {
             "quality":           "/admin/quality",
             "tracker-flow":      "/admin/tracker-flow",
             "settings":          "/admin/settings",
+            "hiring":            "/admin/hiring",
           };
           const permittedPages = ADMIN_PAGES.filter(p => (agentMe.pagePermissions as string[]).includes(p.id));
           return (

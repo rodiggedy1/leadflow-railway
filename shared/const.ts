@@ -27,6 +27,7 @@ export const ADMIN_PAGES = [
   { id: "quality",           label: "Jobs",          group: "Operations" },
   { id: "tracker-flow",      label: "Journey",       group: "Operations" },
   { id: "settings",          label: "Settings",      group: "Admin" },
+  { id: "hiring",            label: "Hiring",        group: "Operations" },
 ] as const;
 
 export type AdminPageId = typeof ADMIN_PAGES[number]["id"];

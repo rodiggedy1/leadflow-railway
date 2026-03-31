@@ -1888,6 +1888,15 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               <ClipboardList className="w-4 h-4" />
             </a>
             <a
+              href="/admin/hiring"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+              title="Hiring Pipeline"
+            >
+              <Users className="w-4 h-4" />
+            </a>
+            <a
               href="/agent"
               target="_blank"
               rel="noopener noreferrer"

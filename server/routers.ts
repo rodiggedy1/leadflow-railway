@@ -3885,7 +3885,7 @@ Your job: fill in the following message template using the booking details provi
      * Public — fetches the VAPI call recording URL for a candidate's AI interview.
      * Queries the VAPI API using the stored interviewCallId.
      */
-    deleteCandidate: protectedProcedure
+    deleteCandidate: adminAgentProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -3895,7 +3895,7 @@ Your job: fill in the following message template using the booking details provi
         return { success: true };
       }),
 
-    archiveCandidate: protectedProcedure
+    archiveCandidate: adminAgentProcedure
       .input(z.object({ id: z.number(), archived: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await getDb();

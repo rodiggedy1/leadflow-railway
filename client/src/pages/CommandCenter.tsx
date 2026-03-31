@@ -49,6 +49,7 @@ import {
   History,
   CheckCircle,
   XCircle,
+  ExternalLink,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -457,6 +458,7 @@ function HotLeadCard({
     nextBestAction: string;
     intentScore: number;
     context: string | null;
+    thumbtackUrl?: string | null;
   };
   onSms: (id: number, name: string, customMessage?: string) => void;
   onCall: (id: number, name: string) => void;
@@ -522,6 +524,17 @@ function HotLeadCard({
           </div>
           {lead.context && (
             <p className="text-xs text-gray-500 leading-relaxed mb-2 line-clamp-2">{lead.context}</p>
+          )}
+          {lead.thumbtackUrl && (
+            <a
+              href={lead.thumbtackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 font-medium mb-2"
+              onClick={e => e.stopPropagation()}
+            >
+              <ExternalLink className="w-3 h-3" /> View on Thumbtack
+            </a>
           )}
           <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100/80">
             <p className="text-xs font-semibold text-gray-700 flex-1 min-w-0 truncate">

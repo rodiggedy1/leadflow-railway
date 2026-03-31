@@ -392,6 +392,7 @@ export const commandCenterRouter = router({
           updatedAt: conversationSessions.updatedAt,
           messageHistory: conversationSessions.messageHistory,
           internalNotes: conversationSessions.internalNotes,
+          barkQA: conversationSessions.barkQA,
         })
         .from(conversationSessions)
         .where(
@@ -431,6 +432,11 @@ export const commandCenterRouter = router({
             const lastCustomer = [...msgs].reverse().find(m => m.role === "user");
             return lastCustomer?.content?.slice(0, 120) ?? null;
           } catch { return null; }
+        })(),
+        thumbtackUrl: (() => {
+          if (!s.barkQA) return null;
+          const match = s.barkQA.match(/https?:\/\/[^\s]+/);
+          return match ? match[0] : null;
         })(),
       }));
 
