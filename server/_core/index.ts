@@ -18,6 +18,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerVideoUploadRoute } from "../videoUpload";
+import { registerInterviewUploadRoutes } from "../interviewUpload";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -72,9 +73,13 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // Raw binary parser for video/image uploads (must be before tRPC middleware)
   app.use("/api/upload/video", express.raw({ type: ["video/webm", "video/mp4", "video/*", "image/*"], limit: "200mb" }));
+  // Raw binary parser for interview video chunks
+  app.use("/api/interview/chunk", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "20mb" }));
 
   // Video upload for applicant recordings
   registerVideoUploadRoute(app as any);
+  // Interview video chunk upload + finalize
+  registerInterviewUploadRoutes(app as any);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // OpenPhone webhook for inbound SMS replies

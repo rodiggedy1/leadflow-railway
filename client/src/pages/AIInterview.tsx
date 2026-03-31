@@ -217,14 +217,17 @@ export default function AIInterview() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  // Session ID for chunk uploads — generated once per component mount
+  const sessionIdRef = useRef<string>(`${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const chunkIndexRef = useRef<number>(0);
+  const mimeTypeRef = useRef<string>("video/webm");
   // Mirror status in a ref so the cleanup useEffect can read current value
   // without being re-registered every time status changes (avoids StrictMode issues)
   const statusRef = useRef<InterviewStatus>("loading");
   // Keep statusRef in sync with status state
   useEffect(() => { statusRef.current = status; }, [status]);
   // Ref to always-latest stopRecordingAndUpload — prevents stale closure in call-end handler
-  const stopRecordingAndUploadRef = useRef<() => void>(() => {});
+  const stopRecordingAndUploadRef = useRef<() => Promise<void>>(async () => {});
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
 
@@ -234,14 +237,10 @@ export default function AIInterview() {
   );
 
   const saveCallId = trpc.hiring.saveInterviewCallId.useMutation();
-  const saveInterviewVideo = trpc.hiring.saveInterviewVideo.useMutation();
 
-  // Refs for values used inside stopRecordingAndUpload — avoids stale closures entirely
+  // Refs for values used inside closures — avoids stale closures entirely
   const candidateIdRef = useRef<number>(candidateId);
-  const saveInterviewVideoRef = useRef(saveInterviewVideo);
-  // Keep candidateIdRef and saveInterviewVideoRef always current
   useEffect(() => { candidateIdRef.current = candidateId; }, [candidateId]);
-  useEffect(() => { saveInterviewVideoRef.current = saveInterviewVideo; }, [saveInterviewVideo]);
 
   // When config loads, move to "ready"
   useEffect(() => {
@@ -276,84 +275,117 @@ export default function AIInterview() {
     setCameraStream(null);
   }, []);
 
-  // ── MediaRecorder ─────────────────────────────────────────────────────────
+  // ── MediaRecorder (chunk-upload approach) ────────────────────────────────
+  //
+  // Each 5-second chunk is uploaded to S3 immediately via /api/interview/chunk.
+  // This means the video is saved incrementally — even if the browser closes
+  // mid-interview, all recorded chunks are already on S3.
+  // At call-end, /api/interview/finalize concatenates the chunks and saves the
+  // final URL to the candidate record.
 
-  // uploadRecordedVideo — called from onstop, does the actual S3 upload + DB save.
-  // Defined as a standalone async function so it can be called from onstop which
-  // is assigned at recorder-creation time (not inside a Promise wrapper).
-  const uploadRecordedVideo = useCallback(async (chunks: Blob[], mimeType: string) => {
-    const cid = candidateIdRef.current;
-    console.log(`[Interview] uploadRecordedVideo — chunks: ${chunks.length}, size: ${chunks.reduce((s, c) => s + c.size, 0)}, candidateId: ${cid}`);
-    if (chunks.length === 0 || cid <= 0) {
-      console.warn("[Interview] Skipping upload — no chunks or invalid candidateId");
-      return;
-    }
+  const uploadChunk = useCallback(async (chunkBlob: Blob, index: number, mimeType: string) => {
+    const sessionId = sessionIdRef.current;
     try {
-      setUploadProgress("Saving your interview video…");
-      const blob = new Blob(chunks, { type: mimeType });
-      console.log(`[Interview] Uploading blob — size: ${blob.size}, type: ${mimeType}`);
-      const res = await fetch("/api/upload/video", {
+      console.log(`[Interview] Uploading chunk index=${index} size=${chunkBlob.size} session=${sessionId}`);
+      const res = await fetch("/api/interview/chunk", {
         method: "POST",
-        headers: { "Content-Type": mimeType },
-        body: blob,
+        headers: {
+          "Content-Type": mimeType,
+          "X-Session-Id": sessionId,
+          "X-Chunk-Index": String(index),
+        },
+        body: chunkBlob,
         credentials: "include",
+        // keepalive: true allows the request to outlive the page
+        keepalive: true,
       });
-      if (!res.ok) throw new Error(`Upload failed: ${res.status} ${await res.text()}`);
-      const { url } = (await res.json()) as { url: string };
-      console.log("[Interview] Upload succeeded, saving URL to DB:", url);
-      await saveInterviewVideoRef.current.mutateAsync({
-        candidateId: cid,
-        interviewVideoUrl: url,
-      });
-      console.log("[Interview] DB save succeeded");
-      setUploadProgress("");
+      if (!res.ok) {
+        console.error(`[Interview] Chunk ${index} upload failed: ${res.status}`);
+      } else {
+        console.log(`[Interview] Chunk ${index} uploaded OK`);
+      }
     } catch (err) {
-      console.error("[Interview] Video upload failed:", err);
-      setUploadProgress("");
+      console.error(`[Interview] Chunk ${index} upload error:`, err);
     }
   }, []);
 
-  // uploadRecordedVideoRef — keeps uploadRecordedVideo stable inside onstop closure
-  const uploadRecordedVideoRef = useRef(uploadRecordedVideo);
-  useEffect(() => { uploadRecordedVideoRef.current = uploadRecordedVideo; }, [uploadRecordedVideo]);
-
   const startRecording = useCallback((stream: MediaStream) => {
     if (!stream || stream.getVideoTracks().length === 0) return;
-    recordedChunksRef.current = [];
+    // Reset chunk index for this session
+    chunkIndexRef.current = 0;
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
       : MediaRecorder.isTypeSupported("video/webm")
       ? "video/webm"
       : "video/mp4";
+    mimeTypeRef.current = mimeType;
     try {
       const mr = new MediaRecorder(stream, { mimeType });
       mr.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          const idx = chunkIndexRef.current++;
+          // Upload immediately — fire-and-forget with keepalive
+          uploadChunk(e.data, idx, mimeType);
+        }
       };
-      // Assign onstop at creation time — NOT inside stopRecordingAndUpload.
-      // This avoids a race where mr.stop() fires before onstop is assigned.
-      // This is the same pattern Apply.tsx uses and is the correct approach.
-      mr.onstop = () => {
-        uploadRecordedVideoRef.current(recordedChunksRef.current, mimeType);
-      };
-      mr.start(1000);
+      // Collect chunks every 5 seconds
+      mr.start(5000);
       mediaRecorderRef.current = mr;
+      console.log(`[Interview] Recording started — session=${sessionIdRef.current} mimeType=${mimeType}`);
     } catch (err) {
       console.warn("[Interview] MediaRecorder init failed:", err);
     }
-  }, []);
+  }, [uploadChunk]);
 
-  // stopRecordingAndUpload — just stops the recorder.
-  // The actual upload runs via onstop which was assigned at creation time.
-  const stopRecordingAndUpload = useCallback(() => {
+  // stopRecordingAndUpload — stops the recorder, waits for the final ondataavailable
+  // chunk to be uploaded, then calls /api/interview/finalize to assemble and save.
+  const stopRecordingAndUpload = useCallback(async () => {
     const mr = mediaRecorderRef.current;
     if (!mr || mr.state === "inactive") {
       console.log("[Interview] stopRecordingAndUpload: recorder not active, skipping");
       return;
     }
-    console.log("[Interview] Stopping recorder, state:", mr.state);
-    mr.stop();
-  }, []);
+    const sessionId = sessionIdRef.current;
+    const mimeType = mimeTypeRef.current;
+    const cid = candidateIdRef.current;
+    console.log(`[Interview] Stopping recorder — session=${sessionId} candidateId=${cid}`);
+
+    // Wait for the final chunk to be delivered via ondataavailable
+    await new Promise<void>((resolve) => {
+      mr.onstop = () => resolve();
+      mr.stop();
+    });
+
+    // Give the last chunk upload a moment to complete (keepalive fetch)
+    await new Promise((r) => setTimeout(r, 500));
+
+    if (cid <= 0) {
+      console.warn("[Interview] Invalid candidateId, skipping finalize");
+      return;
+    }
+
+    try {
+      setUploadProgress("Saving your interview video…");
+      console.log(`[Interview] Calling finalize — session=${sessionId} candidateId=${cid}`);
+      const res = await fetch("/api/interview/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, candidateId: cid, mimeType }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error(`[Interview] Finalize failed: ${res.status} ${txt}`);
+      } else {
+        const { url } = await res.json() as { url: string };
+        console.log("[Interview] Finalize succeeded, URL:", url);
+      }
+      setUploadProgress("");
+    } catch (err) {
+      console.error("[Interview] Finalize error:", err);
+      setUploadProgress("");
+    }
+  }, [uploadChunk]);
 
   // Keep the ref in sync so call-end handler always calls the latest version
   useEffect(() => {
