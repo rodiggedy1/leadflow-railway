@@ -259,7 +259,7 @@ export default function AIInterview() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: false,
+        audio: true,
       });
       cameraStreamRef.current = stream;
       setCameraStream(stream);

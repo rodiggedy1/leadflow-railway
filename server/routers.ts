@@ -3878,14 +3878,42 @@ Your job: fill in the following message template using the booking details provi
         await db.update(candidates)
           .set({ interviewVideoUrl: input.interviewVideoUrl })
           .where(eq(candidates.id, input.candidateId));
-        return { success: true };
+         return { success: true };
+      }),
+    /**
+     * Public — fetches the VAPI call recording URL for a candidate's AI interview.
+     * Queries the VAPI API using the stored interviewCallId.
+     */
+    getInterviewRecordingUrl: publicProcedure
+      .input(z.object({ candidateId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { recordingUrl: null };
+        const { candidates } = await import("../drizzle/schema");
+        const rows = await db
+          .select({ interviewCallId: candidates.interviewCallId })
+          .from(candidates)
+          .where(eq(candidates.id, input.candidateId))
+          .limit(1);
+        const callId = rows[0]?.interviewCallId;
+        if (!callId) return { recordingUrl: null };
+        try {
+          const envModule = await import("./_core/env");
+          const vapiKey = envModule.ENV.vapiPrivateKey;
+          const resp = await fetch(`https://api.vapi.ai/call/${callId}`, {
+            headers: { Authorization: `Bearer ${vapiKey}` },
+          });
+          if (!resp.ok) return { recordingUrl: null };
+          const data = await resp.json() as { artifact?: { recordingUrl?: string } };
+          return { recordingUrl: data?.artifact?.recordingUrl ?? null };
+        } catch {
+          return { recordingUrl: null };
+        }
       }),
   }),
 });
-
 export type AppRouter = typeof appRouter;
-
-// ─── Background processor ─────────────────────────────────────────────────────
+// ─── Background processor ──────────────────────────────────────────────────────
 
 /**
  * Handles the widget lead submission (name + phone only).

@@ -500,16 +500,39 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
 // ── Interview Recording Card ─────────────────────────────────────────────────
 // Distinct from VideoInterviewCard (application form video) — this shows the
 // camera recording captured during the VAPI AI interview session.
-function InterviewRecordingCard({ videoUrl }: { videoUrl: string }) {
+function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; candidateId: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
 
+  const recordingQuery = trpc.hiring.getInterviewRecordingUrl.useQuery(
+    { candidateId },
+    { enabled: showPlayer, retry: false, staleTime: 5 * 60 * 1000 }
+  );
+  const audioUrl = recordingQuery.data?.recordingUrl ?? null;
+
   const togglePlay = () => {
     const v = videoRef.current;
+    const a = audioRef.current;
     if (!v) return;
-    if (v.paused) { v.play(); setIsPlaying(true); }
-    else { v.pause(); setIsPlaying(false); }
+    if (v.paused) {
+      // Sync audio to video position then play both
+      if (a) { a.currentTime = v.currentTime; a.play().catch(() => {}); }
+      v.play();
+      setIsPlaying(true);
+    } else {
+      v.pause();
+      if (a) a.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  // Keep audio in sync when video is seeked
+  const handleVideoSeeked = () => {
+    const v = videoRef.current;
+    const a = audioRef.current;
+    if (v && a) a.currentTime = v.currentTime;
   };
 
   if (!showPlayer) {
@@ -553,6 +576,9 @@ function InterviewRecordingCard({ videoUrl }: { videoUrl: string }) {
             <Video size={13} color="#fff" />
           </div>
           <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Interview Recording</span>
+          {audioUrl && (
+            <span style={{ fontSize: 11, color: "#64748b", marginLeft: 4 }}>+ AI audio</span>
+          )}
         </div>
         <button
           onClick={togglePlay}
@@ -562,16 +588,30 @@ function InterviewRecordingCard({ videoUrl }: { videoUrl: string }) {
           {isPlaying ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Play</>}
         </button>
       </div>
+      {/* Hidden audio element plays VAPI call recording in sync with the video */}
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="auto"
+          style={{ display: "none" }}
+          onEnded={() => { videoRef.current?.pause(); setIsPlaying(false); }}
+        />
+      )}
       <video
         ref={videoRef}
         src={videoUrl}
         className="w-full"
         style={{ display: "block", backgroundColor: "#042f2e", maxHeight: 260 }}
-        controls
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
+        onPlay={() => {
+          if (audioRef.current) { audioRef.current.currentTime = videoRef.current?.currentTime ?? 0; audioRef.current.play().catch(() => {}); }
+          setIsPlaying(true);
+        }}
+        onPause={() => { audioRef.current?.pause(); setIsPlaying(false); }}
+        onEnded={() => { audioRef.current?.pause(); setIsPlaying(false); }}
+        onSeeked={handleVideoSeeked}
         playsInline
+        controls
       />
     </div>
   );
@@ -882,7 +922,7 @@ function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate |
 
       {/* Interview Recording — VAPI camera recording from the AI interview */}
       {candidate.interviewVideoUrl && (
-        <InterviewRecordingCard videoUrl={candidate.interviewVideoUrl} />
+        <InterviewRecordingCard videoUrl={candidate.interviewVideoUrl} candidateId={candidate.id} />
       )}
 
       {/* AI Summary — soft bordered card */}
