@@ -253,6 +253,7 @@ export function registerWebhookRoutes(app: Express) {
             utmSource: "thumbtack-sms",
             sessionId: ttSessionId,
             arrivedAt: now,
+            thumbtackUrl: ttUrl ? (ttUrl.startsWith('http') ? ttUrl : `https://${ttUrl}`) : null,
           });
 
           try {

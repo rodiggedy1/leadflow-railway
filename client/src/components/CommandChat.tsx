@@ -195,6 +195,7 @@ function HotLeadCard({
   const arrivedAt   = (meta.arrivedAt   as number)         ?? msg.createdAt.getTime();
   const claimedBy   = (meta.claimedBy   as string | null)  ?? null;
   const claimedAt   = (meta.claimedAt   as number | null)  ?? null;
+  const thumbtackUrl = (meta.thumbtackUrl as string | null) ?? null;
   const isClaimed   = Boolean(claimedBy);
   const isThumbSms  = utmSource === "thumbtack-sms";
 
@@ -342,6 +343,17 @@ function HotLeadCard({
         {leadPhone   && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
         {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
         {isThumbSms && size && <p className="text-[10px] text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
+        {thumbtackUrl && (
+          <a
+            href={thumbtackUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] text-sky-600 hover:text-sky-800 font-semibold mt-1"
+            onClick={e => e.stopPropagation()}
+          >
+            <ExternalLink className="h-3 w-3" /> View on Thumbtack
+          </a>
+        )}
 
         {/* Action row */}
         <div className="flex items-center gap-2 mt-2.5">
