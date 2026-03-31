@@ -35,6 +35,7 @@ const LiveCallAssist = lazy(() => import("./pages/LiveCallAssist"));
 const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 const SseTest = lazy(() => import("./pages/SseTest"));
 const HiringPipeline = lazy(() => import("./pages/HiringPipeline"));
+const Apply = lazy(() => import("./pages/Apply"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -88,6 +89,7 @@ function Router() {
         <Route path={"/call-assist"} component={LiveCallAssist} />
         <Route path={"/sse-test"} component={SseTest} />
         <Route path={"/admin/hiring"} component={HiringPipeline} />
+        <Route path={"/apply"} component={Apply} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
