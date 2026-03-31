@@ -3631,7 +3631,70 @@ Your job: fill in the following message template using the booking details provi
           bioPhotoUrl: input.bioPhotoUrl || null,
           stage: "Application Submitted",
         });
-        return { success: true, id: (result as any).insertId };
+        const candidateId = (result as any).insertId;
+
+        // ── AI scoring (non-blocking — runs after response is sent) ──────────
+        setImmediate(async () => {
+          try {
+            const yesNo = (v: boolean | null) => v === null ? "Not answered" : v ? "Yes" : "No";
+            const prompt = [
+              `Evaluate this cleaning job applicant and return a JSON object with two fields:`,
+              `- "score": integer 0-100 representing overall hiring fit`,
+              `- "summary": 2-3 sentence plain-text summary of their strengths and any concerns`,
+              ``,
+              `Applicant: ${input.firstName} ${input.lastName}`,
+              `Location: ${[input.city, input.state].filter(Boolean).join(", ") || "Not provided"}`,
+              `Specialties: ${input.specialties.length ? input.specialties.join(", ") : "None selected"}`,
+              `Has cleaning experience: ${yesNo(input.hasCleaning)}`,
+              `Has bank account: ${yesNo(input.hasBankAccount)}`,
+              `Authorized to work in US: ${yesNo(input.isAuthorized)}`,
+              `Consents to background check: ${yesNo(input.consentBackground)}`,
+              `Experience / bio: ${input.experience || "Not provided"}`,
+              `Submitted video interview: ${input.videoUrl ? "Yes" : "No"}`,
+              ``,
+              `Scoring guidelines:`,
+              `- Start at 50. Add points for: cleaning experience (+15), bank account (+10), work authorization (+15), background check consent (+10), detailed experience bio (+10), video submitted (+5), relevant specialties (+5).`,
+              `- Subtract points for: no cleaning experience (-10), no work authorization (-20), no background check consent (-10), no bank account (-5).`,
+              `- Cap at 100, floor at 0.`,
+            ].join("\n");
+
+            const llmResp = await invokeLLM({
+              messages: [
+                { role: "system", content: "You are a hiring assistant for a professional cleaning company. Always respond with valid JSON only, no markdown." },
+                { role: "user", content: prompt },
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "applicant_evaluation",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      score: { type: "integer", description: "0-100 hiring fit score" },
+                      summary: { type: "string", description: "2-3 sentence plain-text summary" },
+                    },
+                    required: ["score", "summary"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            });
+
+            const content = llmResp?.choices?.[0]?.message?.content;
+            if (content && typeof content === "string") {
+              const parsed = JSON.parse(content) as { score: number; summary: string };
+              const score = Math.max(0, Math.min(100, Math.round(parsed.score)));
+              await db.update(candidates)
+                .set({ aiScore: score, aiSummary: parsed.summary })
+                .where(eq(candidates.id, candidateId));
+            }
+          } catch (err: any) {
+            console.error("[AI Scoring] Failed for candidate", candidateId, err.message);
+          }
+        });
+
+        return { success: true, id: candidateId };
       }),
 
     /**
@@ -3669,7 +3732,9 @@ Your job: fill in the following message template using the booking details provi
           hasBankAccount: r.hasBankAccount === 1,
           isAuthorized: r.isAuthorized === 1,
           consentBackground: r.consentBackground === 1,
-          createdAt: r.createdAt,
+          aiScore: r.aiScore ?? null,
+          aiSummary: r.aiSummary ?? null,
+          createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : Number(r.createdAt),
         }));
       }),
 

@@ -57,6 +57,7 @@ interface Candidate {
   score: number;
   tag?: string;
   availability?: string;
+  aiScore?: number | null;
   aiSummary?: string;
   scores?: {
     communication: number;
@@ -344,9 +345,22 @@ function CandidateCard({
         ) : (
           <span />
         )}
-        <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
-          Score {candidate.score}
-        </span>
+        {candidate.aiScore != null ? (
+          <span
+            style={{
+              fontSize: "12px",
+              fontWeight: 700,
+              color: "#fff",
+              backgroundColor: candidate.aiScore >= 80 ? "#059669" : candidate.aiScore >= 60 ? "#d97706" : "#dc2626",
+              borderRadius: "999px",
+              padding: "2px 9px",
+            }}
+          >
+            AI {candidate.aiScore}
+          </span>
+        ) : (
+          <span style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>Scoring…</span>
+        )}
       </div>
     </div>
   );
@@ -741,12 +755,24 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
               <h3 style={{ fontSize: 20, fontWeight: 600, color: "#0f172a", lineHeight: 1.2 }}>
                 {candidate.name}
               </h3>
-              {candidate.score > 0 && (
+              {candidate.aiScore != null ? (
                 <span
                   className="rounded-full text-white"
-                  style={{ backgroundColor: "#0f172a", fontSize: 12, fontWeight: 600, padding: "3px 10px" }}
+                  style={{
+                    backgroundColor: candidate.aiScore >= 80 ? "#059669" : candidate.aiScore >= 60 ? "#d97706" : "#dc2626",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: "3px 12px",
+                  }}
                 >
-                  Score {candidate.score}
+                  AI Score {candidate.aiScore}/100
+                </span>
+              ) : (
+                <span
+                  className="rounded-full"
+                  style={{ backgroundColor: "#f1f5f9", color: "#94a3b8", fontSize: 12, fontWeight: 500, padding: "3px 12px" }}
+                >
+                  Scoring…
                 </span>
               )}
             </div>
@@ -948,7 +974,12 @@ export default function HiringPipeline() {
   });
 
   const candidatesQuery = trpc.hiring.getCandidates.useQuery(undefined, {
-    refetchInterval: 30_000,
+    // Poll more frequently when any candidate is still awaiting AI scoring
+    refetchInterval: (query) => {
+      const rows: any[] = (query.state.data as any[]) ?? [];
+      const hasPending = rows.some((r: any) => r.aiScore == null);
+      return hasPending ? 8_000 : 30_000;
+    },
   });
 
   // Merge real DB candidates with mock data (real candidates take precedence)
@@ -962,8 +993,9 @@ export default function HiringPipeline() {
       transport: "Car" as const,
       zip: r.zip ?? "—",
       stage: (r.stage as Stage) ?? "Application Submitted",
-      score: 0,
-      aiSummary: r.experience ?? undefined,
+      score: r.aiScore ?? 0,
+      aiScore: r.aiScore ?? null,
+      aiSummary: r.aiSummary ?? r.experience ?? undefined,
       notes: [],
       videoUrl: r.videoUrl ?? undefined,
       bioPhotoUrl: r.bioPhotoUrl ?? undefined,

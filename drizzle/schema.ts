@@ -1761,6 +1761,9 @@ export const candidates = mysqlTable("candidates", {
   stage: varchar("stage", { length: 64 }).notNull().default("Application Submitted"),
   bioPhotoUrl: text("bioPhotoUrl"),
   videoUrl: text("videoUrl"),
+  // AI evaluation
+  aiScore: int("aiScore"),
+  aiSummary: text("aiSummary"),
   // Metadata
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

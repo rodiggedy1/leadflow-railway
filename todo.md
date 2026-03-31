@@ -695,3 +695,15 @@
 
 - [x] Fix bio photos not appearing on kanban card and detail panel avatars
 - [x] Fix double-selection highlight (two cards appear selected at once)
+
+## Bug Fix — Bio Photo Not Saving
+
+- [ ] Trace why bioPhotoUrl is null in DB after submission and fix the upload flow
+
+## AI Scoring on Applications
+
+- [x] Add aiScore (int) and aiSummary (text) columns to candidates table
+- [x] Call LLM in submitApplication to generate score + summary from application data
+- [x] Return aiScore and aiSummary from getCandidates
+- [x] Show aiScore badge on kanban card with color coding (green/amber/red)
+- [x] Show aiSummary in detail panel AI Summary section
