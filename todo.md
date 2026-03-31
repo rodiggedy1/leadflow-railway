@@ -731,3 +731,12 @@
 - [x] Wrap kanban board in DndContext with column drop zones
 - [x] Make candidate cards draggable (useDraggable with 8px activation distance)
 - [x] On drop, call updateStage mutation and optimistically update UI (with rollback on error)
+
+## Apply Page — Mobile Responsive
+
+- [x] Replace fixed sidebar nav with top progress bar on mobile (hidden on sm, shown on md+)
+- [x] Stack two-column layouts vertically on mobile
+- [x] Ensure all inputs/buttons have min 44px touch targets
+- [x] Fix Wistia video aspect ratio on mobile
+- [x] Fix specialty grid to single column on mobile
+- [x] Fix video recorder layout on mobile

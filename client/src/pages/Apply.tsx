@@ -189,7 +189,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </p>
 
       {/* Perks */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3">
         {[
           { emoji: "💰", title: "Competitive Pay", desc: "Earn $18–$28/hr" },
           { emoji: "📅", title: "Flexible Hours", desc: "Set your own schedule" },
@@ -241,7 +241,7 @@ function BasicInfoStep({
       <h2 className="text-2xl font-bold text-gray-900 mb-1">Tell us about yourself</h2>
       <p className="text-sm text-gray-400 mb-8">Basic contact and address information</p>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <InputField
             label="First Name *"
@@ -262,7 +262,7 @@ function BasicInfoStep({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <InputField
           label="Email Address"
           placeholder="Enter your email"
@@ -286,7 +286,7 @@ function BasicInfoStep({
 
       <div className="mb-1">
         <h3 className="text-base font-bold text-gray-900 mb-4">Address</h3>
-        <div className="grid grid-cols-[1fr_160px] gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-4 mb-4">
           <InputField
             label="Street Address"
             placeholder="123 Main St"
@@ -300,7 +300,7 @@ function BasicInfoStep({
             onChange={v => onChange({ apt: v })}
           />
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <InputField
             label="City"
             placeholder="Phoenix"
@@ -332,7 +332,7 @@ function BasicInfoStep({
       <div className="flex justify-end mt-8">
         <button
           onClick={handleContinue}
-          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
           Continue <ChevronRight size={16} />
@@ -410,10 +410,10 @@ function RequirementsStep({
         />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end mt-8">
         <button
           onClick={handleContinue}
-          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
           Continue <ChevronRight size={16} />
@@ -461,7 +461,7 @@ function SpecialtiesStep({
         <span className="text-sm text-gray-400">{data.specialties.length}/3+ selected</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
         {SPECIALTIES.map(s => {
           const selected = data.specialties.includes(s);
           return (
@@ -485,7 +485,7 @@ function SpecialtiesStep({
       <div className="flex justify-end">
         <button
           onClick={onNext}
-          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
           Continue <ChevronRight size={16} />
@@ -580,7 +580,7 @@ function BioStep({
       <div className="flex justify-end">
         <button
           onClick={onNext}
-          className="flex items-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 h-12 px-7 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90"
           style={{ backgroundColor: ACCENT }}
         >
           Continue <ChevronRight size={16} />
@@ -1042,12 +1042,63 @@ export default function Apply() {
   const isDone = step === "done";
   const currentIdx = stepIndex(step);
 
+  const progressPct = Math.round((currentIdx / (STEP_ORDER.length - 1)) * 100);
+  const visibleSteps = STEPS.filter(s => s.id !== "done");
+
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: "#f8fafc" }}>
-      {/* ── Left sidebar nav ── */}
+    <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#f8fafc" }}>
+
+      {/* ── Mobile top progress bar (hidden on md+) ── */}
+      {!isDone && (
+        <div
+          className="md:hidden sticky top-0 z-20 px-4 py-3"
+          style={{ backgroundColor: "#fff", borderBottom: "1px solid #f1f5f9" }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: GREEN }}
+              >
+                <span className="text-white text-xs font-bold">MIB</span>
+              </div>
+              <span className="text-sm font-semibold text-gray-800">
+                {STEPS.find(s => s.id === step)?.label ?? "Apply"}
+              </span>
+            </div>
+            <span className="text-xs font-semibold" style={{ color: GREEN }}>
+              Step {currentIdx + 1} / {visibleSteps.length}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%`, backgroundColor: GREEN }}
+            />
+          </div>
+          {/* Dot indicators */}
+          <div className="flex items-center justify-center gap-1.5 mt-2">
+            {visibleSteps.map((s, i) => (
+              <button
+                key={s.id}
+                onClick={() => i < currentIdx && setStep(s.id)}
+                className="rounded-full transition-all"
+                style={{
+                  width: s.id === step ? 20 : 8,
+                  height: 8,
+                  backgroundColor: i < currentIdx ? GREEN : s.id === step ? ACCENT : "#e5e7eb",
+                  cursor: i < currentIdx ? "pointer" : "default",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Left sidebar nav (hidden on mobile, shown on md+) ── */}
       {!isDone && (
         <aside
-          className="w-60 shrink-0 flex flex-col py-8 px-4"
+          className="hidden md:flex w-60 shrink-0 flex-col py-8 px-4"
           style={{ backgroundColor: "#fff", borderRight: "1px solid #f1f5f9" }}
         >
           {/* Logo */}
@@ -1062,7 +1113,7 @@ export default function Apply() {
           </div>
 
           <nav className="space-y-1">
-            {STEPS.filter(s => s.id !== "done").map((s, i) => {
+            {visibleSteps.map((s, i) => {
               const isActive = s.id === step;
               const isCompleted = i < currentIdx;
               return (
@@ -1094,15 +1145,12 @@ export default function Apply() {
           <div className="mt-auto px-2">
             <div className="flex justify-between text-xs text-gray-400 mb-1.5">
               <span>Progress</span>
-              <span>{Math.round((currentIdx / (STEP_ORDER.length - 1)) * 100)}%</span>
+              <span>{progressPct}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${(currentIdx / (STEP_ORDER.length - 1)) * 100}%`,
-                  backgroundColor: GREEN,
-                }}
+                style={{ width: `${progressPct}%`, backgroundColor: GREEN }}
               />
             </div>
           </div>
@@ -1111,7 +1159,7 @@ export default function Apply() {
 
       {/* ── Main content ── */}
       <main className="flex-1 overflow-y-auto">
-        <div className={isDone ? "w-full" : "max-w-3xl px-10 py-10"}>
+        <div className={isDone ? "w-full" : "max-w-3xl mx-auto px-4 py-6 sm:px-6 md:px-10 md:py-10"}>
           {step === "welcome" && <WelcomeStep onNext={next} />}
           {step === "basic-info" && <BasicInfoStep data={formData} onChange={patch} onNext={next} />}
           {step === "requirements" && <RequirementsStep data={formData} onChange={patch} onNext={next} />}
