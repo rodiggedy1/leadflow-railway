@@ -1638,11 +1638,12 @@ function LeadCard({
           {/* ── Thumbtack link (parsed from barkQA) ── */}
           {(() => {
             if (!session.barkQA) return null;
-            const match = session.barkQA.match(/https?:\/\/[^\s]+/);
+            const match = session.barkQA.match(/https?:\/\/[^\s]+|thmtk\.com\/[^\s]+/);
             if (!match) return null;
+            const url = match[0].startsWith('http') ? match[0] : `https://${match[0]}`;
             return (
               <a
-                href={match[0]}
+                href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 font-medium mb-2.5"

@@ -435,8 +435,11 @@ export const commandCenterRouter = router({
         })(),
         thumbtackUrl: (() => {
           if (!s.barkQA) return null;
-          const match = s.barkQA.match(/https?:\/\/[^\s]+/);
-          return match ? match[0] : null;
+          // Match full URLs (https://...) or bare thmtk.com short links
+          const match = s.barkQA.match(/https?:\/\/[^\s]+|thmtk\.com\/[^\s]+/);
+          if (!match) return null;
+          const url = match[0];
+          return url.startsWith('http') ? url : `https://${url}`;
         })(),
       }));
 

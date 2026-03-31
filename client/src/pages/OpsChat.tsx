@@ -66,6 +66,7 @@ import {
   ClipboardList,
   Bell,
   BellOff,
+  Briefcase,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -1894,7 +1895,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
               title="Hiring Pipeline"
             >
-              <Users className="w-4 h-4" />
+              <Briefcase className="w-4 h-4" />
             </a>
             <a
               href="/agent"
