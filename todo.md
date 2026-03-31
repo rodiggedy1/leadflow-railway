@@ -785,3 +785,7 @@
 - [x] CommandChat claimLeadMutation onSuccess: also invalidate opsChat.listChannelMessages so hot leads tray refreshes
 - [x] AgentDashboard claimLead/unclaimLead onSuccess: also invalidate opsChat.listChannelMessages
 - [x] OpsChat onLeadUpdate: also invalidate opsChat.listChannelMessages so hot leads tray refreshes on SSE
+
+## Magic Link Tracker Stage Mapping Fix
+- [x] Fix HiringStatus.tsx STAGE_TO_STEP to use actual DB stage values (display names like "AI Interview", "Application Submitted", etc.) instead of uppercase enum keys
+- [x] Fix Stage type and getCtaContent switch to use the same display name values

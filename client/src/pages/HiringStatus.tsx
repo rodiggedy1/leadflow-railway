@@ -8,17 +8,16 @@ import { CheckCircle2, Circle, Clock, Loader2, AlertCircle, ArrowRight, Video, U
 import { Button } from "@/components/ui/button";
 
 // ─── Stage ordering & metadata ────────────────────────────────────────────────
-
+// These values must match the actual stage strings stored in the DB (display names)
 type Stage =
-  | "APPLIED"
-  | "INTERVIEW_LINK_SENT"
-  | "INTERVIEW_LINK_DONE"
-  | "REAL_INTERVIEW"
-  | "BACKGROUND_CHECK"
-  | "PAID_TEST_CLEAN"
-  | "ONBOARDING"
-  | "REJECTED"
-  | "ARCHIVED";
+  | "Application Submitted"
+  | "AI Interview"
+  | "Real Interview"
+  | "Background Check"
+  | "Paid Test Clean"
+  | "Onboarding"
+  | "Rejected"
+  | "Archived";
 
 interface StepDef {
   key: Stage | Stage[];
@@ -29,37 +28,37 @@ interface StepDef {
 
 const STEPS: StepDef[] = [
   {
-    key: "APPLIED",
+    key: "Application Submitted",
     label: "Application submitted",
     sublabel: "We received your application",
     icon: <ClipboardCheck className="w-5 h-5" />,
   },
   {
-    key: ["INTERVIEW_LINK_SENT", "INTERVIEW_LINK_DONE"],
+    key: "AI Interview",
     label: "AI interview",
     sublabel: "2-minute voice screening",
     icon: <Video className="w-5 h-5" />,
   },
   {
-    key: "REAL_INTERVIEW",
+    key: "Real Interview",
     label: "Real interview",
     sublabel: "Video call with our team",
     icon: <Users className="w-5 h-5" />,
   },
   {
-    key: "BACKGROUND_CHECK",
+    key: "Background Check",
     label: "Background check",
     sublabel: "Identity & background verification",
     icon: <Shield className="w-5 h-5" />,
   },
   {
-    key: "PAID_TEST_CLEAN",
+    key: "Paid Test Clean",
     label: "Paid test clean",
     sublabel: "Hands-on skills assessment",
     icon: <CheckCircle2 className="w-5 h-5" />,
   },
   {
-    key: "ONBOARDING",
+    key: "Onboarding",
     label: "Onboarding",
     sublabel: "Welcome to the team!",
     icon: <GraduationCap className="w-5 h-5" />,
@@ -67,16 +66,16 @@ const STEPS: StepDef[] = [
 ];
 
 // Map each DB stage to a step index (0-based)
-const STAGE_TO_STEP: Record<Stage, number> = {
-  APPLIED: 0,
-  INTERVIEW_LINK_SENT: 1,
-  INTERVIEW_LINK_DONE: 1,
-  REAL_INTERVIEW: 2,
-  BACKGROUND_CHECK: 3,
-  PAID_TEST_CLEAN: 4,
-  ONBOARDING: 5,
-  REJECTED: -1,
-  ARCHIVED: -1,
+// Fallback for any unknown stage value → step 0 (Application Submitted)
+const STAGE_TO_STEP: Record<string, number> = {
+  "Application Submitted": 0,
+  "AI Interview": 1,
+  "Real Interview": 2,
+  "Background Check": 3,
+  "Paid Test Clean": 4,
+  "Onboarding": 5,
+  "Rejected": -1,
+  "Archived": -1,
 };
 
 // ─── CTA panel content per stage ─────────────────────────────────────────────
@@ -91,8 +90,7 @@ interface CtaContent {
 
 function getCtaContent(stage: Stage, interviewLink: string, hasCompletedInterview: boolean): CtaContent {
   switch (stage) {
-    case "APPLIED":
-    case "INTERVIEW_LINK_SENT":
+    case "Application Submitted":
       return {
         title: hasCompletedInterview ? "Interview received!" : "Complete your AI interview",
         body: hasCompletedInterview
@@ -102,37 +100,37 @@ function getCtaContent(stage: Stage, interviewLink: string, hasCompletedIntervie
         buttonHref: hasCompletedInterview ? undefined : interviewLink,
         color: "from-amber-500 to-orange-500",
       };
-    case "INTERVIEW_LINK_DONE":
+    case "AI Interview":
       return {
         title: "Interview received!",
         body: "Great work! We've received your AI interview. Our team will review it and reach out within 1–2 business days to schedule a video call.",
         color: "from-amber-500 to-orange-500",
       };
-    case "REAL_INTERVIEW":
+    case "Real Interview":
       return {
         title: "Real interview scheduled",
         body: "You're moving forward! Check your phone — we'll be in touch soon to confirm your video interview time with our team.",
         color: "from-blue-500 to-indigo-500",
       };
-    case "BACKGROUND_CHECK":
+    case "Background Check":
       return {
         title: "Background check in progress",
         body: "Almost there! We're running a standard background check. This typically takes 2–3 business days. We'll notify you as soon as it's complete.",
         color: "from-purple-500 to-violet-500",
       };
-    case "PAID_TEST_CLEAN":
+    case "Paid Test Clean":
       return {
         title: "Paid test clean scheduled",
         body: "Exciting news — you've been selected for a paid test clean! This is your chance to show your skills. Check your phone for scheduling details.",
         color: "from-teal-500 to-emerald-500",
       };
-    case "ONBOARDING":
+    case "Onboarding":
       return {
         title: "Welcome to Maids in Black! 🎉",
         body: "Congratulations! You've been hired. Our team will reach out with onboarding details, your first assignment, and everything you need to get started.",
         color: "from-green-500 to-emerald-600",
       };
-    case "REJECTED":
+    case "Rejected":
       return {
         title: "Application status update",
         body: "Thank you for your interest in Maids in Black. After careful consideration, we've decided to move forward with other candidates at this time. We appreciate your time and wish you the best.",
@@ -188,7 +186,7 @@ export default function HiringStatus() {
 
   const stage = data.stage as Stage;
   const currentStep = STAGE_TO_STEP[stage] ?? 0;
-  const isRejected = stage === "REJECTED" || stage === "ARCHIVED";
+  const isRejected = stage === "Rejected" || stage === "Archived";
   const cta = getCtaContent(stage, data.interviewLink, data.hasCompletedInterview);
 
   const appliedDate = data.appliedAt
