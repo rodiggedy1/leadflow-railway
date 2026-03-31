@@ -716,3 +716,7 @@
 
 - [x] Replace video placeholder on welcome step with Wistia embed (hwmi77abbz)
 - [x] Add Wistia player.js script to index.html head
+
+## Apply Welcome Step — Layout
+
+- [x] Move Start Application button directly below the video (above the fold)

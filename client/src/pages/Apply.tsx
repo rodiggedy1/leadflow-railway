@@ -166,11 +166,21 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="max-w-2xl">
       {/* Wistia video embed */}
-      <div className="rounded-2xl overflow-hidden mb-8" style={{ aspectRatio: "16/9" }}>
+      <div className="rounded-2xl overflow-hidden mb-5" style={{ aspectRatio: "16/9" }}>
         <style>{`wistia-player[media-id='hwmi77abbz']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/hwmi77abbz/swatch');display:block;filter:blur(5px);padding-top:56.25%;}`}</style>
         {/* @ts-ignore — custom element registered by Wistia script */}
         <wistia-player media-id="hwmi77abbz" seo="false" aspect="1.7777777777777777" style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
+
+      {/* CTA directly below video */}
+      <button
+        onClick={onNext}
+        className="w-full flex items-center justify-center gap-2 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] mb-8"
+        style={{ backgroundColor: GREEN, height: 52 }}
+      >
+        Start Application
+        <ChevronRight size={18} />
+      </button>
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Cleaning Professional Application</h1>
       <p className="text-gray-500 mb-8 leading-relaxed">
@@ -179,7 +189,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </p>
 
       {/* Perks */}
-      <div className="grid grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-3 gap-4">
         {[
           { emoji: "💰", title: "Competitive Pay", desc: "Earn $18–$28/hr" },
           { emoji: "📅", title: "Flexible Hours", desc: "Set your own schedule" },
@@ -196,15 +206,6 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           </div>
         ))}
       </div>
-
-      <button
-        onClick={onNext}
-        className="flex items-center gap-2 h-13 px-8 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
-        style={{ backgroundColor: GREEN, height: 52 }}
-      >
-        Start Application
-        <ChevronRight size={18} />
-      </button>
     </div>
   );
 }
