@@ -1004,12 +1004,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     });
   }, [channelMsgs]);
 
-  // ── Today's Revenue ticker ────────────────────────────────────────────────
-  const { data: revenueData } = trpc.opsChat.getTodayRevenue.useQuery(undefined, {
-    refetchInterval: 60_000, // SSE invalidates on new booking
-  });
-  const todayRevenue = revenueData?.total ?? 0;
-  const todayBookingCount = revenueData?.count ?? 0;
+  // ── Today's Revenue ticker — same query as leads page Booked Revenue card ──
+  const todayDateStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+  const { data: todayStats } = trpc.leads.stats.useQuery(
+    { dateFrom: todayDateStr, dateTo: todayDateStr },
+    { refetchInterval: 60_000 }
+  );
+  const todayRevenue = todayStats?.bookedRevenue ?? 0;
+  const todayBookingCount = todayStats?.bookedCount ?? 0;
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];
