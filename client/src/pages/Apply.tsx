@@ -165,34 +165,11 @@ function InputField({
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="max-w-2xl">
-      {/* Video placeholder */}
-      <div
-        className="relative rounded-2xl overflow-hidden mb-8 cursor-pointer group"
-        style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)", aspectRatio: "16/9" }}
-      >
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div
-            className="w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110"
-            style={{ backgroundColor: GREEN }}
-          >
-            <ChevronRight size={28} color="#fff" style={{ marginLeft: 4 }} />
-          </div>
-          <p className="text-white text-sm font-medium opacity-80">Watch our welcome message</p>
-        </div>
-        {/* Decorative gradient overlay */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-16"
-          style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5), transparent)" }}
-        />
-        <div className="absolute bottom-3 left-4 right-4 flex items-center gap-3">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: GREEN }}>
-            <ChevronRight size={12} color="#fff" style={{ marginLeft: 1 }} />
-          </div>
-          <div className="flex-1 h-1 rounded-full bg-white/20">
-            <div className="h-full w-[8%] rounded-full" style={{ backgroundColor: GREEN }} />
-          </div>
-          <span className="text-white text-xs">0:12</span>
-        </div>
+      {/* Wistia video embed */}
+      <div className="rounded-2xl overflow-hidden mb-8" style={{ aspectRatio: "16/9" }}>
+        <style>{`wistia-player[media-id='hwmi77abbz']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/hwmi77abbz/swatch');display:block;filter:blur(5px);padding-top:56.25%;}`}</style>
+        {/* @ts-ignore — custom element registered by Wistia script */}
+        <wistia-player media-id="hwmi77abbz" seo="false" aspect="1.7777777777777777" style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Cleaning Professional Application</h1>

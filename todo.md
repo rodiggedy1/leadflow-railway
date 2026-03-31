@@ -711,3 +711,8 @@
 ## Bug Fix — AI Scoring Stuck
 
 - [x] Debug why LLM scoring never writes to DB (stuck on "Scoring..." forever) — was pre-existing candidate; added rescoreCandidate mutation + Re-score button
+
+## Apply Page — Wistia Video
+
+- [x] Replace video placeholder on welcome step with Wistia embed (hwmi77abbz)
+- [x] Add Wistia player.js script to index.html head
