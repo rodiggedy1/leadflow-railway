@@ -873,7 +873,7 @@ export const appRouter = router({
         sessionId: z.number().int().positive(),
         agentId: z.number().int().positive().nullable(),
       }))
-      .mutation(async ({ input }) => {
+       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         if (input.agentId === null) {
@@ -881,6 +881,9 @@ export const appRouter = router({
             .update(conversationSessions)
             .set({ assignedAgentId: null, assignedAgentName: null })
             .where(eq(conversationSessions.id, input.sessionId));
+          await syncClaimToOpsChatMessage(db, input.sessionId, null, null);
+          const { broadcastOpsUpdate: bcast1 } = await import("./sseBroadcast");
+          bcast1("lead_update");
           return { success: true };
         }
         const agent = await getAgentById(input.agentId);
@@ -889,9 +892,11 @@ export const appRouter = router({
           .update(conversationSessions)
           .set({ assignedAgentId: agent.id, assignedAgentName: agent.name })
           .where(eq(conversationSessions.id, input.sessionId));
+        await syncClaimToOpsChatMessage(db, input.sessionId, agent.name, Date.now());
+        const { broadcastOpsUpdate: bcast2 } = await import("./sseBroadcast");
+        bcast2("lead_update");
         return { success: true };
       }),
-
     /**
      * leads.updateBookedAmount — admin sets the actual invoiced/booked dollar amount.
      * Pass null to clear the override and revert to quotedPrice + extras.
@@ -2601,9 +2606,12 @@ STAGE DETECTION — return the stage the conversation is currently in:
           .update(conversationSessions)
           .set({ assignedAgentId: agentSession.agentId, assignedAgentName: agentSession.agentName })
           .where(eq(conversationSessions.id, input.sessionId));
+        // Sync claim to the matching new_lead opsChatMessage so the HotLeadsTray reflects it
+        await syncClaimToOpsChatMessage(db, input.sessionId, agentSession.agentName, Date.now());
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("lead_update");
         return { success: true };
       }),
-
     /**
      * agents.unclaimLead — release a lead back to unassigned.
      */
@@ -2622,13 +2630,16 @@ STAGE DETECTION — return the stage the conversation is currently in:
         if (session.assignedAgentId !== agentSession.agentId) {
           throw new Error("You can only unclaim leads assigned to you");
         }
-        await db
+         await db
           .update(conversationSessions)
           .set({ assignedAgentId: null, assignedAgentName: null })
           .where(eq(conversationSessions.id, input.sessionId));
+        // Clear claim from the matching new_lead opsChatMessage
+        await syncClaimToOpsChatMessage(db, input.sessionId, null, null);
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("lead_update");
         return { success: true };
       }),
-
     /**
      * agents.logCall — record a call attempt with outcome and optional notes.
      */
@@ -4712,4 +4723,44 @@ async function getAgentSessionFromCtx(ctx: { req: { headers: { cookie?: string }
   const agent = await getAgentById(session.agentId);
   if (!agent || !agent.isActive) throw new Error("Agent account is inactive or not found");
   return session;
+}
+
+/**
+ * syncClaimToOpsChatMessage — update the matching new_lead opsChatMessage metadata
+ * so the HotLeadsTray in CommandChat reflects the claim state from the Leads drawer.
+ * Pass claimedBy=null to clear the claim (unclaim).
+ */
+async function syncClaimToOpsChatMessage(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  sessionId: number,
+  claimedBy: string | null,
+  claimedAt: number | null,
+): Promise<void> {
+  try {
+    const leadMsgs = await db
+      .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+      .from(opsChatMessages)
+      .where(eq(opsChatMessages.quickAction, "new_lead"))
+      .orderBy(desc(opsChatMessages.createdAt))
+      .limit(200);
+    for (const msg of leadMsgs) {
+      try {
+        const meta = JSON.parse(msg.metadata ?? "{}");
+        if (meta.sessionId === sessionId) {
+          if (claimedBy) {
+            meta.claimedBy = claimedBy;
+            meta.claimedAt = claimedAt;
+          } else {
+            delete meta.claimedBy;
+            delete meta.claimedAt;
+          }
+          await db
+            .update(opsChatMessages)
+            .set({ metadata: JSON.stringify(meta) })
+            .where(eq(opsChatMessages.id, msg.id));
+          break;
+        }
+      } catch { /* ignore parse errors */ }
+    }
+  } catch { /* non-fatal */ }
 }

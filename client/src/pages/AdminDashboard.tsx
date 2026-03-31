@@ -1020,6 +1020,7 @@ function ConversationDrawer({
         assignedAgentName: agent?.name ?? null,
       });
       utils.leads.list.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
       onRefresh();
       toast.success(vars.agentId === null ? "Lead unassigned" : `Assigned to ${agent?.name}`);
     },

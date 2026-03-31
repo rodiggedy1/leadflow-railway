@@ -522,11 +522,19 @@ function ConversationDrawer({
 
   // Claim / release
   const claimLead = trpc.agents.claimLead.useMutation({
-    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead claimed!"); },
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      toast.success("Lead claimed!");
+    },
     onError: (err) => toast.error(err.message),
   });
   const unclaimLead = trpc.agents.unclaimLead.useMutation({
-    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead released"); },
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      toast.success("Lead released");
+    },
     onError: (err) => toast.error(err.message),
   });
 
@@ -1510,11 +1518,19 @@ function LeadCard({
   const [showConversation, setShowConversation] = useState(false);
 
   const claimLead = trpc.agents.claimLead.useMutation({
-    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead claimed!"); },
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      toast.success("Lead claimed!");
+    },
     onError: (err) => toast.error(err.message),
   });
   const unclaimLead = trpc.agents.unclaimLead.useMutation({
-    onSuccess: () => { utils.leads.list.invalidate(); toast.success("Lead released"); },
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      toast.success("Lead released");
+    },
     onError: (err) => toast.error(err.message),
   });
   const markBooked = trpc.agents.markBooked.useMutation({

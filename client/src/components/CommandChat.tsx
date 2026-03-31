@@ -545,6 +545,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
     onLeadUpdate: () => {
       utils.opsChat.getCommandChatData.invalidate();
+      // Also refresh channel messages so the hot leads tray reflects claim changes
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      utils.leads.list.invalidate();
     },
     onReactionUpdate: () => {
       refetchReactions();
@@ -583,6 +586,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         toast.info(`Already claimed by ${res.alreadyClaimedBy}`);
       } else {
         toast.success("Lead claimed!");
+        // Refresh channel messages so the hot leads tray card shows claimed state
+        utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+        utils.leads.list.invalidate();
       }
     },
     onError: (err) => toast.error("Claim failed", { description: err.message }),

@@ -777,3 +777,11 @@
 - [x] Send status page link SMS on submission (second SMS after interview link)
 - [x] Stage-change SMS confirmation popup in hiring pipeline
 - [x] Stage-change SMS messages for all stages (Real Interview, Background Check, Paid Test Clean, Onboarding, Rejected)
+
+## Bidirectional Claim Sync
+- [x] agents.claimLead: also update matching opsChatMessages.metadata (claimedBy/claimedAt) and broadcast lead_update
+- [x] agents.unclaimLead: also clear claimedBy/claimedAt from matching opsChatMessages.metadata and broadcast lead_update
+- [x] adminAssignAgent: also update matching opsChatMessages.metadata and broadcast lead_update
+- [x] CommandChat claimLeadMutation onSuccess: also invalidate opsChat.listChannelMessages so hot leads tray refreshes
+- [x] AgentDashboard claimLead/unclaimLead onSuccess: also invalidate opsChat.listChannelMessages
+- [x] OpsChat onLeadUpdate: also invalidate opsChat.listChannelMessages so hot leads tray refreshes on SSE
