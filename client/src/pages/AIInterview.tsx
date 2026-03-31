@@ -218,6 +218,11 @@ export default function AIInterview() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  // Mirror status in a ref so the cleanup useEffect can read current value
+  // without being re-registered every time status changes (avoids StrictMode issues)
+  const statusRef = useRef<InterviewStatus>("loading");
+  // Keep statusRef in sync with status state
+  useEffect(() => { statusRef.current = status; }, [status]);
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
 
@@ -441,10 +446,17 @@ export default function AIInterview() {
   ]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────
+  // Guard: only stop VAPI if a call is actually in progress.
+  // Without this guard, React StrictMode's double-mount fires stop() on the
+  // first unmount, which destroys the Daily object → triggers left-meeting
+  // → emits call-end before call-start ever fires.
 
   useEffect(() => {
     return () => {
-      vapiRef.current?.stop();
+      const s = statusRef.current;
+      if (s === "active" || s === "connecting" || s === "ending") {
+        vapiRef.current?.stop();
+      }
       stopCamera();
       if (timerRef.current) clearInterval(timerRef.current);
     };
