@@ -482,7 +482,7 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
             >
               <Video size={13} color="#fff" />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Video Interview</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Application Video</span>
           </div>
           <span
             className="rounded-full"
@@ -505,7 +505,7 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
             <Play size={24} color="#fff" fill="#fff" style={{ marginLeft: 3 }} />
           </div>
           <p style={{ position: "absolute", bottom: 12, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
-            Click to watch interview response
+            Click to watch application video
           </p>
         </div>
       </div>
@@ -529,7 +529,7 @@ function VideoInterviewCard({ videoUrl }: { videoUrl: string }) {
           >
             <Video size={13} color="#fff" />
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Video Interview</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Application Video</span>
         </div>
         <button
           onClick={togglePlay}
@@ -570,6 +570,7 @@ function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; c
     { enabled: showPlayer, retry: false, staleTime: 5 * 60 * 1000 }
   );
   const audioUrl = recordingQuery.data?.recordingUrl ?? null;
+  const isStereo = recordingQuery.data?.isStereo ?? false;
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -602,7 +603,7 @@ function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; c
             <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #0f766e, #0d9488)" }}>
               <Video size={13} color="#fff" />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Interview Recording</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>AI Interview</span>
           </div>
           <span className="rounded-full" style={{ fontSize: 11, fontWeight: 600, color: "#0f766e", backgroundColor: "#f0fdfa", padding: "3px 10px" }}>
             AI Interview
@@ -620,7 +621,7 @@ function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; c
             <Play size={24} color="#fff" fill="#fff" style={{ marginLeft: 3 }} />
           </div>
           <p style={{ position: "absolute", bottom: 12, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
-            Click to watch AI interview recording
+            Click to watch AI interview
           </p>
         </div>
       </div>
@@ -634,9 +635,9 @@ function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; c
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #0f766e, #0d9488)" }}>
             <Video size={13} color="#fff" />
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Interview Recording</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>AI Interview</span>
           {audioUrl && (
-            <span style={{ fontSize: 11, color: "#64748b", marginLeft: 4 }}>+ AI audio</span>
+            <span style={{ fontSize: 11, color: "#64748b", marginLeft: 4 }}>{isStereo ? "+ both sides" : "+ AI audio"}</span>
           )}
         </div>
         <button

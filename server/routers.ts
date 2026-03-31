@@ -3911,7 +3911,7 @@ Your job: fill in the following message template using the booking details provi
       .input(z.object({ candidateId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
-        if (!db) return { recordingUrl: null };
+        if (!db) return { recordingUrl: null, isStereo: false };
         const { candidates } = await import("../drizzle/schema");
         const rows = await db
           .select({ interviewCallId: candidates.interviewCallId })
@@ -3919,21 +3919,23 @@ Your job: fill in the following message template using the booking details provi
           .where(eq(candidates.id, input.candidateId))
           .limit(1);
         const callId = rows[0]?.interviewCallId;
-        if (!callId) return { recordingUrl: null };
+        if (!callId) return { recordingUrl: null, isStereo: false };
         try {
           const envModule = await import("./_core/env");
           const vapiKey = envModule.ENV.vapiPrivateKey;
           const resp = await fetch(`https://api.vapi.ai/call/${callId}`, {
             headers: { Authorization: `Bearer ${vapiKey}` },
           });
-          if (!resp.ok) return { recordingUrl: null };
-          const data = await resp.json() as { artifact?: { recordingUrl?: string } };
-          const rawUrl = data?.artifact?.recordingUrl ?? null;
-          // VAPI returns the sentinel string "rawRecordingUploadDisabled" when recording was off
-          const recordingUrl = rawUrl && rawUrl !== "rawRecordingUploadDisabled" ? rawUrl : null;
-          return { recordingUrl };
+          if (!resp.ok) return { recordingUrl: null, isStereo: false };
+          const data = await resp.json() as { artifact?: { recordingUrl?: string; stereoRecordingUrl?: string } };
+          const isSentinel = (u?: string | null) => !u || u === "rawRecordingUploadDisabled";
+          // Prefer stereoRecordingUrl (both sides: AI + candidate) over mono recordingUrl
+          const stereoUrl = data?.artifact?.stereoRecordingUrl ?? null;
+          const monoUrl = data?.artifact?.recordingUrl ?? null;
+          const recordingUrl = !isSentinel(stereoUrl) ? stereoUrl : (!isSentinel(monoUrl) ? monoUrl : null);
+          return { recordingUrl, isStereo: !isSentinel(stereoUrl) };
         } catch {
-          return { recordingUrl: null };
+          return { recordingUrl: null, isStereo: false };
         }
       }),
   }),
