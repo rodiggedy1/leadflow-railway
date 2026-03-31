@@ -1781,3 +1781,15 @@ export const candidates = mysqlTable("candidates", {
 
 export type Candidate = typeof candidates.$inferSelect;
 export type InsertCandidate = typeof candidates.$inferInsert;
+
+// Interview video chunks — persisted so finalize survives server restarts
+export const interviewChunks = mysqlTable("interview_chunks", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: varchar("sessionId", { length: 128 }).notNull(),
+  chunkIndex: int("chunkIndex").notNull(),
+  s3Key: varchar("s3Key", { length: 512 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxSession: index("idx_ichunk_session").on(table.sessionId),
+}));
+export type InterviewChunk = typeof interviewChunks.$inferSelect;
