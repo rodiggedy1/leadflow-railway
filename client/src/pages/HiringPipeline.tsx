@@ -714,9 +714,16 @@ function ApplicationDetailsModal({ candidate, onClose }: { candidate: Candidate;
 
 // ── Candidate Detail Panel ────────────────────────────────────────────────────
 
-function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
+function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate | null; onScoreUpdated?: () => void }) {
   const [editableNotes, setEditableNotes] = React.useState<string[]>(candidate?.notes ?? []);
   const [showAppModal, setShowAppModal] = React.useState(false);
+  const utils = trpc.useUtils();
+  const rescoreMutation = trpc.hiring.rescoreCandidate.useMutation({
+    onSuccess: () => {
+      utils.hiring.getCandidates.invalidate();
+      onScoreUpdated?.();
+    },
+  });
 
   React.useEffect(() => {
     setEditableNotes(candidate?.notes ?? []);
@@ -828,15 +835,37 @@ function CandidateDetail({ candidate }: { candidate: Candidate | null }) {
       )}
 
       {/* AI Summary — soft bordered card */}
-      {candidate.aiSummary && (
-        <div
-          className="rounded-2xl"
-          style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px 16px" }}
-        >
-          <p style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 6 }}>AI summary</p>
-          <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.65 }}>{candidate.aiSummary}</p>
+      <div
+        className="rounded-2xl"
+        style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px 16px" }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>AI Summary</p>
+          <button
+            onClick={() => candidate.id && rescoreMutation.mutate({ id: candidate.id })}
+            disabled={rescoreMutation.isPending}
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: rescoreMutation.isPending ? "#94a3b8" : "#6366f1",
+              background: "none",
+              border: "none",
+              cursor: rescoreMutation.isPending ? "not-allowed" : "pointer",
+              padding: "2px 6px",
+              borderRadius: 6,
+            }}
+          >
+            {rescoreMutation.isPending ? "Scoring…" : "↻ Re-score"}
+          </button>
         </div>
-      )}
+        {candidate.aiSummary ? (
+          <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.65 }}>{candidate.aiSummary}</p>
+        ) : (
+          <p style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+            {rescoreMutation.isPending ? "Generating AI score…" : "No AI summary yet. Click ↻ Re-score to generate one."}
+          </p>
+        )}
+      </div>
 
       {/* Metric score boxes — 2-col grid, each in a soft bordered card */}
       {sc && (

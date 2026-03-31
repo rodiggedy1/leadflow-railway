@@ -707,3 +707,7 @@
 - [x] Return aiScore and aiSummary from getCandidates
 - [x] Show aiScore badge on kanban card with color coding (green/amber/red)
 - [x] Show aiSummary in detail panel AI Summary section
+
+## Bug Fix — AI Scoring Stuck
+
+- [x] Debug why LLM scoring never writes to DB (stuck on "Scoring..." forever) — was pre-existing candidate; added rescoreCandidate mutation + Re-score button

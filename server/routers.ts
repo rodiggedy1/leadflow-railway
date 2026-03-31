@@ -3739,6 +3739,72 @@ Your job: fill in the following message template using the booking details provi
       }),
 
     /**
+     * Protected — re-run AI scoring for a specific candidate
+     */
+    rescoreCandidate: adminAgentProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { candidates } = await import("../drizzle/schema");
+        const rows = await db.select().from(candidates).where(eq(candidates.id, input.id)).limit(1);
+        if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Candidate not found" });
+        const r = rows[0];
+        const yesNo = (v: number | null) => v === null ? "Not answered" : v === 1 ? "Yes" : "No";
+        const specialties = r.specialties ? JSON.parse(r.specialties) as string[] : [];
+        const prompt = [
+          `Evaluate this cleaning job applicant and return a JSON object with two fields:`,
+          `- "score": integer 0-100 representing overall hiring fit`,
+          `- "summary": 2-3 sentence plain-text summary of their strengths and any concerns`,
+          ``,
+          `Applicant: ${r.firstName} ${r.lastName}`,
+          `Location: ${[r.city, r.state].filter(Boolean).join(", ") || "Not provided"}`,
+          `Specialties: ${specialties.length ? specialties.join(", ") : "None selected"}`,
+          `Has cleaning experience: ${yesNo(r.hasCleaning)}`,
+          `Has bank account: ${yesNo(r.hasBankAccount)}`,
+          `Authorized to work in US: ${yesNo(r.isAuthorized)}`,
+          `Consents to background check: ${yesNo(r.consentBackground)}`,
+          `Experience / bio: ${r.experience || "Not provided"}`,
+          `Submitted video interview: ${r.videoUrl ? "Yes" : "No"}`,
+          ``,
+          `Scoring guidelines:`,
+          `- Start at 50. Add points for: cleaning experience (+15), bank account (+10), work authorization (+15), background check consent (+10), detailed experience bio (+10), video submitted (+5), relevant specialties (+5).`,
+          `- Subtract points for: no cleaning experience (-10), no work authorization (-20), no background check consent (-10), no bank account (-5).`,
+          `- Cap at 100, floor at 0.`,
+        ].join("\n");
+        const llmResp = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are a hiring assistant for a professional cleaning company. Always respond with valid JSON only, no markdown." },
+            { role: "user", content: prompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "applicant_evaluation",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  score: { type: "integer", description: "0-100 hiring fit score" },
+                  summary: { type: "string", description: "2-3 sentence plain-text summary" },
+                },
+                required: ["score", "summary"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = llmResp?.choices?.[0]?.message?.content;
+        if (!content || typeof content !== "string") throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "LLM returned no content" });
+        const parsed = JSON.parse(content) as { score: number; summary: string };
+        const score = Math.max(0, Math.min(100, Math.round(parsed.score)));
+        await db.update(candidates)
+          .set({ aiScore: score, aiSummary: parsed.summary })
+          .where(eq(candidates.id, input.id));
+        return { success: true, score, summary: parsed.summary };
+      }),
+
+    /**
      * Protected — advance a candidate to a new stage
      */
     updateStage: adminAgentProcedure
