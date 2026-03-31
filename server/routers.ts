@@ -3927,13 +3927,27 @@ Your job: fill in the following message template using the booking details provi
             headers: { Authorization: `Bearer ${vapiKey}` },
           });
           if (!resp.ok) return { recordingUrl: null, isStereo: false };
-          const data = await resp.json() as { artifact?: { recordingUrl?: string; stereoRecordingUrl?: string } };
+          const data = await resp.json() as {
+            artifact?: {
+              recordingUrl?: string;
+              stereoRecordingUrl?: string;
+              recording?: {
+                stereoUrl?: string;
+                mono?: { combinedUrl?: string; assistantUrl?: string; customerUrl?: string };
+              };
+            };
+          };
           const isSentinel = (u?: string | null) => !u || u === "rawRecordingUploadDisabled";
-          // Prefer stereoRecordingUrl (both sides: AI + candidate) over mono recordingUrl
-          const stereoUrl = data?.artifact?.stereoRecordingUrl ?? null;
+          // Priority: assistantUrl (AI-only, no candidate voice doubling) → stereo → mono combined
+          const assistantUrl = data?.artifact?.recording?.mono?.assistantUrl ?? null;
+          const stereoUrl = data?.artifact?.stereoRecordingUrl ?? data?.artifact?.recording?.stereoUrl ?? null;
           const monoUrl = data?.artifact?.recordingUrl ?? null;
-          const recordingUrl = !isSentinel(stereoUrl) ? stereoUrl : (!isSentinel(monoUrl) ? monoUrl : null);
-          return { recordingUrl, isStereo: !isSentinel(stereoUrl) };
+          const recordingUrl = !isSentinel(assistantUrl) ? assistantUrl
+            : !isSentinel(stereoUrl) ? stereoUrl
+            : !isSentinel(monoUrl) ? monoUrl
+            : null;
+          const isStereo = isSentinel(assistantUrl) && !isSentinel(stereoUrl);
+          return { recordingUrl, isStereo };
         } catch {
           return { recordingUrl: null, isStereo: false };
         }

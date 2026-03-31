@@ -637,7 +637,7 @@ function InterviewRecordingCard({ videoUrl, candidateId }: { videoUrl: string; c
           </div>
           <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>AI Interview</span>
           {audioUrl && (
-            <span style={{ fontSize: 11, color: "#64748b", marginLeft: 4 }}>{isStereo ? "+ both sides" : "+ AI audio"}</span>
+            <span style={{ fontSize: 11, color: "#64748b", marginLeft: 4 }}>+ AI audio</span>
           )}
         </div>
         <button
