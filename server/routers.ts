@@ -3694,6 +3694,76 @@ Your job: fill in the following message template using the booking details provi
           }
         });
 
+        // ── Interview link SMS (non-blocking) ──────────────────────────────
+        setImmediate(async () => {
+          try {
+            const { conversationSessions } = await import("../drizzle/schema");
+            const rawPhone = input.phone.replace(/[^\d]/g, "");
+            const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+            const firstName = input.firstName || "there";
+            const interviewLink = `https://quote.maidinblack.com/interview/${candidateId}`;
+            const smsText = `Hey ${firstName} — got your application 👋\n\nNext step is a quick 5-min interview:\n${interviewLink}`;
+
+            // Create session BEFORE sending SMS so replies are routable
+            const [sessionInsert] = await db.insert(conversationSessions).values({
+              leadPhone: e164Phone,
+              leadName: `${input.firstName} ${input.lastName}`.trim(),
+              stage: "INTERVIEW_LINK_SENT" as any,
+              leadSource: "hiring_interview",
+              aiMode: 1,
+              messageHistory: JSON.stringify([{ role: "assistant", content: smsText, ts: Date.now() }]),
+            });
+            const sessionId = (sessionInsert as any).insertId as number;
+
+            const smsResult = await sendSms({ to: e164Phone, content: smsText });
+            if (!smsResult.success) {
+              console.error(`[Hiring SMS] Failed to send interview link to ${e164Phone}:`, smsResult.error);
+            } else {
+              console.log(`[Hiring SMS] Interview link sent to ${e164Phone}, candidate ${candidateId}, session ${sessionId}`);
+            }
+
+            // Schedule 2-hour nudge
+            const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+            setTimeout(async () => {
+              try {
+                // Only send if candidate hasn't completed interview
+                const { candidates: cTable } = await import("../drizzle/schema");
+                const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
+                if (!candidate || candidate.stage === "AI Interview") return;
+                const nudge1 = `Hey ${firstName} — just a reminder to complete your quick 5-min interview when you get a chance:\n${interviewLink}`;
+                await sendSms({ to: e164Phone, content: nudge1 });
+                await db.update(conversationSessions)
+                  .set({ stage: "INTERVIEW_NUDGE_1" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge1, ts: Date.now() }]) })
+                  .where(eq(conversationSessions.id, sessionId));
+                console.log(`[Hiring SMS] 2-hour nudge sent to ${e164Phone}, candidate ${candidateId}`);
+              } catch (err: any) {
+                console.error(`[Hiring SMS] 2-hour nudge failed for candidate ${candidateId}:`, err.message);
+              }
+            }, TWO_HOURS_MS);
+
+            // Schedule next-morning nudge (18 hours after submission)
+            const NEXT_MORNING_MS = 18 * 60 * 60 * 1000;
+            setTimeout(async () => {
+              try {
+                const { candidates: cTable } = await import("../drizzle/schema");
+                const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
+                if (!candidate || candidate.stage === "AI Interview") return;
+                const nudge2 = `Hey ${firstName} — final reminder! Your 5-min interview is still waiting:\n${interviewLink}\n\nWe're reviewing applicants today — don't miss your spot! 🙌`;
+                await sendSms({ to: e164Phone, content: nudge2 });
+                await db.update(conversationSessions)
+                  .set({ stage: "INTERVIEW_NUDGE_2" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge2, ts: Date.now() }]) })
+                  .where(eq(conversationSessions.id, sessionId));
+                console.log(`[Hiring SMS] Next-morning nudge sent to ${e164Phone}, candidate ${candidateId}`);
+              } catch (err: any) {
+                console.error(`[Hiring SMS] Next-morning nudge failed for candidate ${candidateId}:`, err.message);
+              }
+            }, NEXT_MORNING_MS);
+
+          } catch (err: any) {
+            console.error(`[Hiring SMS] Failed to send interview link for candidate ${candidateId}:`, err.message);
+          }
+        });
+
         return { success: true, id: candidateId };
       }),
 

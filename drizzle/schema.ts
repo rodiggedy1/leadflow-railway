@@ -128,6 +128,16 @@ export const conversationStages = [
    * YELP_CONTACTED → Agent has contacted this Yelp lead via Yelp Biz.
    */
   "YELP_CONTACTED",
+  /**
+   * INTERVIEW_LINK_SENT  → Application submitted, interview link SMS sent, waiting for candidate to complete.
+   * INTERVIEW_NUDGE_1    → 2-hour follow-up nudge sent, still waiting.
+   * INTERVIEW_NUDGE_2    → Next-morning final nudge sent.
+   * INTERVIEW_LINK_DONE  → Candidate completed the interview (terminal stage).
+   */
+  "INTERVIEW_LINK_SENT",
+  "INTERVIEW_NUDGE_1",
+  "INTERVIEW_NUDGE_2",
+  "INTERVIEW_LINK_DONE",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

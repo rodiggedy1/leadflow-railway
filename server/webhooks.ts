@@ -322,6 +322,7 @@ export function registerWebhookRoutes(app: Express) {
           || s.stage === "REVIEW_REQUESTED" || s.stage === "REVIEW_DONE"
           || s.stage === "REVIEW_REBOOKING_REQUESTED" || s.stage === "REVIEW_REBOOKING_DONE"
           || s.stage === "REACTIVATION" || s.stage === "REACTIVATION_TIME"
+          || s.stage === "INTERVIEW_LINK_SENT" || s.stage === "INTERVIEW_NUDGE_1" || s.stage === "INTERVIEW_NUDGE_2"
       );
       const activeSession = reviewSession ??
         reversedSessions.find(s => s.stage !== "DONE");
@@ -632,6 +633,30 @@ export function registerWebhookRoutes(app: Express) {
           console.error(`[Webhook] Failed to send rebooking reply to ${fromPhone}:`, replyResult.error);
         }
         console.log(`[Webhook] Review rebooking reply: ${session.stage} → ${newStage}. isYes=${isYes}, isNo=${isNo}`);
+        return;
+      }
+
+      // ── INTERVIEW_LINK_SENT / NUDGE: Candidate interview link flow ──────────────
+      if (
+        session.stage === "INTERVIEW_LINK_SENT" ||
+        session.stage === "INTERVIEW_NUDGE_1" ||
+        session.stage === "INTERVIEW_NUDGE_2"
+      ) {
+        // Any reply from the candidate — just acknowledge and mark done
+        const firstName = (session.leadName ?? "there").split(" ")[0] ?? "there";
+        const replyMsg = `Thanks ${firstName}! When you're ready, just use the link we sent you to start your interview. 😊`;
+        const smsResult = await sendSms({ to: fromPhone, content: replyMsg });
+        if (!smsResult.success) {
+          console.error(`[Webhook] Failed to send interview reply to ${fromPhone}:`, smsResult.error);
+        }
+        history.push({ role: "user", content: inboundText, ts: Date.now() });
+        history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
+        if (history.length > 20) history = history.slice(-20);
+        await db
+          .update(conversationSessions)
+          .set({ stage: "INTERVIEW_LINK_SENT", messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, session.id));
+        console.log(`[Webhook] Interview link reply: ${session.stage} → INTERVIEW_LINK_SENT`);
         return;
       }
 

@@ -757,3 +757,10 @@
 - [x] Show Interview Recording thumbnail in detail panel separate from application video
 - [x] Fix VAPI call connection on AI interview page so it actually connects and runs to completion
 - [x] Fix camera recording only saving 5 seconds — full interview duration not being captured
+
+## Hiring SMS Flow
+- [x] Add INTERVIEW_LINK_SENT, INTERVIEW_NUDGE_1, INTERVIEW_NUDGE_2, INTERVIEW_LINK_DONE stages to schema + db:push
+- [x] Auto-send interview link SMS on application submission
+- [x] Wire "Do it later by text" button on thank you page
+- [x] Schedule 2-hour nudge if interview not completed
+- [x] Schedule next-morning final nudge if still not completed

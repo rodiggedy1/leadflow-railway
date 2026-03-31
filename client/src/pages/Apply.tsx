@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -993,7 +994,9 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
                 <button
                   className="px-6 py-3 rounded-xl text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100"
                   style={{ border: "1.5px solid #e5e7eb", backgroundColor: "#fff" }}
-                  onClick={() => alert("We'll send you a text with the interview link shortly.")}
+                  onClick={() => {
+                    toast.success("Interview link sent! Check your messages when you're ready.");
+                  }}
                 >
                   Do it later by text
                 </button>
