@@ -720,3 +720,7 @@
 ## Apply Welcome Step — Layout
 
 - [x] Move Start Application button directly below the video (above the fold)
+
+## Navigation
+
+- [x] Add Hiring link to top nav bar (admin-only, links to /admin/hiring)

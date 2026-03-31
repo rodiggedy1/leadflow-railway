@@ -5,6 +5,7 @@
  */
 import React, { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import AdminHeader from "@/components/AdminHeader";
 import {
   User,
   MessageSquare,
@@ -1060,6 +1061,7 @@ export default function HiringPipeline() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#f8fafc", fontFamily: "Inter, sans-serif" }}>
+      <AdminHeader activeTab="hiring" />
       {/* ── Top header ── */}
       <div className="px-6 pt-8 pb-4" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid #e5e7eb" }}>
         <div className="max-w-[1400px] mx-auto">

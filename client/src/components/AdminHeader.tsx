@@ -258,7 +258,8 @@ export type AdminTab =
   | "settings"
   | "field-management"
   | "reactivation"
-  | "review-tracker";
+  | "review-tracker"
+  | "hiring";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -359,6 +360,13 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: <Star className="w-3.5 h-3.5" />,
     href: "/admin/review-tracker",
     tabId: "review-tracker",
+  },
+  {
+    id: "hiring",
+    label: "Hiring",
+    icon: <Users className="w-3.5 h-3.5" />,
+    href: "/admin/hiring",
+    tabId: "hiring" as AdminTab,
   },
   {
     id: "settings",
