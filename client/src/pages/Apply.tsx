@@ -1,6 +1,6 @@
 /**
  * Apply — Public-facing multi-step cleaner application form
- * Steps: Welcome → Basic Info → Requirements → Specialties → Your Bio → Video → Thank You
+ * Steps: Welcome → Basic Info → Requirements → Specialties → Photo → Video → Thank You
  * World-class design: clean white layout, green accent, soft shadows, MIB brand feel.
  */
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -52,7 +52,7 @@ const STEPS: { id: Step; label: string; icon: React.ReactNode }[] = [
   { id: "basic-info", label: "Basic Info", icon: <User size={16} /> },
   { id: "requirements", label: "Requirements", icon: <CheckSquare size={16} /> },
   { id: "specialties", label: "Specialties", icon: <Grid size={16} /> },
-  { id: "bio", label: "Your Bio", icon: <Camera size={16} /> },
+  { id: "bio", label: "Photo", icon: <Camera size={16} /> },
   { id: "video", label: "Video", icon: <Video size={16} /> },
   { id: "done", label: "address", icon: <MapPin size={16} /> },
 ];
@@ -516,7 +516,7 @@ function BioStep({
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-1">Your Bio</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-1">Your Photo</h2>
       <p className="text-sm text-gray-400 mb-8">Upload a professional photo — this helps clients connect with you</p>
 
       <div className="flex flex-col items-center mb-8">
