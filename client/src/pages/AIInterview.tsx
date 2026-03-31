@@ -307,11 +307,11 @@ export default function AIInterview() {
           setUploadProgress("Saving your interview video…");
           const mimeType = chunks[0].type || "video/webm";
           const blob = new Blob(chunks, { type: mimeType });
-          const arrayBuf = await blob.arrayBuffer();
           const res = await fetch("/api/upload/video", {
             method: "POST",
             headers: { "Content-Type": mimeType },
-            body: arrayBuf,
+            body: blob,
+            credentials: "include",
           });
           if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
           const { url } = (await res.json()) as { url: string };
