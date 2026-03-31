@@ -3730,7 +3730,7 @@ Your job: fill in the following message template using the booking details provi
                 const { candidates: cTable } = await import("../drizzle/schema");
                 const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
                 if (!candidate || candidate.stage === "AI Interview") return;
-                const nudge1 = `Hey ${firstName} — just a reminder to complete your quick 5-min interview when you get a chance:\n${interviewLink}`;
+                const nudge1 = `Hey ${firstName} — Jade from Maids in Black here! Your interview link is still waiting 👇\n${interviewLink}\nTakes 5 min and helps us move you forward faster.`;
                 await sendSms({ to: e164Phone, content: nudge1 });
                 await db.update(conversationSessions)
                   .set({ stage: "INTERVIEW_NUDGE_1" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge1, ts: Date.now() }]) })
@@ -3748,7 +3748,7 @@ Your job: fill in the following message template using the booking details provi
                 const { candidates: cTable } = await import("../drizzle/schema");
                 const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
                 if (!candidate || candidate.stage === "AI Interview") return;
-                const nudge2 = `Hey ${firstName} — final reminder! Your 5-min interview is still waiting:\n${interviewLink}\n\nWe're reviewing applicants today — don't miss your spot! 🙌`;
+                const nudge2 = `Good morning ${firstName} — Jade from Maids in Black here 👋 We're still reviewing applications today — your interview spot is open:\n${interviewLink}\nThis is the last reminder — complete it to stay in the running!`;
                 await sendSms({ to: e164Phone, content: nudge2 });
                 await db.update(conversationSessions)
                   .set({ stage: "INTERVIEW_NUDGE_2" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge2, ts: Date.now() }]) })
@@ -3761,6 +3761,33 @@ Your job: fill in the following message template using the booking details provi
 
           } catch (err: any) {
             console.error(`[Hiring SMS] Failed to send interview link for candidate ${candidateId}:`, err.message);
+          }
+        });
+
+        // ── Post new_application card to Command Chat (non-blocking) ──────────
+        setImmediate(async () => {
+          try {
+            const { opsChatMessages } = await import("../drizzle/schema");
+            const applicantName = `${input.firstName} ${input.lastName}`.trim();
+            const rawPhone = input.phone.replace(/[^\d]/g, "");
+            const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+            const cardMeta = JSON.stringify({
+              applicantName,
+              applicantPhone: e164Phone,
+              position: "House Cleaner",
+              photoUrl: input.bioPhotoUrl ?? null,
+              candidateId,
+            });
+            await db.insert(opsChatMessages).values({
+              authorName: "System",
+              authorRole: "system",
+              channel: "general",
+              body: `New application from ${applicantName}`,
+              quickAction: "new_application",
+              metadata: cardMeta,
+            });
+          } catch (err: any) {
+            console.error("[Hiring Card] Failed to post to Command Chat:", err.message);
           }
         });
 

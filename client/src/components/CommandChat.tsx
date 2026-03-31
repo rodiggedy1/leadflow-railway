@@ -25,7 +25,7 @@ import {
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
-  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck } from "lucide-react";
+  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, Briefcase, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -1775,6 +1775,71 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
+                // ── New Application (Hiring) card ─────────────────────────────────
+                if (msg.quickAction === "new_application") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const appName = (meta.applicantName as string) ?? "New Applicant";
+                  const appPhone = (meta.applicantPhone as string | null) ?? null;
+                  const appPosition = (meta.position as string | null) ?? null;
+                  const appPhoto = (meta.photoUrl as string | null) ?? null;
+                  const candidateId = (meta.candidateId as number | null) ?? null;
+                  const initials = appName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-200 shadow-sm">
+                        {/* Header */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-700">
+                          <UserPlus className="h-3 w-3 text-amber-200" />
+                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">New Application</span>
+                          <span className="ml-auto text-[10px] text-amber-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-3 py-2.5 bg-white">
+                          <div className="flex items-center gap-3">
+                            {/* Photo or initials avatar */}
+                            {appPhoto ? (
+                              <img src={appPhoto} alt={appName} className="h-10 w-10 rounded-full object-cover shrink-0 border border-amber-100" />
+                            ) : (
+                              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                {initials}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-base font-bold text-slate-900 leading-tight">{appName}</p>
+                              {appPhone && <p className="text-xs text-slate-400 mt-0.5">{appPhone}</p>}
+                              {appPosition && <p className="text-xs text-amber-700 font-medium mt-0.5">{appPosition}</p>}
+                            </div>
+                          </div>
+                          {/* Action row */}
+                          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+                            <a
+                              href="/admin/hiring"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-full transition-colors"
+                            >
+                              <Briefcase className="h-3.5 w-3.5" />
+                              View in Hiring
+                            </a>
+                            {candidateId && (
+                              <a
+                                href={`/interview/${candidateId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                Interview Link
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Away Status card ──────────────────────────────────────────────
                 if (msg.quickAction?.startsWith("away_status:")) {
                   const statusKey = msg.quickAction.split(":")[1];

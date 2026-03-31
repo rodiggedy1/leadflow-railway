@@ -764,3 +764,8 @@
 - [x] Wire "Do it later by text" button on thank you page
 - [x] Schedule 2-hour nudge if interview not completed
 - [x] Schedule next-morning final nudge if still not completed
+
+## Hiring Notifications & SMS Copy
+- [ ] Update 2-hour nudge SMS copy to include "Jade from Maids in Black"
+- [ ] Update next-morning nudge SMS copy to include "Jade from Maids in Black"
+- [ ] Build hiring notification card in Command Chat (applicant photo, name, link to hiring page)
