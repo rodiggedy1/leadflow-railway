@@ -14,8 +14,14 @@ export function registerVideoUploadRoute(app: Router) {
   app.post("/api/upload/video", async (req: Request, res: Response) => {
     try {
       const contentType = (req.headers["content-type"] || "video/webm") as string;
-      const ext = contentType.includes("mp4") ? "mp4" : "webm";
-      const key = `candidate-videos/${Date.now()}-${randomSuffix()}.${ext}`;
+      let ext = "webm";
+      if (contentType.includes("mp4")) ext = "mp4";
+      else if (contentType.includes("jpeg") || contentType.includes("jpg")) ext = "jpg";
+      else if (contentType.includes("png")) ext = "png";
+      else if (contentType.includes("gif")) ext = "gif";
+      else if (contentType.includes("webp")) ext = "webp";
+      const folder = contentType.startsWith("image/") ? "candidate-photos" : "candidate-videos";
+      const key = `${folder}/${Date.now()}-${randomSuffix()}.${ext}`;
 
       // req.body is a Buffer when express.raw() middleware is active
       const buffer: Buffer = req.body;

@@ -91,7 +91,7 @@ interface Candidate {
 
 const MOCK_CANDIDATES: Candidate[] = [
   {
-    id: 1,
+    id: 10001,
     initials: "TB",
     name: "Tiana Brooks",
     subtitle: "Application only",
@@ -105,7 +105,7 @@ const MOCK_CANDIDATES: Candidate[] = [
     notes: ["Applied via job board", "Available weekdays"],
   },
   {
-    id: 2,
+    id: 10002,
     initials: "KR",
     name: "Kevin Reed",
     subtitle: "No pro experience",
@@ -121,7 +121,7 @@ const MOCK_CANDIDATES: Candidate[] = [
     notes: ["Good attitude", "No car currently", "May work as backup / team placement"],
   },
   {
-    id: 3,
+    id: 10003,
     initials: "MS",
     name: "Maria Santos",
     subtitle: "3 years residential",
@@ -136,7 +136,7 @@ const MOCK_CANDIDATES: Candidate[] = [
     notes: ["3 years residential experience", "Strong references"],
   },
   {
-    id: 4,
+    id: 10004,
     initials: "JL",
     name: "Jasmine Lee",
     subtitle: "5 years contract cleaning",
@@ -151,7 +151,7 @@ const MOCK_CANDIDATES: Candidate[] = [
     notes: ["5 years contract cleaning", "Own supplies"],
   },
   {
-    id: 5,
+    id: 10005,
     initials: "AT",
     name: "Ashley Turner",
     subtitle: "1 year Airbnb turns",
@@ -166,7 +166,7 @@ const MOCK_CANDIDATES: Candidate[] = [
     notes: ["1 year Airbnb turns", "Punctual"],
   },
   {
-    id: 6,
+    id: 10006,
     initials: "DC",
     name: "David Cole",
     subtitle: "2 years move-out cleans",
@@ -941,7 +941,7 @@ type FilterTab = (typeof FILTER_TABS)[number];
 export default function HiringPipeline() {
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(MOCK_CANDIDATES[1]);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
   const updateStageMutation = trpc.hiring.updateStage.useMutation({
     onSuccess: () => candidatesQuery.refetch(),

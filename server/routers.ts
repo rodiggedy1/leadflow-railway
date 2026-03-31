@@ -3650,12 +3650,26 @@ Your job: fill in the following message template using the booking details provi
           .from(candidates)
           .orderBy(desc(candidates.createdAt));
         return rows.map(r => ({
-          ...r,
+          id: r.id,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          email: r.email ?? null,
+          phone: r.phone,
+          streetAddress: r.streetAddress ?? null,
+          apt: r.apt ?? null,
+          city: r.city ?? null,
+          state: r.state ?? null,
+          zip: r.zip ?? null,
+          stage: r.stage,
+          experience: r.experience ?? null,
+          bioPhotoUrl: r.bioPhotoUrl ?? null,
+          videoUrl: r.videoUrl ?? null,
           specialties: r.specialties ? JSON.parse(r.specialties) as string[] : [],
           hasCleaning: r.hasCleaning === 1,
           hasBankAccount: r.hasBankAccount === 1,
           isAuthorized: r.isAuthorized === 1,
           consentBackground: r.consentBackground === 1,
+          createdAt: r.createdAt,
         }));
       }),
 

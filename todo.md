@@ -690,3 +690,8 @@
 - [x] Show bio photo (or initials fallback) on detail panel header avatar
 - [x] Add "View Application" button in detail panel that opens a popup modal
 - [x] Popup modal shows all submitted fields: contact info, Yes/No answers, specialties, experience
+
+## Bug Fixes — Hiring Pipeline
+
+- [x] Fix bio photos not appearing on kanban card and detail panel avatars
+- [x] Fix double-selection highlight (two cards appear selected at once)
