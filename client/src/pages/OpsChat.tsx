@@ -67,7 +67,6 @@ import {
   Bell,
   BellOff,
   Briefcase,
-  Headphones,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -786,11 +785,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">("channels");
-  const [selectedCsSessionId, setSelectedCsSessionId] = useState<number | null>(null);
-  const [csReplyText, setCsReplyText] = useState("");
-  const [csDraft, setCsDraft] = useState("");
-  const [csScrollRef] = useState(() => ({ current: null as HTMLDivElement | null }));
+  const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
@@ -802,7 +797,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
-  const handleSetActiveTab = (tab: "today" | "channels" | "cs") => {
+  const handleSetActiveTab = (tab: "today" | "channels") => {
     if (tab === "channels" && activeTab === "today") {
       // Coming from jobs view → land on command channel, sidebar collapsed
       setActiveTab("channels");
@@ -810,9 +805,6 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       setSidebarCollapsed(true);
     } else if (tab === "today") {
       setActiveTab("today");
-      setSidebarCollapsed(false);
-    } else if (tab === "cs") {
-      setActiveTab("cs");
       setSidebarCollapsed(false);
     } else {
       setActiveTab(tab);
@@ -1196,33 +1188,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     refetchInterval: 60_000,
   });
 
-  // CS inbox — DONE sessions where customer replied after close
-  const { data: csInboxSessions = [], refetch: refetchCsInbox } = trpc.leads.listCsInbox.useQuery(undefined, {
-    enabled: isAuthenticated,
-    refetchInterval: 30_000,
-  });
-  // CS: send reply mutation
-  const csSendMessage = trpc.leads.sendMessage.useMutation({
-    onSuccess: () => {
-      setCsReplyText("");
-      setCsDraft("");
-      refetchCsInbox();
-    },
-    onError: (e) => toast.error("Failed to send: " + e.message),
-  });
-  // CS: AI draft mutation
-  const csGenerateDraft = trpc.leads.generateCsReply.useMutation({
-    onSuccess: (data) => setCsDraft(data.draft),
-    onError: (e) => toast.error("AI draft failed: " + e.message),
-  });
-  // CS: selected session data
-  const selectedCsSession = csInboxSessions.find(s => s.id === selectedCsSessionId) ?? null;
-  // CS: customer history from Launch27
-  const { data: csCustomerHistory } = trpc.leads.getCustomerHistory.useQuery(
-    { phone: selectedCsSession?.leadPhone ?? "" },
-    { enabled: !!selectedCsSession?.leadPhone }
-  );
-  // Unread counts (per-caller, for badge))
+  // Unread counts (per-caller, for badge)
   const { data: unreadCounts, refetch: refetchUnread } = trpc.opsChat.getUnreadCounts.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 60_000,
@@ -1994,27 +1960,17 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           </div>
 
           {/* Tab toggle */}
-          <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1 gap-0.5">
-            {(["today", "channels", "cs"] as const).map((tab) => (
+          <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
+            {(["today", "channels"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => handleSetActiveTab(tab)}
+                onClick={() => handleSetActiveTab(tab as "today" | "channels")}
                 className={cn(
-                  "flex-1 rounded-xl px-2 py-2 text-xs font-medium transition flex items-center justify-center gap-1",
+                  "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition",
                   activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                 )}
               >
-                {tab === "today" ? "Today" : tab === "channels" ? "Channels" : (
-                  <>
-                    <Headphones className="w-3 h-3" />
-                    CS
-                    {csInboxSessions.length > 0 && (
-                      <span className={cn("rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold", activeTab === "cs" ? "bg-white text-slate-900" : "bg-rose-500 text-white")}>
-                        {csInboxSessions.length > 9 ? "9+" : csInboxSessions.length}
-                      </span>
-                    )}
-                  </>
-                )}
+                {tab === "today" ? "Today Ops" : "Channels"}
               </button>
             ))}
           </div>
@@ -2114,7 +2070,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 )}
               </div>
             </div>
-          ) : activeTab === "channels" ? (
+          ) : (
             /* Channels tab */
             <div className="px-3 pb-4 pt-1 space-y-1">
               {CHANNELS.map((ch) => {
@@ -2137,43 +2093,6 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   </button>
                 );
               })}
-            </div>
-          ) : (
-            /* CS Inbox tab */
-            <div className="px-3 pb-4 pt-1 space-y-1">
-              {csInboxSessions.length === 0 ? (
-                <div className="text-sm text-slate-400 text-center py-10">No customer messages</div>
-              ) : (
-                csInboxSessions.map((s) => {
-                  let lastMsg = "";
-                  try {
-                    const hist: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? "[]");
-                    const last = hist[hist.length - 1];
-                    if (last) lastMsg = typeof last.content === "string" ? last.content.slice(0, 80) : "";
-                  } catch { /* ignore */ }
-                  const isSelected = selectedCsSessionId === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setSelectedCsSessionId(s.id)}
-                      className={cn(
-                        "w-full text-left rounded-2xl border px-4 py-3 text-sm transition",
-                        isSelected
-                          ? "bg-slate-900 border-slate-900 text-white"
-                          : "bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:shadow-sm"
-                      )}
-                    >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-semibold truncate">{s.leadName ?? s.leadPhone}</span>
-                        <span className={cn("text-[10px] shrink-0 ml-2", isSelected ? "text-slate-300" : "text-slate-400")}>
-                          {s.updatedAt ? new Date(s.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
-                        </span>
-                      </div>
-                      <p className={cn("text-xs truncate", isSelected ? "text-slate-300" : "text-slate-500")}>{lastMsg}</p>
-                    </button>
-                  );
-                })
-              )}
             </div>
           )}
         </div>
@@ -2757,205 +2676,6 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             </div>
           </>
         </div>
-
-        {/* VIEW: CS Inbox — inline SMS thread + reply box */}
-        {activeTab === "cs" && (
-          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            {selectedCsSession ? (
-              <>
-                {/* Header */}
-                <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between gap-4 shrink-0">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => { setSelectedCsSessionId(null); setCsReplyText(""); setCsDraft(""); }}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 transition"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <div>
-                      <h2 className="text-base font-semibold text-slate-900">
-                        {selectedCsSession.leadName ?? selectedCsSession.leadPhone}
-                      </h2>
-                      <p className="text-xs text-slate-500">{selectedCsSession.leadPhone}</p>
-                    </div>
-                  </div>
-                  <a
-                    href={`/admin/leads?session=${selectedCsSession.id}&tab=sms`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl px-3 py-1.5 transition"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Full thread
-                  </a>
-                </div>
-                {/* SMS thread */}
-                <div
-                  ref={(el) => { csScrollRef.current = el; }}
-                  className="flex-1 overflow-y-auto px-5 py-4 space-y-2"
-                  style={{ scrollbarWidth: 'none' }}
-                >
-                  {(() => {
-                    let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
-                    try { history = JSON.parse(selectedCsSession.messageHistory ?? "[]"); } catch { history = []; }
-                    if (history.length === 0) return (
-                      <div className="text-center text-slate-400 text-sm py-8">No messages yet</div>
-                    );
-                    return history.map((msg, i) => {
-                      const isAgent = msg.role !== "user";
-                      const ts = msg.ts ? new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-                      return (
-                        <div key={i} className={`flex ${isAgent ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-snug ${
-                            isAgent
-                              ? "bg-slate-900 text-white rounded-br-sm"
-                              : "bg-slate-100 text-slate-900 rounded-bl-sm"
-                          }`}>
-                            {msg.senderName && isAgent && (
-                              <p className="text-[10px] font-semibold text-slate-400 mb-0.5">{msg.senderName}</p>
-                            )}
-                            <p>{typeof msg.content === "string" ? msg.content : ""}</p>
-                            {ts && <p className={`text-[10px] mt-1 ${isAgent ? "text-slate-400" : "text-slate-400"}`}>{ts}</p>}
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-                {/* AI draft banner */}
-                {csDraft && (
-                  <div className="mx-4 mb-2 rounded-2xl border border-violet-200 bg-violet-50 p-3 flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wide mb-1">AI Draft</p>
-                      <p className="text-sm text-slate-800 leading-snug">{csDraft}</p>
-                    </div>
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <button
-                        onClick={() => setCsReplyText(csDraft)}
-                        className="text-[11px] font-semibold text-violet-700 hover:text-violet-900 bg-violet-100 hover:bg-violet-200 rounded-lg px-2.5 py-1 transition"
-                      >Use</button>
-                      <button
-                        onClick={() => setCsDraft("")}
-                        className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg px-2.5 py-1 transition"
-                      >Dismiss</button>
-                    </div>
-                  </div>
-                )}
-                {/* Reply box */}
-                <div className="px-4 pb-4 pt-2 border-t border-slate-100 bg-white shrink-0">
-                  <div className="flex gap-2 items-end">
-                    <Textarea
-                      value={csReplyText}
-                      onChange={(e) => setCsReplyText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (csReplyText.trim() && selectedCsSession) {
-                            csSendMessage.mutate({ sessionId: selectedCsSession.id, message: csReplyText.trim() });
-                          }
-                        }
-                      }}
-                      placeholder="Type a reply… (Enter to send)"
-                      className="flex-1 min-h-[60px] max-h-[120px] resize-none rounded-2xl text-sm border-slate-200"
-                    />
-                    <div className="flex flex-col gap-1.5 shrink-0">
-                      <Button
-                        size="sm"
-                        className="bg-slate-900 text-white hover:bg-slate-800 rounded-xl h-9 px-4"
-                        disabled={!csReplyText.trim() || csSendMessage.isPending}
-                        onClick={() => {
-                          if (csReplyText.trim() && selectedCsSession) {
-                            csSendMessage.mutate({ sessionId: selectedCsSession.id, message: csReplyText.trim() });
-                          }
-                        }}
-                      >
-                        {csSendMessage.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl h-9 px-3 text-violet-700 border-violet-200 hover:bg-violet-50"
-                        disabled={csGenerateDraft.isPending}
-                        onClick={() => selectedCsSession && csGenerateDraft.mutate({ sessionId: selectedCsSession.id })}
-                        title="Generate AI draft"
-                      >
-                        {csGenerateDraft.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-                Select a customer message from the left panel
-              </div>
-            )}
-          </div>
-        )}
-        {/* CS RIGHT PANEL — customer info + booking history */}
-        {activeTab === "cs" && selectedCsSession && (
-          <div className="w-[260px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-            <div className="p-4 space-y-3">
-              {/* Customer info card */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Customer</p>
-                <p className="text-base font-bold text-slate-900">{selectedCsSession.leadName ?? "Unknown"}</p>
-                <p className="text-sm text-slate-500 mt-0.5">{selectedCsSession.leadPhone}</p>
-              </div>
-              {/* Booking history from Launch27 */}
-              {csCustomerHistory ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Last Booking</p>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-xs text-slate-400">Service</p>
-                      <p className="text-sm font-semibold text-slate-800">{csCustomerHistory.serviceType ?? "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Date</p>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {csCustomerHistory.jobDate ? new Date(csCustomerHistory.jobDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Price</p>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {csCustomerHistory.lastBookingPrice ? `$${Number(csCustomerHistory.lastBookingPrice).toFixed(0)}` : "—"}
-                      </p>
-                    </div>
-                    {csCustomerHistory.frequency && (
-                      <div>
-                        <p className="text-xs text-slate-400">Frequency</p>
-                        <p className="text-sm font-semibold text-slate-800">{csCustomerHistory.frequency}</p>
-                      </div>
-                    )}
-                    {csCustomerHistory.address && (
-                      <div>
-                        <p className="text-xs text-slate-400">Address</p>
-                        <p className="text-xs text-slate-600 leading-snug">{csCustomerHistory.address}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Last Booking</p>
-                  <p className="text-xs text-slate-400">No booking history found</p>
-                </div>
-              )}
-              {/* Quick actions */}
-              <a
-                href={`/admin/leads?session=${selectedCsSession.id}&tab=sms`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Open full lead
-              </a>
-            </div>
-          </div>
-        )}
 
         {/* VIEW: Fallback — no job selected */}
         {activeTab === "today" && !selectedJob && (
