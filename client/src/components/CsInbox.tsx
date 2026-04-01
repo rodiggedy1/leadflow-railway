@@ -379,12 +379,15 @@ export default function CsInbox() {
     },
   });
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [autoDraftLoading, setAutoDraftLoading] = useState(false);
+  const autoDraftedForId = useRef<number | null>(null);
   const csQuickReply = trpc.leads.csQuickReply.useMutation({
     onSuccess: (data) => {
       if (data.draft) setCompose(data.draft);
       setLoadingAction(null);
+      setAutoDraftLoading(false);
     },
-    onError: () => setLoadingAction(null),
+    onError: () => { setLoadingAction(null); setAutoDraftLoading(false); },
   });
   function fireQuickReply(action: "send_quote" | "make_it_right" | "refer_friend" | "running_late" | "on_the_way" | "review_rebook" | "ai_suggest") {
     if (!selected) return;
@@ -438,6 +441,26 @@ export default function CsInbox() {
       setLastViewedMap((prev) => ({ ...prev, [effectiveSelectedId]: Date.now() }));
     }
   }, [effectiveSelectedId]);
+
+  // Auto-draft: when agent opens a conversation, pre-fill compose with an AI suggestion
+  useEffect(() => {
+    if (!selected) return;
+    if (autoDraftedForId.current === selected.id) return; // already drafted for this conversation
+    autoDraftedForId.current = selected.id;
+    setCompose(""); // clear previous draft
+    setAutoDraftLoading(true);
+    csQuickReply.mutate({
+      action: "ai_suggest",
+      clientName: selected.name ?? undefined,
+      messageHistory: JSON.stringify(
+        selected.messages.map((m) => ({
+          role: m.sender === "client" ? "user" : "assistant",
+          content: m.text,
+        }))
+      ),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -738,13 +761,25 @@ export default function CsInbox() {
                     </Button>
                   ))}
                 </div>
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3">
+                <div className={`rounded-[24px] border p-3 transition-colors ${autoDraftLoading ? "border-violet-200 bg-violet-50/40" : "border-slate-200 bg-slate-50"}`}>
+                  {autoDraftLoading && (
+                    <div className="flex items-center gap-1.5 mb-2 text-xs text-violet-600">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      AI is drafting a reply...
+                    </div>
+                  )}
+                  {!autoDraftLoading && compose && (
+                    <div className="flex items-center gap-1.5 mb-2 text-xs text-violet-500">
+                      <Bot className="h-3 w-3" />
+                      AI draft — review before sending
+                    </div>
+                  )}
                   <div className="flex items-start gap-3">
                     <textarea
                       className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-900 min-h-[96px] resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 text-sm"
-                      placeholder="Type a message or use AI suggestion..."
+                      placeholder={autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
                       value={compose}
-                      onChange={(e) => setCompose(e.target.value)}
+                      onChange={(e) => { setCompose(e.target.value); }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
                                              sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });

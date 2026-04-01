@@ -819,3 +819,4 @@
 - [x] CS inbox: 6 AI-smart quick-reply buttons (Send quote, We'll make it right, Refer a friend, Running late, On the way, Review + rebook) — each reads conversation tone and generates a contextual draft
 - [x] CS inbox: tone indicator badge on each conversation (Frustrated, Happy, Urgent, Neutral, etc.)
 - [x] CS inbox: AI Suggest button — analyzes full conversation, recommends best action, pre-fills draft
+- [x] CS inbox: auto-populate compose box with AI draft when agent opens a conversation
