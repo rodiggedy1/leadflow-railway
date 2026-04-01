@@ -2561,6 +2561,125 @@ STAGE DETECTION — return the stage the conversation is currently in:
           .limit(1);
         return profile ?? null;
       }),
+    /**
+     * getClientProfile — resolves a client's name + booking history from their phone number.
+     * Searches completedJobs (5yr history, E.164 format), cleanerJobs (recent + today, (xxx) format),
+     * and quoteLeads (mixed format). All normalized to 10 digits before lookup.
+     */
+    getClientProfile: protectedProcedure
+      .input(z.object({ phone: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        // Universal normalizer: strip everything non-digit, take last 10
+        const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+        const phone10 = digits10(input.phone);
+        if (!phone10 || phone10.length < 10) return null;
+
+        // E.164 format used by completedJobs
+        const e164 = `+1${phone10}`;
+
+        // 1. Lookup in completedJobs (5yr history)
+        const historyRows = await db
+          .select({
+            name: completedJobs.name,
+            address: completedJobs.address,
+            frequency: completedJobs.frequency,
+            jobDate: completedJobs.jobDate,
+            serviceType: completedJobs.serviceType,
+            lastBookingPrice: completedJobs.lastBookingPrice,
+          })
+          .from(completedJobs)
+          .where(eq(completedJobs.phone, e164))
+          .orderBy(desc(completedJobs.jobDate))
+          .limit(20);
+
+        // 2. Lookup in cleanerJobs by customerPhone (stored as (xxx) xxx-xxxx)
+        // We normalize DB values on the fly using REGEXP_REPLACE in SQL
+        const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+        const todayET = nowET.toISOString().slice(0, 10);
+        const cleanerJobRows = await db
+          .select({
+            customerName: cleanerJobs.customerName,
+            jobAddress: cleanerJobs.jobAddress,
+            serviceDateTime: cleanerJobs.serviceDateTime,
+            jobDate: cleanerJobs.jobDate,
+            serviceType: cleanerJobs.serviceType,
+            jobStatus: cleanerJobs.jobStatus,
+            bookingStatus: cleanerJobs.bookingStatus,
+            issueNote: cleanerJobs.issueNote,
+            delayMinutes: cleanerJobs.delayMinutes,
+          })
+          .from(cleanerJobs)
+          .where(
+            sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phone10}`
+          )
+          .orderBy(desc(cleanerJobs.serviceDateTime))
+          .limit(10);
+
+        // 3. Fallback name from quoteLeads if not found above
+        const [leadRow] = await db
+          .select({ name: quoteLeads.name, phone: quoteLeads.phone })
+          .from(quoteLeads)
+          .where(
+            sql`REGEXP_REPLACE(${quoteLeads.phone}, '[^0-9]', '') LIKE ${'%' + phone10}`
+          )
+          .limit(1);
+
+        // Resolve best name: completedJobs > cleanerJobs > quoteLeads
+        const resolvedName =
+          historyRows[0]?.name ||
+          cleanerJobRows[0]?.customerName ||
+          leadRow?.name ||
+          null;
+
+        // Today's job from cleanerJobs
+        const todayJob = cleanerJobRows.find((j) => j.jobDate === todayET) ?? null;
+
+        // Recent jobs: last 5 from cleanerJobs + last 5 from completedJobs, sorted by date desc
+        const recentFromCleaner = cleanerJobRows.slice(0, 5).map((j) => ({
+          date: j.jobDate,
+          address: j.jobAddress,
+          serviceType: j.serviceType,
+          status: j.jobStatus ?? j.bookingStatus ?? "scheduled",
+          price: null as number | null,
+          source: "live" as const,
+        }));
+        const recentFromHistory = historyRows.slice(0, 5).map((j) => ({
+          date: j.jobDate,
+          address: j.address,
+          serviceType: j.serviceType,
+          status: "completed",
+          price: j.lastBookingPrice,
+          source: "history" as const,
+        }));
+        const recentJobs = [...recentFromCleaner, ...recentFromHistory]
+          .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+          .slice(0, 6);
+
+        // Lifetime stats from completedJobs
+        const totalBookings = historyRows.length;
+        const firstBookingDate = historyRows.length > 0 ? historyRows[historyRows.length - 1].jobDate : null;
+        const lastBookingDate = historyRows.length > 0 ? historyRows[0].jobDate : null;
+        const latestFrequency = historyRows[0]?.frequency ?? null;
+        const latestAddress = historyRows[0]?.address ?? cleanerJobRows[0]?.jobAddress ?? null;
+        const avgPrice = historyRows.length > 0
+          ? Math.round(historyRows.reduce((s, r) => s + (r.lastBookingPrice ?? 0), 0) / historyRows.length)
+          : null;
+
+        return {
+          name: resolvedName,
+          phone: e164,
+          address: latestAddress,
+          frequency: latestFrequency,
+          totalBookings,
+          firstBookingDate,
+          lastBookingDate,
+          avgPrice,
+          todayJob,
+          recentJobs,
+        };
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..

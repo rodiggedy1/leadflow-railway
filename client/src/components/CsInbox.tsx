@@ -320,6 +320,13 @@ export default function CsInbox() {
     { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 }
   );
 
+  // Resolve client profile for non-Teams conversations — MUST be after `selected` is defined
+  const clientPhone = selected?.queue !== "Teams" ? (selected?.phone ?? "") : "";
+  const { data: clientProfile } = trpc.leads.getClientProfile.useQuery(
+    { phone: clientPhone },
+    { enabled: !!clientPhone, refetchOnWindowFocus: false, refetchInterval: 120_000 }
+  );
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
@@ -737,7 +744,7 @@ export default function CsInbox() {
                 </Card>
               </>
             ) : (
-              /* ── CLIENT PANEL (unchanged) ── */
+              /* ── CLIENT PANEL (enriched with real data) ── */
               <>
                 <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
                   <CardContent className="p-0">
@@ -750,69 +757,130 @@ export default function CsInbox() {
                       </Badge>
                     </div>
                     <div className="p-5 space-y-5 bg-white">
+                      {/* Name + phone + address */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        <div className="mt-3 text-2xl font-semibold">{selected.name}</div>
+                        <div className="mt-3 text-2xl font-semibold">
+                          {clientProfile?.name ?? selected.name}
+                        </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
                           <span className="inline-flex items-center gap-1">
                             <Phone className="h-4 w-4" />
                             {selected.phone}
                           </span>
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {selected.location}
-                          </span>
+                          {(clientProfile?.address ?? selected.location) && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-4 w-4" />
+                              {clientProfile?.address ?? selected.location}
+                            </span>
+                          )}
                         </div>
                       </div>
 
+                      {/* Stats grid */}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Service</div>
-                          <div className="mt-1 font-semibold">{selected.service}</div>
+                          <div className="text-xs text-slate-400">Frequency</div>
+                          <div className="mt-1 font-semibold text-sm">
+                            {clientProfile?.frequency ?? selected.service ?? "—"}
+                          </div>
                         </div>
                         <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Price</div>
-                          <div className="mt-1 font-semibold">{selected.amount}</div>
+                          <div className="text-xs text-slate-400">Avg price</div>
+                          <div className="mt-1 font-semibold">
+                            {clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || "—")}
+                          </div>
                         </div>
                         <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Bookings</div>
-                          <div className="mt-1 font-semibold">{selected.stats.bookings}</div>
+                          <div className="text-xs text-slate-400">Total bookings</div>
+                          <div className="mt-1 font-semibold">
+                            {clientProfile ? clientProfile.totalBookings : selected.stats.bookings}
+                          </div>
                         </div>
                         <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Rating</div>
-                          <div className="mt-1 font-semibold inline-flex items-center gap-1">
-                            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                            {selected.stats.rating}
+                          <div className="text-xs text-slate-400">Last booking</div>
+                          <div className="mt-1 font-semibold text-sm">
+                            {clientProfile?.lastBookingDate ?? "—"}
                           </div>
                         </div>
                       </div>
 
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
-                        <div className="mt-3 space-y-2">
-                          {[
-                            selected.stats.bookings === 0
-                              ? "First-time customer"
-                              : `${selected.stats.bookings} prior bookings`,
-                            selected.stats.complaints > 0
-                              ? `${selected.stats.complaints} prior complaint`
-                              : "No complaint history",
-                            selected.queue === "Hot leads"
-                              ? "High-intent inquiry"
-                              : selected.queue === "Post-job"
-                              ? "Good review moment"
-                              : "Needs active handling",
-                          ].map((flag) => (
-                            <div
-                              key={flag}
-                              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
-                            >
-                              <Tag className="h-4 w-4 text-slate-400" />
-                              {flag}
+                      {/* Today's job if any */}
+                      {clientProfile?.todayJob && (
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Today's job</div>
+                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5">
+                            <div className="font-semibold text-sm text-emerald-900">
+                              {new Date(clientProfile.todayJob.serviceDateTime!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {clientProfile.todayJob.serviceType}
                             </div>
-                          ))}
+                            <div className="text-xs text-emerald-700 flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />{clientProfile.todayJob.jobAddress}
+                            </div>
+                            <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
+                              {clientProfile.todayJob.jobStatus ?? clientProfile.todayJob.bookingStatus ?? "Scheduled"}
+                            </Badge>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* Recent job history */}
+                      {clientProfile && clientProfile.recentJobs.length > 0 && (
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Recent history</div>
+                          <div className="space-y-2">
+                            {clientProfile.recentJobs.map((job, i) => (
+                              <div key={i} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-medium text-slate-800 truncate">
+                                    {job.date} {job.serviceType ? `· ${job.serviceType}` : ""}
+                                  </div>
+                                  {job.address && (
+                                    <div className="text-xs text-slate-500 truncate">{job.address}</div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  {job.price != null && (
+                                    <div className="text-sm font-semibold text-slate-700">${job.price}</div>
+                                  )}
+                                  <Badge className="text-xs rounded-full bg-slate-100 text-slate-600 border-slate-200">
+                                    {job.status}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Context flags */}
+                      {!clientProfile && (
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
+                          <div className="mt-3 space-y-2">
+                            {[
+                              selected.stats.bookings === 0
+                                ? "First-time customer"
+                                : `${selected.stats.bookings} prior bookings`,
+                              selected.stats.complaints > 0
+                                ? `${selected.stats.complaints} prior complaint`
+                                : "No complaint history",
+                              selected.queue === "Hot leads"
+                                ? "High-intent inquiry"
+                                : selected.queue === "Post-job"
+                                ? "Good review moment"
+                                : "Needs active handling",
+                            ].map((flag) => (
+                              <div
+                                key={flag}
+                                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
+                              >
+                                <Tag className="h-4 w-4 text-slate-400" />
+                                {flag}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
                         <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
