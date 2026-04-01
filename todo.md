@@ -828,3 +828,9 @@
 - [x] CS inbox: MMS photo rendering inline in chat thread
 - [ ] CS inbox: Ops/Chat/CS tab switcher above conversation list
 - [ ] Auto-close left sidebar when switching back to Chat tab
+## @mention Awareness System (Command Chat)
+- [x] useMissedTags logic — tracks unread @mentions using localStorage (cmd_lastSeenMsgId_{callerName})
+- [x] Re-entry banner — amber sticky strip at top of conversation thread: "You were mentioned in X messages" + Jump + Dismiss
+- [x] Message highlights — amber left border on tagged messages in the conversation thread
+- [x] Live floating pill — violet pill slides up from bottom when tagged while chat is visible, auto-dismisses after 7s
+- [x] Sidebar badge — violet number badge on Chat tab showing unread @mention count

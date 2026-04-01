@@ -782,7 +782,36 @@ function CsUnreadBadge({ hidden }: { hidden: boolean }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── CmdMentionBadge ────────────────────────────────────────────────────────────────────────────────────
+// Shows a violet badge on the Chat tab when there are unread @mentions in Command Chat.
+// Pure localStorage read — no network call.
+
+function CmdMentionBadge({ callerName, hidden, channelMsgs }: {
+  callerName: string;
+  hidden: boolean;
+  channelMsgs: Array<{ id: number; from: string; body: string }>;
+}) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (hidden || !callerName) { setCount(0); return; }
+    const lsKey = `cmd_lastSeenMsgId_${callerName}`;
+    let lastSeen = 0;
+    try { lastSeen = parseInt(localStorage.getItem(lsKey) ?? "0", 10) || 0; } catch {}
+    const pattern = new RegExp(`@${callerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
+    const tagged = channelMsgs.filter(
+      m => m.id > lastSeen && m.from !== callerName && pattern.test(m.body)
+    );
+    setCount(tagged.length);
+  }, [callerName, hidden, channelMsgs]);
+  if (hidden || count === 0) return null;
+  return (
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-violet-600 text-white text-[10px] font-bold px-1 leading-none shadow">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────────────────────────────
 
 interface OpsChatProps {
   onMinimize?: () => void;
@@ -2004,6 +2033,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 {tab.icon}
                 {tab.label}
                 {tab.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                {tab.id === "channels" && (
+                  <CmdMentionBadge
+                    callerName={callerName}
+                    hidden={activeTab === "channels" && activeChannel === "command"}
+                    channelMsgs={(channelMsgs as Array<{ id: number; from: string; body: string; ts: number }>).map(m => ({ id: m.id, from: m.from, body: m.body }))}
+                  />
+                )}
               </button>
             ))}
           </div>
@@ -2516,6 +2552,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setAwayStatusMutation.mutate({ status: status as "away_sec" | "lunch" | "back15" | "eod" | null });
             }}
             senderStatusMap={senderStatusMap}
+            isVisible={activeTab === "channels" && activeChannel === "command"}
           />
         </div>
 

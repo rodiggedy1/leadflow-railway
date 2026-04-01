@@ -69,6 +69,8 @@ interface CommandChatProps {
   onSetAwayStatus?: (status: string | null) => void;
   /** Map of senderName -> "online" | "away" | "offline" for status dot overlays on avatars */
   senderStatusMap?: Record<string, "online" | "away" | "offline">;
+  /** True when this panel is currently visible (not hidden by display:none). Used for @mention tracking. */
+  isVisible?: boolean;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -517,7 +519,7 @@ function HotLeadsTray({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, isVisible }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
@@ -978,6 +980,63 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     setCmdNewMsgToast(null);
     threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }
+
+  // ── @mention awareness ───────────────────────────────────────────────────────
+  // localStorage key: cmd_lastSeenMsgId_{callerName}
+  // Tracks the highest message id the agent has "seen" in Command Chat.
+  // Any message with id > lastSeen that contains @callerName is an unread tag.
+  const lsKey = `cmd_lastSeenMsgId_${callerName}`;
+
+  // Unread tagged message ids (messages that @mention callerName and arrived after lastSeen)
+  const [unreadTagIds, setUnreadTagIds] = useState<number[]>(() => []);
+  // Live floating pill: shown when a new @mention arrives while the panel IS visible
+  const [livePill, setLivePill] = useState<{ from: string; body: string } | null>(null);
+  const livePillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevTagCountRef = useRef(0);
+
+  // Compute unread tagged messages whenever channelMsgs changes
+  useEffect(() => {
+    if (!callerName || channelMsgs.length === 0) return;
+    let lastSeen = 0;
+    try { lastSeen = parseInt(localStorage.getItem(lsKey) ?? "0", 10) || 0; } catch {}
+    const pattern = new RegExp(`@${callerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
+    const tagged = channelMsgs.filter(
+      m => m.id > lastSeen && m.from !== callerName && pattern.test(m.body)
+    );
+    setUnreadTagIds(tagged.map(m => m.id));
+
+    // Detect newly arrived tag while panel is visible → show live pill
+    const newCount = tagged.length;
+    if (isVisible && newCount > prevTagCountRef.current && prevTagCountRef.current >= 0) {
+      const newest = tagged[tagged.length - 1];
+      if (newest) {
+        if (livePillTimer.current) clearTimeout(livePillTimer.current);
+        setLivePill({ from: newest.from, body: newest.body });
+        livePillTimer.current = setTimeout(() => setLivePill(null), 7000);
+      }
+    }
+    prevTagCountRef.current = newCount;
+  }, [channelMsgs, callerName, isVisible, lsKey]);
+
+  // Mark all @mentions as seen (called on banner dismiss or scroll-to-first)
+  function markTagsSeen() {
+    const maxId = channelMsgs.reduce((m, msg) => Math.max(m, msg.id), 0);
+    try { localStorage.setItem(lsKey, String(maxId)); } catch {}
+    setUnreadTagIds([]);
+    if (livePillTimer.current) clearTimeout(livePillTimer.current);
+    setLivePill(null);
+    prevTagCountRef.current = 0;
+  }
+
+  // When panel becomes visible, auto-mark tags as seen after a short delay
+  // (gives the user a moment to notice the banner before it disappears)
+  const wasVisible = useRef(isVisible);
+  useEffect(() => {
+    if (isVisible && !wasVisible.current && unreadTagIds.length > 0) {
+      // Panel just became visible with pending tags — leave banner up so user can act
+    }
+    wasVisible.current = isVisible;
+  }, [isVisible, unreadTagIds.length]);
 
   // Returns true if the scroll container is within 250px of the bottom.
   // 250px threshold (vs old 150px) ensures we catch cases where the compose
@@ -1441,6 +1500,59 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
         {/* Conversation thread — relative wrapper for toast overlay */}
         <div className="relative flex-1 min-h-0 flex flex-col">
+          {/* @mention re-entry banner — sticky amber strip when there are unread @mentions */}
+          {unreadTagIds.length > 0 && (
+            <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm">🔔</span>
+                <p className="text-xs font-semibold truncate">
+                  {unreadTagIds.length === 1
+                    ? `You were mentioned in 1 message`
+                    : `You were mentioned in ${unreadTagIds.length} messages`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const firstId = unreadTagIds[0];
+                    if (firstId) scrollToCmdMsg(firstId);
+                    markTagsSeen();
+                  }}
+                  className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
+                >
+                  Jump
+                </button>
+                <button
+                  onClick={markTagsSeen}
+                  className="text-amber-500 hover:text-amber-700 transition"
+                  title="Dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Live floating pill — slides up when a new @mention arrives while panel is visible */}
+          {livePill && (
+            <button
+              onClick={() => {
+                const lastId = unreadTagIds[unreadTagIds.length - 1];
+                if (lastId) scrollToCmdMsg(lastId);
+                setLivePill(null);
+                if (livePillTimer.current) clearTimeout(livePillTimer.current);
+              }}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 py-2 rounded-full bg-violet-600 text-white text-xs font-semibold shadow-lg hover:bg-violet-700 active:scale-95 transition-all animate-in slide-in-from-bottom-2 duration-200 max-w-[80%]"
+            >
+              <span className="text-sm shrink-0">🔔</span>
+              <span className="truncate">{livePill.from} mentioned you</span>
+              <X
+                className="h-3 w-3 shrink-0 opacity-70"
+                onClick={(e) => { e.stopPropagation(); setLivePill(null); if (livePillTimer.current) clearTimeout(livePillTimer.current); }}
+              />
+            </button>
+          )}
+
           {/* New-message toast — WhatsApp pattern */}
           {cmdNewMsgToast && (
             <button
@@ -1940,6 +2052,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const authorInitial = (msg.from ?? "?")[0].toUpperCase();
                   const authorColor = senderHex(msg.from ?? "");
                   const authorPhoto = senderPhotoMap[msg.from ?? ""] ?? null;
+                  const isTaggedMsg = unreadTagIds.includes(msg.id);
                   return (
                     <div
                       key={msg.id}
@@ -1947,7 +2060,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       className={cn(
                         "flex group transition-colors duration-300",
                         isMine ? "justify-end" : "justify-start",
-                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-xl" : ""
+                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-xl" : "",
+                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-xl" : ""
                       )}
                     >
                       {/* Avatar circle for other people's messages */}
