@@ -386,7 +386,7 @@ export default function CsInbox() {
     },
     onError: () => setLoadingAction(null),
   });
-  function fireQuickReply(action: "send_quote" | "make_it_right" | "refer_friend" | "running_late" | "on_the_way" | "review_rebook") {
+  function fireQuickReply(action: "send_quote" | "make_it_right" | "refer_friend" | "running_late" | "on_the_way" | "review_rebook" | "ai_suggest") {
     if (!selected) return;
     setLoadingAction(action);
     csQuickReply.mutate({
@@ -394,6 +394,24 @@ export default function CsInbox() {
       clientName: selected.name ?? undefined,
       messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
     });
+  }
+  // Derive tone badge from last few client messages
+  function deriveTone(messages: { sender: MsgSender; text: string }[]): { label: string; className: string } {
+    const clientMsgs = messages.filter((m) => m.sender === "client").slice(-3).map((m) => m.text.toLowerCase());
+    const all = clientMsgs.join(" ");
+    if (/angry|furious|unacceptable|terrible|awful|worst|disgusting|never again|refund|cancel|lawsuit/.test(all))
+      return { label: "Frustrated", className: "bg-red-100 text-red-700 border-red-200" };
+    if (/upset|disappointed|not happy|not satisfied|issue|problem|wrong|broken|missing|late|where is|still waiting|no show/.test(all))
+      return { label: "Concerned", className: "bg-orange-100 text-orange-700 border-orange-200" };
+    if (/urgent|asap|emergency|right now|immediately|hurry|quickly/.test(all))
+      return { label: "Urgent", className: "bg-rose-100 text-rose-700 border-rose-200" };
+    if (/thank|thanks|great|love|amazing|awesome|perfect|happy|wonderful|excellent|best/.test(all))
+      return { label: "Happy", className: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+    if (/interested|how much|price|cost|quote|book|schedule|available|when can/.test(all))
+      return { label: "Interested", className: "bg-blue-100 text-blue-700 border-blue-200" };
+    if (clientMsgs.length === 0)
+      return { label: "New", className: "bg-slate-100 text-slate-600 border-slate-200" };
+    return { label: "Neutral", className: "bg-slate-100 text-slate-500 border-slate-200" };
   }
 
   // Resolve cleanerProfileId for the selected Teams conversation — MUST be after `selected` is defined
@@ -580,9 +598,19 @@ export default function CsInbox() {
                             </div>
                             <div className="mt-2 text-sm text-slate-600 line-clamp-2">{conversation.lastMessage}</div>
                             <div className="mt-3 flex items-center justify-between gap-3">
-                              <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
-                                {conversation.queue}
-                              </Badge>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
+                                  {conversation.queue}
+                                </Badge>
+                                {(() => {
+                                  const t = deriveTone(conversation.messages);
+                                  return (
+                                    <Badge className={`rounded-full border text-[10px] px-1.5 py-0 ${t.className} hover:bg-transparent`}>
+                                      {t.label}
+                                    </Badge>
+                                  );
+                                })()}
+                              </div>
                               <div className="text-xs text-slate-500 truncate">{conversation.status}</div>
                             </div>
                           </div>
@@ -735,7 +763,24 @@ export default function CsInbox() {
                       {sendMessage.isPending ? "Sending..." : "Send"}
                     </Button>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2 items-center">
+                    {/* AI Robot button — suggests best action */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="rounded-full h-8 w-8 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
+                      disabled={loadingAction !== null || !selected}
+                      onClick={() => fireQuickReply("ai_suggest")}
+                      title="AI Suggest — picks the best reply for this conversation"
+                    >
+                      {loadingAction === "ai_suggest" ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Bot className="h-4 w-4" />
+                      )}
+                    </Button>
+                    {/* Divider */}
+                    <div className="h-5 w-px bg-slate-200" />
                     {([
                       { action: "send_quote",    label: "Send quote",         icon: <Tag className="h-3.5 w-3.5" /> },
                       { action: "make_it_right", label: "Make it right",      icon: <AlertTriangle className="h-3.5 w-3.5" /> },

@@ -2810,18 +2810,53 @@ STAGE DETECTION — return the stage the conversation is currently in:
      */
     csQuickReply: protectedProcedure
       .input(z.object({
-        action: z.enum(["send_quote", "make_it_right", "refer_friend", "running_late", "on_the_way", "review_rebook"]),
+        action: z.enum(["send_quote", "make_it_right", "refer_friend", "running_late", "on_the_way", "review_rebook", "ai_suggest"]),
         clientName: z.string().optional(),
         messageHistory: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const firstName = input.clientName?.split(" ")[0] ?? "there";
-        const recentMessages: Array<{ role: string; content: string }> = (() => {
-          try { return JSON.parse(input.messageHistory ?? "[]").slice(-6); } catch { return []; }
+        const allMessages: Array<{ role: string; content: string }> = (() => {
+          try { return JSON.parse(input.messageHistory ?? "[]"); } catch { return []; }
         })();
+        const recentMessages = allMessages.slice(-6);
         const conversationSnippet = recentMessages
           .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
           .join("\n");
+        const systemPrompt = `You are a world-class customer service agent for Maids in Black, a premium home cleaning company serving the DC/MD/VA area. You write short, human, warm SMS messages. Never use emojis. Never sound corporate or scripted. Always sound like a real person who cares.`;
+
+        // AI Suggest: analyze conversation and pick best action + write draft
+        if (input.action === "ai_suggest") {
+          const result = await invokeLLM({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `You are analyzing a customer service conversation for a home cleaning company. Based on the conversation below, choose the single best next action from this list: send_quote, make_it_right, refer_friend, running_late, on_the_way, review_rebook. Then write the ideal SMS draft for that action, addressing the client as ${firstName}.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}\n\nRespond in this exact JSON format: {"action": "<action_key>", "draft": "<sms message>"}` },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "ai_suggest_result",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    action: { type: "string", description: "One of: send_quote, make_it_right, refer_friend, running_late, on_the_way, review_rebook" },
+                    draft: { type: "string", description: "The SMS draft message" },
+                  },
+                  required: ["action", "draft"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          try {
+            const parsed = JSON.parse(result.choices?.[0]?.message?.content ?? "{}");
+            return { draft: parsed.draft ?? "", suggestedAction: parsed.action ?? null };
+          } catch {
+            return { draft: "", suggestedAction: null };
+          }
+        }
+
         const actionPrompts: Record<string, string> = {
           send_quote: `Write a friendly, confident SMS quote message for a home cleaning service. Address the client by first name (${firstName}). Based on the conversation, craft a natural price/availability message. If no specific details are known, write a warm message offering to send a custom quote. Keep it under 2 sentences. No emojis. Sound human, not corporate.`,
           make_it_right: `Write a sincere, empathetic de-escalation SMS for a home cleaning service. Address the client by first name (${firstName}). Acknowledge the issue without being defensive, and offer to make it right. Keep it under 3 sentences. No emojis. Sound genuine and caring.`,
@@ -2830,7 +2865,6 @@ STAGE DETECTION — return the stage the conversation is currently in:
           on_the_way: `Write a brief, upbeat SMS letting a client know their cleaner is on the way. Address the client by first name (${firstName}). Keep it to 1 sentence. No emojis. Sound warm and professional.`,
           review_rebook: `Write a warm post-job SMS asking for a review and offering to rebook. Address the client by first name (${firstName}). Based on the positive conversation, naturally ask for a Google review and mention scheduling the next clean. Keep it under 3 sentences. No emojis. Sound genuine, not scripted.`,
         };
-        const systemPrompt = `You are a world-class customer service agent for Maids in Black, a premium home cleaning company serving the DC/MD/VA area. You write short, human, warm SMS messages. Never use emojis. Never sound corporate or scripted. Always sound like a real person who cares.`;
         const userPrompt = conversationSnippet
           ? `Recent conversation:\n${conversationSnippet}\n\n${actionPrompts[input.action]}`
           : actionPrompts[input.action];
@@ -2841,7 +2875,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           ],
         });
         const draft = (result.choices?.[0]?.message?.content ?? "").trim();
-        return { draft };
+        return { draft, suggestedAction: null };
       }),
     /**
      * batchResolveNames — given an array of raw phone strings, returns a map of

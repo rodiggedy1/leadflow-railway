@@ -817,3 +817,5 @@
 - [ ] Filter cs-inbound / cs-inbound-cleaner sessions out of leads view
 - [ ] Filter window cleaning and carpet cleaning sessions out of command center and hot leads
 - [x] CS inbox: 6 AI-smart quick-reply buttons (Send quote, We'll make it right, Refer a friend, Running late, On the way, Review + rebook) — each reads conversation tone and generates a contextual draft
+- [x] CS inbox: tone indicator badge on each conversation (Frustrated, Happy, Urgent, Neutral, etc.)
+- [x] CS inbox: AI Suggest button — analyzes full conversation, recommends best action, pre-fills draft
