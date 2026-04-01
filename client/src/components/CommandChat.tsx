@@ -71,6 +71,8 @@ interface CommandChatProps {
   senderStatusMap?: Record<string, "online" | "away" | "offline">;
   /** True when this panel is currently visible (not hidden by display:none). Used for @mention tracking. */
   isVisible?: boolean;
+  /** All possible names for the current user (handles OAuth name vs DB name mismatch). Used for @mention detection. */
+  myNames?: Set<string>;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -519,7 +521,7 @@ function HotLeadsTray({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, isVisible }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
@@ -992,22 +994,38 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Live floating pill: shown when a new @mention arrives while the panel IS visible
   const [livePill, setLivePill] = useState<{ from: string; body: string } | null>(null);
   const livePillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevTagCountRef = useRef(0);
+  const prevTagCountRef = useRef(-1); // -1 = not yet initialized, suppresses pill on first load
+
+  // All names the current user might go by (handles OAuth name vs DB name mismatch)
+  const effectiveNames = useMemo(() => {
+    const s = new Set<string>(myNamesProp ?? []);
+    if (callerName) s.add(callerName);
+    return s;
+  }, [myNamesProp, callerName]);
+
+  // Build a combined regex that matches @AnyOfMyNames
+  const mentionPattern = useMemo(() => {
+    if (effectiveNames.size === 0) return null;
+    const alts = Array.from(effectiveNames)
+      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|');
+    return new RegExp(`@(${alts})(?:\\b|\\s|$)`, 'i');
+  }, [effectiveNames]);
 
   // Compute unread tagged messages whenever channelMsgs changes
   useEffect(() => {
-    if (!callerName || channelMsgs.length === 0) return;
+    if (!mentionPattern || channelMsgs.length === 0) return;
     let lastSeen = 0;
     try { lastSeen = parseInt(localStorage.getItem(lsKey) ?? "0", 10) || 0; } catch {}
-    const pattern = new RegExp(`@${callerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
     const tagged = channelMsgs.filter(
-      m => m.id > lastSeen && m.from !== callerName && pattern.test(m.body)
+      m => m.id > lastSeen && !effectiveNames.has(m.from) && mentionPattern.test(m.body)
     );
     setUnreadTagIds(tagged.map(m => m.id));
 
     // Detect newly arrived tag while panel is visible → show live pill
+    // prevTagCountRef starts at -1 to suppress pill on initial load
     const newCount = tagged.length;
-    if (isVisible && newCount > prevTagCountRef.current && prevTagCountRef.current >= 0) {
+    if (isVisible && prevTagCountRef.current >= 0 && newCount > prevTagCountRef.current) {
       const newest = tagged[tagged.length - 1];
       if (newest) {
         if (livePillTimer.current) clearTimeout(livePillTimer.current);
@@ -1016,7 +1034,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       }
     }
     prevTagCountRef.current = newCount;
-  }, [channelMsgs, callerName, isVisible, lsKey]);
+  }, [channelMsgs, mentionPattern, effectiveNames, isVisible, lsKey]);
 
   // Mark all @mentions as seen (called on banner dismiss or scroll-to-first)
   function markTagsSeen() {

@@ -404,6 +404,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
     onError: () => { setLoadingAction(null); setAutoDraftLoading(false); },
   });
+  const syncOutbound = trpc.opsChat.syncCsOutboundMessages.useMutation({
+    onSuccess: () => {
+      utils.leads.listCsInbox.invalidate();
+    },
+  });
+
   function fireQuickReply(action: "send_quote" | "make_it_right" | "refer_friend" | "running_late" | "on_the_way" | "review_rebook" | "ai_suggest") {
     if (!selected) return;
     setLoadingAction(action);
@@ -773,6 +779,20 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap items-center">
+                    {/* Sync from OpenPhone — backfills outbound messages sent from the OpenPhone app */}
+                    {selected && selected.id > 0 && selected.phone && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-2xl border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800 transition-colors text-xs"
+                        onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
+                        disabled={syncOutbound.isPending}
+                        title="Pull in messages sent from the OpenPhone app"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
+                        {syncOutbound.isPending ? "Syncing…" : "Sync OpenPhone"}
+                      </Button>
+                    )}
                     {/* Resolve button — only for real CS sessions (not static demo) */}
                     {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
                       <Button

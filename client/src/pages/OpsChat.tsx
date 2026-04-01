@@ -786,23 +786,28 @@ function CsUnreadBadge({ hidden }: { hidden: boolean }) {
 // Shows a violet badge on the Chat tab when there are unread @mentions in Command Chat.
 // Pure localStorage read — no network call.
 
-function CmdMentionBadge({ callerName, hidden, channelMsgs }: {
+function CmdMentionBadge({ callerName, hidden, channelMsgs, myNames }: {
   callerName: string;
   hidden: boolean;
   channelMsgs: Array<{ id: number; from: string; body: string }>;
+  myNames?: Set<string>;
 }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
     if (hidden || !callerName) { setCount(0); return; }
+    // Build effective names set (all possible names for this user)
+    const effectiveNames = new Set<string>(myNames ?? []);
+    effectiveNames.add(callerName);
     const lsKey = `cmd_lastSeenMsgId_${callerName}`;
     let lastSeen = 0;
     try { lastSeen = parseInt(localStorage.getItem(lsKey) ?? "0", 10) || 0; } catch {}
-    const pattern = new RegExp(`@${callerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
+    const alts = Array.from(effectiveNames).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const pattern = new RegExp(`@(${alts})(?:\\b|\\s|$)`, 'i');
     const tagged = channelMsgs.filter(
-      m => m.id > lastSeen && m.from !== callerName && pattern.test(m.body)
+      m => m.id > lastSeen && !effectiveNames.has(m.from) && pattern.test(m.body)
     );
     setCount(tagged.length);
-  }, [callerName, hidden, channelMsgs]);
+  }, [callerName, hidden, channelMsgs, myNames]);
   if (hidden || count === 0) return null;
   return (
     <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-violet-600 text-white text-[10px] font-bold px-1 leading-none shadow">
@@ -2038,6 +2043,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     callerName={callerName}
                     hidden={activeTab === "channels" && activeChannel === "command"}
                     channelMsgs={(channelMsgs as Array<{ id: number; from: string; body: string; ts: number }>).map(m => ({ id: m.id, from: m.from, body: m.body }))}
+                    myNames={myNames}
                   />
                 )}
               </button>
@@ -2553,6 +2559,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             senderStatusMap={senderStatusMap}
             isVisible={activeTab === "channels" && activeChannel === "command"}
+            myNames={myNames}
           />
         </div>
 

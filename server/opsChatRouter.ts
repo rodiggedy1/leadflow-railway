@@ -2061,6 +2061,19 @@ export const opsChatRouter = router({
         .onDuplicateKeyUpdate({ set: { lastReadMessageId: input.lastMessageId } });
       return { ok: true };
     }),
+
+  /**
+   * syncCsOutboundMessages — manually trigger a sync of OpenPhone outbound messages
+   * for a specific CS conversation. Useful for backfilling messages sent from the
+   * OpenPhone app before this feature was deployed.
+   */
+  syncCsOutboundMessages: opsChatProcedure
+    .input(z.object({ sessionId: z.number(), leadPhone: z.string() }))
+    .mutation(async ({ input }) => {
+      const { syncCsOutboundMessages } = await import("./webhooks");
+      await syncCsOutboundMessages(input.leadPhone, input.sessionId);
+      return { ok: true };
+    }),
 });
 
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

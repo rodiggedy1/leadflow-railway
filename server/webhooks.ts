@@ -1276,6 +1276,28 @@ async function handleCsInboundMessage(msg: any) {
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("lead_update");
+
+  // Sync any outbound messages sent from OpenPhone app for this conversation
+  // (OpenPhone doesn't fire webhooks for outbound messages, so we poll on each inbound)
+  const resolvedSessionId = existingSession?.id ?? (await (async () => {
+    const [s] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, fromPhone),
+          eq(conversationSessions.leadSource, sessionSource)
+        )
+      )
+      .orderBy(desc(conversationSessions.updatedAt))
+      .limit(1);
+    return s?.id;
+  })());
+  if (resolvedSessionId) {
+    syncCsOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
+      console.warn("[CS] syncCsOutboundMessages error:", err)
+    );
+  }
 }
 
 /**
@@ -1361,4 +1383,94 @@ async function handleCsOutboundMessage(msg: any) {
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("lead_update");
+}
+
+/**
+ * syncCsOutboundMessages — fetches recent messages from OpenPhone API for a given
+ * CS conversation and mirrors any outbound (agent-sent) messages that aren't already
+ * in the session history. Called after each inbound message since OpenPhone doesn't
+ * fire webhooks for outbound messages sent from the app.
+ */
+export async function syncCsOutboundMessages(leadPhone: string, sessionId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const apiKey = process.env.OPENPHONE_API_KEY;
+  const csNumberId = process.env.OPENPHONE_CS_PHONE_NUMBER_ID;
+  if (!apiKey || !csNumberId) {
+    console.warn("[CS Sync] Missing OPENPHONE_API_KEY or OPENPHONE_CS_PHONE_NUMBER_ID");
+    return;
+  }
+
+  // Fetch last 20 messages for this conversation from OpenPhone
+  let messages: any[] = [];
+  try {
+    const url = `https://api.openphone.com/v1/messages?phoneNumberId=${encodeURIComponent(csNumberId)}&participants=${encodeURIComponent(leadPhone)}&maxResults=20`;
+    const res = await fetch(url, {
+      headers: { Authorization: apiKey, "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      console.warn(`[CS Sync] OpenPhone API ${res.status} for ${leadPhone}`);
+      return;
+    }
+    const json = await res.json() as any;
+    messages = json?.data ?? [];
+  } catch (err) {
+    console.warn("[CS Sync] Fetch error:", err);
+    return;
+  }
+
+  // Filter to outbound messages only
+  const outbound = messages.filter((m: any) => m.direction === "outgoing");
+  if (outbound.length === 0) return;
+
+  // Load current session history
+  const [session] = await db
+    .select({ messageHistory: conversationSessions.messageHistory })
+    .from(conversationSessions)
+    .where(eq(conversationSessions.id, sessionId))
+    .limit(1);
+  if (!session) return;
+
+  let history: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }> = [];
+  try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+
+  // Build set of already-synced OpenPhone message IDs
+  const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
+
+  let added = 0;
+  for (const m of outbound) {
+    const text: string = m.text ?? m.body ?? "";
+    if (!text.trim()) continue;
+    const msgId: string = m.id ?? "";
+    const msgTs = m.createdAt ? new Date(m.createdAt).getTime() : 0;
+
+    // Skip if already synced by ID
+    if (msgId && syncedIds.has(msgId)) continue;
+
+    // Skip if identical content within 15s (covers messages sent from CS chat already stored)
+    const isDup = history.some(
+      (h: any) => h.role === "assistant" && h.content === text && Math.abs((h.ts ?? 0) - msgTs) < 15_000
+    );
+    if (isDup) continue;
+
+    history.push({ role: "assistant", content: text, ts: msgTs, senderName: "OpenPhone", opMsgId: msgId });
+    added++;
+  }
+
+  if (added === 0) return;
+
+  // Sort by ts to maintain chronological order
+  history.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
+  if (history.length > 40) history = history.slice(-40);
+
+  await db
+    .update(conversationSessions)
+    .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
+    .where(eq(conversationSessions.id, sessionId));
+
+  console.log(`[CS Sync] Synced ${added} outbound message(s) from OpenPhone for session ${sessionId} (${leadPhone})`);
+
+  // Broadcast SSE so CS inbox updates instantly
+  const { broadcastOpsUpdate: broadcastOpsUpdate2 } = await import("./sseBroadcast");
+  broadcastOpsUpdate2("lead_update");
 }

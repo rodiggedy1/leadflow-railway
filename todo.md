@@ -834,3 +834,7 @@
 - [x] Message highlights — amber left border on tagged messages in the conversation thread
 - [x] Live floating pill — violet pill slides up from bottom when tagged while chat is visible, auto-dismisses after 7s
 - [x] Sidebar badge — violet number badge on Chat tab showing unread @mention count
+
+## Bug Fixes (Apr 1)
+- [x] Fix @mention awareness: use myNames set (all possible names) for multi-name matching; fix prevTagCountRef to start at -1
+- [x] Fix CS inbox: add syncCsOutboundMessages (polls OpenPhone API after each inbound); add "Sync OpenPhone" button in CS thread header
