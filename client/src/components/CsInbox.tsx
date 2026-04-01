@@ -246,6 +246,16 @@ export default function CsInbox() {
 
   const { data: csData } = trpc.leads.listCsInbox.useQuery(undefined, { refetchOnWindowFocus: false });
 
+  // Collect all phones from real sessions for batch name resolution
+  const allPhones = useMemo(
+    () => (csData ?? []).map((r) => r.leadPhone ?? "").filter(Boolean),
+    [csData]
+  );
+  const { data: nameMap } = trpc.leads.batchResolveNames.useQuery(
+    { phones: allPhones },
+    { enabled: allPhones.length > 0, refetchOnWindowFocus: false }
+  );
+
   // Map DB rows to Conversation shape
   const liveConversations: Conversation[] = useMemo(() => {
     if (!csData) return conversations; // loading — show static demo data
@@ -258,7 +268,10 @@ export default function CsInbox() {
       const waitMs = lastTs ? Date.now() - lastTs : 0;
       const waitMin = Math.round(waitMs / 60000);
       const waitStr = waitMin < 60 ? `${waitMin} min` : `${Math.round(waitMin / 60)} hr`;
-      const name = row.leadName || row.leadPhone || "Unknown";
+      // Resolve name: batch map > leadName > raw phone
+      const phone10 = (row.leadPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+      const resolvedName = (nameMap && phone10 && nameMap[phone10]) || row.leadName || row.leadPhone || "Unknown";
+      const name = resolvedName;
       const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
       return {
         id: row.id,

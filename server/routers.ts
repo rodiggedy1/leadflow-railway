@@ -2680,6 +2680,75 @@ STAGE DETECTION — return the stage the conversation is currently in:
           recentJobs,
         };
       }),
+    /**
+     * batchResolveNames — given an array of raw phone strings, returns a map of
+     * { normalizedPhone10 -> resolvedName } in a single round-trip.
+     * Priority: cleanerProfiles > completedJobs > cleanerJobs.customerName > quoteLeads
+     */
+    batchResolveNames: protectedProcedure
+      .input(z.object({ phones: z.array(z.string()).max(100) }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+        const normalized = input.phones.map(digits10).filter((p) => p.length === 10);
+        if (normalized.length === 0) return {} as Record<string, string>;
+
+        const result: Record<string, string> = {};
+
+        // 1. cleanerProfiles (exact match on 10-digit phone)
+        const cleanerRows = await db
+          .select({ phone: cleanerProfiles.phone, name: cleanerProfiles.name })
+          .from(cleanerProfiles)
+          .where(inArray(cleanerProfiles.phone, normalized));
+        for (const r of cleanerRows) {
+          if (r.phone && r.name) result[r.phone] = r.name;
+        }
+
+        // 2. completedJobs (phone stored as E.164 +1xxxxxxxxxx)
+        const e164List = normalized.filter((p) => !result[p]).map((p) => `+1${p}`);
+        if (e164List.length > 0) {
+          const histRows = await db
+            .select({ phone: completedJobs.phone, name: completedJobs.name })
+            .from(completedJobs)
+            .where(inArray(completedJobs.phone, e164List))
+            .groupBy(completedJobs.phone, completedJobs.name)
+            .limit(e164List.length * 2);
+          for (const r of histRows) {
+            if (!r.phone || !r.name) continue;
+            const p10 = digits10(r.phone);
+            if (!result[p10]) result[p10] = r.name;
+          }
+        }
+
+        // 3. cleanerJobs.customerName (phone stored as (xxx) xxx-xxxx, normalize via SQL)
+        const stillMissing = normalized.filter((p) => !result[p]);
+        if (stillMissing.length > 0) {
+          for (const p10 of stillMissing) {
+            const [cj] = await db
+              .select({ customerName: cleanerJobs.customerName })
+              .from(cleanerJobs)
+              .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${p10}`)
+              .limit(1);
+            if (cj?.customerName) result[p10] = cj.customerName;
+          }
+        }
+
+        // 4. quoteLeads fallback
+        const stillMissing2 = normalized.filter((p) => !result[p]);
+        if (stillMissing2.length > 0) {
+          for (const p10 of stillMissing2) {
+            const [ql] = await db
+              .select({ name: quoteLeads.name })
+              .from(quoteLeads)
+              .where(sql`REGEXP_REPLACE(${quoteLeads.phone}, '[^0-9]', '') LIKE ${'%' + p10}`)
+              .limit(1);
+            if (ql?.name) result[p10] = ql.name;
+          }
+        }
+
+        return result;
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..
