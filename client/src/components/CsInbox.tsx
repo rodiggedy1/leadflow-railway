@@ -396,11 +396,36 @@ export default function CsInbox() {
   ];
 
   return (
-    <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-3 pt-3 pb-3 text-slate-900">
-      <div className="w-full flex flex-col flex-1 min-h-0">
-        <div className="flex flex-row gap-3 flex-1 min-h-0 overflow-hidden">
+    <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-6 pb-4 md:pb-6 text-slate-900">
+      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 shrink-0"
+        >
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+              <Sparkles className="h-3.5 w-3.5" /> Customer Service SMS Handler
+            </div>
+            <h1 className="mt-3 text-3xl md:text-4xl font-semibold tracking-tight">
+              Three-column customer service inbox
+            </h1>
+            <p className="mt-2 text-slate-600 max-w-3xl">
+              Conversation-first, job-aware. Built for fast replies, priority handling, and clear context without
+              burying the thread.
+            </p>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <Button className="rounded-2xl h-11">AI reply mode</Button>
+            <Button variant="outline" className="rounded-2xl h-11">
+              Bulk follow-up
+            </Button>
+          </div>
+        </motion.div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── LEFT: Queue sidebar ── */}
-          <Card className="w-[320px] shrink-0 rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col py-0 gap-0">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto">
               <div className="flex items-start justify-between gap-3">
@@ -553,7 +578,7 @@ export default function CsInbox() {
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="flex-1 min-w-0 rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col py-0 gap-0">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
@@ -605,15 +630,15 @@ export default function CsInbox() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 min-h-[400px] px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
-                <div className="flex flex-col space-y-3">
+              <ScrollArea className="flex-1 min-h-0 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+                <div className="space-y-3">
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
                       key={`${message.time}-${idx}`}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.04 }}
-                      className={`self-start max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
+                      className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                     >
                       <div className="text-xs uppercase tracking-wide opacity-60">{message.sender}</div>
                       <div className="mt-1.5 text-sm leading-6">{message.text}</div>
@@ -678,7 +703,7 @@ export default function CsInbox() {
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="w-[340px] shrink-0 flex flex-col overflow-y-auto">
+          <div className="overflow-y-auto space-y-5">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
