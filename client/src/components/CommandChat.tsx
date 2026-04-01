@@ -1297,7 +1297,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setLeftCollapsed(v => !v)}
           title={leftCollapsed ? "Expand panel" : "Collapse panel"}
-          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all opacity-0 group-hover:opacity-100"
+          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all"
         >
           {leftCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
         </button>
@@ -2404,7 +2404,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setRightCollapsed(v => !v)}
           title={rightCollapsed ? "Expand panel" : "Collapse panel"}
-          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all opacity-0 group-hover:opacity-100"
+          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all"
         >
           {rightCollapsed ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         </button>
