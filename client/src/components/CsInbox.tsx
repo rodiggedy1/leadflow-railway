@@ -10,7 +10,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertTriangle,
+  Briefcase,
   Bot,
+  Building2,
   CheckCircle2,
   ChevronRight,
   CircleDot,
@@ -201,6 +203,33 @@ function queueTone(queue: Queue) {
   return queueMeta.find((q) => q.label === queue) || queueMeta[0];
 }
 
+// ── Status badge helpers for Teams panel ──────────────────────────────────────
+type JobStatus = "on_the_way" | "arrived" | "running_late" | "in_progress" | "completed" | "issue_at_property" | null | undefined;
+
+function jobStatusLabel(s: JobStatus): string {
+  switch (s) {
+    case "on_the_way":          return "On the way";
+    case "arrived":             return "Arrived";
+    case "running_late":        return "Running late";
+    case "in_progress":         return "In progress";
+    case "completed":           return "Completed";
+    case "issue_at_property":   return "Issue at property";
+    default:                    return "Scheduled";
+  }
+}
+
+function jobStatusStyle(s: JobStatus): string {
+  switch (s) {
+    case "on_the_way":          return "bg-blue-50 text-blue-700 border-blue-200";
+    case "arrived":             return "bg-teal-50 text-teal-700 border-teal-200";
+    case "running_late":        return "bg-amber-50 text-amber-700 border-amber-200";
+    case "in_progress":         return "bg-indigo-50 text-indigo-700 border-indigo-200";
+    case "completed":           return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "issue_at_property":   return "bg-rose-50 text-rose-700 border-rose-200";
+    default:                    return "bg-slate-50 text-slate-600 border-slate-200";
+  }
+}
+
 export default function CsInbox() {
   const [activeQueue, setActiveQueue] = useState<Queue | "All">("All");
   const [query, setQuery] = useState("");
@@ -265,6 +294,17 @@ export default function CsInbox() {
       utils.leads.listCsInbox.invalidate();
     },
   });
+
+  // Resolve cleanerProfileId for the selected Teams conversation
+  const selectedPhone = selected?.queue === "Teams" ? (selected?.phone ?? "") : "";
+  const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
+    { phone: selectedPhone },
+    { enabled: !!selectedPhone, refetchOnWindowFocus: false }
+  );
+  const { data: cleanerTodayJobs } = trpc.leads.getCleanerTodayJobs.useQuery(
+    { cleanerProfileId: cleanerProfile?.id ?? 0 },
+    { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 }
+  );
 
   const filtered = useMemo(() => {
     return displayConversations.filter((c) => {
@@ -567,137 +607,269 @@ export default function CsInbox() {
             </CardContent>
           </Card>
 
-          {/* ── RIGHT: Client profile + actions ── */}
+          {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
           <div className="space-y-5">
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
-              <CardContent className="p-0">
-                <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 text-amber-800 font-medium">
-                    <TriangleAlert className="h-4 w-4" /> Flag as needs attention
-                  </div>
-                  <Badge className="rounded-full border border-amber-200 bg-white text-amber-700 hover:bg-white">
-                    Urgent
-                  </Badge>
-                </div>
-                <div className="p-5 space-y-5 bg-white">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                    <div className="mt-3 text-2xl font-semibold">{selected.name}</div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
-                      <span className="inline-flex items-center gap-1">
-                        <Phone className="h-4 w-4" />
-                        {selected.phone}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {selected.location}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Service</div>
-                      <div className="mt-1 font-semibold">{selected.service}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Price</div>
-                      <div className="mt-1 font-semibold">{selected.amount}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Bookings</div>
-                      <div className="mt-1 font-semibold">{selected.stats.bookings}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Rating</div>
-                      <div className="mt-1 font-semibold inline-flex items-center gap-1">
-                        <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                        {selected.stats.rating}
+            {selected.queue === "Teams" ? (
+              /* ── TEAMS PANEL ── */
+              <>
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+                  <CardContent className="p-0">
+                    {/* Header */}
+                    <div className="p-5 bg-teal-50 border-b border-teal-200">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12 border-2 border-teal-200">
+                          <AvatarFallback className="bg-teal-100 text-teal-700 font-semibold text-lg">
+                            {selected.initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-semibold text-lg text-slate-900">{selected.name}</div>
+                          <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
+                            <Phone className="h-3.5 w-3.5" />
+                            {selected.phone}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
-                    <div className="mt-3 space-y-2">
+                    {/* Today's jobs */}
+                    <div className="p-5 bg-white space-y-3">
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400 flex items-center gap-2">
+                        <Briefcase className="h-3.5 w-3.5" /> Today's jobs
+                      </div>
+                      {!cleanerTodayJobs ? (
+                        <div className="text-sm text-slate-400 py-2">Loading jobs...</div>
+                      ) : cleanerTodayJobs.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                          No jobs scheduled today
+                        </div>
+                      ) : (
+                        cleanerTodayJobs.map((job) => {
+                          const time = job.serviceDateTime
+                            ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "—";
+                          return (
+                            <div
+                              key={job.id}
+                              className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm space-y-3"
+                            >
+                              {/* Time + status row */}
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                                  <Clock3 className="h-4 w-4 text-slate-400" />
+                                  {time}
+                                </div>
+                                <Badge
+                                  className={`rounded-full border text-xs font-medium hover:bg-transparent ${
+                                    jobStatusStyle(job.jobStatus as JobStatus)
+                                  }`}
+                                >
+                                  {jobStatusLabel(job.jobStatus as JobStatus)}
+                                </Badge>
+                              </div>
+
+                              {/* Client name */}
+                              <div className="flex items-start gap-2 text-sm text-slate-700">
+                                <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                <span className="font-medium">{job.customerName || "—"}</span>
+                              </div>
+
+                              {/* Address */}
+                              {job.jobAddress && (
+                                <div className="flex items-start gap-2 text-sm text-slate-500">
+                                  <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                  <span className="leading-5">{job.jobAddress}</span>
+                                </div>
+                              )}
+
+                              {/* Service type */}
+                              {job.serviceType && (
+                                <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-1.5 text-xs text-slate-600">
+                                  {job.serviceType}
+                                </div>
+                              )}
+
+                              {/* Issue note */}
+                              {job.jobStatus === "issue_at_property" && job.issueNote && (
+                                <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-800 flex items-start gap-2">
+                                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                                  {job.issueNote}
+                                </div>
+                              )}
+
+                              {/* Running late note */}
+                              {job.jobStatus === "running_late" && job.delayMinutes && (
+                                <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                                  Running {job.delayMinutes} min late
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Thread status for Teams */}
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
+                    <div className="mt-4 space-y-3">
                       {[
-                        selected.stats.bookings === 0
-                          ? "First-time customer"
-                          : `${selected.stats.bookings} prior bookings`,
-                        selected.stats.complaints > 0
-                          ? `${selected.stats.complaints} prior complaint`
-                          : "No complaint history",
-                        selected.queue === "Hot leads"
-                          ? "High-intent inquiry"
-                          : selected.queue === "Post-job"
-                          ? "Good review moment"
-                          : "Needs active handling",
-                      ].map((flag) => (
+                        { label: "Teams", icon: AlertTriangle },
+                        { label: selected.status, icon: CircleDot },
+                        { label: `${selected.wait} since last message`, icon: Clock3 },
+                      ].map((item) => (
                         <div
-                          key={flag}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
+                          key={item.label}
+                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
                         >
-                          <Tag className="h-4 w-4 text-slate-400" />
-                          {flag}
+                          <div className="flex items-center gap-2 text-sm">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            {item.label}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
                         </div>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
-                      <Bot className="h-4 w-4" /> AI insight
-                    </div>
-                    <div className="mt-2 text-sm leading-6 text-blue-900">{selected.aiInsight}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-              <CardContent className="p-5">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Call client", icon: Phone },
-                    { label: "Message client", icon: MessageSquare },
-                    { label: "Send tracking link", icon: Mail },
-                    { label: "Approve extra time", icon: Clock3 },
-                    { label: "Mark complete", icon: CheckCircle2 },
-                    { label: "Offer rebook", icon: Wallet },
-                  ].map((action) => (
-                    <Button key={action.label} variant="outline" className="rounded-2xl justify-start h-12">
-                      <action.icon className="h-4 w-4 mr-2" />
-                      {action.label}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-              <CardContent className="p-5">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
-                <div className="mt-4 space-y-3">
-                  {[
-                    { label: selected.queue, icon: AlertTriangle },
-                    { label: selected.status, icon: CircleDot },
-                    { label: `${selected.wait} since last client message`, icon: Clock3 },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2 text-sm">
-                        <item.icon className="h-4 w-4 text-slate-400" />
-                        {item.label}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              /* ── CLIENT PANEL (unchanged) ── */
+              <>
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 text-amber-800 font-medium">
+                        <TriangleAlert className="h-4 w-4" /> Flag as needs attention
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                      <Badge className="rounded-full border border-amber-200 bg-white text-amber-700 hover:bg-white">
+                        Urgent
+                      </Badge>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    <div className="p-5 space-y-5 bg-white">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
+                        <div className="mt-3 text-2xl font-semibold">{selected.name}</div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="h-4 w-4" />
+                            {selected.phone}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {selected.location}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Service</div>
+                          <div className="mt-1 font-semibold">{selected.service}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Price</div>
+                          <div className="mt-1 font-semibold">{selected.amount}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Bookings</div>
+                          <div className="mt-1 font-semibold">{selected.stats.bookings}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Rating</div>
+                          <div className="mt-1 font-semibold inline-flex items-center gap-1">
+                            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                            {selected.stats.rating}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
+                        <div className="mt-3 space-y-2">
+                          {[
+                            selected.stats.bookings === 0
+                              ? "First-time customer"
+                              : `${selected.stats.bookings} prior bookings`,
+                            selected.stats.complaints > 0
+                              ? `${selected.stats.complaints} prior complaint`
+                              : "No complaint history",
+                            selected.queue === "Hot leads"
+                              ? "High-intent inquiry"
+                              : selected.queue === "Post-job"
+                              ? "Good review moment"
+                              : "Needs active handling",
+                          ].map((flag) => (
+                            <div
+                              key={flag}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
+                            >
+                              <Tag className="h-4 w-4 text-slate-400" />
+                              {flag}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+                          <Bot className="h-4 w-4" /> AI insight
+                        </div>
+                        <div className="mt-2 text-sm leading-6 text-blue-900">{selected.aiInsight}</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      {[
+                        { label: "Call client", icon: Phone },
+                        { label: "Message client", icon: MessageSquare },
+                        { label: "Send tracking link", icon: Mail },
+                        { label: "Approve extra time", icon: Clock3 },
+                        { label: "Mark complete", icon: CheckCircle2 },
+                        { label: "Offer rebook", icon: Wallet },
+                      ].map((action) => (
+                        <Button key={action.label} variant="outline" className="rounded-2xl justify-start h-12">
+                          <action.icon className="h-4 w-4 mr-2" />
+                          {action.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
+                    <div className="mt-4 space-y-3">
+                      {[
+                        { label: selected.queue, icon: AlertTriangle },
+                        { label: selected.status, icon: CircleDot },
+                        { label: `${selected.wait} since last client message`, icon: Clock3 },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            {item.label}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </div>
       </div>

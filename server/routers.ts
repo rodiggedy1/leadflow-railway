@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -2504,6 +2504,62 @@ STAGE DETECTION — return the stage the conversation is currently in:
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(100);
         return sessions;
+      }),
+    /**
+     * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
+     * Used by the Teams right panel in CsInbox.
+     */
+    getCleanerTodayJobs: protectedProcedure
+      .input(z.object({ cleanerProfileId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        // Use Eastern Time date (business operates in DC/MD/VA)
+        const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+        const todayET = nowET.toISOString().slice(0, 10);
+        const jobs = await db
+          .select({
+            id: cleanerJobs.id,
+            jobDate: cleanerJobs.jobDate,
+            serviceDateTime: cleanerJobs.serviceDateTime,
+            customerName: cleanerJobs.customerName,
+            jobAddress: cleanerJobs.jobAddress,
+            serviceType: cleanerJobs.serviceType,
+            bookingStatus: cleanerJobs.bookingStatus,
+            jobStatus: cleanerJobs.jobStatus,
+            bedrooms: cleanerJobs.bedrooms,
+            bathrooms: cleanerJobs.bathrooms,
+            customerNotes: cleanerJobs.customerNotes,
+            issueNote: cleanerJobs.issueNote,
+            delayMinutes: cleanerJobs.delayMinutes,
+          })
+          .from(cleanerJobs)
+          .where(
+            and(
+              eq(cleanerJobs.cleanerProfileId, input.cleanerProfileId),
+              eq(cleanerJobs.jobDate, todayET)
+            )
+          )
+          .orderBy(cleanerJobs.serviceDateTime);
+        return jobs;
+      }),
+    /**
+     * getCleanerProfileByPhone — looks up a cleanerProfile by 10-digit phone.
+     * Used by the Teams right panel to resolve cleanerProfileId from the session phone.
+     */
+    getCleanerProfileByPhone: protectedProcedure
+      .input(z.object({ phone: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        // Normalize to 10 digits
+        const digits = input.phone.replace(/^\+1/, "").replace(/[^\d]/g, "");
+        const [profile] = await db
+          .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.phone, digits))
+          .limit(1);
+        return profile ?? null;
       }),
   }),
   /**
