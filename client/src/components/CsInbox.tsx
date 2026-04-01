@@ -396,33 +396,8 @@ export default function CsInbox() {
   ];
 
   return (
-    <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-6 pb-4 md:pb-6 text-slate-900">
+    <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 shrink-0"
-        >
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
-              <Sparkles className="h-3.5 w-3.5" /> Customer Service SMS Handler
-            </div>
-            <h1 className="mt-3 text-3xl md:text-4xl font-semibold tracking-tight">
-              Three-column customer service inbox
-            </h1>
-            <p className="mt-2 text-slate-600 max-w-3xl">
-              Conversation-first, job-aware. Built for fast replies, priority handling, and clear context without
-              burying the thread.
-            </p>
-          </div>
-          <div className="flex gap-3 flex-wrap">
-            <Button className="rounded-2xl h-11">AI reply mode</Button>
-            <Button variant="outline" className="rounded-2xl h-11">
-              Bulk follow-up
-            </Button>
-          </div>
-        </motion.div>
-
         <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── LEFT: Queue sidebar ── */}
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
