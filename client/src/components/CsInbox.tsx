@@ -237,6 +237,8 @@ export default function CsInbox() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Unread tracking: sessionId -> timestamp when agent last viewed it
+  const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
 
   const utils = trpc.useUtils();
   useOpsStream({
@@ -274,6 +276,8 @@ export default function CsInbox() {
       const resolvedName = (nameMap && phone10 && nameMap[phone10]) || row.leadName || row.leadPhone || "Unknown";
       const name = resolvedName;
       const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+      // Last inbound message timestamp for unread detection
+      const lastInboundTs = msgs.filter((m) => m.role === "user").slice(-1)[0]?.ts ?? 0;
       return {
         id: row.id,
         name,
@@ -290,6 +294,7 @@ export default function CsInbox() {
         phone: row.leadPhone || "",
         stats: { bookings: 0, rating: "—", complaints: 0 },
         aiInsight: "",
+        lastInboundTs,
         messages: msgs.map((m) => ({
           sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system" as MsgSender,
           text: m.content,
@@ -340,6 +345,13 @@ export default function CsInbox() {
     { phone: clientPhone },
     { enabled: !!clientPhone, refetchOnWindowFocus: false, refetchInterval: 120_000 }
   );
+
+  // Mark conversation as viewed when selected changes
+  useEffect(() => {
+    if (effectiveSelectedId != null) {
+      setLastViewedMap((prev) => ({ ...prev, [effectiveSelectedId]: Date.now() }));
+    }
+  }, [effectiveSelectedId]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -469,6 +481,8 @@ export default function CsInbox() {
                 <div className="mt-4 space-y-2.5">
                   {filtered.map((conversation) => {
                     const q = queueTone(conversation.queue);
+                    const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
+                    const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     return (
                       <button
                         key={conversation.id}
@@ -478,15 +492,20 @@ export default function CsInbox() {
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <Avatar className="h-11 w-11 border border-slate-200">
-                            <AvatarFallback className="bg-slate-100 text-slate-700">
-                              {conversation.initials}
-                            </AvatarFallback>
-                          </Avatar>
+                          <div className="relative shrink-0">
+                            <Avatar className="h-11 w-11 border border-slate-200">
+                              <AvatarFallback className="bg-slate-100 text-slate-700">
+                                {conversation.initials}
+                              </AvatarFallback>
+                            </Avatar>
+                            {isUnread && (
+                              <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-teal-500 border-2 border-white" />
+                            )}
+                          </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="font-semibold truncate">{conversation.name}</div>
+                                <div className={`truncate ${isUnread ? "font-bold text-slate-900" : "font-semibold"}`}>{conversation.name}</div>
                                 <div className="text-sm text-slate-500 truncate mt-0.5">{conversation.service}</div>
                               </div>
                               <div className="text-xs text-slate-400 whitespace-nowrap">{conversation.wait}</div>
@@ -914,20 +933,33 @@ export default function CsInbox() {
                 <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</div>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      {[
-                        { label: "Call client", icon: Phone },
-                        { label: "Message client", icon: MessageSquare },
-                        { label: "Send tracking link", icon: Mail },
-                        { label: "Approve extra time", icon: Clock3 },
-                        { label: "Mark complete", icon: CheckCircle2 },
-                        { label: "Offer rebook", icon: Wallet },
-                      ].map((action) => (
-                        <Button key={action.label} variant="outline" className="rounded-2xl justify-start h-12">
-                          <action.icon className="h-4 w-4 mr-2" />
-                          {action.label}
-                        </Button>
-                      ))}
+                    <div className="mt-4 flex flex-col gap-3">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl justify-start h-12 w-full"
+                        onClick={() => {
+                          const phone = selected?.phone?.replace(/\D/g, "").slice(-10);
+                          if (phone) window.open(`tel:+1${phone}`, "_self");
+                        }}
+                      >
+                        <Phone className="h-4 w-4 mr-2" />
+                        Call client
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl justify-start h-12 w-full"
+                        onClick={() => {
+                          const link = `${window.location.origin}/book`;
+                          navigator.clipboard.writeText(link).then(() => {
+                            // brief visual feedback via title flash
+                            const btn = document.activeElement as HTMLButtonElement;
+                            if (btn) { const orig = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = orig; }, 1500); }
+                          });
+                        }}
+                      >
+                        <Mail className="h-4 w-4 mr-2" />
+                        Share magic link
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
