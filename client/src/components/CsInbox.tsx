@@ -218,8 +218,8 @@ export default function CsInbox() {
 
   // Map DB rows to Conversation shape
   const liveConversations: Conversation[] = useMemo(() => {
-    if (!csData) return []; // loading state — show empty, not static demo data
-    if (csData.length === 0) return [];
+    if (!csData) return conversations; // loading — show static demo data
+    if (csData.length === 0) return conversations; // no real sessions — show static demo data
     return csData.map((row) => {
       let msgs: { role: string; content: string; ts?: number; senderName?: string }[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
@@ -256,7 +256,7 @@ export default function CsInbox() {
     });
   }, [csData]);
 
-  const displayConversations = liveConversations;
+  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
 
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
