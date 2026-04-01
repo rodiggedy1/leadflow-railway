@@ -378,6 +378,23 @@ export default function CsInbox() {
       alert(`Backfill complete: ${data.fixed} of ${data.total} sessions updated.`);
     },
   });
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const csQuickReply = trpc.leads.csQuickReply.useMutation({
+    onSuccess: (data) => {
+      if (data.draft) setCompose(data.draft);
+      setLoadingAction(null);
+    },
+    onError: () => setLoadingAction(null),
+  });
+  function fireQuickReply(action: "send_quote" | "make_it_right" | "refer_friend" | "running_late" | "on_the_way" | "review_rebook") {
+    if (!selected) return;
+    setLoadingAction(action);
+    csQuickReply.mutate({
+      action,
+      clientName: selected.name ?? undefined,
+      messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
+    });
+  }
 
   // Resolve cleanerProfileId for the selected Teams conversation — MUST be after `selected` is defined
   const selectedPhone = selected?.queue === "Teams" ? (selected?.phone ?? "") : "";
@@ -719,19 +736,29 @@ export default function CsInbox() {
                     </Button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button variant="outline" className="rounded-full">
-                      <Bot className="h-4 w-4 mr-2" />
-                      AI Suggest
-                    </Button>
-                    <Button variant="outline" className="rounded-full">
-                      Running late
-                    </Button>
-                    <Button variant="outline" className="rounded-full">
-                      We're on the way
-                    </Button>
-                    <Button variant="outline" className="rounded-full">
-                      Review + rebook
-                    </Button>
+                    {([
+                      { action: "send_quote",    label: "Send quote",         icon: <Tag className="h-3.5 w-3.5" /> },
+                      { action: "make_it_right", label: "Make it right",      icon: <AlertTriangle className="h-3.5 w-3.5" /> },
+                      { action: "refer_friend",  label: "Refer a friend",     icon: <Users className="h-3.5 w-3.5" /> },
+                      { action: "running_late",  label: "Running late",       icon: <Clock3 className="h-3.5 w-3.5" /> },
+                      { action: "on_the_way",    label: "On the way",         icon: <MapPin className="h-3.5 w-3.5" /> },
+                      { action: "review_rebook", label: "Review + rebook",    icon: <Star className="h-3.5 w-3.5" /> },
+                    ] as const).map(({ action, label, icon }) => (
+                      <Button
+                        key={action}
+                        variant="outline"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3"
+                        disabled={loadingAction !== null || !selected}
+                        onClick={() => fireQuickReply(action)}
+                      >
+                        {loadingAction === action ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <>{icon}</>
+                        )}
+                        {label}
+                      </Button>
+                    ))}
                   </div>
                 </div>
               </div>
