@@ -284,6 +284,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
   csResolvedAt: bigint("csResolvedAt", { mode: "number" }),
   /**
+   * CS inbox queue label — manually assigned by agents.
+   * One of: "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams"
+   * NULL = unassigned (defaults to "Needs attention" in the UI).
+   */
+  csQueue: varchar("csQueue", { length: 32 }),
+  /**
    * Cached JSON payload from the last AI closing recommendation.
    * Stored so the drawer loads instantly on re-open without re-calling the LLM.
    * Invalidated when new messages arrive (messageHistory length changes).

@@ -2538,6 +2538,20 @@ STAGE DETECTION — return the stage the conversation is currently in:
         return { success: true };
       }),
     /**
+     * updateCsQueue — assign a CS inbox session to a queue label.
+     */
+    updateCsQueue: protectedProcedure
+      .input(z.object({ sessionId: z.number(), queue: z.string() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ csQueue: input.queue } as any)
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+    /**
      * backfillCsNames — one-shot admin procedure to resolve leadName for all CS sessions
      * that currently have a null leadName. Checks cleanerProfiles, completedJobs,
      * cleanerJobs, quoteLeads, and other sessions with the same phone.

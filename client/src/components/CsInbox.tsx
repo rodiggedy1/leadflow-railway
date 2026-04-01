@@ -5,6 +5,12 @@ import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,14 +64,15 @@ type Conversation = {
   quickActions: string[];
 };
 
-const queueMeta: { label: Queue; count: number; tone: string; dot: string }[] = [
-  { label: "Needs attention", count: 12, tone: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" },
-  { label: "Follow up", count: 8, tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-  { label: "Hot leads", count: 6, tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  { label: "Active jobs", count: 14, tone: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  { label: "Post-job", count: 9, tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
-  { label: "Teams", count: 0, tone: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
-];
+const queueStyles: Record<Queue, { tone: string; dot: string }> = {
+  "Needs attention": { tone: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" },
+  "Follow up":       { tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
+  "Hot leads":       { tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  "Active jobs":     { tone: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
+  "Post-job":        { tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
+  "Teams":           { tone: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
+};
+const QUEUES: Queue[] = ["Needs attention", "Follow up", "Hot leads", "Active jobs", "Post-job", "Teams"];
 
 const conversations: Conversation[] = [
   {
@@ -205,7 +212,7 @@ function bubbleStyles(sender: MsgSender) {
 }
 
 function queueTone(queue: Queue) {
-  return queueMeta.find((q) => q.label === queue) || queueMeta[0];
+  return { label: queue, ...( queueStyles[queue] ?? queueStyles["Needs attention"]) };
 }
 
 // ── Status badge helpers for Teams panel ──────────────────────────────────────
@@ -287,7 +294,7 @@ export default function CsInbox() {
         id: row.id,
         name,
         initials,
-        queue: (row.leadSource === "cs-inbound-cleaner" ? "Teams" : "Needs attention") as Queue,
+        queue: ((row as any).csQueue ?? (row.leadSource === "cs-inbound-cleaner" ? "Teams" : "Needs attention")) as Queue,
         service: row.leadSource === "cs-inbound-cleaner" ? "Cleaner" : "CS inquiry",
         location: row.leadPhone || "",
         amount: "",
@@ -361,6 +368,9 @@ export default function CsInbox() {
     },
   });
 
+  const updateCsQueue = trpc.leads.updateCsQueue.useMutation({
+    onSuccess: () => utils.leads.listCsInbox.invalidate(),
+  });
   const backfillCsNames = trpc.leads.backfillCsNames.useMutation({
     onSuccess: (data) => {
       utils.leads.listCsInbox.invalidate();
@@ -400,7 +410,7 @@ export default function CsInbox() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [selected?.messages?.length]);
-  const tone = selected ? queueTone(selected.queue) : queueMeta[0];
+  const tone = selected ? queueTone(selected.queue) : { label: "Needs attention" as Queue, ...queueStyles["Needs attention"] };
 
   const priorityItems = [
     { name: "Jillian", reason: "waiting 12 min • job starts soon", queue: "Needs attention" },
@@ -435,23 +445,27 @@ export default function CsInbox() {
                 >
                   All conversations
                 </Button>
-                {queueMeta.map((q) => (
+                {QUEUES.map((qLabel) => {
+                  const q = queueTone(qLabel);
+                  const liveCount = displayConversations.filter((c) => c.queue === qLabel).length;
+                  return (
                   <button
-                    key={q.label}
-                    onClick={() => setActiveQueue(q.label)}
+                    key={qLabel}
+                    onClick={() => setActiveQueue(qLabel)}
                     className={`w-full rounded-2xl border px-4 py-3 text-left transition ${q.tone} ${
-                      activeQueue === q.label ? "ring-2 ring-slate-900/10" : ""
+                      activeQueue === qLabel ? "ring-2 ring-slate-900/10" : ""
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className={`h-2.5 w-2.5 rounded-full ${q.dot}`} />
-                        <div className="font-medium">{q.label}</div>
+                        <div className="font-medium">{qLabel}</div>
                       </div>
-                      <div className="text-sm font-semibold">{q.count}</div>
+                      <div className="text-sm font-semibold">{liveCount}</div>
                     </div>
                   </button>
-                ))}
+                );
+                })}
               </div>
 
               {/* Show resolved toggle + backfill names */}
@@ -517,7 +531,7 @@ export default function CsInbox() {
                 </div>
                 <div className="mt-4 space-y-2.5">
                   {filtered.map((conversation) => {
-                    const q = queueTone(conversation.queue);
+                    const q = queueTone(conversation.queue as Queue);
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     return (
@@ -606,9 +620,27 @@ export default function CsInbox() {
                           </button>
                         </div>
                       )}
-                      <Badge className={`rounded-full border ${tone.tone} hover:bg-transparent`}>
-                        {selected.queue}
-                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Badge className={`rounded-full border cursor-pointer ${tone.tone} hover:opacity-80 transition-opacity`}>
+                            {selected.queue}
+                          </Badge>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-44">
+                          {QUEUES.map((q) => (
+                            <DropdownMenuItem
+                              key={q}
+                              onClick={() => {
+                                if (selected.id > 0) updateCsQueue.mutate({ sessionId: selected.id, queue: q });
+                              }}
+                              className={selected.queue === q ? "font-semibold" : ""}
+                            >
+                              <span className={`mr-2 h-2 w-2 rounded-full inline-block ${queueStyles[q].dot}`} />
+                              {q}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                       <span>{selected.service}</span>
