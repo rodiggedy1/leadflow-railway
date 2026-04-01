@@ -477,12 +477,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     });
   }
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when conversation changes or new messages arrive
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [selected?.messages?.length]);
+  }, [effectiveSelectedId, selected?.messages?.length]);
 
   // Close emoji picker on outside click
   useEffect(() => {
