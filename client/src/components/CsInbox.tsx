@@ -707,15 +707,14 @@ export default function CsInbox() {
                       }}
                     />
                     <Button
-                      variant="outline"
-                      className="rounded-2xl h-11 px-5"
+                      className="rounded-2xl h-14 px-6 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base gap-2 shrink-0 disabled:opacity-40"
                       disabled={!compose.trim() || sendMessage.isPending || !selected}
                       onClick={() => {
                         if (!selected || !compose.trim()) return;
                         sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
                       }}
                     >
-                      <Send className="h-4 w-4 mr-2" />
+                      <Send className="h-4 w-4" />
                       {sendMessage.isPending ? "Sending..." : "Send"}
                     </Button>
                   </div>

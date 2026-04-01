@@ -813,3 +813,6 @@
 - [x] Filter cs-inbound and cs-inbound-cleaner sessions from daily summary query in routers.ts
 - [x] Verify leads.list and leads.stats already had cs-inbound filter in place
 - [x] Confirm TypeScript compilation passes with zero errors (tsc --noEmit exit 0)
+
+- [ ] Filter cs-inbound / cs-inbound-cleaner sessions out of leads view
+- [ ] Filter window cleaning and carpet cleaning sessions out of command center and hot leads
