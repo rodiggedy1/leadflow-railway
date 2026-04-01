@@ -807,3 +807,12 @@
 - [x] Mix mic + system audio tracks into a single AudioContext for Deepgram
 - [x] Add audio source selector UI (Mic only / System audio / Both)
 - [x] Handle permission denial gracefully with clear user instructions
+
+## Call Assist — Permissions Policy Fix
+- [ ] Add display-capture to server Permissions-Policy header so getDisplayMedia works in iframes
+
+## Customer Service SMS Inbox (Phase 1)
+- [x] Add leads.listCsInbox tRPC procedure (DONE sessions where last msg is from customer)
+- [x] Add CS tab to OpsChat tab bar with red badge count
+- [x] CS sidebar: show session list with name, last message preview, date
+- [x] CS center panel: click session → shows Open full thread button → opens AdminDashboard ?session=ID&tab=sms

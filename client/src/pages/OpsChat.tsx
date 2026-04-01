@@ -67,6 +67,7 @@ import {
   Bell,
   BellOff,
   Briefcase,
+  Headphones,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -785,7 +786,8 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
+  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">("channels");
+  const [selectedCsSessionId, setSelectedCsSessionId] = useState<number | null>(null);
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
@@ -797,7 +799,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
-  const handleSetActiveTab = (tab: "today" | "channels") => {
+  const handleSetActiveTab = (tab: "today" | "channels" | "cs") => {
     if (tab === "channels" && activeTab === "today") {
       // Coming from jobs view → land on command channel, sidebar collapsed
       setActiveTab("channels");
@@ -805,6 +807,9 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
       setSidebarCollapsed(true);
     } else if (tab === "today") {
       setActiveTab("today");
+      setSidebarCollapsed(false);
+    } else if (tab === "cs") {
+      setActiveTab("cs");
       setSidebarCollapsed(false);
     } else {
       setActiveTab(tab);
@@ -1186,6 +1191,12 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   const { data: channelCounts } = trpc.opsChat.getChannelCounts.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 60_000,
+  });
+
+  // CS inbox — DONE sessions where customer replied after close
+  const { data: csInboxSessions = [], refetch: refetchCsInbox } = trpc.leads.listCsInbox.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchInterval: 30_000,
   });
 
   // Unread counts (per-caller, for badge)
@@ -1960,17 +1971,27 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           </div>
 
           {/* Tab toggle */}
-          <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
-            {(["today", "channels"] as const).map((tab) => (
+          <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1 gap-0.5">
+            {(["today", "channels", "cs"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => handleSetActiveTab(tab as "today" | "channels")}
+                onClick={() => handleSetActiveTab(tab)}
                 className={cn(
-                  "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition",
+                  "flex-1 rounded-xl px-2 py-2 text-xs font-medium transition flex items-center justify-center gap-1",
                   activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                 )}
               >
-                {tab === "today" ? "Today Ops" : "Channels"}
+                {tab === "today" ? "Today" : tab === "channels" ? "Channels" : (
+                  <>
+                    <Headphones className="w-3 h-3" />
+                    CS
+                    {csInboxSessions.length > 0 && (
+                      <span className={cn("rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold", activeTab === "cs" ? "bg-white text-slate-900" : "bg-rose-500 text-white")}>
+                        {csInboxSessions.length > 9 ? "9+" : csInboxSessions.length}
+                      </span>
+                    )}
+                  </>
+                )}
               </button>
             ))}
           </div>
@@ -2070,7 +2091,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                 )}
               </div>
             </div>
-          ) : (
+          ) : activeTab === "channels" ? (
             /* Channels tab */
             <div className="px-3 pb-4 pt-1 space-y-1">
               {CHANNELS.map((ch) => {
@@ -2093,6 +2114,43 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   </button>
                 );
               })}
+            </div>
+          ) : (
+            /* CS Inbox tab */
+            <div className="px-3 pb-4 pt-1 space-y-1">
+              {csInboxSessions.length === 0 ? (
+                <div className="text-sm text-slate-400 text-center py-10">No customer messages</div>
+              ) : (
+                csInboxSessions.map((s) => {
+                  let lastMsg = "";
+                  try {
+                    const hist: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? "[]");
+                    const last = hist[hist.length - 1];
+                    if (last) lastMsg = typeof last.content === "string" ? last.content.slice(0, 80) : "";
+                  } catch { /* ignore */ }
+                  const isSelected = selectedCsSessionId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedCsSessionId(s.id)}
+                      className={cn(
+                        "w-full text-left rounded-2xl border px-4 py-3 text-sm transition",
+                        isSelected
+                          ? "bg-slate-900 border-slate-900 text-white"
+                          : "bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:shadow-sm"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="font-semibold truncate">{s.leadName ?? s.leadPhone}</span>
+                        <span className={cn("text-[10px] shrink-0 ml-2", isSelected ? "text-slate-300" : "text-slate-400")}>
+                          {s.updatedAt ? new Date(s.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+                        </span>
+                      </div>
+                      <p className={cn("text-xs truncate", isSelected ? "text-slate-300" : "text-slate-500")}>{lastMsg}</p>
+                    </button>
+                  );
+                })
+              )}
             </div>
           )}
         </div>
@@ -2676,6 +2734,59 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
             </div>
           </>
         </div>
+
+        {/* VIEW: CS Inbox — selected session opens in AdminDashboard */}
+        {activeTab === "cs" && (
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            {selectedCsSessionId ? (
+              <>
+                <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSelectedCsSessionId(null)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 transition"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">
+                        {csInboxSessions.find(s => s.id === selectedCsSessionId)?.leadName ?? csInboxSessions.find(s => s.id === selectedCsSessionId)?.leadPhone ?? "Customer"}
+                      </h2>
+                      <p className="text-xs text-slate-500">Customer message</p>
+                    </div>
+                  </div>
+                  <a
+                    href={`/admin/leads?session=${selectedCsSessionId}&tab=sms`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl px-3 py-2 transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open full thread
+                  </a>
+                </div>
+                <div className="flex-1 flex items-center justify-center flex-col gap-3 text-slate-400">
+                  <Headphones className="w-10 h-10 text-slate-300" />
+                  <p className="text-sm font-medium text-slate-600">Open the full thread to reply</p>
+                  <p className="text-xs text-slate-400 max-w-[260px] text-center">Click "Open full thread" above to view the SMS conversation, draft a reply, and see the customer's booking history.</p>
+                  <a
+                    href={`/admin/leads?session=${selectedCsSessionId}&tab=sms`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium rounded-xl px-4 py-2.5 hover:bg-slate-800 transition"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open full thread
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+                Select a customer message from the left panel
+              </div>
+            )}
+          </div>
+        )}
 
         {/* VIEW: Fallback — no job selected */}
         {activeTab === "today" && !selectedJob && (

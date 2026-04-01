@@ -294,6 +294,32 @@ export const appRouter = router({
 
         return enriched;
       }),
+
+    /**
+     * leads.listCsInbox — DONE sessions where the customer sent a new inbound
+     * message after the session was closed. Sorted by most recent customer reply.
+     */
+    listCsInbox: adminAgentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const sessions = await db
+        .select()
+        .from(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.stage, "DONE" as any),
+            // Last message in the JSON array has role "user" (customer replied after close)
+            sql`JSON_UNQUOTE(JSON_EXTRACT(
+              ${conversationSessions.messageHistory},
+              CONCAT('$[', JSON_LENGTH(${conversationSessions.messageHistory}) - 1, '].role')
+            )) = 'user'`
+          )
+        )
+        .orderBy(desc(conversationSessions.updatedAt))
+        .limit(100);
+      return sessions;
+    }),
+
     stats: publicProcedure
       .input(
         z.object({
