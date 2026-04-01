@@ -5,4 +5,4 @@
  * anywhere to get/set the state.
  */
 export { useOpsChatWindow, OpsChatProvider } from "../contexts/OpsChatContext";
-export type { OpsChatWindowState } from "../contexts/OpsChatContext";
+export type { OpsChatWindowState, OpsChatTab } from "../contexts/OpsChatContext";

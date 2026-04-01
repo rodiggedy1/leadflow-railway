@@ -68,6 +68,7 @@ import {
   Bell,
   BellOff,
   Briefcase,
+  Headphones,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -768,9 +769,10 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
 interface OpsChatProps {
   onMinimize?: () => void;
   onClose?: () => void;
+  initialTab?: "today" | "channels" | "cs";
 }
 
-export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
+export default function OpsChat({ onMinimize, onClose, initialTab: initialTabProp }: OpsChatProps = {}) {
   // Owner auth (Manus OAuth)
   const { user, loading: ownerLoading } = useAuth();
 
@@ -779,16 +781,33 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
     retry: false,
   });
 
-  const { minimize: minimizeFromHook, state: opsChatState } = useOpsChatWindow();
+  const { minimize: minimizeFromHook, state: opsChatState, initialTab: ctxInitialTab, clearInitialTab, setActiveTab: setCtxActiveTab } = useOpsChatWindow();
   const minimizeOpsChat = onMinimize ?? minimizeFromHook;
   // Per-view scroll position map: key = view key (e.g. "channel-command", "job-42")
   // Saves scroll position when the user scrolls, restores it when switching back to that view.
 
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">("channels");
+  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">(
+    initialTabProp ?? ctxInitialTab ?? "channels"
+  );
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  // When openToTab() is called from the nav pill while OpsChat is already mounted,
+  // ctxInitialTab changes — sync it into activeTab and clear it so it doesn't re-fire.
+  useEffect(() => {
+    if (ctxInitialTab) {
+      handleSetActiveTab(ctxInitialTab);
+      clearInitialTab();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctxInitialTab]);
+
+  // Keep context in sync when the user switches tabs inside OpsChat
+  useEffect(() => {
+    setCtxActiveTab(activeTab);
+  }, [activeTab, setCtxActiveTab]);
 
   // Auto-collapse sidebar only for command channel; expand for all other views
   const handleSetActiveChannel = (ch: string) => {
@@ -1965,16 +1984,21 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
           {/* Tab toggle */}
           <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
-            {(["today", "channels", "cs"] as const).map((tab) => (
+            {([
+              { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
+              { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
+              { id: "cs"       as const, label: "CS",   icon: <Headphones    className="w-3.5 h-3.5" /> },
+            ]).map((tab) => (
               <button
-                key={tab}
-                onClick={() => handleSetActiveTab(tab)}
+                key={tab.id}
+                onClick={() => handleSetActiveTab(tab.id)}
                 className={cn(
-                  "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition",
-                  activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  "flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
+                  activeTab === tab.id ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                 )}
               >
-                {tab === "today" ? "Today Ops" : tab === "channels" ? "Channels" : "CS"}
+                {tab.icon}
+                {tab.label}
               </button>
             ))}
           </div>

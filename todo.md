@@ -807,3 +807,4 @@
 - [x] Mix mic + system audio tracks into a single AudioContext for Deepgram
 - [x] Add audio source selector UI (Mic only / System audio / Both)
 - [x] Handle permission denial gracefully with clear user instructions
+- [x] Redesign command center navigation with icons (Ops / Chat / CS) and make it accessible from all admin pages
