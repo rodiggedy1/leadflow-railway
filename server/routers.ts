@@ -2063,11 +2063,11 @@ HOW TO WRITE THE SUGGESTION:
 - Never parrot back the customer's exact words
 - Be confident. Be warm. Never robotic.
 
-STAGE DETECTION — return the stage the conversation is currently in. Use the FULL conversation AND the CUSTOMER JUST SAID line to determine stage. Advance immediately — do not wait for the next turn.
+STAGE DETECTION — return the stage the conversation is currently in:
 - opener: customer hasn't confirmed they want a cleaning
-- discovery: confirmed they want cleaning, still collecting home details (bedrooms, bathrooms, service type). Stay in discovery until ALL THREE are known from anywhere in the conversation including CUSTOMER JUST SAID.
-- value: bedrooms + bathrooms + service type are all now known (including from CUSTOMER JUST SAID). Advance to value the SAME turn the last missing field is provided — do not stay in discovery.
-- recap: value pitch delivered, haven't bridged to price yet
+- discovery: confirmed they want cleaning, still collecting home details
+- value: have home details, value pitch not yet delivered
+- recap: value delivered, haven't bridged to price yet
 - close: price given, upsell offered, actively collecting booking details
 - objection: customer expressed hesitation or concern`;
 

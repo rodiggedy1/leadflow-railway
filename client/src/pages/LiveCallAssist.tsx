@@ -16,7 +16,6 @@ import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw, X,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
   SendHorizonal, MessageSquare, User, Plus, Minus,
-  Mic, MicOff, Radio,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -143,23 +142,6 @@ export default function LiveCallAssist() {
   const [activeStage, setActiveStage] = useState<StageId>("opener");
   const [doneStages, setDoneStages]   = useState<Set<StageId>>(new Set());
 
-  // ── Live Mode state ─────────────────────────────────────────────────────────
-  const [liveMode, setLiveMode] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [interimTranscript, setInterimTranscript] = useState("");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const liveModeAutoSubmitRef = useRef(false); // tracks if we should auto-submit after final transcript
-
-  // Clean up recognition on unmount
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, []);
-
   // Scroll transcript to bottom
   const transcriptRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -245,85 +227,6 @@ export default function LiveCallAssist() {
     onError: (e) => toast.error(e.message),
   });
 
-  // ── Live Mode: mic control ─────────────────────────────────────────────────
-  // Keep a stable ref to handleSubmit so the speech callbacks can call it
-  const handleSubmitRef = useRef<() => void>(() => {});
-
-  const startListening = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      toast.error("Speech recognition is not supported in this browser. Use Chrome or Edge.");
-      return;
-    }
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognitionRef.current = recognition;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => {
-      setIsListening(false);
-      setInterimTranscript("");
-    };
-    recognition.onerror = (e: any) => {
-      if (e.error !== "aborted" && e.error !== "no-speech") {
-        toast.error(`Mic error: ${e.error}`);
-      }
-      setIsListening(false);
-      setInterimTranscript("");
-    };
-    recognition.onresult = (e: any) => {
-      let interim = "";
-      let finalText = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          finalText += e.results[i][0].transcript;
-        } else {
-          interim += e.results[i][0].transcript;
-        }
-      }
-      if (finalText) {
-        // Append final text to the customer input field
-        setCustomerInput(prev => {
-          const combined = (prev + " " + finalText).trim();
-          // Debounce: clear any existing timer and set a new one to auto-submit
-          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-          debounceTimerRef.current = setTimeout(() => {
-            liveModeAutoSubmitRef.current = true;
-            handleSubmitRef.current();
-          }, 1200); // 1.2s silence = customer done talking
-          return combined;
-        });
-        setInterimTranscript("");
-      } else {
-        setInterimTranscript(interim);
-      }
-    };
-
-    recognition.start();
-  }, []);
-
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-    setInterimTranscript("");
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-  }, []);
-
-  const toggleLiveMode = useCallback(() => {
-    setLiveMode(prev => {
-      if (prev) {
-        stopListening();
-      }
-      return !prev;
-    });
-  }, [stopListening]);
-
   // ── Submit ───────────────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(() => {
@@ -344,18 +247,6 @@ export default function LiveCallAssist() {
       .filter(Boolean)
       .join(", ");
 
-    // Inline extraction: detect bedroom/bathroom/service mentions in the current customer line
-    // so the AI can advance stage on the SAME turn even before state is updated
-    const textLower = text.toLowerCase();
-    const bedroomMatch = textLower.match(/(\d+)\s*(?:bed(?:room)?s?|br\b)/);
-    const bathroomMatch = textLower.match(/(\d+(?:\.5)?)\s*(?:bath(?:room)?s?|ba\b)/);
-    const serviceMatch = textLower.match(/\b(deep|move.?(?:in|out)|standard|airbnb|post.?construction|office|event|spring|senior)\b/);
-    const inlineExtracted = [
-      bedroomMatch && !bedrooms ? `Bedrooms (just mentioned): ${bedroomMatch[1]} bedrooms` : null,
-      bathroomMatch && !bathrooms ? `Bathrooms (just mentioned): ${bathroomMatch[1]} bathrooms` : null,
-      serviceMatch && !serviceType ? `Service type (just mentioned): ${serviceMatch[1]}` : null,
-    ].filter(Boolean).join("\n");
-
     const context = [
       leadName   ? `Customer name: ${leadName}` : null,
       phone      ? `Customer phone: ${phone}` : null,
@@ -366,7 +257,6 @@ export default function LiveCallAssist() {
       preferredDate ? `Preferred date: ${preferredDate}` : null,
       quotedPrice ? `Quoted price: $${quotedPrice}` : null,
       extrasLabels ? `Add-ons selected: ${extrasLabels}` : null,
-      inlineExtracted || null,
     ].filter(Boolean).join("\n");
 
     // Build known fields string for outbound mode
@@ -391,11 +281,6 @@ export default function LiveCallAssist() {
     });
   }, [customerInput, conversation, mutation, activeStage, leadName, address, bedrooms, bathrooms, serviceType, preferredDate, quotedPrice]);
 
-  // Keep ref in sync with latest handleSubmit so speech callbacks always call the current version
-  useEffect(() => {
-    handleSubmitRef.current = handleSubmit;
-  }, [handleSubmit]);
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -417,7 +302,6 @@ export default function LiveCallAssist() {
     setConversation([]);
     setSuggestion("");
     setCustomerInput("");
-    setInterimTranscript("");
     setActiveStage("opener");
     setDoneStages(new Set());
     setLeadName("");
@@ -430,8 +314,6 @@ export default function LiveCallAssist() {
     setSelectedExtras([]);
     setOutcomeModal(null);
     setFollowUpDate("");
-    // Stop mic if listening
-    stopListening();
   };
 
   const handleClearCall = (notInterested = false, isFollowUp = false, fDate = "", isBooked = false) => {
@@ -662,20 +544,6 @@ export default function LiveCallAssist() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Live Mode toggle */}
-          <button
-            onClick={toggleLiveMode}
-            className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-colors border ${
-              liveMode
-                ? "bg-red-500 text-white border-red-500 hover:bg-red-600 animate-pulse"
-                : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
-            }`}
-            title={liveMode ? "Exit Live Mode" : "Enable Live Mode — mic transcribes customer speech"}
-          >
-            {liveMode ? <Radio className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-            {liveMode ? "Live" : "Live Mode"}
-          </button>
-          <div className="w-px h-5 bg-gray-200 shrink-0" />
           <button
             onClick={() => setOutcomeModal('booked')}
             className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors"
@@ -894,115 +762,43 @@ export default function LiveCallAssist() {
             )}
 
             {suggestion && !mutation.isPending && (
-              <div className={`rounded-2xl border-2 p-6 ${activeStageObj.border} ${activeStageObj.bg} ${
-                liveMode ? "ring-4 ring-offset-2" : ""
-              }`} style={liveMode ? { outline: `3px solid ${activeStageObj.color}`, outlineOffset: "3px" } : {}}>
+              <div className={`rounded-2xl border-2 p-6 ${activeStageObj.border} ${activeStageObj.bg}`}>
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-                    {liveMode ? "Read This Out Loud" : "Say This"}
-                  </span>
-                  {liveMode && (
-                    <span className="text-[10px] font-bold text-red-400 uppercase tracking-wide flex items-center gap-1">
-                      <Radio className="w-3 h-3 animate-pulse" /> Live
-                    </span>
-                  )}
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Say This</span>
                   <div className="flex-1 h-px bg-gray-200" />
                   <CopyBtn text={suggestion} />
                 </div>
-                <p className={`font-semibold text-gray-900 leading-relaxed ${liveMode ? "text-3xl" : "text-2xl"}`}>
+                <p className="text-2xl font-semibold text-gray-900 leading-relaxed">
                   {suggestion}
                 </p>
-                {liveMode && (
-                  <p className="text-xs text-gray-400 mt-4 text-center">Read it, then hold the mic button for their reply</p>
-                )}
               </div>
             )}
           </div>
 
           {/* Customer input — pinned at bottom */}
           <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-            {liveMode ? (
-              /* ── Live Mode input area ── */
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-red-500 uppercase tracking-wide flex items-center gap-1.5">
-                    <Radio className="w-3 h-3 animate-pulse" /> Live Mode Active
-                  </p>
-                  <p className="text-[10px] text-gray-400">Hold mic while customer talks</p>
-                </div>
-
-                {/* Live transcript preview */}
-                {(customerInput || interimTranscript) && (
-                  <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 min-h-[3rem]">
-                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-1">Customer said:</p>
-                    <p className="text-sm text-gray-800 leading-relaxed">
-                      {customerInput}
-                      {interimTranscript && (
-                        <span className="text-gray-400 italic"> {interimTranscript}</span>
-                      )}
-                    </p>
-                  </div>
-                )}
-
-                {/* Mic button */}
-                <div className="flex gap-2">
-                  <button
-                    onPointerDown={startListening}
-                    onPointerUp={stopListening}
-                    onPointerLeave={stopListening}
-                    className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm transition-all select-none ${
-                      isListening
-                        ? "bg-red-500 text-white shadow-lg scale-[0.98] ring-4 ring-red-300"
-                        : "bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.98]"
-                    }`}
-                  >
-                    {isListening
-                      ? <><MicOff className="w-5 h-5" /> Release when done</>
-                      : <><Mic className="w-5 h-5" /> Hold to Listen</>
-                    }
-                  </button>
-                  {customerInput.trim() && (
-                    <button
-                      onClick={handleSubmit}
-                      disabled={mutation.isPending}
-                      className="px-4 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40 transition-colors font-bold text-sm"
-                    >
-                      {mutation.isPending
-                        ? <Loader2 className="w-5 h-5 animate-spin" />
-                        : <SendHorizonal className="w-5 h-5" />
-                      }
-                    </button>
-                  )}
-                </div>
-                <p className="text-[10px] text-gray-400 text-center">AI generates response automatically after 1.2s of silence</p>
-              </div>
-            ) : (
-              /* ── Normal Mode input area ── */
-              <>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">What did they say?</p>
-                <div className="flex gap-2 items-end">
-                  <textarea
-                    value={customerInput}
-                    onChange={e => setCustomerInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type their response, then press Enter..."
-                    rows={4}
-                    className="flex-1 text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white leading-relaxed"
-                  />
-                  <button
-                    onClick={handleSubmit}
-                    disabled={mutation.isPending || !customerInput.trim()}
-                    className="p-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors mb-0.5"
-                  >
-                    {mutation.isPending
-                      ? <Loader2 className="w-5 h-5 animate-spin" />
-                      : <SendHorizonal className="w-5 h-5" />
-                    }
-                  </button>
-                </div>
-                <p className="text-[10px] text-gray-400 mt-2">Enter to get next line · Shift+Enter for newline</p>
-              </>
-            )}
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">What did they say?</p>
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={customerInput}
+                onChange={e => setCustomerInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type their response, then press Enter..."
+                rows={4}
+                className="flex-1 text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white leading-relaxed"
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={mutation.isPending || !customerInput.trim()}
+                className="p-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors mb-0.5"
+              >
+                {mutation.isPending
+                  ? <Loader2 className="w-5 h-5 animate-spin" />
+                  : <SendHorizonal className="w-5 h-5" />
+                }
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">Enter to get next line · Shift+Enter for newline</p>
           </div>
         </div>
 
