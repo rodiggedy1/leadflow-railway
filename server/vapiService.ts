@@ -429,7 +429,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
     },
     voice: {
       provider: "11labs",
-      voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — warm, professional female voice
+      voiceId: "6aDn1KB0hjpdcocrUkmq",
       stability: 0.5,
       similarityBoost: 0.75,
       style: 0.3,
