@@ -344,6 +344,18 @@ export default function LiveCallAssist() {
       .filter(Boolean)
       .join(", ");
 
+    // Inline extraction: detect bedroom/bathroom/service mentions in the current customer line
+    // so the AI can advance stage on the SAME turn even before state is updated
+    const textLower = text.toLowerCase();
+    const bedroomMatch = textLower.match(/(\d+)\s*(?:bed(?:room)?s?|br\b)/);
+    const bathroomMatch = textLower.match(/(\d+(?:\.5)?)\s*(?:bath(?:room)?s?|ba\b)/);
+    const serviceMatch = textLower.match(/\b(deep|move.?(?:in|out)|standard|airbnb|post.?construction|office|event|spring|senior)\b/);
+    const inlineExtracted = [
+      bedroomMatch && !bedrooms ? `Bedrooms (just mentioned): ${bedroomMatch[1]} bedrooms` : null,
+      bathroomMatch && !bathrooms ? `Bathrooms (just mentioned): ${bathroomMatch[1]} bathrooms` : null,
+      serviceMatch && !serviceType ? `Service type (just mentioned): ${serviceMatch[1]}` : null,
+    ].filter(Boolean).join("\n");
+
     const context = [
       leadName   ? `Customer name: ${leadName}` : null,
       phone      ? `Customer phone: ${phone}` : null,
@@ -354,6 +366,7 @@ export default function LiveCallAssist() {
       preferredDate ? `Preferred date: ${preferredDate}` : null,
       quotedPrice ? `Quoted price: $${quotedPrice}` : null,
       extrasLabels ? `Add-ons selected: ${extrasLabels}` : null,
+      inlineExtracted || null,
     ].filter(Boolean).join("\n");
 
     // Build known fields string for outbound mode

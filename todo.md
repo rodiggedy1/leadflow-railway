@@ -801,3 +801,7 @@
 - [x] Debounced AI response generation as transcript builds (1.2s after last word)
 - [x] Large-text teleprompter display for AI suggested response (3xl in live mode)
 - [x] Auto-submit after 1.2s silence; mic cleanup on reset/unmount
+
+## Call Assist Stage Advancement Fix
+- [x] Fix stage detection: include extracted fields from lastCustomerLine in context before calling AI so stage advances on the same turn bedrooms/bathrooms are mentioned
+- [x] Update system prompt stage detection to consider lastCustomerLine content when determining stage
