@@ -22,7 +22,8 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
-import { useLiveTranscript } from "@/hooks/useLiveTranscript";
+import { useLiveTranscript, supportsSystemAudio } from "@/hooks/useLiveTranscript";
+import type { AudioSourceMode } from "@/hooks/useLiveTranscript";
 
 // ─── Stages (visual only — AI determines current stage) ──────────────────────
 
@@ -414,6 +415,8 @@ export default function LiveCallAssist() {
 
   // ── Live Mode (Deepgram streaming) ───────────────────────────────────────────
   const [liveMode, setLiveMode] = useState(false);
+  const [audioSourceMode, setAudioSourceMode] = useState<AudioSourceMode>("system");
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
   // Buffer for accumulating customer speech before sending to AI
   const liveCustomerBuffer = useRef<string[]>([]);
 
@@ -480,7 +483,10 @@ export default function LiveCallAssist() {
         }, 50);
       }
     },
-    onError: (msg) => toast.error(`Mic error: ${msg}`),
+    onError: (msg) => {
+      toast.error(`Live audio error: ${msg}`);
+      setLiveMode(false);
+    },
   });
 
   const toggleLiveMode = useCallback(async () => {
@@ -489,15 +495,94 @@ export default function LiveCallAssist() {
       setLiveMode(false);
       liveCustomerBuffer.current = [];
     } else {
-      setLiveMode(true);
-      await liveTranscript.start();
+      setShowSourcePicker(true);
     }
   }, [liveMode, liveTranscript]);
+
+  const startLiveWithMode = useCallback(async (mode: AudioSourceMode) => {
+    setAudioSourceMode(mode);
+    setShowSourcePicker(false);
+    setLiveMode(true);
+    await liveTranscript.start(mode);
+  }, [liveTranscript]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+
+      {/* ── Audio Source Picker Modal ── */}
+      {showSourcePicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowSourcePicker(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowSourcePicker(false)}
+              className="absolute top-3 right-3 w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors z-10"
+            >
+              <X className="w-3.5 h-3.5 text-gray-500" />
+            </button>
+            <div className="px-6 pt-7 pb-2">
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Choose audio source</h2>
+              <p className="text-sm text-gray-500 mb-4">Select what Deepgram should listen to during the call.</p>
+            </div>
+            <div className="px-6 pb-6 flex flex-col gap-3">
+              {/* System audio (recommended) */}
+              <button
+                onClick={() => startLiveWithMode("system")}
+                disabled={!supportsSystemAudio()}
+                className="flex items-start gap-3 w-full text-left px-4 py-3.5 rounded-xl border-2 border-violet-300 bg-violet-50 hover:bg-violet-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="text-2xl mt-0.5">&#x1F4BB;</span>
+                <div>
+                  <p className="text-sm font-bold text-violet-800">System Audio <span className="text-[10px] font-semibold bg-violet-200 text-violet-700 px-1.5 py-0.5 rounded-full ml-1">Recommended</span></p>
+                  <p className="text-xs text-violet-600 mt-0.5">Captures the caller's voice from your speakers. Chrome/Edge only — you'll be asked to share your screen.</p>
+                  {!supportsSystemAudio() && (
+                    <p className="text-[11px] text-red-500 mt-1 font-medium">Not supported in this browser. Use Chrome or Edge.</p>
+                  )}
+                </div>
+              </button>
+
+              {/* Mic only */}
+              <button
+                onClick={() => startLiveWithMode("mic")}
+                className="flex items-start gap-3 w-full text-left px-4 py-3.5 rounded-xl border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                <span className="text-2xl mt-0.5">&#x1F3A4;</span>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">Microphone only</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Captures your voice. Works in all browsers. Good for in-person calls or headset use.</p>
+                </div>
+              </button>
+
+              {/* Both */}
+              <button
+                onClick={() => startLiveWithMode("both")}
+                disabled={!supportsSystemAudio()}
+                className="flex items-start gap-3 w-full text-left px-4 py-3.5 rounded-xl border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="text-2xl mt-0.5">&#x1F50A;</span>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">Both (mic + system)</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Captures both sides. Chrome/Edge only. Best for calls where you want full diarization.</p>
+                  {!supportsSystemAudio() && (
+                    <p className="text-[11px] text-red-500 mt-1 font-medium">Not supported in this browser.</p>
+                  )}
+                </div>
+              </button>
+
+              <p className="text-[10px] text-gray-400 text-center mt-1">
+                For System Audio: Chrome will ask you to share a screen or window. Check \u201cShare tab audio\u201d in the dialog.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Outcome Modals ── */}
       {outcomeModal && (

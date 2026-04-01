@@ -801,3 +801,9 @@
 - [x] Add Live Mode toggle and teleprompter UI to LiveCallAssist
 - [x] Wire customer-only transcript lines to AI suggestion generation
 - [ ] Deterministic stage advancement based on collected fields (not AI-driven)
+
+## Call Assist — System Audio / Loopback Capture
+- [x] Research getDisplayMedia system audio API and browser support
+- [x] Mix mic + system audio tracks into a single AudioContext for Deepgram
+- [x] Add audio source selector UI (Mic only / System audio / Both)
+- [x] Handle permission denial gracefully with clear user instructions
