@@ -793,3 +793,11 @@
 ## New Application Card Not Appearing in Command Chat
 - [x] Fix submitApplication: insert new_application card into channel "command" not "general"
 - [x] Also broadcast lead_update SSE after inserting so the card appears instantly without a page refresh
+
+## Call Assist Deepgram Live Mode
+- [x] Install @deepgram/sdk on server
+- [x] Build server WebSocket endpoint /api/deepgram-stream that proxies audio to Deepgram streaming ASR with diarization
+- [x] Build useLiveTranscript hook in client that captures mic audio and streams to server WebSocket
+- [x] Add Live Mode toggle and teleprompter UI to LiveCallAssist
+- [x] Wire customer-only transcript lines to AI suggestion generation
+- [ ] Deterministic stage advancement based on collected fields (not AI-driven)

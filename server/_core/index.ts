@@ -19,6 +19,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerVideoUploadRoute } from "../videoUpload";
 import { registerInterviewUploadRoutes } from "../interviewUpload";
+import { registerDeepgramStreamRoute } from "../deepgramStream";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -80,6 +81,8 @@ async function startServer() {
   registerVideoUploadRoute(app as any);
   // Interview video chunk upload + finalize
   registerInterviewUploadRoutes(app as any);
+  // Deepgram streaming WebSocket proxy for real-time call assist
+  registerDeepgramStreamRoute(server);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // OpenPhone webhook for inbound SMS replies

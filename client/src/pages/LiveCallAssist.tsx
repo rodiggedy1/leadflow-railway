@@ -16,11 +16,13 @@ import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw, X,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
   SendHorizonal, MessageSquare, User, Plus, Minus,
+  Mic, MicOff, Radio,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { EXTRAS_LIST, calculateExtrasTotal } from "@shared/extras";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
+import { useLiveTranscript } from "@/hooks/useLiveTranscript";
 
 // ─── Stages (visual only — AI determines current stage) ──────────────────────
 
@@ -410,6 +412,88 @@ export default function LiveCallAssist() {
 
   const activeStageObj = STAGES.find(s => s.id === activeStage)!;
 
+  // ── Live Mode (Deepgram streaming) ───────────────────────────────────────────
+  const [liveMode, setLiveMode] = useState(false);
+  // Buffer for accumulating customer speech before sending to AI
+  const liveCustomerBuffer = useRef<string[]>([]);
+
+  const liveTranscript = useLiveTranscript({
+    onFinalTranscript: (text, speaker) => {
+      // speaker 0 = first speaker (customer), speaker 1 = agent
+      // We only feed customer lines (speaker 0) to the AI
+      if (speaker === 0) {
+        liveCustomerBuffer.current.push(text);
+        // Update the textarea so the agent can see what's being captured
+        setCustomerInput(prev => {
+          const buffered = liveCustomerBuffer.current.join(" ");
+          return buffered;
+        });
+      }
+    },
+    onUtteranceEnd: () => {
+      // When Deepgram signals the customer finished speaking, auto-submit
+      const buffered = liveCustomerBuffer.current.join(" ").trim();
+      if (buffered && !mutation.isPending) {
+        liveCustomerBuffer.current = [];
+        setCustomerInput(buffered);
+        // Small delay to let React flush the state update before submitting
+        setTimeout(() => {
+          setCustomerInput(prev => {
+            if (prev.trim()) {
+              // Trigger submit via the same path as manual submit
+              const lines = [
+                ...conversation,
+                { id: -1, speaker: "customer" as const, text: prev.trim() },
+              ];
+              const transcript = lines
+                .map(l => `${l.speaker === "agent" ? "AGENT" : "CUSTOMER"}: ${l.text}`)
+                .join("\n");
+              const extrasLabels = selectedExtras
+                .map(k => EXTRAS_LIST.find(e => e.key === k)?.label)
+                .filter(Boolean)
+                .join(", ");
+              const context = [
+                leadName    ? `Customer name: ${leadName}` : null,
+                phone       ? `Customer phone: ${phone}` : null,
+                address     ? `Address: ${address}` : null,
+                bedrooms    ? `Bedrooms: ${bedrooms}` : null,
+                bathrooms   ? `Bathrooms: ${bathrooms}` : null,
+                serviceType ? `Service: ${serviceType}` : null,
+                preferredDate ? `Preferred date: ${preferredDate}` : null,
+                quotedPrice ? `Quoted price: $${quotedPrice}` : null,
+                extrasLabels ? `Add-ons selected: ${extrasLabels}` : null,
+              ].filter(Boolean).join("\n");
+              mutation.mutate({
+                stage: activeStage,
+                transcript,
+                leadName: leadName || undefined,
+                serviceType: [bedrooms, bathrooms, serviceType].filter(Boolean).join(", ") || undefined,
+                quotedPrice: quotedPrice || undefined,
+                lastCustomerLine: prev.trim(),
+                context: context || undefined,
+                isOutbound: isOutbound || undefined,
+              });
+              return "";
+            }
+            return prev;
+          });
+        }, 50);
+      }
+    },
+    onError: (msg) => toast.error(`Mic error: ${msg}`),
+  });
+
+  const toggleLiveMode = useCallback(async () => {
+    if (liveMode) {
+      liveTranscript.stop();
+      setLiveMode(false);
+      liveCustomerBuffer.current = [];
+    } else {
+      setLiveMode(true);
+      await liveTranscript.start();
+    }
+  }, [liveMode, liveTranscript]);
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -544,6 +628,27 @@ export default function LiveCallAssist() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Live Mode toggle */}
+          <button
+            onClick={toggleLiveMode}
+            title={liveMode ? "Stop live transcription" : "Start live transcription (mic)"}
+            className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
+              liveMode
+                ? "bg-red-500 text-white hover:bg-red-600 animate-pulse"
+                : liveTranscript.isConnecting
+                ? "bg-orange-400 text-white cursor-wait"
+                : "bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-300"
+            }`}
+          >
+            {liveMode ? (
+              <><Radio className="w-3.5 h-3.5" /> Live</>
+            ) : liveTranscript.isConnecting ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Connecting…</>
+            ) : (
+              <><Mic className="w-3.5 h-3.5" /> Live Mode</>
+            )}
+          </button>
+          <div className="w-px h-5 bg-gray-200 shrink-0" />
           <button
             onClick={() => setOutcomeModal('booked')}
             className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors"
@@ -776,29 +881,80 @@ export default function LiveCallAssist() {
           </div>
 
           {/* Customer input — pinned at bottom */}
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">What did they say?</p>
-            <div className="flex gap-2 items-end">
-              <textarea
-                value={customerInput}
-                onChange={e => setCustomerInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type their response, then press Enter..."
-                rows={4}
-                className="flex-1 text-sm rounded-xl border border-gray-200 px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 placeholder-gray-400 bg-white leading-relaxed"
-              />
-              <button
-                onClick={handleSubmit}
-                disabled={mutation.isPending || !customerInput.trim()}
-                className="p-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors mb-0.5"
-              >
-                {mutation.isPending
-                  ? <Loader2 className="w-5 h-5 animate-spin" />
-                  : <SendHorizonal className="w-5 h-5" />
-                }
-              </button>
+          <div className={`px-6 py-4 border-t shrink-0 transition-colors ${
+            liveMode ? "border-red-200 bg-red-50" : "border-gray-100 bg-gray-50"
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                {liveMode ? "Listening to customer…" : "What did they say?"}
+              </p>
+              {liveMode && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-[10px] font-bold text-red-500 uppercase tracking-wide">Live</span>
+                </div>
+              )}
             </div>
-            <p className="text-[10px] text-gray-400 mt-2">Enter to get next line · Shift+Enter for newline</p>
+            <div className="flex gap-2 items-end">
+              <div className="relative flex-1">
+                <textarea
+                  value={customerInput}
+                  onChange={e => !liveMode && setCustomerInput(e.target.value)}
+                  onKeyDown={liveMode ? undefined : handleKeyDown}
+                  readOnly={liveMode}
+                  placeholder={liveMode ? "Customer speech will appear here automatically…" : "Type their response, then press Enter..."}
+                  rows={4}
+                  className={`w-full text-sm rounded-xl border px-4 py-3 resize-none focus:outline-none focus:ring-2 placeholder-gray-400 leading-relaxed ${
+                    liveMode
+                      ? "border-red-200 bg-red-50/50 text-gray-700 focus:ring-red-200 cursor-default"
+                      : "border-gray-200 bg-white focus:ring-violet-300 focus:border-violet-300"
+                  }`}
+                />
+                {liveMode && liveTranscript.interimText && (
+                  <div className="absolute bottom-2 left-3 right-3 text-[11px] text-red-400 italic truncate">
+                    {liveTranscript.interimText}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5 mb-0.5">
+                {liveMode ? (
+                  <button
+                    onClick={() => {
+                      // Manual submit in live mode (flush the buffer)
+                      if (customerInput.trim() && !mutation.isPending) {
+                        liveCustomerBuffer.current = [];
+                        handleSubmit();
+                      }
+                    }}
+                    disabled={mutation.isPending || !customerInput.trim()}
+                    className="p-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors"
+                    title="Submit now"
+                  >
+                    {mutation.isPending
+                      ? <Loader2 className="w-5 h-5 animate-spin" />
+                      : <SendHorizonal className="w-5 h-5" />
+                    }
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={mutation.isPending || !customerInput.trim()}
+                    className="p-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors"
+                  >
+                    {mutation.isPending
+                      ? <Loader2 className="w-5 h-5 animate-spin" />
+                      : <SendHorizonal className="w-5 h-5" />
+                    }
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">
+              {liveMode
+                ? "Auto-submits when customer stops speaking · Click Send to submit manually"
+                : "Enter to get next line · Shift+Enter for newline"
+              }
+            </p>
           </div>
         </div>
 
