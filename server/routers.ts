@@ -2487,7 +2487,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * listCsInbox — list all sessions that came in via the CS line (202-888-5362).
      * Accessible to all agents and admins.
      */
-    listCsInbox: agentProcedure
+    listCsInbox: protectedProcedure
       .query(async () => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
