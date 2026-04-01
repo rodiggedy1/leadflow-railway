@@ -14,6 +14,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
+import CsInbox from "@/components/CsInbox";
 import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
 import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
@@ -785,7 +786,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "channels">("channels");
+  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">("channels");
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
@@ -797,7 +798,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
-  const handleSetActiveTab = (tab: "today" | "channels") => {
+  const handleSetActiveTab = (tab: "today" | "channels" | "cs") => {
     if (tab === "channels" && activeTab === "today") {
       // Coming from jobs view → land on command channel, sidebar collapsed
       setActiveTab("channels");
@@ -1961,16 +1962,16 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
 
           {/* Tab toggle */}
           <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
-            {(["today", "channels"] as const).map((tab) => (
+            {(["today", "channels", "cs"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => handleSetActiveTab(tab as "today" | "channels")}
+                onClick={() => handleSetActiveTab(tab)}
                 className={cn(
                   "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition",
                   activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                 )}
               >
-                {tab === "today" ? "Today Ops" : "Channels"}
+                {tab === "today" ? "Today Ops" : tab === "channels" ? "Channels" : "CS"}
               </button>
             ))}
           </div>
@@ -2681,6 +2682,13 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
         {activeTab === "today" && !selectedJob && (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
             Select a job from the left panel
+          </div>
+        )}
+
+        {/* VIEW: CS Inbox */}
+        {activeTab === "cs" && (
+          <div className="flex-1 overflow-y-auto">
+            <CsInbox />
           </div>
         )}
       </div>
