@@ -1106,11 +1106,14 @@ async function handleCsInboundMessage(msg: any) {
     setTimeout(() => csMessageDedup.delete(messageId), 60_000);
   }
 
-  // Resolve cleaner name by matching phone against cleanerProfiles
+  // Resolve cleaner name by matching phone against cleanerProfiles.
+  // cleanerProfiles stores 10-digit numbers (e.g. "2405438028") but fromPhone
+  // is E.164 (e.g. "+12405438028"). Strip the leading +1 before querying.
+  const fromPhoneDigits = fromPhone.replace(/^\+1/, "").replace(/[^\d]/g, "");
   const [cleanerProfile] = await db
     .select({ name: cleanerProfiles.name })
     .from(cleanerProfiles)
-    .where(eq(cleanerProfiles.phone, fromPhone))
+    .where(eq(cleanerProfiles.phone, fromPhoneDigits))
     .limit(1);
   const isCleaner = !!cleanerProfile;
   const resolvedName = cleanerProfile?.name ?? null;
