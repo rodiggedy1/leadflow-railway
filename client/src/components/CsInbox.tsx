@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { useState, useMemo } from "react";
+import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -202,6 +204,13 @@ export default function CsInbox() {
   const [activeQueue, setActiveQueue] = useState<Queue | "All">("Needs attention");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(1);
+
+  const utils = trpc.useUtils();
+  useOpsStream({
+    onLeadUpdate: () => {
+      utils.leads.listCsInbox.invalidate();
+    },
+  });
 
   const filtered = useMemo(() => {
     return conversations.filter((c) => {

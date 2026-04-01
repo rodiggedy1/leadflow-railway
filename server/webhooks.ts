@@ -1137,4 +1137,8 @@ async function handleCsInboundMessage(msg: any) {
     const sessionId = (result as any).insertId;
     console.log(`[CS] Created new cs-inbound session ${sessionId} for ${fromPhone}`);
   }
+
+  // Broadcast SSE so CS inbox updates instantly
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("lead_update");
 }
