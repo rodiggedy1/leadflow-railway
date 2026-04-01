@@ -823,3 +823,5 @@
 - [x] CS inbox: emoji picker button in compose area
 - [x] CS inbox: red unread message counter badge on CS tab
 - [x] CS inbox: Launch27 deep links on recent history booking items
+- [ ] Investigate why inbound SMS to 202 CS number are not appearing in CS inbox
+- [ ] Add MMS photo rendering in CS chat thread

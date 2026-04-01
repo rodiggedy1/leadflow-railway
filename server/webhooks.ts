@@ -1112,6 +1112,7 @@ async function handleCsInboundMessage(msg: any) {
   // 3. cleanerJobs.customerName (phone stored as (xxx) xxx-xxxx)
   // 4. quoteLeads (leads who filled out the form)
   // 5. Other conversationSessions with same phone that have a leadName
+  // 6. OpenPhone contacts API (fallback for contacts known to OpenPhone but not in DB)
   const fromPhoneDigits = fromPhone.replace(/^\+1/, "").replace(/[^\d]/g, "");
 
   // 1. cleanerProfiles
@@ -1169,6 +1170,40 @@ async function handleCsInboundMessage(msg: any) {
       .limit(1);
     if (otherSession?.leadName) resolvedName = otherSession.leadName;
   }
+
+  // 6. OpenPhone contacts API — fallback when all DB checks return null
+  if (!resolvedName) {
+    try {
+      const opApiKey = process.env.OPENPHONE_API_KEY;
+      if (opApiKey) {
+        // OpenPhone contacts API doesn't filter by phone server-side, so we paginate and match client-side
+        let pageToken: string | undefined;
+        let found = false;
+        do {
+          const url = `https://api.openphone.com/v1/contacts?pageSize=100${pageToken ? `&pageToken=${pageToken}` : ""}`;
+          const opRes = await fetch(url, { headers: { Authorization: opApiKey, "Content-Type": "application/json" } });
+          if (!opRes.ok) break;
+          const opData = await opRes.json() as any;
+          const contacts: any[] = opData?.data ?? [];
+          const match = contacts.find((c: any) =>
+            (c.defaultFields?.phoneNumbers ?? []).some((p: any) => p.value === fromPhone)
+          );
+          if (match) {
+            const first = (match.defaultFields?.firstName ?? "").trim();
+            const last = (match.defaultFields?.lastName ?? "").trim();
+            const combined = last ? `${first} ${last}` : first;
+            if (combined) resolvedName = combined;
+            found = true;
+          }
+          pageToken = opData?.nextPageToken;
+          if (found || !pageToken) break;
+        } while (true);
+      }
+    } catch (err) {
+      console.warn("[CS] OpenPhone contacts lookup failed:", err);
+    }
+  }
+
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
   // Find the most recent matching session for this phone
