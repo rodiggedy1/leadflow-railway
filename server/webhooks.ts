@@ -99,7 +99,12 @@ export function registerWebhookRoutes(app: Express) {
       // stored as cs-inbound sessions and skipped from the main lead AI engine.
       const csNumberId = ENV.openPhoneCsNumberId;
       if (csNumberId && msg.phoneNumberId === csNumberId) {
-        await handleCsInboundMessage(msg);
+        if (msg.direction === "outgoing") {
+          // Agent replied directly from OpenPhone app — mirror into CS chat
+          await handleCsOutboundMessage(msg);
+        } else {
+          await handleCsInboundMessage(msg);
+        }
         return;
       }
       const configuredNumberId = ENV.openPhoneNumberId;
@@ -1267,6 +1272,91 @@ async function handleCsInboundMessage(msg: any) {
     const sessionId = (result as any).insertId;
     console.log(`[CS] Created new ${sessionSource} session ${sessionId} for ${fromPhone}${resolvedName ? ` (${resolvedName})` : ""}`);
   }
+
+  // Broadcast SSE so CS inbox updates instantly
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("lead_update");
+}
+
+/**
+ * handleCsOutboundMessage — mirrors messages sent from the OpenPhone app
+ * back into the CS chat so agents see a unified thread.
+ */
+const csOutboundDedup = new Map<string, number>();
+
+async function handleCsOutboundMessage(msg: any) {
+  const db = await getDb();
+  if (!db) return;
+
+  const messageId: string | undefined = msg.id;
+  const now = Date.now();
+
+  // Dedup — OpenPhone at-least-once delivery
+  if (messageId) {
+    if (csOutboundDedup.has(messageId)) {
+      console.log(`[CS Outbound] Duplicate messageId ${messageId} — skipping`);
+      return;
+    }
+    csOutboundDedup.set(messageId, now);
+    setTimeout(() => csOutboundDedup.delete(messageId), 60_000);
+  }
+
+  // For outgoing messages: from = our CS number, to = lead's phone
+  const toPhones: string[] = Array.isArray(msg.to) ? msg.to : [msg.to].filter(Boolean);
+  const leadPhone = toPhones[0];
+  if (!leadPhone) {
+    console.warn("[CS Outbound] No recipient phone found in outgoing message");
+    return;
+  }
+
+  const outboundText: string = msg.text ?? msg.body ?? "";
+  if (!outboundText.trim()) return;
+
+  // Find the most recent CS session for this lead phone
+  const [session] = await db
+    .select()
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.leadPhone, leadPhone),
+        or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+        )
+      )
+    )
+    .orderBy(desc(conversationSessions.updatedAt))
+    .limit(1);
+
+  if (!session) {
+    console.log(`[CS Outbound] No CS session found for ${leadPhone} — skipping mirror`);
+    return;
+  }
+
+  let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+  try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+
+  // Content dedup: skip if identical assistant message already stored within 15s
+  // (covers the case where agent sent from CS chat — already stored — and OpenPhone
+  // fires the outgoing webhook for the same message)
+  const recent = history.slice(-3);
+  const isDup = recent.some(
+    m => m.role === "assistant" && m.content === outboundText && now - (m.ts ?? 0) < 15_000
+  );
+  if (isDup) {
+    console.log(`[CS Outbound] Content dedup: message already in history for session ${session.id} — skipping`);
+    return;
+  }
+
+  history.push({ role: "assistant", content: outboundText, ts: now, senderName: "OpenPhone" });
+  if (history.length > 20) history = history.slice(-20);
+
+  await db
+    .update(conversationSessions)
+    .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
+    .where(eq(conversationSessions.id, session.id));
+
+  console.log(`[CS Outbound] Mirrored OpenPhone reply to session ${session.id} for ${leadPhone}: "${outboundText.slice(0, 60)}"`);
 
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
