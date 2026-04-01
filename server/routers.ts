@@ -2609,6 +2609,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
             bookingStatus: cleanerJobs.bookingStatus,
             issueNote: cleanerJobs.issueNote,
             delayMinutes: cleanerJobs.delayMinutes,
+            teamName: cleanerJobs.teamName,
           })
           .from(cleanerJobs)
           .where(

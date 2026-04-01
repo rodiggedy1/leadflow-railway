@@ -27,6 +27,7 @@ import {
   Star,
   Tag,
   TriangleAlert,
+  Users,
   Wallet,
 } from "lucide-react";
 
@@ -829,8 +830,13 @@ export default function CsInbox() {
                             <div className="text-xs text-emerald-700 flex items-center gap-1">
                               <MapPin className="h-3 w-3" />{clientProfile.todayJob.jobAddress}
                             </div>
+                            {(clientProfile.todayJob as any).teamName && (
+                              <div className="text-xs text-emerald-700 flex items-center gap-1">
+                                <Users className="h-3 w-3" />{(clientProfile.todayJob as any).teamName}
+                              </div>
+                            )}
                             <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
-                              {clientProfile.todayJob.jobStatus ?? clientProfile.todayJob.bookingStatus ?? "Scheduled"}
+                              {jobStatusLabel((clientProfile.todayJob.jobStatus ?? clientProfile.todayJob.bookingStatus ?? "assigned") as JobStatus)}
                             </Badge>
                           </div>
                         </div>
