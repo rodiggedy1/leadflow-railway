@@ -589,17 +589,7 @@ export default function CsInbox() {
                 </div>
               </div>
 
-              <div className="border-b border-slate-200 px-5 py-2 md:px-6 bg-slate-50/70 flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-400 shrink-0">Timeline</span>
-                {selected.tags.map((tag) => (
-                  <Badge key={tag} variant="outline" className="rounded-full bg-white text-xs py-0 h-5">{tag}</Badge>
-                ))}
-                {selected.sentiment && (
-                  <Badge variant="outline" className="rounded-full bg-white text-xs py-0 h-5">Tone: {selected.sentiment}</Badge>
-                )}
-              </div>
-
-              <ScrollArea className="flex-1 min-h-[400px] px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <div className="flex-1 overflow-y-auto px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
                 <div className="space-y-3">
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
@@ -615,7 +605,7 @@ export default function CsInbox() {
                     </motion.div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
 
               <div className="shrink-0 border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
                 <div className="flex flex-wrap gap-2 mb-3">
