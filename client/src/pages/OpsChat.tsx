@@ -1959,27 +1959,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">In-App Ops Chat</p>
               <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Today</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSidebarCollapsed(true)}
-                className="w-10 h-10 rounded-xl bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 transition shadow-sm"
-                title="Collapse sidebar"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm font-medium">
-                {jobs.length} online
-              </div>
-              <button
-                onClick={minimizeOpsChat}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:bg-slate-50 text-xs font-medium transition"
-                title="Minimize OpsChat"
-                aria-label="Minimize OpsChat"
-              >
-                <Minus className="w-3.5 h-3.5" />
-                Minimize
-              </button>
-            </div>
+            <button
+              onClick={() => setSidebarCollapsed(true)}
+              className="w-12 h-12 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition shadow-sm"
+              title="Close sidebar"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
           </div>
 
           {/* Tab toggle */}
