@@ -28,7 +28,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job";
+type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner";
 
 type Conversation = {
@@ -57,6 +57,7 @@ const queueMeta: { label: Queue; count: number; tone: string; dot: string }[] = 
   { label: "Hot leads", count: 6, tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
   { label: "Active jobs", count: 14, tone: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
   { label: "Post-job", count: 9, tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
+  { label: "Teams", count: 0, tone: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
 ];
 
 const conversations: Conversation[] = [
@@ -234,8 +235,8 @@ export default function CsInbox() {
         id: row.id,
         name,
         initials,
-        queue: "Needs attention" as Queue,
-        service: "CS inquiry",
+        queue: (row.leadSource === "cs-inbound-cleaner" ? "Teams" : "Needs attention") as Queue,
+        service: row.leadSource === "cs-inbound-cleaner" ? "Cleaner" : "CS inquiry",
         location: row.leadPhone || "",
         amount: "",
         lastMessage: lastMsg?.content || "",

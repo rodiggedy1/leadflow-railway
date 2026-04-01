@@ -2495,7 +2495,12 @@ STAGE DETECTION — return the stage the conversation is currently in:
         const sessions = await db
           .select()
           .from(conversationSessions)
-          .where(eq(conversationSessions.leadSource, "cs-inbound"))
+          .where(
+            or(
+              eq(conversationSessions.leadSource, "cs-inbound"),
+              eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+            )
+          )
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(100);
         return sessions;

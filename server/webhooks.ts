@@ -1106,14 +1106,24 @@ async function handleCsInboundMessage(msg: any) {
     setTimeout(() => csMessageDedup.delete(messageId), 60_000);
   }
 
-  // Find the most recent cs-inbound session for this phone
+  // Resolve cleaner name by matching phone against cleanerProfiles
+  const [cleanerProfile] = await db
+    .select({ name: cleanerProfiles.name })
+    .from(cleanerProfiles)
+    .where(eq(cleanerProfiles.phone, fromPhone))
+    .limit(1);
+  const isCleaner = !!cleanerProfile;
+  const resolvedName = cleanerProfile?.name ?? null;
+  const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
+
+  // Find the most recent matching session for this phone
   const [existingSession] = await db
     .select()
     .from(conversationSessions)
     .where(
       and(
         eq(conversationSessions.leadPhone, fromPhone),
-        eq(conversationSessions.leadSource, "cs-inbound")
+        eq(conversationSessions.leadSource, sessionSource)
       )
     )
     .orderBy(desc(conversationSessions.updatedAt))
@@ -1148,9 +1158,9 @@ async function handleCsInboundMessage(msg: any) {
       .insert(conversationSessions)
       .values({
         leadPhone: fromPhone,
-        leadName: null,
+        leadName: resolvedName,
         leadEmail: null,
-        leadSource: "cs-inbound",
+        leadSource: sessionSource,
         messageHistory: JSON.stringify(history),
         stage: "OPEN",
         createdAt: new Date(),
@@ -1158,7 +1168,7 @@ async function handleCsInboundMessage(msg: any) {
       } as any);
 
     const sessionId = (result as any).insertId;
-    console.log(`[CS] Created new cs-inbound session ${sessionId} for ${fromPhone}`);
+    console.log(`[CS] Created new ${sessionSource} session ${sessionId} for ${fromPhone}${resolvedName ? ` (${resolvedName})` : ""}`);
   }
 
   // Broadcast SSE so CS inbox updates instantly
