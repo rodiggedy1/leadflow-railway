@@ -5185,21 +5185,39 @@ function calcBookedRevenue(row: {
   return 0;
 }
 
+/**
+ * Returns the UTC offset in milliseconds for America/New_York at a given UTC instant.
+ * Handles both EST (UTC-5) and EDT (UTC-4) automatically.
+ */
+function estOffsetMs(utcDate: Date): number {
+  // Format the date in ET to get the local wall-clock time
+  const etStr = utcDate.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  // etStr looks like "04/01/2026, 00:00:00"
+  const [datePart, timePart] = etStr.split(", ");
+  const [mo, dy, yr] = datePart.split("/");
+  // Treat it as UTC to get the numeric value of the ET wall-clock time
+  const etAsUtc = new Date(`${yr}-${mo}-${dy}T${timePart}Z`);
+  // Offset = ET wall-clock interpreted as UTC minus actual UTC = negative for behind-UTC timezones
+  return etAsUtc.getTime() - utcDate.getTime();
+}
+
 function buildDateConditions(dateFrom?: string, dateTo?: string) {
   const conditions = [];
   if (dateFrom) {
-    // Parse as local midnight by appending T00:00:00 without Z (local time)
-    // Then convert to UTC for the DB query. We use a wide window: from start of
-    // dateFrom in UTC-12 (earliest timezone) to cover all possible local "today"s.
-    const from = new Date(dateFrom + "T00:00:00.000Z");
-    // Subtract 14 hours to cover UTC-14 (furthest behind UTC timezone)
-    from.setUTCHours(from.getUTCHours() - 14);
+    // Midnight EST/EDT: start with midnight UTC on the given date, then adjust for ET offset
+    const midnightUtc = new Date(dateFrom + "T00:00:00.000Z");
+    const from = new Date(midnightUtc.getTime() - estOffsetMs(midnightUtc));
     conditions.push(gte(conversationSessions.createdAt, from));
   }
   if (dateTo) {
-    // End of dateTo: add 1 day + 14 hours to cover UTC+14 (furthest ahead)
-    const to = new Date(dateTo + "T23:59:59.999Z");
-    to.setUTCHours(to.getUTCHours() + 14);
+    // End of day EST/EDT: 23:59:59.999 ET
+    const endUtc = new Date(dateTo + "T23:59:59.999Z");
+    const to = new Date(endUtc.getTime() - estOffsetMs(endUtc));
     conditions.push(lte(conversationSessions.createdAt, to));
   }
   return conditions.length > 0 ? and(...conditions) : undefined;

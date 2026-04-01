@@ -1009,11 +1009,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // ── Today's Revenue ticker — same query as leads page Booked Revenue card ──
   const todayDateStr = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    // Use ET date so "today" aligns with the EST/EDT midnight boundary on the server
+    return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   }, []);
   const { data: todayStats } = trpc.leads.stats.useQuery(
     { dateFrom: todayDateStr, dateTo: todayDateStr },
