@@ -297,7 +297,7 @@ export default function CsInbox() {
         quickActions: [],
       };
     });
-  }, [csData]);
+  }, [csData, nameMap]);
 
   const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
 
