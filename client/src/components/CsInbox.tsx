@@ -1130,27 +1130,38 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       </div>
 
                       {/* Today's job if any */}
-                      {clientProfile?.todayJob && (
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Today's job</div>
-                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5">
-                            <div className="font-semibold text-sm text-emerald-900">
-                              {new Date(clientProfile.todayJob.serviceDateTime!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {clientProfile.todayJob.serviceType}
-                            </div>
-                            <div className="text-xs text-emerald-700 flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />{clientProfile.todayJob.jobAddress}
-                            </div>
-                            {(clientProfile.todayJob as any).teamName && (
-                              <div className="text-xs text-emerald-700 flex items-center gap-1">
-                                <Users className="h-3 w-3" />{(clientProfile.todayJob as any).teamName}
+                      {clientProfile?.todayJob && (() => {
+                        const tj = clientProfile.todayJob;
+                        const tjUrl = tj.bookingId ? `https://maidsinblack.launch27.com/admin/bookings/${tj.bookingId}` : null;
+                        const TjCard = tjUrl ? "a" : "div";
+                        return (
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Today's job</div>
+                            <TjCard
+                              {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
+                              className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="font-semibold text-sm text-emerald-900">
+                                  {new Date(tj.serviceDateTime!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {tj.serviceType}
+                                </div>
+                                {tjUrl && <ExternalLink className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
                               </div>
-                            )}
-                            <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
-                              {jobStatusLabel((clientProfile.todayJob.jobStatus ?? clientProfile.todayJob.bookingStatus ?? "assigned") as JobStatus)}
-                            </Badge>
+                              <div className="text-xs text-emerald-700 flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />{tj.jobAddress}
+                              </div>
+                              {(tj as any).teamName && (
+                                <div className="text-xs text-emerald-700 flex items-center gap-1">
+                                  <Users className="h-3 w-3" />{(tj as any).teamName}
+                                </div>
+                              )}
+                              <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
+                                {jobStatusLabel((tj.jobStatus ?? tj.bookingStatus ?? "assigned") as JobStatus)}
+                              </Badge>
+                            </TjCard>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Recent job history */}
                       {clientProfile && clientProfile.recentJobs.length > 0 && (
