@@ -138,6 +138,11 @@ export const conversationStages = [
   "INTERVIEW_NUDGE_1",
   "INTERVIEW_NUDGE_2",
   "INTERVIEW_LINK_DONE",
+  /**
+   * OPEN → CS inbound session — customer texted the CS line (202-888-5362).
+   * Agent handles manually; no AI auto-reply.
+   */
+  "OPEN",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

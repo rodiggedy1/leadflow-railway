@@ -961,6 +961,7 @@ export const appRouter = router({
       .input(z.object({
         sessionId: z.number().int().positive(),
         message: z.string().min(1).max(1600),
+        fromNumberId: z.string().optional(), // Optional override for CS line replies
       }))
       .mutation(async ({ input, ctx }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
@@ -1003,8 +1004,8 @@ export const appRouter = router({
           .set({ messageHistory: JSON.stringify(history) })
           .where(eq(conversationSessions.id, input.sessionId));
 
-        // Send via OpenPhone
-        const smsResult = await sendSms({ to: session.leadPhone, content: input.message });
+        // Send via OpenPhone (use fromNumberId override for CS line replies)
+        const smsResult = await sendSms({ to: session.leadPhone, content: input.message, ...(input.fromNumberId ? { fromNumberId: input.fromNumberId } : {}) });
         if (!smsResult.success) {
           console.error(`[sendMessage] Failed to send SMS to ${session.leadPhone}:`, smsResult.error);
           // Don't throw — message is already stored in history

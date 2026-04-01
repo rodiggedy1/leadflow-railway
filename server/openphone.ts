@@ -21,6 +21,7 @@ export interface SendSmsParams {
   to: string;       // Recipient phone number in E.164 format, e.g. "+12025551234"
   content: string;  // Text content of the message (1–1600 chars)
   mediaUrl?: string; // Optional MMS media URL (image/photo to attach)
+  fromNumberId?: string; // Optional override for the sender phone number ID (defaults to OPENPHONE_PHONE_NUMBER_ID)
 }
 
 export interface SendSmsResult {
@@ -32,9 +33,9 @@ export interface SendSmsResult {
 /**
  * Sends an SMS via the OpenPhone API from the configured sender number.
  */
-export async function sendSms({ to, content, mediaUrl }: SendSmsParams): Promise<SendSmsResult> {
+export async function sendSms({ to, content, mediaUrl, fromNumberId: fromNumberIdOverride }: SendSmsParams): Promise<SendSmsResult> {
   const apiKey = ENV.openPhoneApiKey;
-  const fromNumberId = ENV.openPhoneNumberId;
+  const fromNumberId = fromNumberIdOverride || ENV.openPhoneNumberId;
 
   if (!apiKey || !fromNumberId) {
     console.error("[OpenPhone] Missing API key or phone number ID");

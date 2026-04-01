@@ -218,7 +218,7 @@ export default function CsInbox() {
 
   // Map DB rows to Conversation shape
   const liveConversations: Conversation[] = useMemo(() => {
-    if (!csData) return conversations;
+    if (!csData) return []; // loading state — show empty, not static demo data
     if (csData.length === 0) return [];
     return csData.map((row) => {
       let msgs: { role: string; content: string; ts?: number; senderName?: string }[] = [];
@@ -256,7 +256,7 @@ export default function CsInbox() {
     });
   }, [csData]);
 
-  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
+  const displayConversations = liveConversations;
 
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
@@ -529,18 +529,17 @@ export default function CsInbox() {
                       onChange={(e) => setCompose(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
-                          e.preventDefault();
-                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim() });
+                                             sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
                         }
                       }}
                     />
                     <Button
-                      className="rounded-2xl h-[96px] px-5"
+                      variant="outline"
+                      className="rounded-2xl h-11 px-5"
                       disabled={!compose.trim() || sendMessage.isPending || !selected}
                       onClick={() => {
-                        if (compose.trim() && selected) {
-                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim() });
-                        }
+                        if (!selected || !compose.trim()) return;
+                        sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
                       }}
                     >
                       <Send className="h-4 w-4 mr-2" />
