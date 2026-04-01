@@ -820,3 +820,6 @@
 - [x] CS inbox: tone indicator badge on each conversation (Frustrated, Happy, Urgent, Neutral, etc.)
 - [x] CS inbox: AI Suggest button — analyzes full conversation, recommends best action, pre-fills draft
 - [x] CS inbox: auto-populate compose box with AI draft when agent opens a conversation
+- [x] CS inbox: emoji picker button in compose area
+- [x] CS inbox: red unread message counter badge on CS tab
+- [x] CS inbox: Launch27 deep links on recent history booking items

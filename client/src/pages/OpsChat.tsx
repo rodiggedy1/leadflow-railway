@@ -764,6 +764,24 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
   );
 }
 
+// ── CsUnreadBadge ────────────────────────────────────────────────────────────
+// Shows a red dot/count on the CS tab when there are new CS sessions since the tab was last viewed.
+
+function CsUnreadBadge({ hidden }: { hidden: boolean }) {
+  const [lastSeenTs] = useState(() => Date.now() - 5 * 60 * 1000); // last 5 minutes on mount
+  const { data } = trpc.leads.getCsUnreadCount.useQuery(
+    { lastSeenTs },
+    { refetchInterval: 30_000, enabled: !hidden }
+  );
+  const count = data?.count ?? 0;
+  if (hidden || count === 0) return null;
+  return (
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none shadow">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface OpsChatProps {
@@ -1979,12 +1997,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 key={tab.id}
                 onClick={() => handleSetActiveTab(tab.id)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
+                  "flex-1 relative flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
                   activeTab === tab.id ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                 )}
               >
                 {tab.icon}
                 {tab.label}
+                {tab.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
               </button>
             ))}
           </div>

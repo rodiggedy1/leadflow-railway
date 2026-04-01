@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import Picker from "@emoji-mart/react";
+import data from "@emoji-mart/data";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { motion } from "framer-motion";
@@ -39,6 +41,8 @@ import {
   Pencil,
   Check,
   X,
+  Smile,
+  ExternalLink,
 } from "lucide-react";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
@@ -381,6 +385,8 @@ export default function CsInbox() {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const autoDraftedForId = useRef<number | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const csQuickReply = trpc.leads.csQuickReply.useMutation({
     onSuccess: (data) => {
       if (data.draft) setCompose(data.draft);
@@ -468,6 +474,17 @@ export default function CsInbox() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [selected?.messages?.length]);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
   const tone = selected ? queueTone(selected.queue) : { label: "Needs attention" as Queue, ...queueStyles["Needs attention"] };
 
   const priorityItems = [
@@ -774,7 +791,22 @@ export default function CsInbox() {
                       AI draft — review before sending
                     </div>
                   )}
-                  <div className="flex items-start gap-3">
+                  <div className="relative flex items-start gap-3">
+                    {/* Emoji picker popup */}
+                    {showEmojiPicker && (
+                      <div ref={emojiPickerRef} className="absolute bottom-full mb-2 left-0 z-50 shadow-xl rounded-2xl overflow-hidden">
+                        <Picker
+                          data={data}
+                          onEmojiSelect={(emoji: { native: string }) => {
+                            setCompose((prev) => prev + emoji.native);
+                            setShowEmojiPicker(false);
+                          }}
+                          theme="light"
+                          previewPosition="none"
+                          skinTonePosition="none"
+                        />
+                      </div>
+                    )}
                     <textarea
                       className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-900 min-h-[96px] resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 text-sm"
                       placeholder={autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
@@ -786,17 +818,29 @@ export default function CsInbox() {
                         }
                       }}
                     />
-                    <Button
-                      className="rounded-2xl h-14 px-6 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base gap-2 shrink-0 disabled:opacity-40"
-                      disabled={!compose.trim() || sendMessage.isPending || !selected}
-                      onClick={() => {
-                        if (!selected || !compose.trim()) return;
-                        sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
-                      }}
-                    >
-                      <Send className="h-4 w-4" />
-                      {sendMessage.isPending ? "Sending..." : "Send"}
-                    </Button>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="rounded-xl h-7 w-7 border-slate-200 text-slate-500 hover:text-slate-800"
+                        onClick={() => setShowEmojiPicker((v) => !v)}
+                        title="Add emoji"
+                        type="button"
+                      >
+                        <Smile className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        className="rounded-2xl h-14 px-6 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base gap-2 shrink-0 disabled:opacity-40"
+                        disabled={!compose.trim() || sendMessage.isPending || !selected}
+                        onClick={() => {
+                          if (!selected || !compose.trim()) return;
+                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                        }}
+                      >
+                        <Send className="h-4 w-4" />
+                        {sendMessage.isPending ? "Sending..." : "Send"}
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 items-center">
                     {/* AI Robot button — suggests best action */}
@@ -1064,26 +1108,37 @@ export default function CsInbox() {
                         <div>
                           <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Recent history</div>
                           <div className="space-y-2">
-                            {clientProfile.recentJobs.map((job, i) => (
-                              <div key={i} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-slate-800 truncate">
-                                    {job.date} {job.serviceType ? `· ${job.serviceType}` : ""}
+                            {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
+                              const l27Url = job.bookingId
+                                ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
+                                : null;
+                              const CardEl = l27Url ? "a" : "div";
+                              return (
+                                <CardEl
+                                  key={i}
+                                  {...(l27Url ? { href: l27Url, target: "_blank", rel: "noopener noreferrer" } : {})}
+                                  className={`rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-400 hover:bg-slate-100 cursor-pointer transition" : ""}`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-slate-800 truncate">
+                                      {job.date} {job.serviceType ? `· ${job.serviceType}` : ""}
+                                    </div>
+                                    {job.address && (
+                                      <div className="text-xs text-slate-500 truncate">{job.address}</div>
+                                    )}
                                   </div>
-                                  {job.address && (
-                                    <div className="text-xs text-slate-500 truncate">{job.address}</div>
-                                  )}
-                                </div>
-                                <div className="shrink-0 text-right">
-                                  {job.price != null && (
-                                    <div className="text-sm font-semibold text-slate-700">${job.price}</div>
-                                  )}
-                                  <Badge className="text-xs rounded-full bg-slate-100 text-slate-600 border-slate-200">
-                                    {job.status}
-                                  </Badge>
-                                </div>
-                              </div>
-                            ))}
+                                  <div className="shrink-0 text-right flex flex-col items-end gap-1">
+                                    {job.price != null && (
+                                      <div className="text-sm font-semibold text-slate-700">${job.price}</div>
+                                    )}
+                                    <Badge className="text-xs rounded-full bg-slate-100 text-slate-600 border-slate-200">
+                                      {job.status}
+                                    </Badge>
+                                    {l27Url && <ExternalLink className="w-3 h-3 text-slate-400" />}
+                                  </div>
+                                </CardEl>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

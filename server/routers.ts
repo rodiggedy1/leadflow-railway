@@ -2513,6 +2513,31 @@ STAGE DETECTION — return the stage the conversation is currently in:
         return sessions;
       }),
     /**
+     * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.
+     * Used to show the red badge on the CS tab.
+     */
+    getCsUnreadCount: protectedProcedure
+      .input(z.object({ lastSeenTs: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { count: 0 };
+        const sourceFilter = or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+        );
+        const sessions = await db
+          .select({ id: conversationSessions.id, updatedAt: conversationSessions.updatedAt })
+          .from(conversationSessions)
+          .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)))
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(200);
+        const count = sessions.filter((s) => {
+          const ts = s.updatedAt instanceof Date ? s.updatedAt.getTime() : new Date(s.updatedAt as string).getTime();
+          return ts > input.lastSeenTs;
+        }).length;
+        return { count };
+      }),
+    /**
      * resolveSession — marks a CS inbox session as resolved (archived).
      * Sets csResolvedAt to the current timestamp.
      */
@@ -2711,6 +2736,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
             jobDate: completedJobs.jobDate,
             serviceType: completedJobs.serviceType,
             lastBookingPrice: completedJobs.lastBookingPrice,
+            launch27BookingId: completedJobs.launch27BookingId,
           })
           .from(completedJobs)
           .where(eq(completedJobs.phone, e164))
@@ -2733,6 +2759,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
             issueNote: cleanerJobs.issueNote,
             delayMinutes: cleanerJobs.delayMinutes,
             teamName: cleanerJobs.teamName,
+            bookingId: cleanerJobs.bookingId,
           })
           .from(cleanerJobs)
           .where(
@@ -2768,6 +2795,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           status: j.jobStatus ?? j.bookingStatus ?? "scheduled",
           price: null as number | null,
           source: "live" as const,
+          bookingId: j.bookingId ? String(j.bookingId) : null,
         }));
         const recentFromHistory = historyRows.slice(0, 5).map((j) => ({
           date: j.jobDate,
@@ -2776,6 +2804,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           status: "completed",
           price: j.lastBookingPrice,
           source: "history" as const,
+          bookingId: j.launch27BookingId ?? null,
         }));
         const recentJobs = [...recentFromCleaner, ...recentFromHistory]
           .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
@@ -2850,7 +2879,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
             },
           });
           try {
-            const parsed = JSON.parse(result.choices?.[0]?.message?.content ?? "{}");
+            const parsed = JSON.parse((result.choices?.[0]?.message?.content as string) ?? "{}");
             return { draft: parsed.draft ?? "", suggestedAction: parsed.action ?? null };
           } catch {
             return { draft: "", suggestedAction: null };
@@ -2874,7 +2903,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
             { role: "user", content: userPrompt },
           ],
         });
-        const draft = (result.choices?.[0]?.message?.content ?? "").trim();
+        const draft = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
         return { draft, suggestedAction: null };
       }),
     /**
