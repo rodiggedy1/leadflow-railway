@@ -1291,16 +1291,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       >
         {/* Drag track */}
         <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
-        {/* Expand/collapse pill button — always visible */}
-        <button
-          type="button"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={() => setLeftCollapsed(v => !v)}
-          title={leftCollapsed ? "Expand panel" : "Collapse panel"}
-          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all"
-        >
-          {leftCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-        </button>
+
       </div>
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
@@ -2399,15 +2390,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
       >
         <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
-        <button
-          type="button"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={() => setRightCollapsed(v => !v)}
-          title={rightCollapsed ? "Expand panel" : "Collapse panel"}
-          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all"
-        >
-          {rightCollapsed ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-        </button>
+
       </div>
 
       {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
