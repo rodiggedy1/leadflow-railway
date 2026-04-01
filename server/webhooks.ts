@@ -94,15 +94,6 @@ export function registerWebhookRoutes(app: Express) {
       //   2. Env is set + payload has ID + they differ → block (wrong number)
       //   3. Env is set + payload has NO ID            → allow (older API versions omit it)
       //   4. Env is NOT set                            → allow all (misconfigured — log a warning)
-      // ── CS line intercept ──────────────────────────────────────────────────
-      // Messages to the CS line (202-888-5362, phoneNumberId=PN0wVLcpCq) are
-      // stored as cs-inbound sessions and skipped from the main lead AI engine.
-      const csNumberId = ENV.openPhoneCsNumberId;
-      if (csNumberId && msg.phoneNumberId === csNumberId) {
-        await handleCsInboundMessage(msg);
-        return;
-      }
-
       const configuredNumberId = ENV.openPhoneNumberId;
       if (!configuredNumberId) {
         console.warn("[Webhook] OPENPHONE_PHONE_NUMBER_ID is not set — processing messages from ALL numbers. Set this env var to filter by number.");
@@ -1075,97 +1066,5 @@ async function handleCallTranscriptCompleted(event: any): Promise<void> {
     }
   } catch (err) {
     console.error("[CallTranscript] handleCallTranscriptCompleted error:", err);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// handleCsInboundMessage
-// Fired when an inbound SMS arrives at the CS line (202-888-5362).
-// Stores the message in a conversation_sessions row with leadSource='cs-inbound'
-// for display in the CS inbox. No AI, no auto-reply — just storage.
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleCsInboundMessage(msg: any): Promise<void> {
-  try {
-    const rawPhone: string = msg.from;
-    const inboundText: string = msg.text ?? msg.body ?? "";
-    const inboundMessageId: string | undefined = msg.id;
-
-    if (!rawPhone || !inboundText.trim()) {
-      console.warn(`[CS] Skipping: empty phone or text (phone=${rawPhone}, text=${inboundText})`);
-      return;
-    }
-
-    const fromPhone = normalizePhone(rawPhone);
-    console.log(`[CS] Inbound SMS from ${fromPhone}: "${inboundText}"`);
-
-    const db = await getDb();
-    if (!db) {
-      console.error("[CS] No DB connection available");
-      return;
-    }
-
-    // Find the most recent cs-inbound session for this phone
-    const sessions = await db
-      .select()
-      .from(conversationSessions)
-      .where(
-        and(
-          eq(conversationSessions.leadPhone, fromPhone),
-          eq(conversationSessions.leadSource, "cs-inbound")
-        )
-      )
-      .orderBy(conversationSessions.createdAt)
-      .limit(10);
-
-    let session = sessions.slice().reverse().find(s => s.stage !== "DONE") ?? sessions[sessions.length - 1];
-
-    // If no session exists, create one
-    if (!session) {
-      const now = Date.now();
-      const initialHistory = JSON.stringify([
-        { role: "user", content: inboundText, ts: now },
-      ]);
-      const [ins] = await db.insert(conversationSessions).values({
-        leadPhone: fromPhone,
-        leadName: null,
-        stage: "QUOTE_SENT",
-        leadSource: "cs-inbound",
-        aiMode: 0, // manual mode — no AI auto-replies
-        messageHistory: initialHistory,
-        lastProcessedMessageId: inboundMessageId,
-      });
-      const sessionId = (ins as any).insertId as number;
-      console.log(`[CS] Created new cs-inbound session ${sessionId} for ${fromPhone}`);
-      return;
-    }
-
-    // Idempotency check
-    if (inboundMessageId && session.lastProcessedMessageId === inboundMessageId) {
-      console.log(`[CS] Duplicate event — messageId ${inboundMessageId} already processed for session ${session.id}. Skipping.`);
-      return;
-    }
-
-    // Append message to history
-    let history: Array<{ role: string; content: string; ts?: number }> = [];
-    try {
-      history = JSON.parse(session.messageHistory ?? "[]");
-    } catch {
-      history = [];
-    }
-
-    history.push({ role: "user", content: inboundText, ts: Date.now() });
-    if (history.length > 20) history = history.slice(-20);
-
-    await db
-      .update(conversationSessions)
-      .set({
-        messageHistory: JSON.stringify(history),
-        lastProcessedMessageId: inboundMessageId,
-      })
-      .where(eq(conversationSessions.id, session.id));
-
-    console.log(`[CS] Appended message to session ${session.id} for ${fromPhone}`);
-  } catch (err) {
-    console.error("[CS] handleCsInboundMessage error:", err);
   }
 }
