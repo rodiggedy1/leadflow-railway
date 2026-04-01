@@ -2524,6 +2524,79 @@ STAGE DETECTION — return the stage the conversation is currently in:
         return { success: true };
       }),
     /**
+     * backfillCsNames — one-shot admin procedure to resolve leadName for all CS sessions
+     * that currently have a null leadName. Checks cleanerProfiles, completedJobs,
+     * cleanerJobs, quoteLeads, and other sessions with the same phone.
+     */
+    backfillCsNames: protectedProcedure
+      .mutation(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+
+        // Fetch all CS sessions with no name
+        const sessions = await db
+          .select({ id: conversationSessions.id, leadPhone: conversationSessions.leadPhone })
+          .from(conversationSessions)
+          .where(
+            and(
+              or(
+                eq(conversationSessions.leadSource, "cs-inbound"),
+                eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+              ),
+              sql`(${conversationSessions.leadName} IS NULL OR ${conversationSessions.leadName} = '')`
+            )
+          );
+
+        let fixed = 0;
+        for (const session of sessions) {
+          const phone = session.leadPhone ?? "";
+          if (!phone) continue;
+          const p10 = digits10(phone);
+          let name: string | null = null;
+
+          // 1. cleanerProfiles
+          if (!name) {
+            const [r] = await db.select({ name: cleanerProfiles.name }).from(cleanerProfiles).where(eq(cleanerProfiles.phone, p10)).limit(1);
+            if (r?.name) name = r.name;
+          }
+          // 2. completedJobs (E.164)
+          if (!name) {
+            const [r] = await db.select({ name: completedJobs.name }).from(completedJobs).where(eq(completedJobs.phone, phone)).limit(1);
+            if (r?.name) name = r.name;
+          }
+          // 3. cleanerJobs.customerName
+          if (!name) {
+            const [r] = await db.select({ customerName: cleanerJobs.customerName }).from(cleanerJobs).where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${p10}`).limit(1);
+            if (r?.customerName) name = r.customerName;
+          }
+          // 4. quoteLeads
+          if (!name) {
+            const [r] = await db.select({ name: quoteLeads.name }).from(quoteLeads).where(sql`REGEXP_REPLACE(${quoteLeads.phone}, '[^0-9]', '') LIKE ${'%' + p10}`).limit(1);
+            if (r?.name) name = r.name;
+          }
+          // 5. Other sessions with same phone that have a name
+          if (!name) {
+            const [r] = await db
+              .select({ leadName: conversationSessions.leadName })
+              .from(conversationSessions)
+              .where(and(
+                eq(conversationSessions.leadPhone, phone),
+                sql`${conversationSessions.leadName} IS NOT NULL AND ${conversationSessions.leadName} != ''`
+              ))
+              .orderBy(desc(conversationSessions.updatedAt))
+              .limit(1);
+            if (r?.leadName) name = r.leadName;
+          }
+
+          if (name) {
+            await db.update(conversationSessions).set({ leadName: name } as any).where(eq(conversationSessions.id, session.id));
+            fixed++;
+          }
+        }
+        return { total: sessions.length, fixed };
+      }),
+    /**
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
      * Used by the Teams right panel in CsInbox.
      */

@@ -29,6 +29,7 @@ import {
   TriangleAlert,
   Users,
   Wallet,
+  RefreshCw,
 } from "lucide-react";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
@@ -347,6 +348,14 @@ export default function CsInbox() {
     },
   });
 
+  const backfillCsNames = trpc.leads.backfillCsNames.useMutation({
+    onSuccess: (data) => {
+      utils.leads.listCsInbox.invalidate();
+      utils.leads.batchResolveNames.invalidate();
+      alert(`Backfill complete: ${data.fixed} of ${data.total} sessions updated.`);
+    },
+  });
+
   // Resolve cleanerProfileId for the selected Teams conversation — MUST be after `selected` is defined
   const selectedPhone = selected?.queue === "Teams" ? (selected?.phone ?? "") : "";
   const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
@@ -456,14 +465,25 @@ export default function CsInbox() {
                 ))}
               </div>
 
-              {/* Show resolved toggle */}
-              <button
-                onClick={() => setShowResolved((v) => !v)}
-                className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {showResolved ? "Hide resolved" : "Show resolved"}
-              </button>
+              {/* Show resolved toggle + backfill names */}
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setShowResolved((v) => !v)}
+                  className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {showResolved ? "Hide resolved" : "Show resolved"}
+                </button>
+                <button
+                  onClick={() => backfillCsNames.mutate()}
+                  disabled={backfillCsNames.isPending}
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 disabled:opacity-50"
+                  title="Fix missing names from database"
+                >
+                  <RefreshCw className={`h-3 w-3 ${backfillCsNames.isPending ? 'animate-spin' : ''}`} />
+                  Fix names
+                </button>
+              </div>
 
               <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium">

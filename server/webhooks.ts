@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -1106,17 +1106,69 @@ async function handleCsInboundMessage(msg: any) {
     setTimeout(() => csMessageDedup.delete(messageId), 60_000);
   }
 
-  // Resolve cleaner name by matching phone against cleanerProfiles.
-  // cleanerProfiles stores 10-digit numbers (e.g. "2405438028") but fromPhone
-  // is E.164 (e.g. "+12405438028"). Strip the leading +1 before querying.
+  // Resolve name by checking multiple sources in priority order:
+  // 1. cleanerProfiles (team members) — determines cs-inbound-cleaner vs cs-inbound
+  // 2. completedJobs (past customers, E.164 phone)
+  // 3. cleanerJobs.customerName (phone stored as (xxx) xxx-xxxx)
+  // 4. quoteLeads (leads who filled out the form)
+  // 5. Other conversationSessions with same phone that have a leadName
   const fromPhoneDigits = fromPhone.replace(/^\+1/, "").replace(/[^\d]/g, "");
+
+  // 1. cleanerProfiles
   const [cleanerProfile] = await db
     .select({ name: cleanerProfiles.name })
     .from(cleanerProfiles)
     .where(eq(cleanerProfiles.phone, fromPhoneDigits))
     .limit(1);
   const isCleaner = !!cleanerProfile;
-  const resolvedName = cleanerProfile?.name ?? null;
+
+  let resolvedName: string | null = cleanerProfile?.name ?? null;
+
+  if (!resolvedName) {
+    // 2. completedJobs (E.164 format)
+    const [cj] = await db
+      .select({ name: completedJobs.name })
+      .from(completedJobs)
+      .where(eq(completedJobs.phone, fromPhone))
+      .limit(1);
+    if (cj?.name) resolvedName = cj.name;
+  }
+
+  if (!resolvedName) {
+    // 3. cleanerJobs.customerName (formatted phone)
+    const [cjob] = await db
+      .select({ customerName: cleanerJobs.customerName })
+      .from(cleanerJobs)
+      .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${fromPhoneDigits}`)
+      .limit(1);
+    if (cjob?.customerName) resolvedName = cjob.customerName;
+  }
+
+  if (!resolvedName) {
+    // 4. quoteLeads
+    const [ql] = await db
+      .select({ name: quoteLeads.name })
+      .from(quoteLeads)
+      .where(sql`REGEXP_REPLACE(${quoteLeads.phone}, '[^0-9]', '') LIKE ${'%' + fromPhoneDigits}`)
+      .limit(1);
+    if (ql?.name) resolvedName = ql.name;
+  }
+
+  if (!resolvedName) {
+    // 5. Other conversationSessions with same phone that have a leadName
+    const [otherSession] = await db
+      .select({ leadName: conversationSessions.leadName })
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, fromPhone),
+          sql`${conversationSessions.leadName} IS NOT NULL AND ${conversationSessions.leadName} != ''`
+        )
+      )
+      .orderBy(desc(conversationSessions.updatedAt))
+      .limit(1);
+    if (otherSession?.leadName) resolvedName = otherSession.leadName;
+  }
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
   // Find the most recent matching session for this phone
@@ -1148,12 +1200,17 @@ async function handleCsInboundMessage(msg: any) {
     history.push({ role: "user", content: inboundText, ts: now });
     if (history.length > 20) history = history.slice(-20);
 
+    // Also backfill leadName if it was previously null and we now resolved one
+    const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date() };
+    if (resolvedName && !existingSession.leadName) {
+      updatePayload.leadName = resolvedName;
+    }
     await db
       .update(conversationSessions)
-      .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() })
+      .set(updatePayload as any)
       .where(eq(conversationSessions.id, existingSession.id));
 
-    console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}`);
+    console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}${resolvedName && !existingSession.leadName ? ` (backfilled name: ${resolvedName})` : ""}`);
   } else {
     // Create new cs-inbound session
     const history = [{ role: "user", content: inboundText, ts: now }];
