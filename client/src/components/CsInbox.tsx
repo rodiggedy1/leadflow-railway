@@ -249,7 +249,8 @@ function jobStatusStyle(s: JobStatus): string {
   }
 }
 
-export default function CsInbox({ onSwitchTab }: { onSwitchTab?: (tab: "today" | "channels" | "cs") => void } = {}) {
+type CsInboxProps = { onSwitchTab?: (tab: "today" | "channels" | "cs") => void };
+export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [activeQueue, setActiveQueue] = useState<Queue | "All">("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -389,6 +390,9 @@ export default function CsInbox({ onSwitchTab }: { onSwitchTab?: (tab: "today" |
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   const autoDraftedForId = useRef<number | null>(null);
+  // Tracks the last conversation the user explicitly navigated to.
+  // Only updated on user click — never by background data refreshes.
+  const userNavigatedToId = useRef<number | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const csQuickReply = trpc.leads.csQuickReply.useMutation({
@@ -452,25 +456,25 @@ export default function CsInbox({ onSwitchTab }: { onSwitchTab?: (tab: "today" |
     }
   }, [effectiveSelectedId]);
 
-  // Auto-draft: when agent opens a conversation, pre-fill compose with an AI suggestion
-  useEffect(() => {
-    if (!selected) return;
-    if (autoDraftedForId.current === selected.id) return; // already drafted for this conversation
-    autoDraftedForId.current = selected.id;
+  // Auto-draft: only fires when the user explicitly clicks a conversation.
+  // Background data refreshes (new inbound messages, re-sorts) never trigger this.
+  function triggerAutoDraft(conv: typeof selected) {
+    if (!conv) return;
+    if (autoDraftedForId.current === conv.id) return; // already drafted for this conversation
+    autoDraftedForId.current = conv.id;
     setCompose(""); // clear previous draft
     setAutoDraftLoading(true);
     csQuickReply.mutate({
       action: "ai_suggest",
-      clientName: selected.name ?? undefined,
+      clientName: conv.name ?? undefined,
       messageHistory: JSON.stringify(
-        selected.messages.map((m) => ({
+        conv.messages.map((m) => ({
           role: m.sender === "client" ? "user" : "assistant",
           content: m.text,
         }))
       ),
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id]);
+  }
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -602,6 +606,8 @@ export default function CsInbox({ onSwitchTab }: { onSwitchTab?: (tab: "today" |
                         if (found) {
                           setActiveQueue("All");
                           setSelectedId(found.id);
+                          userNavigatedToId.current = found.id;
+                          triggerAutoDraft(found);
                         }
                       }}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm"
@@ -638,7 +644,11 @@ export default function CsInbox({ onSwitchTab }: { onSwitchTab?: (tab: "today" |
                     return (
                       <button
                         key={conversation.id}
-                        onClick={() => setSelectedId(conversation.id)}
+                        onClick={() => {
+                          setSelectedId(conversation.id);
+                          userNavigatedToId.current = conversation.id;
+                          triggerAutoDraft(conversation);
+                        }}
                         className={`w-full rounded-[24px] border bg-white px-4 py-4 text-left shadow-sm transition hover:shadow-md ${
                           selected.id === conversation.id ? "border-slate-900" : "border-slate-200"
                         }`}
