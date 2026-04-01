@@ -838,3 +838,8 @@
 ## Bug Fixes (Apr 1)
 - [x] Fix @mention awareness: use myNames set (all possible names) for multi-name matching; fix prevTagCountRef to start at -1
 - [x] Fix CS inbox: add syncCsOutboundMessages (polls OpenPhone API after each inbound); add "Sync OpenPhone" button in CS thread header
+## Team Magic Link in CS Chat
+- [x] Add "Team actions" card to Teams panel in CS inbox right sidebar
+- [x] "Send magic link" button — generates cleaner portal one-tap login link and sends via SMS
+- [x] "Copy magic link" button — generates link and copies to clipboard
+- [x] Graceful fallback message when no cleaner profile is linked to the conversation

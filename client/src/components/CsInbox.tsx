@@ -45,8 +45,11 @@ import {
   X,
   Smile,
   ExternalLink,
+  Link2,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner";
@@ -409,6 +412,38 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       utils.leads.listCsInbox.invalidate();
     },
   });
+
+  // Magic link for Teams conversations
+  const [magicLinkAction, setMagicLinkAction] = useState<"send" | "copy" | null>(null);
+  const getMagicLink = trpc.cleaner.getMagicLink.useMutation({
+    onSuccess: async ({ url, cleanerName }) => {
+      if (magicLinkAction === "copy") {
+        navigator.clipboard.writeText(url).then(() => {
+          toast.success(`Magic link for ${cleanerName} copied!`);
+        }).catch(() => {
+          toast.info(`Magic link: ${url}`, { duration: 10000 });
+        });
+      } else if (magicLinkAction === "send" && selected && selected.id > 0) {
+        const msg = `Here's your one-tap login link to the portal:\n${url}`;
+        sendMessage.mutate({ sessionId: selected.id, message: msg, fromNumberId: "PN0wVLcpCq" });
+        toast.success(`Magic link sent to ${cleanerName}!`);
+      }
+      setMagicLinkAction(null);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to generate magic link");
+      setMagicLinkAction(null);
+    },
+  });
+
+  const handleMagicLink = (action: "send" | "copy") => {
+    if (!cleanerProfile?.id) {
+      toast.error("No cleaner profile linked to this conversation.");
+      return;
+    }
+    setMagicLinkAction(action);
+    getMagicLink.mutate({ cleanerProfileId: cleanerProfile.id, origin: "https://quote.maidinblack.com" });
+  };
 
   function fireQuickReply(action: "send_quote" | "make_it_right" | "refer_friend" | "running_late" | "on_the_way" | "review_rebook" | "ai_suggest") {
     if (!selected) return;
@@ -1063,6 +1098,48 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             </div>
                           );
                         })
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Team Actions — magic link */}
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-4">Team actions</div>
+                    <div className="space-y-3">
+                      {/* Send magic link via SMS */}
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl justify-start h-12 w-full border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800 transition-colors"
+                        onClick={() => handleMagicLink("send")}
+                        disabled={getMagicLink.isPending || !cleanerProfile?.id}
+                        title={cleanerProfile?.id ? "Send one-tap login link via SMS" : "No cleaner profile linked to this conversation"}
+                      >
+                        {getMagicLink.isPending && magicLinkAction === "send"
+                          ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          : <Link2 className="h-4 w-4 mr-2" />
+                        }
+                        Send magic link
+                      </Button>
+                      {/* Copy magic link to clipboard */}
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl justify-start h-12 w-full border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+                        onClick={() => handleMagicLink("copy")}
+                        disabled={getMagicLink.isPending || !cleanerProfile?.id}
+                        title={cleanerProfile?.id ? "Copy one-tap login link to clipboard" : "No cleaner profile linked to this conversation"}
+                      >
+                        {getMagicLink.isPending && magicLinkAction === "copy"
+                          ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          : <Copy className="h-4 w-4 mr-2" />
+                        }
+                        Copy magic link
+                      </Button>
+                      {!cleanerProfile?.id && (
+                        <p className="text-xs text-slate-400 text-center">
+                          No cleaner profile found for this number
+                        </p>
                       )}
                     </div>
                   </CardContent>
