@@ -295,17 +295,6 @@ export default function CsInbox() {
     },
   });
 
-  // Resolve cleanerProfileId for the selected Teams conversation
-  const selectedPhone = selected?.queue === "Teams" ? (selected?.phone ?? "") : "";
-  const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
-    { phone: selectedPhone },
-    { enabled: !!selectedPhone, refetchOnWindowFocus: false }
-  );
-  const { data: cleanerTodayJobs } = trpc.leads.getCleanerTodayJobs.useQuery(
-    { cleanerProfileId: cleanerProfile?.id ?? 0 },
-    { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 }
-  );
-
   const filtered = useMemo(() => {
     return displayConversations.filter((c) => {
       const matchesQueue = activeQueue === "All" || c.queue === activeQueue;
@@ -319,6 +308,17 @@ export default function CsInbox() {
 
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
+
+  // Resolve cleanerProfileId for the selected Teams conversation — MUST be after `selected` is defined
+  const selectedPhone = selected?.queue === "Teams" ? (selected?.phone ?? "") : "";
+  const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
+    { phone: selectedPhone },
+    { enabled: !!selectedPhone, refetchOnWindowFocus: false }
+  );
+  const { data: cleanerTodayJobs } = trpc.leads.getCleanerTodayJobs.useQuery(
+    { cleanerProfileId: cleanerProfile?.id ?? 0 },
+    { enabled: !!cleanerProfile?.id, refetchOnWindowFocus: false, refetchInterval: 60_000 }
+  );
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
