@@ -799,7 +799,10 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
   const handleSetActiveTab = (tab: "today" | "channels" | "cs") => {
-    if (tab === "channels" && activeTab === "today") {
+    if (tab === "cs") {
+      setActiveTab("cs");
+      setSidebarCollapsed(true);
+    } else if (tab === "channels" && activeTab === "today") {
       // Coming from jobs view → land on command channel, sidebar collapsed
       setActiveTab("channels");
       setActiveChannel("command");
