@@ -67,7 +67,7 @@ type Conversation = {
   phone: string;
   stats: { bookings: number; rating: string; complaints: number };
   aiInsight: string;
-  messages: { sender: MsgSender; text: string; time: string }[];
+  messages: { sender: MsgSender; text: string; time: string; senderName?: string; media?: string[] }[];
   quickActions: string[];
 };
 
@@ -284,7 +284,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (!csData) return conversations; // loading — show static demo data
     if (csData.length === 0) return conversations; // no real sessions — show static demo data
     return csData.map((row) => {
-      let msgs: { role: string; content: string; ts?: number; senderName?: string }[] = [];
+      let msgs: { role: string; content: string; ts?: number; senderName?: string; media?: string[] }[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
       const lastMsg = msgs.filter((m) => m.role === "user").slice(-1)[0];
       const lastTs = msgs.slice(-1)[0]?.ts;
@@ -320,6 +320,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           text: m.content,
           time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
           media: (m.media ?? []) as string[],
+          senderName: m.senderName,
         })),
         quickActions: [],
         rawName: row.leadName ?? "",
@@ -798,7 +799,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       transition={{ delay: idx * 0.04 }}
                       className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                     >
-                      <div className="text-xs uppercase tracking-wide opacity-60">{message.sender}</div>
+                      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
+                        <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender}</span>
+                        {message.senderName === "OpenPhone" && (
+                          <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 normal-case tracking-normal">via OpenPhone</span>
+                        )}
+                      </div>
                       {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
                       {message.media && message.media.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">
