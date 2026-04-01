@@ -21,7 +21,7 @@
  */
 
 import type { Express } from "express";
-import { and, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
@@ -94,6 +94,14 @@ export function registerWebhookRoutes(app: Express) {
       //   2. Env is set + payload has ID + they differ → block (wrong number)
       //   3. Env is set + payload has NO ID            → allow (older API versions omit it)
       //   4. Env is NOT set                            → allow all (misconfigured — log a warning)
+      // ── CS line intercept ──────────────────────────────────────────────────
+      // Messages to the CS line (202-888-5362, phoneNumberId=PN0wVLcpCq) are
+      // stored as cs-inbound sessions and skipped from the main lead AI engine.
+      const csNumberId = ENV.openPhoneCsNumberId;
+      if (csNumberId && msg.phoneNumberId === csNumberId) {
+        await handleCsInboundMessage(msg);
+        return;
+      }
       const configuredNumberId = ENV.openPhoneNumberId;
       if (!configuredNumberId) {
         console.warn("[Webhook] OPENPHONE_PHONE_NUMBER_ID is not set — processing messages from ALL numbers. Set this env var to filter by number.");
@@ -1066,5 +1074,67 @@ async function handleCallTranscriptCompleted(event: any): Promise<void> {
     }
   } catch (err) {
     console.error("[CallTranscript] handleCallTranscriptCompleted error:", err);
+  }
+}
+
+/**
+ * handleCsInboundMessage — stores inbound texts to the CS line (202-888-5362)
+ * as cs-inbound sessions without running AI or auto-reply logic.
+ */
+async function handleCsInboundMessage(msg: any) {
+  const db = await getDb();
+  if (!db) {
+    console.error("[CS] No DB connection");
+    return;
+  }
+
+  const fromPhone = msg.from;
+  const inboundText = msg.text ?? msg.body ?? "";
+  const now = Date.now();
+
+  // Find the most recent cs-inbound session for this phone
+  const [existingSession] = await db
+    .select()
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.leadPhone, fromPhone),
+        eq(conversationSessions.leadSource, "cs-inbound")
+      )
+    )
+    .orderBy(desc(conversationSessions.updatedAt))
+    .limit(1);
+
+  if (existingSession) {
+    // Append to existing session
+    let history: Array<{ role: string; content: string; ts?: number }> = [];
+    try { history = JSON.parse(existingSession.messageHistory ?? "[]"); } catch { history = []; }
+    history.push({ role: "user", content: inboundText, ts: now });
+    if (history.length > 20) history = history.slice(-20);
+
+    await db
+      .update(conversationSessions)
+      .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() })
+      .where(eq(conversationSessions.id, existingSession.id));
+
+    console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}`);
+  } else {
+    // Create new cs-inbound session
+    const history = [{ role: "user", content: inboundText, ts: now }];
+    const [result] = await db
+      .insert(conversationSessions)
+      .values({
+        leadPhone: fromPhone,
+        leadName: null,
+        leadEmail: null,
+        leadSource: "cs-inbound",
+        messageHistory: JSON.stringify(history),
+        stage: "OPEN",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+    const sessionId = (result as any).insertId;
+    console.log(`[CS] Created new cs-inbound session ${sessionId} for ${fromPhone}`);
   }
 }

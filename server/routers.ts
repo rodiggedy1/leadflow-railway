@@ -2482,6 +2482,23 @@ STAGE DETECTION — return the stage the conversation is currently in:
         broadcastOpsUpdate("lead_update");
         return { success: true, leadId, sessionId };
       }),
+
+    /**
+     * listCsInbox — list all sessions that came in via the CS line (202-888-5362).
+     * Accessible to all agents and admins.
+     */
+    listCsInbox: agentProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.leadSource, "cs-inbound"))
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(100);
+        return sessions;
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..
