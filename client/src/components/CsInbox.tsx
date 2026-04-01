@@ -30,6 +30,9 @@ import {
   Users,
   Wallet,
   RefreshCw,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
@@ -303,6 +306,7 @@ export default function CsInbox() {
           time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
         })),
         quickActions: [],
+        rawName: row.leadName ?? "",
       };
     });
   }, [csData, nameMap]);
@@ -345,6 +349,15 @@ export default function CsInbox() {
       const nextConv = f[currentIdx + 1] ?? f[currentIdx - 1] ?? null;
       setSelectedId(nextConv?.id ?? null);
       utils.leads.listCsInbox.invalidate();
+    },
+  });
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const updateCsName = trpc.leads.updateCsName.useMutation({
+    onSuccess: () => {
+      utils.leads.listCsInbox.invalidate();
+      setEditingName(false);
     },
   });
 
@@ -559,7 +572,40 @@ export default function CsInbox() {
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <h2 className="text-3xl font-semibold tracking-tight">{selected.name}</h2>
+                      {editingName ? (
+                        <form
+                          className="flex items-center gap-2"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (selected.id > 0) updateCsName.mutate({ sessionId: selected.id, name: nameInput });
+                          }}
+                        >
+                          <Input
+                            autoFocus
+                            value={nameInput}
+                            onChange={(e) => setNameInput(e.target.value)}
+                            className="h-9 text-lg font-semibold w-48"
+                            placeholder="Enter name…"
+                          />
+                          <Button type="submit" size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" disabled={updateCsName.isPending}>
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-slate-400" onClick={() => setEditingName(false)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </form>
+                      ) : (
+                        <div className="flex items-center gap-2 group">
+                          <h2 className="text-3xl font-semibold tracking-tight">{selected.name}</h2>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600"
+                            onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
+                            title="Edit name"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                       <Badge className={`rounded-full border ${tone.tone} hover:bg-transparent`}>
                         {selected.queue}
                       </Badge>
