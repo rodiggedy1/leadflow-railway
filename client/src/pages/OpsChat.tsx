@@ -2505,6 +2505,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setSelectedJobId(jobId);
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
+            onSwitchToCS={() => handleSetActiveTab("cs")}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
               setAwayStatusMutation.mutate({ status: status as "away_sec" | "lunch" | "back15" | "eod" | null });

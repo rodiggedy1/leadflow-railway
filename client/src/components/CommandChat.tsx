@@ -25,7 +25,8 @@ import {
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
-  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, Briefcase, UserPlus } from "lucide-react";
+  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, Briefcase, UserPlus,
+  CalendarDays, Headphones } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,8 +59,10 @@ interface CommandChatProps {
   onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }, quickAction?: string) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
-  /** Called when user clicks "Today Ops" in the in-panel tab switcher */
+  /** Called when user clicks "Ops" in the in-panel tab switcher */
   onSwitchToToday: () => void;
+  /** Called when user clicks "CS" in the in-panel tab switcher */
+  onSwitchToCS?: () => void;
   /** Current away status of the calling agent (null = available) */
   awayStatus?: string | null;
   /** Called when agent sets or clears away status */
@@ -514,7 +517,7 @@ function HotLeadsTray({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, awayStatus, onSetAwayStatus, senderStatusMap }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
@@ -1192,17 +1195,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {/* View switcher pill */}
-          <div className="flex bg-slate-100 rounded-full p-1 gap-1">
+          <div className="flex bg-slate-100 rounded-2xl border border-slate-200 p-1 gap-0.5">
             <button
               onClick={onSwitchToToday}
-              className="flex-1 text-xs font-semibold rounded-full py-1.5 transition-all text-slate-500 hover:text-slate-800"
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-xl py-2 transition-all text-slate-500 hover:text-slate-800 hover:bg-white/60"
             >
-              Today Ops
+              <CalendarDays className="w-3.5 h-3.5" />
+              Ops
             </button>
             <button
-              className="flex-1 text-xs font-semibold rounded-full py-1.5 bg-slate-900 text-white shadow-sm"
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-xl py-2 bg-slate-900 text-white shadow-sm"
             >
-              Channels
+              <MessageSquare className="w-3.5 h-3.5" />
+              Chat
+            </button>
+            <button
+              onClick={onSwitchToCS}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-xl py-2 transition-all text-slate-500 hover:text-slate-800 hover:bg-white/60"
+            >
+              <Headphones className="w-3.5 h-3.5" />
+              CS
             </button>
           </div>
 

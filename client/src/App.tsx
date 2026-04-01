@@ -4,9 +4,8 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import React, { lazy, Suspense, useEffect, useState } from "react";
-import { useOpsChatWindow, OpsChatProvider, type OpsChatTab } from "./hooks/useOpsChatWindow";
-import { CalendarDays, MessageSquare, HeadphonesIcon } from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
 import { trpc } from "./lib/trpc";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -104,19 +103,11 @@ function Router() {
 /**
  * GlobalOpsChat
  * Renders OpsChat as a fixed full-screen overlay — never navigates away from
- * the current page. The 3-button pill nav opens it to a specific tab.
+ * the current page. The bubble opens it; Minimize collapses it back to the bubble.
  */
-
-// Nav tab definitions
-const NAV_TABS: { id: OpsChatTab; label: string; icon: React.ReactNode }[] = [
-  { id: "today",    label: "Ops",  icon: <CalendarDays className="w-4 h-4" /> },
-  { id: "channels", label: "Chat", icon: <MessageSquare className="w-4 h-4" /> },
-  { id: "cs",       label: "CS",   icon: <HeadphonesIcon className="w-4 h-4" /> },
-];
-
 function GlobalOpsChat() {
   const [location] = useLocation();
-  const { state, openToTab, minimize, close, activeTab: ctxActiveTab } = useOpsChatWindow();
+  const { state, open, minimize, close } = useOpsChatWindow();
   const { user } = useAuth();
 
   // Fetch unread counts for the badge — only when authenticated and OpsChat is not open
@@ -128,7 +119,7 @@ function GlobalOpsChat() {
     refetchInterval: 30_000,
   });
 
-  const chatUnread = unreadCounts
+  const totalUnread = unreadCounts
     ? (unreadCounts.urgent + unreadCounts.dispatch + unreadCounts.general + unreadCounts.cleaners)
     : 0;
 
@@ -150,10 +141,6 @@ function GlobalOpsChat() {
     if (isEligible && !hasBeenMounted) setHasBeenMounted(true);
   }, [isEligible, hasBeenMounted]);
 
-  // Determine which tab is currently active (for highlighting the nav button)
-  // When OpsChat is open, use the context's activeTab (synced from inside OpsChat).
-  const activeNavTab = state === "open" ? ctxActiveTab : null;
-
   // Only render OpsChat if we are on (or have visited) an eligible route.
   // This prevents the sound hooks from being active on the public quote form.
   const shouldRenderOpsChat = hasBeenMounted;
@@ -172,42 +159,36 @@ function GlobalOpsChat() {
         </div>
       )}
 
-      {/* 3-button pill nav — always visible on eligible routes */}
-      {isEligible && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <div className="flex items-center gap-1 rounded-2xl bg-slate-900/95 backdrop-blur-sm shadow-2xl border border-white/10 p-1.5">
-            {NAV_TABS.map((tab) => {
-              const isActive = activeNavTab === tab.id;
-              const unread = tab.id === "channels" ? chatUnread : 0;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    if (state === "open" && ctxActiveTab === tab.id) {
-                      minimize();
-                    } else {
-                      openToTab(tab.id);
-                    }
-                  }}
-                  className={[
-                    "relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150",
-                    isActive
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-400 hover:text-white hover:bg-white/10",
-                  ].join(" ")}
-                  aria-label={tab.label}
-                >
-                  {tab.icon}
-                  <span className="tracking-wide">{tab.label}</span>
-                  {unread > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                      {unread > 99 ? "99+" : unread}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+      {/* Floating bubble — only visible on eligible routes when not open */}
+      {isEligible && state !== "open" && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
+          <button
+            onClick={open}
+            className="relative flex items-center gap-3 rounded-full bg-slate-900 text-white shadow-2xl px-5 py-3.5 hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+            aria-label="Open MIB Chat"
+          >
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/MIB_logo_final_138df3e8.png"
+              alt="MIB"
+              className="w-7 h-7 rounded-full object-cover"
+            />
+            <span className="text-sm font-bold tracking-wide">MIB Chat</span>
+            {/* Unread badge */}
+            {totalUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 shadow">
+                {totalUnread > 99 ? "99+" : totalUnread}
+              </span>
+            )}
+          </button>
+          {state === "minimized" && (
+            <button
+              onClick={close}
+              className="w-8 h-8 rounded-full bg-slate-700 text-white shadow-lg flex items-center justify-center hover:bg-slate-600 transition-all hover:scale-105 active:scale-95 text-base leading-none"
+              aria-label="Dismiss MIB Chat"
+            >
+              ×
+            </button>
+          )}
         </div>
       )}
     </>

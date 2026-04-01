@@ -31,6 +31,9 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  CalendarDays,
+  MessageSquare,
+  Headphones,
 } from "lucide-react";
 import type { OpsChatWindowState } from "@/hooks/useOpsChatWindow";
 
@@ -141,7 +144,7 @@ export default function OpsChatPanel({ state, onOpen, onMinimize, onClose }: Ops
   const callerName = user?.name ?? agentMe?.name ?? "Office";
 
   // Panel state
-  const [activeTab, setActiveTab] = useState<"today" | "channels">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">("today");
   const [activeChannel, setActiveChannel] = useState("dispatch");
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [composer, setComposer] = useState("");
@@ -279,16 +282,21 @@ export default function OpsChatPanel({ state, onOpen, onMinimize, onClose }: Ops
             {/* Tab toggle */}
             <div className="px-3 pt-3 pb-2">
               <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-0.5">
-                {(["today", "channels"] as const).map((tab) => (
+                {([
+                  { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3 h-3" /> },
+                  { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3 h-3" /> },
+                  { id: "cs"       as const, label: "CS",   icon: <Headphones    className="w-3 h-3" /> },
+                ]).map((tab) => (
                   <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition",
-                      activeTab === tab ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                      "flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium transition",
+                      activeTab === tab.id ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
                     )}
                   >
-                    {tab === "today" ? "Today" : "Channels"}
+                    {tab.icon}
+                    {tab.label}
                   </button>
                 ))}
               </div>
