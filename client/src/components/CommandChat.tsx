@@ -1286,20 +1286,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Left drag handle + collapse-expand toggle ── */}
       <div
         className="relative flex-none flex items-center justify-center group"
-        style={{ width: 16, cursor: "col-resize", zIndex: 10 }}
+        style={{ width: 8, cursor: "col-resize", zIndex: 10 }}
         onMouseDown={leftCollapsed ? undefined : startDrag("left")}
       >
         {/* Drag track */}
         <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
-        {/* Expand/collapse pill button — always visible, centered at 40% down */}
+        {/* Expand/collapse pill button — always visible */}
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setLeftCollapsed(v => !v)}
           title={leftCollapsed ? "Expand panel" : "Collapse panel"}
-          className="absolute z-20 top-[40%] -translate-y-1/2 w-7 h-14 rounded-full bg-white border border-slate-300 shadow-md flex items-center justify-center text-slate-500 hover:text-slate-800 hover:border-slate-500 hover:shadow-lg transition-all"
+          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all"
         >
-          {leftCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          {leftCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
         </button>
       </div>
 
@@ -2395,7 +2395,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Right drag handle + collapse-expand toggle ── */}
       <div
         className="relative flex-none flex items-center justify-center group"
-        style={{ width: 16, cursor: "col-resize", zIndex: 10 }}
+        style={{ width: 8, cursor: "col-resize", zIndex: 10 }}
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
       >
         <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
@@ -2404,9 +2404,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setRightCollapsed(v => !v)}
           title={rightCollapsed ? "Expand panel" : "Collapse panel"}
-          className="absolute z-20 top-[40%] -translate-y-1/2 w-7 h-14 rounded-full bg-white border border-slate-300 shadow-md flex items-center justify-center text-slate-500 hover:text-slate-800 hover:border-slate-500 hover:shadow-lg transition-all"
+          className="absolute z-20 w-5 h-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-all"
         >
-          {rightCollapsed ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          {rightCollapsed ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         </button>
       </div>
 
