@@ -202,7 +202,7 @@ function queueTone(queue: Queue) {
 }
 
 export default function CsInbox() {
-  const [activeQueue, setActiveQueue] = useState<Queue | "All">("Needs attention");
+  const [activeQueue, setActiveQueue] = useState<Queue | "All">("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
