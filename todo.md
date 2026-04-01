@@ -793,3 +793,11 @@
 ## New Application Card Not Appearing in Command Chat
 - [x] Fix submitApplication: insert new_application card into channel "command" not "general"
 - [x] Also broadcast lead_update SSE after inserting so the card appears instantly without a page refresh
+
+## Call Assist Live Mode (Voice Teleprompter)
+- [x] Add "Live Mode" toggle to Call Assist panel
+- [x] Push-to-listen mic button using Web Speech API (hold while customer talks)
+- [x] Stream live transcript into context as customer speaks
+- [x] Debounced AI response generation as transcript builds (1.2s after last word)
+- [x] Large-text teleprompter display for AI suggested response (3xl in live mode)
+- [x] Auto-submit after 1.2s silence; mic cleanup on reset/unmount
