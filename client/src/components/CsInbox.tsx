@@ -631,14 +631,14 @@ export default function CsInbox() {
               </div>
 
               <ScrollArea className="flex-1 min-h-0 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
-                <div className="space-y-3">
+                <div className="flex flex-col space-y-3">
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
                       key={`${message.time}-${idx}`}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.04 }}
-                      className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
+                      className={`self-start max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                     >
                       <div className="text-xs uppercase tracking-wide opacity-60">{message.sender}</div>
                       <div className="mt-1.5 text-sm leading-6">{message.text}</div>
