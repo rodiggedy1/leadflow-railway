@@ -808,3 +808,8 @@
 - [x] Add audio source selector UI (Mic only / System audio / Both)
 - [x] Handle permission denial gracefully with clear user instructions
 - [x] Redesign command center navigation with icons (Ops / Chat / CS) and make it accessible from all admin pages
+
+- [x] Filter cs-inbound and cs-inbound-cleaner sessions from all commandCenterRouter queries (13 query locations)
+- [x] Filter cs-inbound and cs-inbound-cleaner sessions from daily summary query in routers.ts
+- [x] Verify leads.list and leads.stats already had cs-inbound filter in place
+- [x] Confirm TypeScript compilation passes with zero errors (tsc --noEmit exit 0)

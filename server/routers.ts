@@ -102,6 +102,8 @@ export const appRouter = router({
         //      This works regardless of stage — auto-replies being off means stage
         //      stays at REACTIVATION even after a reply, so we check the message log.
         const sourceFilter = and(
+          // Never show CS inbox sessions in the lead list
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner'))`,
           // Never show pure review-flow sessions in the lead list
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
           or(
@@ -315,7 +317,8 @@ export const appRouter = router({
         // ── Visibility filters ────────────────────────────────────────────────────
         // Organic: null source OR non-campaign sources (form, widget, voice, bark…)
         const organicFilter = and(
-          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('review'))`,
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'review'))`,
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner'))`,
           or(
             sql`${conversationSessions.leadSource} IS NULL`,
             sql`(
@@ -342,7 +345,7 @@ export const appRouter = router({
         );
         // Combined (what the leads list shows)
         const listVisibilityFilter = and(
-          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'review'))`,
           or(organicFilter, campaignFilter, reviewRebookingFilter)
         );
 
@@ -1292,7 +1295,7 @@ export const appRouter = router({
       const yesterdayEnd = new Date(yesterdayStart);
       yesterdayEnd.setUTCHours(23, 59, 59, 999);
 
-      // All sessions created yesterday (excluding review sessions)
+      // All sessions created yesterday (excluding review and CS inbox sessions)
       const sessions = await db
         .select()
         .from(conversationSessions)
@@ -1300,7 +1303,8 @@ export const appRouter = router({
           and(
             gte(conversationSessions.createdAt, yesterdayStart),
             lte(conversationSessions.createdAt, yesterdayEnd),
-            ne(conversationSessions.leadSource, "review")
+            ne(conversationSessions.leadSource, "review"),
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner'))`
           )
         );
 

@@ -1,4 +1,4 @@
-import { bigint, decimal, index, int, longtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, index, int, json, longtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -1823,3 +1823,14 @@ export const interviewChunks = mysqlTable("interview_chunks", {
   idxSession: index("idx_ichunk_session").on(table.sessionId),
 }));
 export type InterviewChunk = typeof interviewChunks.$inferSelect;
+
+// Single-row config table for runtime feature flags
+// pausedServices: JSON array of serviceType strings currently paused
+// e.g. ["Carpet Cleaning", "Window Cleaning"]
+// To unpause: remove the entry from the array in the DB panel — no deploy needed
+export const systemConfig = mysqlTable("system_config", {
+  id: int("id").autoincrement().primaryKey(),
+  pausedServices: json("pausedServices").$type<string[]>().notNull().default([]),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SystemConfig = typeof systemConfig.$inferSelect;
