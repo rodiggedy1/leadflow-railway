@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { motion } from "framer-motion";
@@ -203,7 +203,9 @@ function queueTone(queue: Queue) {
 export default function CsInbox() {
   const [activeQueue, setActiveQueue] = useState<Queue | "All">("Needs attention");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(1);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [compose, setCompose] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const utils = trpc.useUtils();
   useOpsStream({
@@ -212,8 +214,59 @@ export default function CsInbox() {
     },
   });
 
+  const { data: csData } = trpc.leads.listCsInbox.useQuery(undefined, { refetchOnWindowFocus: false });
+
+  // Map DB rows to Conversation shape
+  const liveConversations: Conversation[] = useMemo(() => {
+    if (!csData) return conversations;
+    if (csData.length === 0) return [];
+    return csData.map((row) => {
+      let msgs: { role: string; content: string; ts?: number; senderName?: string }[] = [];
+      try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
+      const lastMsg = msgs.filter((m) => m.role === "user").slice(-1)[0];
+      const lastTs = msgs.slice(-1)[0]?.ts;
+      const waitMs = lastTs ? Date.now() - lastTs : 0;
+      const waitMin = Math.round(waitMs / 60000);
+      const waitStr = waitMin < 60 ? `${waitMin} min` : `${Math.round(waitMin / 60)} hr`;
+      const name = row.leadName || row.leadPhone || "Unknown";
+      const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+      return {
+        id: row.id,
+        name,
+        initials,
+        queue: "Needs attention" as Queue,
+        service: "CS inquiry",
+        location: row.leadPhone || "",
+        amount: "",
+        lastMessage: lastMsg?.content || "",
+        wait: waitStr,
+        status: "CS line",
+        sentiment: undefined,
+        tags: ["CS"],
+        phone: row.leadPhone || "",
+        stats: { bookings: 0, rating: "—", complaints: 0 },
+        aiInsight: "",
+        messages: msgs.map((m) => ({
+          sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system" as MsgSender,
+          text: m.content,
+          time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+        })),
+        quickActions: [],
+      };
+    });
+  }, [csData]);
+
+  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
+
+  const sendMessage = trpc.leads.sendMessage.useMutation({
+    onSuccess: () => {
+      setCompose("");
+      utils.leads.listCsInbox.invalidate();
+    },
+  });
+
   const filtered = useMemo(() => {
-    return conversations.filter((c) => {
+    return displayConversations.filter((c) => {
       const matchesQueue = activeQueue === "All" || c.queue === activeQueue;
       const q = query.trim().toLowerCase();
       const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.tags.join(" ")]
@@ -221,10 +274,18 @@ export default function CsInbox() {
         .toLowerCase();
       return matchesQueue && (!q || hay.includes(q));
     });
-  }, [activeQueue, query]);
+  }, [activeQueue, query, displayConversations]);
 
-  const selected = filtered.find((c) => c.id === selectedId) || filtered[0] || conversations[0];
-  const tone = queueTone(selected.queue);
+  const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
+  const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [selected?.messages?.length]);
+  const tone = selected ? queueTone(selected.queue) : queueMeta[0];
 
   const priorityItems = [
     { name: "Jillian", reason: "waiting 12 min • job starts soon", queue: "Needs attention" },
@@ -433,9 +494,9 @@ export default function CsInbox() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)] min-h-[420px]">
+              <ScrollArea className="flex-1 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)] min-h-[420px]" ref={scrollRef}>
                 <div className="space-y-3">
-                  {selected.messages.map((message, idx) => (
+                  {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
                       key={`${message.time}-${idx}`}
                       initial={{ opacity: 0, y: 8 }}
@@ -461,12 +522,29 @@ export default function CsInbox() {
                 </div>
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-start gap-3">
-                    <div className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-400 min-h-[96px]">
-                      Type a message or use AI suggestion...
-                    </div>
-                    <Button className="rounded-2xl h-[96px] px-5">
+                    <textarea
+                      className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-900 min-h-[96px] resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 text-sm"
+                      placeholder="Type a message or use AI suggestion..."
+                      value={compose}
+                      onChange={(e) => setCompose(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
+                          e.preventDefault();
+                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim() });
+                        }
+                      }}
+                    />
+                    <Button
+                      className="rounded-2xl h-[96px] px-5"
+                      disabled={!compose.trim() || sendMessage.isPending || !selected}
+                      onClick={() => {
+                        if (compose.trim() && selected) {
+                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim() });
+                        }
+                      }}
+                    >
                       <Send className="h-4 w-4 mr-2" />
-                      Send
+                      {sendMessage.isPending ? "Sending..." : "Send"}
                     </Button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
