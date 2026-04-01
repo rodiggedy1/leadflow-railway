@@ -1081,6 +1081,9 @@ async function handleCallTranscriptCompleted(event: any): Promise<void> {
  * handleCsInboundMessage — stores inbound texts to the CS line (202-888-5362)
  * as cs-inbound sessions without running AI or auto-reply logic.
  */
+// In-memory dedup for CS inbound: prevents double-appends from OpenPhone at-least-once delivery.
+const csMessageDedup = new Map<string, number>();
+
 async function handleCsInboundMessage(msg: any) {
   const db = await getDb();
   if (!db) {
@@ -1090,7 +1093,18 @@ async function handleCsInboundMessage(msg: any) {
 
   const fromPhone = msg.from;
   const inboundText = msg.text ?? msg.body ?? "";
+  const messageId: string | undefined = msg.id;
   const now = Date.now();
+
+  // Dedup by messageId — OpenPhone retries can fire the same event twice
+  if (messageId) {
+    if (csMessageDedup.has(messageId)) {
+      console.log(`[CS] Duplicate messageId ${messageId} — skipping`);
+      return;
+    }
+    csMessageDedup.set(messageId, now);
+    setTimeout(() => csMessageDedup.delete(messageId), 60_000);
+  }
 
   // Find the most recent cs-inbound session for this phone
   const [existingSession] = await db
@@ -1109,6 +1123,15 @@ async function handleCsInboundMessage(msg: any) {
     // Append to existing session
     let history: Array<{ role: string; content: string; ts?: number }> = [];
     try { history = JSON.parse(existingSession.messageHistory ?? "[]"); } catch { history = []; }
+
+    // Content dedup: skip if identical message already stored within 10s
+    const recent = history.slice(-3);
+    const isDup = recent.some(m => m.role === "user" && m.content === inboundText && now - (m.ts ?? 0) < 10_000);
+    if (isDup) {
+      console.log(`[CS] Content dedup: identical message already in history for session ${existingSession.id}. Skipping.`);
+      return;
+    }
+
     history.push({ role: "user", content: inboundText, ts: now });
     if (history.length > 20) history = history.slice(-20);
 
