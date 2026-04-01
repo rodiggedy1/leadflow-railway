@@ -279,6 +279,11 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    */
    lastProcessedMessageId: varchar("lastProcessedMessageId", { length: 100 }),
   /**
+   * Timestamp (ms) when a CS agent resolved/archived this CS inbox session. NULL = open.
+   * Only set for cs-inbound and cs-inbound-cleaner sessions.
+   */
+  csResolvedAt: bigint("csResolvedAt", { mode: "number" }),
+  /**
    * Cached JSON payload from the last AI closing recommendation.
    * Stored so the drawer loads instantly on re-open without re-calling the LLM.
    * Invalidated when new messages arrive (messageHistory length changes).

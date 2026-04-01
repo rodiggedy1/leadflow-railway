@@ -236,6 +236,7 @@ export default function CsInbox() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
+  const [showResolved, setShowResolved] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
@@ -247,7 +248,7 @@ export default function CsInbox() {
     },
   });
 
-  const { data: csData } = trpc.leads.listCsInbox.useQuery(undefined, { refetchOnWindowFocus: false });
+  const { data: csData } = trpc.leads.listCsInbox.useQuery({ showResolved }, { refetchOnWindowFocus: false });
 
   // Collect all phones from real sessions for batch name resolution
   const allPhones = useMemo(
@@ -314,6 +315,9 @@ export default function CsInbox() {
     },
   });
 
+  const filteredRef = useRef<typeof filtered>([]);
+  const effectiveSelectedIdRef = useRef<number | null>(null);
+
   const filtered = useMemo(() => {
     return displayConversations.filter((c) => {
       const matchesQueue = activeQueue === "All" || c.queue === activeQueue;
@@ -327,6 +331,21 @@ export default function CsInbox() {
 
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
+
+  // Keep refs in sync so resolveSession.onSuccess can read latest values
+  filteredRef.current = filtered;
+  effectiveSelectedIdRef.current = effectiveSelectedId;
+
+  const resolveSession = trpc.leads.resolveSession.useMutation({
+    onSuccess: () => {
+      const f = filteredRef.current;
+      const curId = effectiveSelectedIdRef.current;
+      const currentIdx = f.findIndex((c) => c.id === curId);
+      const nextConv = f[currentIdx + 1] ?? f[currentIdx - 1] ?? null;
+      setSelectedId(nextConv?.id ?? null);
+      utils.leads.listCsInbox.invalidate();
+    },
+  });
 
   // Resolve cleanerProfileId for the selected Teams conversation — MUST be after `selected` is defined
   const selectedPhone = selected?.queue === "Teams" ? (selected?.phone ?? "") : "";
@@ -436,6 +455,15 @@ export default function CsInbox() {
                   </button>
                 ))}
               </div>
+
+              {/* Show resolved toggle */}
+              <button
+                onClick={() => setShowResolved((v) => !v)}
+                className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {showResolved ? "Hide resolved" : "Show resolved"}
+              </button>
 
               <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -547,14 +575,19 @@ export default function CsInbox() {
                       <span>{selected.amount}</span>
                     </div>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button variant="outline" className="rounded-2xl">
-                      <Phone className="h-4 w-4 mr-2" />
-                      Call
-                    </Button>
-                    <Button variant="outline" className="rounded-2xl">
-                      Open full job
-                    </Button>
+                  <div className="flex gap-2 flex-wrap items-center">
+                    {/* Resolve button — only for real CS sessions (not static demo) */}
+                    {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors"
+                        onClick={() => resolveSession.mutate({ sessionId: selected.id })}
+                        disabled={resolveSession.isPending}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        {resolveSession.isPending ? "Resolving…" : "Resolve"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

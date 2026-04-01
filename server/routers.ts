@@ -2489,21 +2489,39 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * Accessible to all agents and admins.
      */
     listCsInbox: protectedProcedure
-      .query(async () => {
+      .input(z.object({ showResolved: z.boolean().optional().default(false) }))
+      .query(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
+        const sourceFilter = or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+        );
+        const resolvedFilter = input.showResolved
+          ? undefined  // show all
+          : isNull(conversationSessions.csResolvedAt); // only open
         const sessions = await db
           .select()
           .from(conversationSessions)
-          .where(
-            or(
-              eq(conversationSessions.leadSource, "cs-inbound"),
-              eq(conversationSessions.leadSource, "cs-inbound-cleaner")
-            )
-          )
+          .where(resolvedFilter ? and(sourceFilter, resolvedFilter) : sourceFilter)
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(100);
         return sessions;
+      }),
+    /**
+     * resolveSession — marks a CS inbox session as resolved (archived).
+     * Sets csResolvedAt to the current timestamp.
+     */
+    resolveSession: protectedProcedure
+      .input(z.object({ sessionId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ csResolvedAt: Date.now() } as any)
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
       }),
     /**
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
