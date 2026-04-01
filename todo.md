@@ -826,3 +826,5 @@
 - [ ] Investigate why inbound SMS to 202 CS number are not appearing in CS inbox
 - [ ] Add MMS photo rendering in CS chat thread
 - [x] CS inbox: MMS photo rendering inline in chat thread
+- [ ] CS inbox: Ops/Chat/CS tab switcher above conversation list
+- [ ] Auto-close left sidebar when switching back to Chat tab

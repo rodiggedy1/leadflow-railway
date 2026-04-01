@@ -21,10 +21,12 @@ import {
   Briefcase,
   Bot,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
   CircleDot,
   Clock3,
+  Headphones,
   Mail,
   MapPin,
   MessageSquare,
@@ -44,6 +46,7 @@ import {
   Smile,
   ExternalLink,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner";
@@ -246,7 +249,7 @@ function jobStatusStyle(s: JobStatus): string {
   }
 }
 
-export default function CsInbox() {
+export default function CsInbox({ onSwitchTab }: { onSwitchTab?: (tab: "today" | "channels" | "cs") => void } = {}) {
   const [activeQueue, setActiveQueue] = useState<Queue | "All">("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -502,6 +505,28 @@ export default function CsInbox() {
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto">
+              {/* Tab switcher — Ops / Chat / CS */}
+              {onSwitchTab && (
+                <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
+                  {([
+                    { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
+                    { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
+                    { id: "cs"       as const, label: "CS",   icon: <Headphones    className="w-3.5 h-3.5" /> },
+                  ]).map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => onSwitchTab(tab.id)}
+                      className={cn(
+                        "flex-1 relative flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
+                        tab.id === "cs" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                      )}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inbox</div>
