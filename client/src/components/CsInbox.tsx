@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertTriangle,
   Bot,
@@ -13,175 +14,99 @@ import {
   ChevronRight,
   CircleDot,
   Clock3,
-  Mail,
+  Loader2,
   MapPin,
   MessageSquare,
   Phone,
+  RefreshCw,
   Search,
   Send,
   Sparkles,
-  Star,
   Tag,
   TriangleAlert,
-  Wallet,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
-type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job";
-type MsgSender = "client" | "agent" | "system" | "cleaner";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type Conversation = {
+type MsgSender = "client" | "agent" | "system";
+
+interface ParsedMessage {
+  sender: MsgSender;
+  text: string;
+  time: string;
+  ts?: number;
+}
+
+interface CsSession {
   id: number;
-  name: string;
-  initials: string;
-  queue: Queue;
-  service: string;
-  location: string;
-  amount: string;
-  lastMessage: string;
-  wait: string;
-  status: string;
-  sentiment?: string;
-  tags: string[];
-  phone: string;
-  stats: { bookings: number; rating: string; complaints: number };
-  aiInsight: string;
-  messages: { sender: MsgSender; text: string; time: string }[];
-  quickActions: string[];
-};
+  leadPhone: string;
+  leadName: string | null;
+  stage: string;
+  leadSource: string;
+  messageHistory: string | null;
+  createdAt: Date | string;
+  lastCustomerReplyAt: Date | string | null;
+  lastActivityText: string | null;
+}
 
-const queueMeta: { label: Queue; count: number; tone: string; dot: string }[] = [
-  { label: "Needs attention", count: 12, tone: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" },
-  { label: "Follow up", count: 8, tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-  { label: "Hot leads", count: 6, tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  { label: "Active jobs", count: 14, tone: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  { label: "Post-job", count: 9, tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const conversations: Conversation[] = [
-  {
-    id: 1,
-    name: "Jillian McMahon",
-    initials: "JM",
-    queue: "Needs attention",
-    service: "3 bedroom clean",
-    location: "Alexandria, VA 22301",
-    amount: "$179.10",
-    lastMessage: "hey is someone coming today?",
-    wait: "12 min",
-    status: "Job starts in 18 min",
-    sentiment: "Concerned",
-    tags: ["Today", "Assigned", "High priority"],
-    phone: "(571) 555-0134",
-    stats: { bookings: 6, rating: "4.9", complaints: 1 },
-    aiInsight:
-      "Likely salvageable if answered immediately. Send running-late update and tracking link, then offer a small make-good only if delay exceeds 20 minutes.",
-    messages: [
-      { sender: "client", text: "Hey is someone coming today?", time: "12:12 PM" },
-      { sender: "system", text: "Your cleaning is scheduled for 12:30 PM today.", time: "12:13 PM" },
-      { sender: "cleaner", text: "Running about 15 min behind from prior job.", time: "12:17 PM" },
-      { sender: "agent", text: "Thanks — I'm checking with the team now.", time: "12:18 PM" },
-    ],
-    quickActions: ["Running late", "Send tracking link", "Offer discount", "Call client", "Escalate"],
-  },
-  {
-    id: 2,
-    name: "Monica Reed",
-    initials: "MR",
-    queue: "Hot leads",
-    service: "Move-out cleaning",
-    location: "Washington, DC 20011",
-    amount: "$320.00",
-    lastMessage: "can you do tomorrow morning?",
-    wait: "4 min",
-    status: "Ready to book",
-    sentiment: "High intent",
-    tags: ["New lead", "Tomorrow", "Large job"],
-    phone: "(202) 555-0118",
-    stats: { bookings: 0, rating: "—", complaints: 0 },
-    aiInsight:
-      "High-value lead with immediate intent. Push slot urgency and move to phone confirmation quickly.",
-    messages: [
-      { sender: "client", text: "Can you do tomorrow morning?", time: "10:04 AM" },
-      { sender: "system", text: "Lead came in from quote form. 3 bed / 2 bath move-out.", time: "10:04 AM" },
-      { sender: "agent", text: "Yes — we may have either 9 AM or 1 PM. Want me to grab one for you?", time: "10:06 AM" },
-    ],
-    quickActions: ["Offer 9 AM", "Offer 1 PM", "Send price", "Call lead", "Book now"],
-  },
-  {
-    id: 3,
-    name: "Daniel Price",
-    initials: "DP",
-    queue: "Follow up",
-    service: "Recurring clean",
-    location: "Arlington, VA 22201",
-    amount: "$210.00",
-    lastMessage: "let me think about it",
-    wait: "19 hr",
-    status: "Quote sent",
-    sentiment: "Warm",
-    tags: ["Quote out", "Follow-up due"],
-    phone: "(703) 555-0142",
-    stats: { bookings: 1, rating: "5.0", complaints: 0 },
-    aiInsight:
-      "Soft close opportunity. A short nudge with availability pressure is more likely to convert than a long explanation.",
-    messages: [
-      { sender: "client", text: "Let me think about it.", time: "Yesterday 3:44 PM" },
-      { sender: "agent", text: "Totally — for a home that size most jobs land around $210 depending on condition.", time: "Yesterday 3:39 PM" },
-      { sender: "system", text: "Follow-up recommended after 18 hours.", time: "Today 10:00 AM" },
-    ],
-    quickActions: ["Last-minute opening", "Still interested?", "Resend quote", "Call", "Archive"],
-  },
-  {
-    id: 4,
-    name: "Priya Shah",
-    initials: "PS",
-    queue: "Post-job",
-    service: "Standard clean",
-    location: "Bethesda, MD 20814",
-    amount: "$165.00",
-    lastMessage: "looks great thank you",
-    wait: "38 min",
-    status: "Review opportunity",
-    sentiment: "Happy",
-    tags: ["5-star vibe", "Rebook chance"],
-    phone: "(301) 555-0188",
-    stats: { bookings: 3, rating: "5.0", complaints: 0 },
-    aiInsight:
-      "Best moment for review request and recurring-service ask. High probability of successful rebook while satisfaction is fresh.",
-    messages: [
-      { sender: "client", text: "Looks great thank you", time: "11:22 AM" },
-      { sender: "cleaner", text: "Finished up and did a final check with the client.", time: "11:18 AM" },
-      { sender: "system", text: "Post-job automation available: review + rebook.", time: "11:23 AM" },
-    ],
-    quickActions: ["Send review link", "Offer rebook", "Thank client", "Mark complete", "Call"],
-  },
-  {
-    id: 5,
-    name: "Ethan Long",
-    initials: "EL",
-    queue: "Active jobs",
-    service: "Deep clean",
-    location: "Fairfax, VA 22030",
-    amount: "$260.00",
-    lastMessage: "please make sure they do the oven",
-    wait: "7 min",
-    status: "In progress",
-    sentiment: "Specific request",
-    tags: ["In progress", "Special request"],
-    phone: "(703) 555-0107",
-    stats: { bookings: 2, rating: "4.8", complaints: 0 },
-    aiInsight:
-      "Operational update needed, not sales. Confirm the request is logged and reassure before job completion.",
-    messages: [
-      { sender: "client", text: "Please make sure they do the oven.", time: "1:07 PM" },
-      { sender: "agent", text: "Absolutely — I'm noting that for the team right now.", time: "1:08 PM" },
-      { sender: "cleaner", text: "Got it. Adding oven to the checklist.", time: "1:10 PM" },
-    ],
-    quickActions: ["Confirm request", "Message team", "Call cleaner", "Mark issue", "Complete"],
-  },
-];
+function initials(name: string | null, phone: string): string {
+  if (name) {
+    const parts = name.trim().split(" ");
+    return parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : parts[0].slice(0, 2).toUpperCase();
+  }
+  return phone.slice(-2);
+}
 
-function bubbleStyles(sender: MsgSender) {
+function displayName(session: CsSession): string {
+  return session.leadName ?? formatPhone(session.leadPhone);
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits[0] === "1") {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
+}
+
+function parseMessages(messageHistory: string | null): ParsedMessage[] {
+  if (!messageHistory) return [];
+  try {
+    const raw: Array<{ role: string; content: string; ts?: number; senderName?: string }> =
+      JSON.parse(messageHistory);
+    return raw.map((m) => ({
+      sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system",
+      text: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      ts: m.ts,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function timeAgo(date: Date | string | null): string {
+  if (!date) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  const diffMs = Date.now() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
+}
+
+function bubbleStyles(sender: MsgSender): string {
   switch (sender) {
     case "client":
       return "bg-white border-slate-200 text-slate-900";
@@ -189,43 +114,96 @@ function bubbleStyles(sender: MsgSender) {
       return "bg-slate-900 border-slate-900 text-white ml-auto";
     case "system":
       return "bg-blue-50 border-blue-200 text-blue-800";
-    case "cleaner":
-      return "bg-amber-50 border-amber-200 text-amber-800";
   }
 }
 
-function queueTone(queue: Queue) {
-  return queueMeta.find((q) => q.label === queue) || queueMeta[0];
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CsInbox() {
-  const [activeQueue, setActiveQueue] = useState<Queue | "All">("Needs attention");
+  // toast is imported from sonner
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(1);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // ── Live data ──────────────────────────────────────────────────────────────
+  const { data: sessions = [], isLoading, refetch } = trpc.leads.listCsInbox.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+
+  const sendMessage = trpc.leads.sendMessage.useMutation({
+    onSuccess: () => {
+      setReplyText("");
+      refetch();
+      toast.success("Message sent", { description: "Reply delivered via CS line." });
+    },
+    onError: (err) => {
+      toast.error("Send failed", { description: err.message });
+    },
+  });
+
+  // ── Derived state ──────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    return conversations.filter((c) => {
-      const matchesQueue = activeQueue === "All" || c.queue === activeQueue;
-      const q = query.trim().toLowerCase();
-      const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.tags.join(" ")]
+    if (!query.trim()) return sessions as CsSession[];
+    const q = query.trim().toLowerCase();
+    return (sessions as CsSession[]).filter((s) => {
+      const hay = [s.leadName ?? "", s.leadPhone, s.lastActivityText ?? "", s.stage]
         .join(" ")
         .toLowerCase();
-      return matchesQueue && (!q || hay.includes(q));
+      return hay.includes(q);
     });
-  }, [activeQueue, query]);
+  }, [sessions, query]);
 
-  const selected = filtered.find((c) => c.id === selectedId) || filtered[0] || conversations[0];
-  const tone = queueTone(selected.queue);
+  const selected = useMemo(
+    () => filtered.find((s) => s.id === selectedId) ?? filtered[0] ?? null,
+    [filtered, selectedId]
+  );
 
-  const priorityItems = [
-    { name: "Jillian", reason: "waiting 12 min • job starts soon", queue: "Needs attention" },
-    { name: "Monica", reason: "high-ticket lead • wants tomorrow", queue: "Hot leads" },
-    { name: "Priya", reason: "great review moment • rebook chance", queue: "Post-job" },
-  ];
+  const selectedMessages = useMemo(
+    () => parseMessages(selected?.messageHistory ?? null),
+    [selected]
+  );
+
+  // Auto-select first session when data loads
+  useEffect(() => {
+    if (!selectedId && filtered.length > 0) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [selectedMessages.length]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+  function handleSend() {
+    if (!selected || !replyText.trim() || sendMessage.isPending) return;
+    sendMessage.mutate({ sessionId: selected.id, message: replyText.trim() });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }
+
+  // ── Empty state ────────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] p-4 md:p-6 text-slate-900">
       <div className="mx-auto max-w-[1600px]">
+        {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -236,17 +214,20 @@ export default function CsInbox() {
               <Sparkles className="h-3.5 w-3.5" /> Customer Service SMS Handler
             </div>
             <h1 className="mt-3 text-3xl md:text-4xl font-semibold tracking-tight">
-              Three-column customer service inbox
+              CS Inbox — 202-888-5362
             </h1>
             <p className="mt-2 text-slate-600 max-w-3xl">
-              Conversation-first, job-aware. Built for fast replies, priority handling, and clear context without
-              burying the thread.
+              All inbound texts to the DC customer service line. Conversation-first, reply-ready.
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Button className="rounded-2xl h-11">AI reply mode</Button>
-            <Button variant="outline" className="rounded-2xl h-11">
-              Bulk follow-up
+            <Button
+              variant="outline"
+              className="rounded-2xl h-11"
+              onClick={() => refetch()}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
             </Button>
           </div>
         </motion.div>
@@ -261,356 +242,314 @@ export default function CsInbox() {
                   <div className="mt-2 text-3xl font-semibold">Today</div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center min-w-[74px]">
-                  <div className="text-xl font-semibold">15</div>
-                  <div className="text-xs text-slate-500 mt-1">online</div>
+                  <div className="text-xl font-semibold">{sessions.length}</div>
+                  <div className="text-xs text-slate-500 mt-1">threads</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
-                <Button
-                  variant={activeQueue === "All" ? "default" : "outline"}
-                  className="w-full rounded-2xl justify-start h-10"
-                  onClick={() => setActiveQueue("All")}
-                >
-                  All conversations
-                </Button>
-                {queueMeta.map((q) => (
-                  <button
-                    key={q.label}
-                    onClick={() => setActiveQueue(q.label)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${q.tone} ${
-                      activeQueue === q.label ? "ring-2 ring-slate-900/10" : ""
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-2.5 w-2.5 rounded-full ${q.dot}`} />
-                        <div className="font-medium">{q.label}</div>
-                      </div>
-                      <div className="text-sm font-semibold">{q.count}</div>
-                    </div>
-                  </button>
-                ))}
+              {/* Search */}
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search conversations..."
+                  className="pl-9 h-11 rounded-2xl border-slate-200"
+                />
               </div>
 
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Bot className="h-4 w-4" /> AI priority queue
-                </div>
-                <div className="mt-3 space-y-2">
-                  {priorityItems.map((item, idx) => (
+              {/* Session list */}
+              <div className="space-y-2.5">
+                {filtered.length === 0 && (
+                  <div className="text-center py-10 text-slate-400 text-sm">
+                    {sessions.length === 0
+                      ? "No CS messages yet. Texts to 202-888-5362 will appear here."
+                      : "No results for your search."}
+                  </div>
+                )}
+                {filtered.map((session) => {
+                  const msgs = parseMessages(session.messageHistory);
+                  const lastMsg = msgs[msgs.length - 1];
+                  const isSelected = selected?.id === session.id;
+                  return (
                     <button
-                      key={item.name}
-                      onClick={() => {
-                        const found = conversations.find((c) => c.name.startsWith(item.name));
-                        if (found) {
-                          setActiveQueue("All");
-                          setSelectedId(found.id);
-                        }
-                      }}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm"
+                      key={session.id}
+                      onClick={() => setSelectedId(session.id)}
+                      className={`w-full rounded-[24px] border bg-white px-4 py-4 text-left shadow-sm transition hover:shadow-md ${
+                        isSelected ? "border-slate-900" : "border-slate-200"
+                      }`}
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium">
-                          {idx + 1}. {item.name}
-                        </div>
-                        <Badge variant="outline" className="rounded-full">
-                          {item.queue}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">{item.reason}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="relative">
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search conversations..."
-                    className="pl-9 h-11 rounded-2xl border-slate-200"
-                  />
-                </div>
-                <div className="mt-4 space-y-2.5">
-                  {filtered.map((conversation) => {
-                    const q = queueTone(conversation.queue);
-                    return (
-                      <button
-                        key={conversation.id}
-                        onClick={() => setSelectedId(conversation.id)}
-                        className={`w-full rounded-[24px] border bg-white px-4 py-4 text-left shadow-sm transition hover:shadow-md ${
-                          selected.id === conversation.id ? "border-slate-900" : "border-slate-200"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <Avatar className="h-11 w-11 border border-slate-200">
-                            <AvatarFallback className="bg-slate-100 text-slate-700">
-                              {conversation.initials}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="font-semibold truncate">{conversation.name}</div>
-                                <div className="text-sm text-slate-500 truncate mt-0.5">{conversation.service}</div>
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-11 w-11 border border-slate-200 shrink-0">
+                          <AvatarFallback className="bg-slate-100 text-slate-700 text-sm">
+                            {initials(session.leadName, session.leadPhone)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold truncate">{displayName(session)}</div>
+                              <div className="text-sm text-slate-500 truncate mt-0.5">
+                                {formatPhone(session.leadPhone)}
                               </div>
-                              <div className="text-xs text-slate-400 whitespace-nowrap">{conversation.wait}</div>
                             </div>
-                            <div className="mt-2 text-sm text-slate-600 line-clamp-2">{conversation.lastMessage}</div>
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                              <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
-                                {conversation.queue}
-                              </Badge>
-                              <div className="text-xs text-slate-500 truncate">{conversation.status}</div>
+                            <div className="text-xs text-slate-400 whitespace-nowrap">
+                              {timeAgo(session.lastCustomerReplyAt)}
                             </div>
                           </div>
+                          {lastMsg && (
+                            <div className="mt-2 text-sm text-slate-600 line-clamp-2">
+                              {lastMsg.text}
+                            </div>
+                          )}
+                          <div className="mt-3 flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={`rounded-full text-xs ${
+                                lastMsg?.sender === "client"
+                                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                                  : "border-slate-200 bg-slate-50 text-slate-600"
+                              }`}
+                            >
+                              {lastMsg?.sender === "client" ? "Awaiting reply" : "Replied"}
+                            </Badge>
+                          </div>
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
 
           {/* ── CENTER: Thread ── */}
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
-            <CardContent className="p-0 h-full flex flex-col">
-              <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h2 className="text-3xl font-semibold tracking-tight">{selected.name}</h2>
-                      <Badge className={`rounded-full border ${tone.tone} hover:bg-transparent`}>
-                        {selected.queue}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                      <span>{selected.service}</span>
-                      <span>•</span>
-                      <span>{selected.location}</span>
-                      <span>•</span>
-                      <span>{selected.amount}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button variant="outline" className="rounded-2xl">
-                      <Phone className="h-4 w-4 mr-2" />
-                      Call
-                    </Button>
-                    <Button variant="outline" className="rounded-2xl">
-                      Open full job
-                    </Button>
-                  </div>
+            {!selected ? (
+              <CardContent className="flex items-center justify-center h-full min-h-[500px]">
+                <div className="text-center text-slate-400">
+                  <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">Select a conversation</p>
                 </div>
-              </div>
-
-              <div className="border-b border-slate-200 px-5 py-4 md:px-6 bg-slate-50/70">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Live timeline</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {selected.tags.map((tag) => (
-                    <Badge key={tag} variant="outline" className="rounded-full bg-white">
-                      {tag}
-                    </Badge>
-                  ))}
-                  {selected.sentiment && (
-                    <Badge variant="outline" className="rounded-full bg-white">
-                      Tone: {selected.sentiment}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <ScrollArea className="flex-1 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)] min-h-[420px]">
-                <div className="space-y-3">
-                  {selected.messages.map((message, idx) => (
-                    <motion.div
-                      key={`${message.time}-${idx}`}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.04 }}
-                      className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
-                    >
-                      <div className="text-xs uppercase tracking-wide opacity-60">{message.sender}</div>
-                      <div className="mt-1.5 text-sm leading-6">{message.text}</div>
-                      <div className="mt-2 text-xs opacity-60">{message.time}</div>
-                    </motion.div>
-                  ))}
-                </div>
-              </ScrollArea>
-
-              <div className="border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {selected.quickActions.map((action) => (
-                    <Button key={action} variant="outline" className="rounded-full h-10">
-                      {action}
-                    </Button>
-                  ))}
-                </div>
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-400 min-h-[96px]">
-                      Type a message or use AI suggestion...
-                    </div>
-                    <Button className="rounded-2xl h-[96px] px-5">
-                      <Send className="h-4 w-4 mr-2" />
-                      Send
-                    </Button>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button variant="outline" className="rounded-full">
-                      <Bot className="h-4 w-4 mr-2" />
-                      AI Suggest
-                    </Button>
-                    <Button variant="outline" className="rounded-full">
-                      Running late
-                    </Button>
-                    <Button variant="outline" className="rounded-full">
-                      We're on the way
-                    </Button>
-                    <Button variant="outline" className="rounded-full">
-                      Review + rebook
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ── RIGHT: Client profile + actions ── */}
-          <div className="space-y-5">
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
-              <CardContent className="p-0">
-                <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 text-amber-800 font-medium">
-                    <TriangleAlert className="h-4 w-4" /> Flag as needs attention
-                  </div>
-                  <Badge className="rounded-full border border-amber-200 bg-white text-amber-700 hover:bg-white">
-                    Urgent
-                  </Badge>
-                </div>
-                <div className="p-5 space-y-5 bg-white">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                    <div className="mt-3 text-2xl font-semibold">{selected.name}</div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
-                      <span className="inline-flex items-center gap-1">
-                        <Phone className="h-4 w-4" />
-                        {selected.phone}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {selected.location}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Service</div>
-                      <div className="mt-1 font-semibold">{selected.service}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Price</div>
-                      <div className="mt-1 font-semibold">{selected.amount}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Bookings</div>
-                      <div className="mt-1 font-semibold">{selected.stats.bookings}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="text-xs text-slate-400">Rating</div>
-                      <div className="mt-1 font-semibold inline-flex items-center gap-1">
-                        <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                        {selected.stats.rating}
+              </CardContent>
+            ) : (
+              <CardContent className="p-0 h-full flex flex-col">
+                {/* Thread header */}
+                <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h2 className="text-3xl font-semibold tracking-tight">
+                          {displayName(selected)}
+                        </h2>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+                        <span>{formatPhone(selected.leadPhone)}</span>
+                        <span>•</span>
+                        <span>{selectedMessages.length} messages</span>
                       </div>
                     </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl"
+                        onClick={() => window.open(`tel:${selected.leadPhone}`, "_self")}
+                      >
+                        <Phone className="h-4 w-4 mr-2" />
+                        Call
+                      </Button>
+                    </div>
                   </div>
+                </div>
 
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
-                    <div className="mt-3 space-y-2">
+                {/* Messages */}
+                <ScrollArea className="flex-1 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)] min-h-[420px]">
+                  <div ref={scrollRef} className="space-y-3">
+                    {selectedMessages.length === 0 && (
+                      <div className="text-center text-slate-400 text-sm py-10">
+                        No messages yet.
+                      </div>
+                    )}
+                    {selectedMessages.map((message, idx) => (
+                      <motion.div
+                        key={`${message.ts ?? idx}-${idx}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.03 }}
+                        className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
+                      >
+                        <div className="text-xs uppercase tracking-wide opacity-60">{message.sender}</div>
+                        <div className="mt-1.5 text-sm leading-6">{message.text}</div>
+                        {message.time && (
+                          <div className="mt-2 text-xs opacity-60">{message.time}</div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                {/* Reply box */}
+                <div className="border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-start gap-3">
+                      <Textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Type a reply… (Enter to send, Shift+Enter for newline)"
+                        className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-sm min-h-[96px] resize-none focus-visible:ring-1"
+                      />
+                      <Button
+                        className="rounded-2xl h-[96px] px-5"
+                        onClick={handleSend}
+                        disabled={!replyText.trim() || sendMessage.isPending}
+                      >
+                        {sendMessage.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 mr-2" />
+                            Send
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── RIGHT: Client profile ── */}
+          <div className="space-y-5">
+            {selected && (
+              <>
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 text-amber-800 font-medium">
+                        <TriangleAlert className="h-4 w-4" /> Flag as needs attention
+                      </div>
+                      <Badge className="rounded-full border border-amber-200 bg-white text-amber-700 hover:bg-white">
+                        Urgent
+                      </Badge>
+                    </div>
+                    <div className="p-5 space-y-5 bg-white">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
+                        <div className="mt-3 text-2xl font-semibold">{displayName(selected)}</div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="h-4 w-4" />
+                            {formatPhone(selected.leadPhone)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Stage</div>
+                          <div className="mt-1 font-semibold text-sm">{selected.stage}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Messages</div>
+                          <div className="mt-1 font-semibold">{selectedMessages.length}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 p-3 col-span-2">
+                          <div className="text-xs text-slate-400">First contact</div>
+                          <div className="mt-1 font-semibold text-sm">
+                            {selected.createdAt
+                              ? new Date(selected.createdAt).toLocaleString()
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
+                        <div className="mt-3 space-y-2">
+                          {[
+                            selectedMessages.filter((m) => m.sender === "client").length === 1
+                              ? "First message"
+                              : `${selectedMessages.filter((m) => m.sender === "client").length} customer messages`,
+                            selectedMessages[selectedMessages.length - 1]?.sender === "client"
+                              ? "Awaiting agent reply"
+                              : "Agent replied",
+                          ].map((flag) => (
+                            <div
+                              key={flag}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
+                            >
+                              <Tag className="h-4 w-4 text-slate-400" />
+                              {flag}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
                       {[
-                        selected.stats.bookings === 0
-                          ? "First-time customer"
-                          : `${selected.stats.bookings} prior bookings`,
-                        selected.stats.complaints > 0
-                          ? `${selected.stats.complaints} prior complaint`
-                          : "No complaint history",
-                        selected.queue === "Hot leads"
-                          ? "High-intent inquiry"
-                          : selected.queue === "Post-job"
-                          ? "Good review moment"
-                          : "Needs active handling",
-                      ].map((flag) => (
-                        <div
-                          key={flag}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 flex items-center gap-2"
+                        { label: "Call client", icon: Phone, action: () => window.open(`tel:${selected.leadPhone}`, "_self") },
+                        { label: "Message client", icon: MessageSquare, action: () => document.querySelector("textarea")?.focus() },
+                        { label: "Mark complete", icon: CheckCircle2, action: () => toast.info("Coming soon") },
+                        { label: "Escalate", icon: AlertTriangle, action: () => toast.info("Coming soon") },
+                      ].map((a) => (
+                        <Button
+                          key={a.label}
+                          variant="outline"
+                          className="rounded-2xl justify-start h-12"
+                          onClick={a.action}
                         >
-                          <Tag className="h-4 w-4 text-slate-400" />
-                          {flag}
+                          <a.icon className="h-4 w-4 mr-2" />
+                          {a.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <CardContent className="p-5">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
+                    <div className="mt-4 space-y-3">
+                      {[
+                        {
+                          label: selectedMessages[selectedMessages.length - 1]?.sender === "client"
+                            ? "Awaiting reply"
+                            : "Agent replied",
+                          icon: CircleDot,
+                        },
+                        {
+                          label: `Last activity: ${timeAgo(selected.lastCustomerReplyAt)}`,
+                          icon: Clock3,
+                        },
+                        {
+                          label: `${selectedMessages.length} total messages`,
+                          icon: Bot,
+                        },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            {item.label}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
                         </div>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
-                      <Bot className="h-4 w-4" /> AI insight
-                    </div>
-                    <div className="mt-2 text-sm leading-6 text-blue-900">{selected.aiInsight}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-              <CardContent className="p-5">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Call client", icon: Phone },
-                    { label: "Message client", icon: MessageSquare },
-                    { label: "Send tracking link", icon: Mail },
-                    { label: "Approve extra time", icon: Clock3 },
-                    { label: "Mark complete", icon: CheckCircle2 },
-                    { label: "Offer rebook", icon: Wallet },
-                  ].map((action) => (
-                    <Button key={action.label} variant="outline" className="rounded-2xl justify-start h-12">
-                      <action.icon className="h-4 w-4 mr-2" />
-                      {action.label}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-              <CardContent className="p-5">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
-                <div className="mt-4 space-y-3">
-                  {[
-                    { label: selected.queue, icon: AlertTriangle },
-                    { label: selected.status, icon: CircleDot },
-                    { label: `${selected.wait} since last client message`, icon: Clock3 },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2 text-sm">
-                        <item.icon className="h-4 w-4 text-slate-400" />
-                        {item.label}
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-slate-300" />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </div>
       </div>

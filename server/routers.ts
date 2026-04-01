@@ -2482,6 +2482,68 @@ STAGE DETECTION — return the stage the conversation is currently in:
         broadcastOpsUpdate("lead_update");
         return { success: true, leadId, sessionId };
       }),
+
+    /**
+     * leads.listCsInbox — list all cs-inbound sessions (texts to 202-888-5362).
+     * Returns sessions sorted by most recent customer reply.
+     */
+    listCsInbox: adminAgentProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.leadSource, "cs-inbound"))
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(500);
+
+        // Derive lastActivityAt and lastCustomerReplyAt from messageHistory
+        const mapped = sessions.map(s => {
+          let lastActivityText: string | null = null;
+          let lastActivityAt: Date | null = null;
+          let lastCustomerReplyAt: Date | null = null;
+
+          try {
+            const history: Array<{ role: string; content: string; ts?: number }> =
+              JSON.parse(s.messageHistory ?? "[]");
+            if (history.length > 0) {
+              const last = history[history.length - 1];
+              lastActivityText = typeof last.content === "string"
+                ? last.content.slice(0, 100)
+                : null;
+              lastActivityAt = last.ts ? new Date(last.ts) : s.updatedAt;
+
+              // Walk backwards to find most recent customer reply
+              for (let i = history.length - 1; i >= 0; i--) {
+                const msg = history[i];
+                if (msg.role === "user" && msg.ts) {
+                  lastCustomerReplyAt = new Date(msg.ts);
+                  break;
+                }
+              }
+            }
+          } catch {
+            // ignore parse errors
+          }
+
+          return { ...s, lastActivityText, lastActivityAt, lastCustomerReplyAt };
+        });
+
+        // Sort by lastCustomerReplyAt descending
+        mapped.sort((a, b) => {
+          const aTime = a.lastCustomerReplyAt
+            ? (a.lastCustomerReplyAt instanceof Date ? a.lastCustomerReplyAt.getTime() : new Date(a.lastCustomerReplyAt as string).getTime())
+            : (a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt as string).getTime());
+          const bTime = b.lastCustomerReplyAt
+            ? (b.lastCustomerReplyAt instanceof Date ? b.lastCustomerReplyAt.getTime() : new Date(b.lastCustomerReplyAt as string).getTime())
+            : (b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt as string).getTime());
+          return bTime - aTime;
+        });
+
+        return mapped;
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..
