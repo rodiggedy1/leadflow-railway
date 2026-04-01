@@ -816,3 +816,9 @@
 - [x] Add CS tab to OpsChat tab bar with red badge count
 - [x] CS sidebar: show session list with name, last message preview, date
 - [x] CS center panel: click session → shows Open full thread button → opens AdminDashboard ?session=ID&tab=sms
+
+## CS Inbox — Inline Right Panel (OpsChat style)
+- [x] CS center panel: show SMS thread inline (message bubbles, timestamps, role colors)
+- [x] CS center panel: reply box with send button (reuse sendMessage mutation)
+- [x] CS right panel: customer info card (name, phone, stage, last booking date, price)
+- [x] CS right panel: AI draft suggestion with Use/Dismiss buttons + AI draft button

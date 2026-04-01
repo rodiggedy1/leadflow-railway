@@ -319,7 +319,42 @@ export const appRouter = router({
         .limit(100);
       return sessions;
     }),
-
+    /**
+     * leads.generateCsReply — AI drafts a short customer service SMS reply
+     * based on the session's message history.
+     */
+    generateCsReply: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const [session] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) throw new Error("Session not found");
+        let history: Array<{ role: string; content: string; ts?: number }> = [];
+        try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+        const recentMessages = history.slice(-10).map(m => ({
+          role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+          content: typeof m.content === "string" ? m.content : "",
+        }));
+        const systemPrompt = `You are a friendly, professional customer service agent for Maid in Black, a premium residential cleaning company in Washington DC.
+Draft a short, warm, helpful SMS reply to the customer's latest message.
+Keep replies under 160 characters when possible. Be concise and professional.
+Output ONLY the reply text — no preamble, no quotes, no labels.
+If the customer wants to reschedule or cancel, acknowledge and say a team member will follow up shortly.
+If they have a complaint, empathize and assure them the team will make it right.`;
+        const llmResult = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...recentMessages,
+          ],
+        });
+        const draft = llmResult?.choices?.[0]?.message?.content ?? "";
+        return { draft: typeof draft === "string" ? draft.trim() : "" };
+      }),
     stats: publicProcedure
       .input(
         z.object({
