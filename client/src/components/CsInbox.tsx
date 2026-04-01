@@ -396,8 +396,8 @@ export default function CsInbox() {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] p-4 md:p-6 text-slate-900 overflow-hidden">
-      <div className="mx-auto max-w-[1600px] flex flex-col flex-1 min-h-0 w-full">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] p-4 md:p-6 text-slate-900">
+      <div className="mx-auto max-w-[1600px]">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -423,10 +423,10 @@ export default function CsInbox() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0">
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5">
           {/* ── LEFT: Queue sidebar ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col min-h-0">
-            <CardContent className="p-4 md:p-5 space-y-5 overflow-y-auto flex-1 min-h-0">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+            <CardContent className="p-4 md:p-5 space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inbox</div>
@@ -576,8 +576,8 @@ export default function CsInbox() {
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col min-h-0">
-            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+            <CardContent className="p-0 h-full flex flex-col">
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
@@ -628,7 +628,7 @@ export default function CsInbox() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 min-h-0 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <ScrollArea className="flex-1 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)] min-h-[420px]" ref={scrollRef}>
                 <div className="space-y-3">
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
@@ -646,7 +646,7 @@ export default function CsInbox() {
                 </div>
               </ScrollArea>
 
-              <div className="border-t border-slate-200 px-5 py-4 md:px-6 bg-white shrink-0">
+              <div className="border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
                     <Button key={action} variant="outline" className="rounded-full h-10">
@@ -701,7 +701,7 @@ export default function CsInbox() {
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="space-y-5 overflow-y-auto min-h-0">
+          <div className="space-y-5">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
