@@ -921,34 +921,48 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // ── Guard: skip ALL post-call processing for outbound FieldMgmt / LeadAlert calls ──
   // These are calls WE placed to cleaners or the CS team — they are not inbound customer calls.
   // Processing them would fire spurious notifyOwner alerts, command chat cards, and missed-call SMSes.
+  // IMPORTANT: The same phoneNumberId (f2f1c044) is also used when inbound calls are forwarded
+  // from 202-888-5362 through Vapi. So we must NOT skip based on phoneNumberId alone.
+  // Instead, check if a fieldMgmtCalls record exists for this vapiCallId — only outbound
+  // FieldMgmt/LeadAlert calls have a pre-inserted record. Real inbound forwarded calls do not.
   const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
   if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
-    console.log(`[Vapi] Skipping post-call processing for outbound FieldMgmt/LeadAlert call (phoneNumberId=${call.phoneNumberId}, reason: ${endedReason})`);
-    // Still update the fieldMgmtCalls record if one exists for this vapiCallId
-    try {
-      const dbFm = await getDb();
-      if (dbFm && vapiCallId) {
-        const transcript = artifact?.transcript ?? null;
-        const summary = analysis?.summary ?? null;
-        const durationSeconds = call.startedAt && call.endedAt
-          ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
-          : 0;
-        await dbFm.update(fieldMgmtCalls)
-          .set({
-            outcome: endedReason === "customer-ended-call" ? "answered" : "no_answer",
-            durationSeconds,
-            transcript,
-            summary,
-            endedReason,
-            recordingUrl: artifact?.recordingUrl ?? null,
-          })
-          .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId));
-        console.log(`[Vapi] Updated fieldMgmtCalls record for vapiCallId=${vapiCallId}`);
+    // Check if this is a real FieldMgmt outbound call (has a pre-inserted record)
+    const dbCheck = await getDb();
+    const isOutboundFieldMgmt = dbCheck && vapiCallId
+      ? (await dbCheck.select({ id: fieldMgmtCalls.id }).from(fieldMgmtCalls).where(eq(fieldMgmtCalls.vapiCallId, vapiCallId)).limit(1)).length > 0
+      : false;
+    if (!isOutboundFieldMgmt) {
+      console.log(`[Vapi] phoneNumberId=${call.phoneNumberId} but no fieldMgmtCalls record found — treating as inbound forwarded call, continuing normal processing`);
+      // Fall through to normal inbound call processing below
+    } else {
+      console.log(`[Vapi] Skipping post-call processing for outbound FieldMgmt/LeadAlert call (phoneNumberId=${call.phoneNumberId}, reason: ${endedReason})`);
+      // Still update the fieldMgmtCalls record if one exists for this vapiCallId
+      try {
+        const dbFm = await getDb();
+        if (dbFm && vapiCallId) {
+          const transcript = artifact?.transcript ?? null;
+          const summary = analysis?.summary ?? null;
+          const durationSeconds = call.startedAt && call.endedAt
+            ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
+            : 0;
+          await dbFm.update(fieldMgmtCalls)
+            .set({
+              outcome: endedReason === "customer-ended-call" ? "answered" : "no_answer",
+              durationSeconds,
+              transcript,
+              summary,
+              endedReason,
+              recordingUrl: artifact?.recordingUrl ?? null,
+            })
+            .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId));
+          console.log(`[Vapi] Updated fieldMgmtCalls record for vapiCallId=${vapiCallId}`);
+        }
+      } catch (fmErr) {
+        console.error("[Vapi] Failed to update fieldMgmtCalls for outbound call:", fmErr);
       }
-    } catch (fmErr) {
-      console.error("[Vapi] Failed to update fieldMgmtCalls for outbound call:", fmErr);
+      return;
     }
-    return;
   }
 
   // ── Missed call: send auto-SMS if caller hung up before Madison could help ──
