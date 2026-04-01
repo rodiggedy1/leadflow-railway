@@ -315,6 +315,7 @@ export default function CsInbox() {
           sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system" as MsgSender,
           text: m.content,
           time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+          media: (m.media ?? []) as string[],
         })),
         quickActions: [],
         rawName: row.leadName ?? "",
@@ -763,7 +764,20 @@ export default function CsInbox() {
                       className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                     >
                       <div className="text-xs uppercase tracking-wide opacity-60">{message.sender}</div>
-                      <div className="mt-1.5 text-sm leading-6">{message.text}</div>
+                      {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
+                      {message.media && message.media.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {message.media.map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={url}
+                                alt="MMS photo"
+                                className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                       <div className="mt-2 text-xs opacity-60">{message.time}</div>
                     </motion.div>
                   ))}

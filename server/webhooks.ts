@@ -458,7 +458,7 @@ export function registerWebhookRoutes(app: Express) {
       }
 
       // Append the lead's inbound message to history first (always stored)
-      history.push({ role: "user", content: inboundText, ts: now });
+      history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
 
       // Trim history to last 20 messages to stay within varchar(5000)
       if (history.length > 20) {
@@ -1095,6 +1095,8 @@ async function handleCsInboundMessage(msg: any) {
   const inboundText = msg.text ?? msg.body ?? "";
   const messageId: string | undefined = msg.id;
   const now = Date.now();
+  // Extract MMS media URLs (photos/images sent via SMS)
+  const mediaUrls: string[] = (msg.media ?? []).map((m: any) => m.url ?? m.src ?? m.mediaUrl).filter(Boolean);
 
   // Dedup by messageId — OpenPhone retries can fire the same event twice
   if (messageId) {
@@ -1232,7 +1234,7 @@ async function handleCsInboundMessage(msg: any) {
       return;
     }
 
-    history.push({ role: "user", content: inboundText, ts: now });
+    history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
     if (history.length > 20) history = history.slice(-20);
 
     // Also backfill leadName if it was previously null and we now resolved one
@@ -1248,7 +1250,7 @@ async function handleCsInboundMessage(msg: any) {
     console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}${resolvedName && !existingSession.leadName ? ` (backfilled name: ${resolvedName})` : ""}`);
   } else {
     // Create new cs-inbound session
-    const history = [{ role: "user", content: inboundText, ts: now }];
+    const history = [{ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
     const [result] = await db
       .insert(conversationSessions)
       .values({
