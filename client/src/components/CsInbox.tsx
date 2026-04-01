@@ -630,7 +630,7 @@ export default function CsInbox() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 min-h-0 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <ScrollArea className="flex-1 min-h-[400px] px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
                 <div className="space-y-3">
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
