@@ -1726,10 +1726,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         <div className="w-14 shrink-0 h-full border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-visible transition-all">
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+            className="w-10 h-10 rounded-xl bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 transition shadow-sm"
             title="Expand sidebar"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-5 h-5" />
           </button>
           {/* Channel icons */}
           {CHANNELS.map((ch) => {
@@ -1962,10 +1962,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSidebarCollapsed(true)}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition"
+                className="w-10 h-10 rounded-xl bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 transition shadow-sm"
                 title="Collapse sidebar"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-5 h-5" />
               </button>
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm font-medium">
                 {jobs.length} online
