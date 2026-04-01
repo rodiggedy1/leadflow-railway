@@ -2758,76 +2758,73 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
           </>
         </div>
 
-        {/* VIEW: CS Inbox — always mounted, hidden with display:none (mirrors Jobs pattern) */}
-        <div style={{ display: activeTab === "cs" ? "flex" : "none" }} className="flex-1 flex overflow-hidden min-h-0">
-          {/* CS CENTER: SMS thread + reply box */}
+        {/* VIEW: CS Inbox — inline SMS thread + reply box */}
+        {activeTab === "cs" && (
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
             {selectedCsSession ? (
               <>
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4 shrink-0">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-900">
-                      {selectedCsSession.leadName ?? selectedCsSession.leadPhone}
-                    </h2>
-                    <p className="text-sm text-slate-500 mt-0.5">
-                      {selectedCsSession.leadPhone}
-                      {selectedCsSession.stage ? ` • ${selectedCsSession.stage}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={`/admin/leads?session=${selectedCsSession.id}&tab=sms`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl px-3 py-1.5 transition"
+                <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between gap-4 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => { setSelectedCsSessionId(null); setCsReplyText(""); setCsDraft(""); }}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 transition"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      Full thread
-                    </a>
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">
+                        {selectedCsSession.leadName ?? selectedCsSession.leadPhone}
+                      </h2>
+                      <p className="text-xs text-slate-500">{selectedCsSession.leadPhone}</p>
+                    </div>
                   </div>
+                  <a
+                    href={`/admin/leads?session=${selectedCsSession.id}&tab=sms`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl px-3 py-1.5 transition"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Full thread
+                  </a>
                 </div>
                 {/* SMS thread */}
-                <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                  <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">SMS Thread</p>
-                  </div>
-                  <div
-                    ref={(el) => { csScrollRef.current = el; }}
-                    className="flex-1 overflow-y-auto px-6 py-4 space-y-3"
-                    style={{ scrollbarWidth: 'thin' }}
-                  >
-                    {(() => {
-                      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
-                      try { history = JSON.parse(selectedCsSession.messageHistory ?? "[]"); } catch { history = []; }
-                      if (history.length === 0) return (
-                        <div className="text-center text-slate-400 text-sm py-8">No messages yet</div>
-                      );
-                      return history.map((msg, i) => {
-                        const isAgent = msg.role !== "user";
-                        const ts = msg.ts ? new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-                        return (
-                          <div key={i} className={`flex ${isAgent ? "justify-end" : "justify-start"}`}>
-                            <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-snug ${
-                              isAgent
-                                ? "bg-slate-900 text-white rounded-br-sm"
-                                : "bg-white border border-slate-200 text-slate-900 rounded-bl-sm shadow-sm"
-                            }`}>
-                              {msg.senderName && isAgent && (
-                                <p className="text-[10px] font-semibold text-slate-400 mb-0.5">{msg.senderName}</p>
-                              )}
-                              <p>{typeof msg.content === "string" ? msg.content : ""}</p>
-                              {ts && <p className={`text-[10px] mt-1 ${isAgent ? "text-slate-400" : "text-slate-400"}`}>{ts}</p>}
-                            </div>
+                <div
+                  ref={(el) => { csScrollRef.current = el; }}
+                  className="flex-1 overflow-y-auto px-5 py-4 space-y-2"
+                  style={{ scrollbarWidth: 'none' }}
+                >
+                  {(() => {
+                    let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+                    try { history = JSON.parse(selectedCsSession.messageHistory ?? "[]"); } catch { history = []; }
+                    if (history.length === 0) return (
+                      <div className="text-center text-slate-400 text-sm py-8">No messages yet</div>
+                    );
+                    return history.map((msg, i) => {
+                      const isAgent = msg.role !== "user";
+                      const ts = msg.ts ? new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                      return (
+                        <div key={i} className={`flex ${isAgent ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-snug ${
+                            isAgent
+                              ? "bg-slate-900 text-white rounded-br-sm"
+                              : "bg-slate-100 text-slate-900 rounded-bl-sm"
+                          }`}>
+                            {msg.senderName && isAgent && (
+                              <p className="text-[10px] font-semibold text-slate-400 mb-0.5">{msg.senderName}</p>
+                            )}
+                            <p>{typeof msg.content === "string" ? msg.content : ""}</p>
+                            {ts && <p className={`text-[10px] mt-1 ${isAgent ? "text-slate-400" : "text-slate-400"}`}>{ts}</p>}
                           </div>
-                        );
-                      });
-                    })()}
-                  </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
                 {/* AI draft banner */}
                 {csDraft && (
-                  <div className="mx-6 mb-2 rounded-2xl border border-violet-200 bg-violet-50 p-3 flex items-start gap-2">
+                  <div className="mx-4 mb-2 rounded-2xl border border-violet-200 bg-violet-50 p-3 flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wide mb-1">AI Draft</p>
                       <p className="text-sm text-slate-800 leading-snug">{csDraft}</p>
@@ -2845,7 +2842,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                   </div>
                 )}
                 {/* Reply box */}
-                <div className="px-6 py-3 border-t border-slate-100 bg-white shrink-0">
+                <div className="px-4 pb-4 pt-2 border-t border-slate-100 bg-white shrink-0">
                   <div className="flex gap-2 items-end">
                     <Textarea
                       value={csReplyText}
@@ -2858,7 +2855,7 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
                           }
                         }
                       }}
-                      placeholder="Type a reply… (Enter to send, Shift+Enter for newline)"
+                      placeholder="Type a reply… (Enter to send)"
                       className="flex-1 min-h-[60px] max-h-[120px] resize-none rounded-2xl text-sm border-slate-200"
                     />
                     <div className="flex flex-col gap-1.5 shrink-0">
@@ -2890,105 +2887,75 @@ export default function OpsChat({ onMinimize, onClose }: OpsChatProps = {}) {
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-                Select a conversation from the left panel
+                Select a customer message from the left panel
               </div>
             )}
           </div>
-
-          {/* CS RIGHT PANEL — customer info + booking history (always in DOM when CS tab active) */}
-          {selectedCsSession && (
-            <div className="w-[300px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              <div className="p-4 space-y-3">
-                {/* Customer info card */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Customer</p>
-                  <p className="text-base font-bold text-slate-900">{selectedCsSession.leadName ?? "Unknown"}</p>
-                  <p className="text-sm text-slate-500 mt-0.5">{selectedCsSession.leadPhone}</p>
-                  {selectedCsSession.stage && (
-                    <div className="mt-3">
-                      <p className="text-xs text-slate-400">Stage</p>
-                      <p className="text-sm font-semibold text-slate-800">{selectedCsSession.stage}</p>
-                    </div>
-                  )}
-                </div>
-                {/* Booking history from Launch27 */}
-                {csCustomerHistory ? (
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Last Booking</p>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-0.5">Service</p>
-                        <p className="text-sm font-semibold text-slate-900">{csCustomerHistory.serviceType ?? "—"}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="text-xs text-slate-400 mb-0.5">Date</p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {csCustomerHistory.jobDate ? new Date(csCustomerHistory.jobDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-400 mb-0.5">Price</p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {csCustomerHistory.lastBookingPrice ? `$${Number(csCustomerHistory.lastBookingPrice).toFixed(0)}` : "—"}
-                          </p>
-                        </div>
-                      </div>
-                      {csCustomerHistory.frequency && (
-                        <div>
-                          <p className="text-xs text-slate-400 mb-0.5">Frequency</p>
-                          <p className="text-sm font-semibold text-slate-900">{csCustomerHistory.frequency}</p>
-                        </div>
-                      )}
-                      {csCustomerHistory.address && (
-                        <div>
-                          <p className="text-xs text-slate-400 mb-0.5">Address</p>
-                          <p className="text-xs text-slate-600 leading-snug">{csCustomerHistory.address}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Last Booking</p>
-                    <p className="text-xs text-slate-400">No booking history found</p>
-                  </div>
-                )}
-                {/* Actions */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Actions</p>
-                  <div className="space-y-2">
-                    {selectedCsSession.leadPhone && (
-                      <Button variant="outline" className="w-full h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50" asChild>
-                        <a href={`tel:${selectedCsSession.leadPhone}`}>
-                          <Phone className="w-3.5 h-3.5 mr-1.5" />
-                          Call Customer
-                        </a>
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-full h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50"
-                      onClick={() => { setCsReplyText(""); }}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-                      New Reply
-                    </Button>
-                    <a
-                      href={`/admin/leads?session=${selectedCsSession.id}&tab=sms`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 w-full h-9 rounded-xl text-xs font-medium border border-slate-200 text-slate-800 bg-white hover:bg-slate-50 transition"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Open Full Lead
-                    </a>
-                  </div>
-                </div>
+        )}
+        {/* CS RIGHT PANEL — customer info + booking history */}
+        {activeTab === "cs" && selectedCsSession && (
+          <div className="w-[260px] shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+            <div className="p-4 space-y-3">
+              {/* Customer info card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Customer</p>
+                <p className="text-base font-bold text-slate-900">{selectedCsSession.leadName ?? "Unknown"}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{selectedCsSession.leadPhone}</p>
               </div>
+              {/* Booking history from Launch27 */}
+              {csCustomerHistory ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Last Booking</p>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs text-slate-400">Service</p>
+                      <p className="text-sm font-semibold text-slate-800">{csCustomerHistory.serviceType ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Date</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {csCustomerHistory.jobDate ? new Date(csCustomerHistory.jobDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Price</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {csCustomerHistory.lastBookingPrice ? `$${Number(csCustomerHistory.lastBookingPrice).toFixed(0)}` : "—"}
+                      </p>
+                    </div>
+                    {csCustomerHistory.frequency && (
+                      <div>
+                        <p className="text-xs text-slate-400">Frequency</p>
+                        <p className="text-sm font-semibold text-slate-800">{csCustomerHistory.frequency}</p>
+                      </div>
+                    )}
+                    {csCustomerHistory.address && (
+                      <div>
+                        <p className="text-xs text-slate-400">Address</p>
+                        <p className="text-xs text-slate-600 leading-snug">{csCustomerHistory.address}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Last Booking</p>
+                  <p className="text-xs text-slate-400">No booking history found</p>
+                </div>
+              )}
+              {/* Quick actions */}
+              <a
+                href={`/admin/leads?session=${selectedCsSession.id}&tab=sms`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Open full lead
+              </a>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* VIEW: Fallback — no job selected */}
         {activeTab === "today" && !selectedJob && (

@@ -296,9 +296,8 @@ export const appRouter = router({
       }),
 
     /**
-     * leads.listCsInbox — ALL sessions where the last message is from the customer
-     * (role = 'user'). No stage filter — shows every inbound text regardless of
-     * where the conversation is in the funnel. Sorted newest first.
+     * leads.listCsInbox — DONE sessions where the customer sent a new inbound
+     * message after the session was closed. Sorted by most recent customer reply.
      */
     listCsInbox: adminAgentProcedure.query(async () => {
       const db = await getDb();
@@ -307,14 +306,17 @@ export const appRouter = router({
         .select()
         .from(conversationSessions)
         .where(
-          // Last message in the JSON array has role "user" (customer sent a message)
-          sql`JSON_UNQUOTE(JSON_EXTRACT(
-            ${conversationSessions.messageHistory},
-            CONCAT('$[', JSON_LENGTH(${conversationSessions.messageHistory}) - 1, '].role')
-          )) = 'user'`
+          and(
+            eq(conversationSessions.stage, "DONE" as any),
+            // Last message in the JSON array has role "user" (customer replied after close)
+            sql`JSON_UNQUOTE(JSON_EXTRACT(
+              ${conversationSessions.messageHistory},
+              CONCAT('$[', JSON_LENGTH(${conversationSessions.messageHistory}) - 1, '].role')
+            )) = 'user'`
+          )
         )
         .orderBy(desc(conversationSessions.updatedAt))
-        .limit(200);
+        .limit(100);
       return sessions;
     }),
     /**
