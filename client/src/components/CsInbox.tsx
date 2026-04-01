@@ -396,12 +396,12 @@ export default function CsInbox() {
   ];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] p-4 md:p-6 text-slate-900">
-      <div className="mx-auto max-w-[1600px]">
+    <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-6 pb-4 md:pb-6 text-slate-900">
+      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4"
+          className="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 shrink-0"
         >
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
@@ -423,10 +423,11 @@ export default function CsInbox() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── LEFT: Queue sidebar ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
-            <CardContent className="p-4 md:p-5 space-y-5">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inbox</div>
@@ -572,12 +573,13 @@ export default function CsInbox() {
                   })}
                 </div>
               </div>
+              </div>
             </CardContent>
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
-            <CardContent className="p-0 h-full flex flex-col">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
@@ -628,7 +630,7 @@ export default function CsInbox() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)] min-h-[420px]" ref={scrollRef}>
+              <ScrollArea className="flex-1 min-h-0 px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
                 <div className="space-y-3">
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
@@ -646,7 +648,7 @@ export default function CsInbox() {
                 </div>
               </ScrollArea>
 
-              <div className="border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
+              <div className="shrink-0 border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
                     <Button key={action} variant="outline" className="rounded-full h-10">
@@ -701,7 +703,7 @@ export default function CsInbox() {
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="space-y-5">
+          <div className="overflow-y-auto space-y-5">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>

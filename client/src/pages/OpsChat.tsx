@@ -2701,7 +2701,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
         {/* VIEW: CS Inbox */}
         {activeTab === "cs" && (
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <CsInbox />
           </div>
         )}
