@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
@@ -764,11 +764,20 @@ type View = "queue" | "new" | "detail";
 interface FollowUpsModalProps {
   open: boolean;
   onClose: () => void;
+  initialItemId?: number | null;
 }
 
-export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
-  const [view, setView] = useState<View>("queue");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+export default function FollowUpsModal({ open, onClose, initialItemId }: FollowUpsModalProps) {
+  const [view, setView] = useState<View>(initialItemId ? "detail" : "queue");
+  const [selectedId, setSelectedId] = useState<number | null>(initialItemId ?? null);
+
+  // When initialItemId changes (e.g. clicking a different card), update state
+  useEffect(() => {
+    if (initialItemId) {
+      setSelectedId(initialItemId);
+      setView("detail");
+    }
+  }, [initialItemId]);
 
   const { data: rawItems = [], isLoading } = trpc.followUps.list.useQuery(undefined, {
     enabled: open,

@@ -901,3 +901,5 @@
 - [x] Follow-ups modal: post a compact summary card into command chat when a new follow-up is created
 - [x] Bug: AI priority queue resurrects dismissed/past items — fixed: tightened window to 24h, filter by last customer message recency, dismissal now permanent
 - [x] CS inbox right panel: add Follow-ups section above AI priority queue with clickable cards that open inline detail
+- [x] CS inbox: move Follow-ups section to left panel (below AI priority queue, above search bar) — actually user wants it in CommandChat right panel below issues
+- [x] CommandChat right panel: add Follow-ups section below "No open issues" / AI issues area

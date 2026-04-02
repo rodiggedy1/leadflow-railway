@@ -530,6 +530,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
+  const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
+  const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
+  const { data: fuPanelItems = [] } = trpc.followUps.list.useQuery(undefined, { staleTime: 60_000, refetchInterval: 2 * 60_000 });
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
@@ -2801,6 +2804,61 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             )}
           </div>
+
+          <div className="border-t border-slate-200" />
+
+          {/* ── Follow-ups Panel ── */}
+          <div>
+            <button
+              onClick={() => setFuPanelExpanded((v) => !v)}
+              className="w-full flex items-center justify-between mb-3 group"
+            >
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-3.5 w-3.5 text-violet-500" />
+                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Follow-ups</p>
+                {fuPanelItems.length > 0 && (
+                  <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">{fuPanelItems.length}</span>
+                )}
+              </div>
+              <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fuPanelExpanded && "rotate-180")} />
+            </button>
+            {fuPanelExpanded && (
+              fuPanelItems.length === 0 ? (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
+                  <p className="text-xs text-slate-400">No active follow-ups</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(fuPanelItems as any[]).map((fu) => {
+                    const isOverdue = fu.dueAt < Date.now();
+                    const d = new Date(fu.dueAt);
+                    const dueStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                    return (
+                      <button
+                        key={fu.id}
+                        onClick={() => { setFollowUpsInitialId(fu.id); setFollowUpsOpen(true); }}
+                        className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:shadow-sm transition"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <span className="text-sm font-semibold text-slate-900 leading-tight truncate">{fu.name}</span>
+                          {fu.priority === "High" && (
+                            <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">High</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mb-1.5 line-clamp-2 leading-relaxed">{fu.nextStep}</p>
+                        <div className="flex flex-wrap gap-1">
+                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", isOverdue ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600")}>{dueStr}</span>
+                          <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{fu.owner}</span>
+                          <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">{fu.type}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            )}
+          </div>
+
         </div>
       </div>
 
@@ -3233,7 +3291,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
-      <FollowUpsModal open={followUpsOpen} onClose={() => setFollowUpsOpen(false)} />
+      <FollowUpsModal
+        open={followUpsOpen}
+        onClose={() => { setFollowUpsOpen(false); setFollowUpsInitialId(null); }}
+        initialItemId={followUpsInitialId}
+      />
     </div>
   );
 }
