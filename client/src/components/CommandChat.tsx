@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import FollowUpsModal from "@/components/FollowUpsModal";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -528,6 +529,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
   const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
@@ -2316,6 +2318,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             >
               Pin Note
             </button>
+            <button
+              onClick={() => setFollowUpsOpen(true)}
+              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50"
+            >
+              Follow-ups
+            </button>
 {/* Away / I'm Back toggle */}
             {awayStatus ? (
               // Currently away — show "I'm Back" button to clear status
@@ -3182,6 +3190,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
+      <FollowUpsModal open={followUpsOpen} onClose={() => setFollowUpsOpen(false)} />
     </div>
   );
 }
