@@ -11,7 +11,7 @@ import { and, eq, isNull, lte } from "drizzle-orm";
 import { router } from "./_core/trpc";
 import { agentProcedure } from "./_core/trpc";
 import { getDb, getAllAgents } from "./db";
-import { followUps } from "../drizzle/schema";
+import { followUps, opsChatMessages } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
 
@@ -88,6 +88,37 @@ export const followUpsRouter = router({
     });
     const insertId = (result as any).insertId as number;
     const [created] = await db.select().from(followUps).where(eq(followUps.id, insertId));
+
+    // Post a compact card into the command channel
+    try {
+      const dueLabel = new Date(input.dueAt).toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        authorName: input.owner,
+        authorRole: "system",
+        body: `Follow-up created — ${input.name}`,
+        quickAction: "follow_up_created",
+        metadata: JSON.stringify({
+          followUpId: insertId,
+          name: input.name,
+          type: input.type,
+          owner: input.owner,
+          priority: input.priority,
+          nextStep: input.nextStep,
+          dueLabel,
+          internalNote: input.internalNote ?? null,
+        }),
+      });
+    } catch (err) {
+      console.error("[followUps.create] Failed to post command chat card:", err);
+    }
+
     return { ...created, history: safeParseHistory(created.history) };
   }),
 

@@ -25,7 +25,7 @@ import {
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
-  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, Briefcase, UserPlus,
+  CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2060,8 +2060,51 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
-
-                // ── Default bubble ───────────────────────────────────────────────────
+                // ── Follow-up Created card (violet) ─────────────────────────────
+                if (msg.quickAction === "follow_up_created") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const fuName = (meta.name as string) ?? msg.body;
+                  const fuType = (meta.type as string) ?? "";
+                  const fuOwner = (meta.owner as string) ?? msg.from;
+                  const fuPriority = (meta.priority as string) ?? "Normal";
+                  const fuNextStep = (meta.nextStep as string) ?? "";
+                  const fuDueLabel = (meta.dueLabel as string) ?? "";
+                  const fuNote = (meta.internalNote as string | null) ?? null;
+                  const priorityColor: Record<string, string> = {
+                    High: "text-red-600 bg-red-50 border-red-200",
+                    Normal: "text-amber-600 bg-amber-50 border-amber-200",
+                    Low: "text-slate-500 bg-slate-50 border-slate-200",
+                  };
+                  const pClass = priorityColor[fuPriority] ?? priorityColor["Normal"];
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-violet-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600">
+                          <ClipboardList className="h-3 w-3 text-violet-100" />
+                          <span className="text-[10px] font-semibold text-violet-100 uppercase tracking-widest">Follow-up Created</span>
+                          {fuType && <span className="ml-1.5 text-[10px] bg-violet-700 text-violet-200 rounded-full px-2 py-0.5">{fuType}</span>}
+                          <span className="ml-auto text-[10px] text-violet-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-semibold text-slate-900">{fuName}</p>
+                          {fuNextStep && <p className="text-xs text-slate-600 mt-0.5">{fuNextStep}</p>}
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {fuDueLabel && (
+                              <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                                <Clock className="h-3 w-3" /> {fuDueLabel}
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-medium border rounded-full px-2 py-0.5 ${pClass}`}>{fuPriority}</span>
+                          </div>
+                          {fuNote && <p className="text-xs text-slate-400 mt-1.5 italic">{fuNote}</p>}
+                          <p className="text-[10px] text-slate-400 mt-2">Assigned to {fuOwner}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
                   const reactionGroups = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
