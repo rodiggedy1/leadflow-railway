@@ -2858,7 +2858,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
         // ── System prompts ────────────────────────────────────────────────────
         const systemPrompt = isTeams
           ? `You are a field operations manager for Maids in Black, a premium home cleaning company in the DC/MD/VA area. You are texting one of your cleaning team members named ${firstName}. You write short, direct, supportive SMS messages. Never use emojis. Never sound corporate. Sound like a real manager who has their team's back and gets things done quickly. Common situations: access issues (can't get into the job), job size questions (bigger than expected), callouts (can't make it to work), field management questions (supplies, parking, timing), and requests for larger or better jobs.`
-          : `You are a world-class customer service agent for Maids in Black, a premium home cleaning company serving the DC/MD/VA area. You write short, human, warm SMS messages. Never use emojis. Never sound corporate or scripted. Always sound like a real person who cares.`;
+          : `You are a customer service agent for Maids in Black, a premium home cleaning company in the DC/MD/VA area. You write short, high-energy, warm SMS messages that sound like a real person texting — not a chatbot or call center script. Never use emojis. Never use filler phrases like "Thanks for clarifying!" or "Great news!" — just get straight to the answer. Keep it punchy and natural.`;
 
         // ── AI Suggest: analyze conversation and pick best action + write draft ─
         if (input.action === "ai_suggest") {
@@ -2877,7 +2877,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           const result = await invokeLLM({
             messages: [
               { role: "system", content: systemPrompt },
-              { role: "user", content: `You are analyzing a customer service conversation for a home cleaning company. The client's name is "${firstName}". Based on the conversation below, choose the single best next action from this list: send_quote, make_it_right, refer_friend, running_late, on_the_way, review_rebook. Then write the ideal SMS draft for that action, starting with "Hey ${firstName},". IMPORTANT: use the actual name "${firstName}" in the draft — never write [Client Name] or any placeholder.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}\n\nRespond in this exact JSON format: {"action": "<action_key>", "draft": "<sms message>"}` },
+              { role: "user", content: `You are analyzing a customer service conversation for a home cleaning company. The client's name is "${firstName}". Read the FULL conversation to understand their intent — if they've already committed to booking, treat it as done and move the conversation forward (ask for entry info, confirm details, etc.). Don't re-ask decisions they've already made. Based on the conversation below, choose the single best next action from this list: send_quote, make_it_right, refer_friend, running_late, on_the_way, review_rebook. Then write the ideal SMS draft for that action, starting with "Hey ${firstName},". Keep it short (1-2 sentences max), high-energy, and presumptive. IMPORTANT: use the actual name "${firstName}" in the draft — never write [Client Name] or any placeholder.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}\n\nRespond in this exact JSON format: {"action": "<action_key>", "draft": "<sms message>"}` },
             ],
             response_format: {
               type: "json_schema",
