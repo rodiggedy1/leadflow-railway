@@ -518,8 +518,23 @@ function DetailView({
   const addNoteMutation = trpc.followUps.addNote.useMutation({
     onSuccess: () => utils.followUps.list.invalidate(),
   });
+  const reassignMutation = trpc.followUps.reassign.useMutation({
+    onSuccess: () => { utils.followUps.list.invalidate(); setReassigning(false); },
+  });
+  const updateDueMutation = trpc.followUps.updateDueAt.useMutation({
+    onSuccess: () => { utils.followUps.list.invalidate(); setChangingDue(false); },
+  });
   const [noteInput, setNoteInput] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
+  const [selectedOwner, setSelectedOwner] = useState(item.owner);
+  const [changingDue, setChangingDue] = useState(false);
+  // Default datetime-local value from item.dueAt
+  const [dueValue, setDueValue] = useState(() => {
+    const d = new Date(item.dueAt);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
 
   function handleAddNote() {
     if (!noteInput.trim()) return;
@@ -663,14 +678,73 @@ function DetailView({
         >
           {completeMutation.isPending ? "Marking…" : "Mark completed"}
         </button>
-        <div className="grid grid-cols-2 gap-2">
-          <button className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition">
-            Reassign owner
-          </button>
-          <button className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition">
-            Change due time
-          </button>
-        </div>
+        {/* Reassign owner inline */}
+        {reassigning ? (
+          <div className="flex gap-2">
+            <select
+              value={selectedOwner}
+              onChange={(e) => setSelectedOwner(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
+            >
+              {OWNERS.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => reassignMutation.mutate({ id: item.id, owner: selectedOwner })}
+              disabled={reassignMutation.isPending}
+              className="text-sm font-semibold bg-slate-900 text-white px-4 rounded-xl hover:bg-slate-700 transition disabled:opacity-50"
+            >
+              {reassignMutation.isPending ? "…" : "Save"}
+            </button>
+            <button
+              onClick={() => setReassigning(false)}
+              className="text-sm font-medium bg-white border border-slate-200 text-slate-600 px-3 rounded-xl hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : changingDue ? (
+          <div className="flex gap-2">
+            <input
+              type="datetime-local"
+              value={dueValue}
+              onChange={(e) => setDueValue(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            <button
+              onClick={() => {
+                const ts = new Date(dueValue).getTime();
+                if (!isNaN(ts)) updateDueMutation.mutate({ id: item.id, dueAt: ts });
+              }}
+              disabled={updateDueMutation.isPending}
+              className="text-sm font-semibold bg-slate-900 text-white px-4 rounded-xl hover:bg-slate-700 transition disabled:opacity-50"
+            >
+              {updateDueMutation.isPending ? "…" : "Save"}
+            </button>
+            <button
+              onClick={() => setChangingDue(false)}
+              className="text-sm font-medium bg-white border border-slate-200 text-slate-600 px-3 rounded-xl hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { setReassigning(true); setChangingDue(false); }}
+              className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition"
+            >
+              Reassign owner
+            </button>
+            <button
+              onClick={() => { setChangingDue(true); setReassigning(false); }}
+              className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition"
+            >
+              Change due time
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

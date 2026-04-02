@@ -893,3 +893,5 @@
 - [x] Follow-ups modal: wire FollowUpsModal to real DB (replace mock data with trpc.followUps.*)
 - [x] Follow-ups modal: due-time reminder cron (runFollowUpReminders, runs every 5 min via internalCron)
 - [x] Follow-ups modal: vitest tests for deriveStatus logic and runFollowUpReminders
+- [x] Follow-ups modal: wire "Reassign owner" button — trpc.followUps.reassign mutation + inline owner picker
+- [x] Follow-ups modal: wire "Change due time" button — trpc.followUps.updateDueAt mutation + inline date/time input

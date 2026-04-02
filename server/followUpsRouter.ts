@@ -118,6 +118,57 @@ export const followUpsRouter = router({
   }),
 
   /**
+   * Reassign a follow-up to a different owner.
+   */
+  reassign: agentProcedure
+    .input(z.object({ id: z.number().int(), owner: z.string().min(1).max(100) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      // Append a history note
+      const [row] = await db.select().from(followUps).where(eq(followUps.id, input.id));
+      if (!row) throw new Error("Follow-up not found");
+      const history = safeParseHistory(row.history);
+      history.push({
+        text: `Reassigned to ${input.owner} (was ${row.owner})`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ts: Date.now(),
+      });
+      await db
+        .update(followUps)
+        .set({ owner: input.owner, history: JSON.stringify(history) })
+        .where(eq(followUps.id, input.id));
+      return { ok: true };
+    }),
+
+  /**
+   * Snooze / change due time on an existing follow-up.
+   * Also clears reminderSentAt so the cron will fire again at the new time.
+   */
+  updateDueAt: agentProcedure
+    .input(z.object({ id: z.number().int(), dueAt: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const [row] = await db.select().from(followUps).where(eq(followUps.id, input.id));
+      if (!row) throw new Error("Follow-up not found");
+      const history = safeParseHistory(row.history);
+      const newLabel = new Date(input.dueAt).toLocaleString("en-US", {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+      history.push({
+        text: `Due time changed to ${newLabel}`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ts: Date.now(),
+      });
+      await db
+        .update(followUps)
+        .set({ dueAt: input.dueAt, reminderSentAt: null, history: JSON.stringify(history) })
+        .where(eq(followUps.id, input.id));
+      return { ok: true };
+    }),
+
+  /**
    * Update owner, priority, or dueAt on an existing follow-up.
    */
   update: agentProcedure
