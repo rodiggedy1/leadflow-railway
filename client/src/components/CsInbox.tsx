@@ -320,6 +320,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
       // Last inbound message timestamp for unread detection
       const lastInboundTs = msgs.filter((m) => m.role === "user").slice(-1)[0]?.ts ?? 0;
+      // hasUnanswered: server computed, or derive locally as fallback
+      const hasUnanswered = (row as any).hasUnanswered ?? (msgs.length > 0 && msgs[msgs.length - 1].role === "user");
       return {
         id: row.id,
         name,
@@ -337,6 +339,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         stats: { bookings: 0, rating: "—", complaints: 0 },
         aiInsight: "",
         lastInboundTs,
+        hasUnanswered,
         messages: msgs.map((m) => ({
           sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system" as MsgSender,
           text: m.content,
@@ -759,8 +762,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[24px] border bg-white px-4 py-4 text-left shadow-sm transition hover:shadow-md ${
-                          selected.id === conversation.id ? "border-slate-900" : "border-slate-200"
+                        className={`w-full rounded-[24px] border px-4 py-4 text-left shadow-sm transition hover:shadow-md ${
+                          selected.id === conversation.id
+                            ? "border-slate-900 bg-white"
+                            : (conversation as any).hasUnanswered
+                              ? "border-orange-300 bg-orange-50 shadow-orange-100"
+                              : "border-slate-200 bg-white"
                         }`}
                       >
                         <div className="flex items-start gap-3">
