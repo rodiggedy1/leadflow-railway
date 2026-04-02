@@ -130,6 +130,9 @@ export async function buildJadePriceReveal(params: {
       "{price}": priceForTemplate,
       "{recurringprice}": recurringPriceForTemplate,
       "$(recurringprice}": recurringPriceForTemplate,
+      // ${recurringprice} — user-friendly format where $ is part of the placeholder
+      // We substitute the whole thing including the $ so the output already has the dollar sign
+      "${recurringprice}": `$${recurringPriceForTemplate}`,
       "{day}": day,
       "{extrasLine}": extrasLine,
     }
