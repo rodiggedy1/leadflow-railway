@@ -2333,7 +2333,7 @@ function ConversationDrawer({
             <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Quick Controls</div>
             <div className="grid grid-cols-2 gap-2.5">
               <button
-                onClick={() => { if (session.leadPhone) window.open(`tel:${session.leadPhone}`, "_self"); }}
+                onClick={() => { if (session.leadPhone) window.open(`openphone://call?to=${session.leadPhone}`, "_self"); }}
                 className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors"
               >
                 <span>&#128222;</span> Call lead
@@ -4137,7 +4137,7 @@ export default function AdminDashboard() {
                           {/* Click-to-call + Call Assist — always visible */}
                           <div className="flex items-center gap-0.5 flex-shrink-0">
                             <a
-                              href={`tel:${session.leadPhone}`}
+                              href={`openphone://call?to=${session.leadPhone}`}
                               onClick={e => e.stopPropagation()}
                               title={`Call ${formatPhone(session.leadPhone)}`}
                               className="flex-shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"

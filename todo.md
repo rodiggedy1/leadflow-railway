@@ -884,3 +884,4 @@
 - [x] Add SMS client widget on job card (sms: link to customer phone)
 - [x] Add Launch27 booking link on job card (opens booking in new tab)
 - [x] Replace tel: links with openphone://dial?number= in CS chat call buttons
+- [x] Fix all call buttons to use openphone://call?to= scheme across entire app (CsInbox, CommandChat, OpsChat, AdminDashboard, AgentDashboard, KanbanBoard, DailyRecapModal, ControlTowerTab)

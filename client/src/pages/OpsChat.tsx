@@ -2237,7 +2237,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 </button>
                 {jobDetail?.job.cleanerPhone && (
                   <Button variant="outline" size="sm" asChild>
-                    <a href={`tel:${jobDetail.job.cleanerPhone}`}>
+                    <a href={`openphone://call?to=${jobDetail.job.cleanerPhone}`}>
                       <Phone className="h-4 w-4 mr-1.5" />
                       Call Cleaner
                     </a>
@@ -2863,7 +2863,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <div className="grid grid-cols-2 gap-2">
                 {jobDetail.job.customerPhone ? (
                   <Button variant="outline" className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap" asChild>
-                    <a href={`tel:${jobDetail.job.customerPhone}`}>Call Client</a>
+                    <a href={`openphone://call?to=${jobDetail.job.customerPhone}`}>Call Client</a>
                   </Button>
                 ) : (
                   <Button variant="outline" className="h-9 rounded-xl text-xs font-medium border-slate-200 text-slate-800 bg-white hover:bg-slate-50 whitespace-nowrap">

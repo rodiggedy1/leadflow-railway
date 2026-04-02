@@ -830,7 +830,7 @@ export default function ControlTowerTab() {
                   {selectedJob.customerPhone && (
                     <Button
                       className="h-12 rounded-2xl"
-                      onClick={() => window.open(`tel:${selectedJob.customerPhone}`, "_self")}
+                      onClick={() => window.open(`openphone://call?to=${selectedJob.customerPhone}`, "_self")}
                     >
                       <Phone className="mr-2 h-4 w-4" /> Call client
                     </Button>

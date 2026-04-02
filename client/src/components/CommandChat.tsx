@@ -366,7 +366,7 @@ function HotLeadCard({
         <div className="flex items-center gap-2 mt-2.5">
           {leadPhone && (
             <a
-              href={`tel:${leadPhone}`}
+              href={`openphone://call?to=${leadPhone}`}
               title={`Call ${leadName}`}
               className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0"
             >
@@ -1737,7 +1737,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             {/* Call icon — dial lead directly */}
                             {leadPhone && (
                               <a
-                                href={`tel:${leadPhone}`}
+                                href={`openphone://call?to=${leadPhone}`}
                                 title={`Call ${leadName}`}
                                 className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors shrink-0"
                               >

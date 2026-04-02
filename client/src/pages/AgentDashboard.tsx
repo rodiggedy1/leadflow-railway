@@ -744,7 +744,7 @@ function ConversationDrawer({
                   </button>
                 )}
                 <a
-                  href={`tel:${session.leadPhone}`}
+                  href={`openphone://call?to=${session.leadPhone}`}
                   title={`Call ${formatPhone(session.leadPhone)}`}
                   className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors"
                   style={{ backgroundColor: "#E8603C", color: "white" }}
@@ -1593,7 +1593,7 @@ function LeadCard({
               {/* Hover call icon */}
               {session.leadPhone && (
                 <a
-                  href={`tel:${session.leadPhone}`}
+                  href={`openphone://call?to=${session.leadPhone}`}
                   className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-white bg-[#E8603C] hover:bg-[#d4522f]"
                   onClick={e => e.stopPropagation()}
                   title={`Call ${formatPhone(session.leadPhone)}`}
@@ -1612,7 +1612,7 @@ function LeadCard({
           {/* ── Row 2: Phone + Meta ── */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 mb-2">
             <a
-              href={`tel:${session.leadPhone}`}
+              href={`openphone://call?to=${session.leadPhone}`}
               className="inline-flex items-center gap-1 font-medium text-gray-600 hover:text-[#E8603C] transition-colors"
               onClick={e => e.stopPropagation()}
             >

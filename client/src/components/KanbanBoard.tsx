@@ -423,7 +423,7 @@ function LeadCard({
           <div className="flex items-center gap-2">
             {lead.leadPhone && (
               <a
-                href={`tel:${lead.leadPhone}`}
+                href={`openphone://call?to=${lead.leadPhone}`}
                 onClick={e => e.stopPropagation()}
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                 title={`Call ${lead.leadPhone}`}

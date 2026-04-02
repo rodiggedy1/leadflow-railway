@@ -141,7 +141,7 @@ function PendingRow({
         <span className="text-sm font-bold text-gray-800 mr-1">${lead.quotedPrice.toLocaleString()}</span>
       )}
       <a
-        href={`tel:${lead.phone}`}
+        href={`openphone://call?to=${lead.phone}`}
         onClick={e => e.stopPropagation()}
         className="inline-flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors flex-shrink-0"
         style={{ backgroundColor: "#AAFF00", color: "#111" }}
