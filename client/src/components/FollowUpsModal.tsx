@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Priority = "High" | "Normal" | "Low";
-type FollowUpType = "Lead callback" | "Customer issue" | "Reschedule" | "Voicemail";
+type FollowUpType = "Lead callback" | "Customer issue" | "Reschedule" | "Voicemail" | "Team Issue";
 type FollowUpStatus = "Due soon" | "High priority" | "Needs decision" | "Queued";
 
 interface HistoryEntry {
@@ -132,6 +132,7 @@ const FOLLOW_UP_TYPES: { type: FollowUpType; sub: string }[] = [
   { type: "Customer issue", sub: "Refund, save, complaint" },
   { type: "Reschedule", sub: "Move job + notify" },
   { type: "Voicemail", sub: "No answer, queue next touch" },
+  { type: "Team Issue", sub: "Internal team escalation" },
 ];
 
 const NEXT_STEP_OPTIONS = [
@@ -143,7 +144,9 @@ const NEXT_STEP_OPTIONS = [
   "Wait for reply",
 ];
 
-const OWNERS = ["Madison", "Ariana", "Kevin", "Jade", "Me"];
+// OWNERS is now fetched live from the DB via trpc.followUps.listAgents
+// Fallback list used only when the query hasn't resolved yet
+const OWNERS_FALLBACK = ["Madison", "Ariana", "Kevin", "Jade"];
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -274,9 +277,11 @@ function QueueView({
 function NewFollowUpView({
   onBack,
   onSaved,
+  agents,
 }: {
   onBack: () => void;
   onSaved: () => void;
+  agents: string[];
 }) {
   const utils = trpc.useUtils();
   const createMutation = trpc.followUps.create.useMutation({
@@ -390,7 +395,7 @@ function NewFollowUpView({
               onChange={(e) => setOwner(e.target.value)}
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
             >
-              {OWNERS.map((o) => (
+              {agents.map((o) => (
                 <option key={o}>{o}</option>
               ))}
             </select>
@@ -505,11 +510,13 @@ function DetailView({
   onBack,
   onComplete,
   onClose,
+  agents,
 }: {
   item: FollowUp;
   onBack: () => void;
   onComplete: () => void;
   onClose: () => void;
+  agents: string[];
 }) {
   const utils = trpc.useUtils();
   const completeMutation = trpc.followUps.complete.useMutation({
@@ -686,7 +693,7 @@ function DetailView({
               onChange={(e) => setSelectedOwner(e.target.value)}
               className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
             >
-              {OWNERS.map((o) => (
+              {agents.map((o) => (
                 <option key={o} value={o}>{o}</option>
               ))}
             </select>
@@ -767,6 +774,10 @@ export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
     enabled: open,
     refetchInterval: open ? 30_000 : false,
   });
+  const { data: agentNames = OWNERS_FALLBACK } = trpc.followUps.listAgents.useQuery(undefined, {
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
   const items = rawItems as FollowUp[];
   const selectedItem = items.find((i) => i.id === selectedId) ?? null;
 
@@ -805,7 +816,7 @@ export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
           />
         )}
         {view === "new" && (
-          <NewFollowUpView onBack={handleBack} onSaved={handleBack} />
+          <NewFollowUpView onBack={handleBack} onSaved={handleBack} agents={agentNames} />
         )}
         {view === "detail" && selectedItem && (
           <DetailView
@@ -813,6 +824,7 @@ export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
             onBack={handleBack}
             onComplete={handleBack}
             onClose={onClose}
+            agents={agentNames}
           />
         )}
       </div>

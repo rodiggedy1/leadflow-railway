@@ -10,7 +10,7 @@ import { z } from "zod";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import { router } from "./_core/trpc";
 import { agentProcedure } from "./_core/trpc";
-import { getDb } from "./db";
+import { getDb, getAllAgents } from "./db";
 import { followUps } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
@@ -22,7 +22,7 @@ const createInput = z.object({
   nextStep: z.string().min(1).max(255),
   dueAt: z.number().int(), // Unix ms
   owner: z.string().min(1).max(100),
-  type: z.enum(["Lead callback", "Customer issue", "Reschedule", "Voicemail"]),
+  type: z.enum(["Lead callback", "Customer issue", "Reschedule", "Voicemail", "Team Issue"]),
   priority: z.enum(["High", "Normal", "Low"]).default("Normal"),
   internalNote: z.string().max(2000).optional(),
   customerFacingMove: z.string().max(2000).optional(),
@@ -36,6 +36,16 @@ const addHistoryInput = z.object({
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const followUpsRouter = router({
+  /**
+   * List active CS agents (name only) for the owner picker.
+   */
+  listAgents: agentProcedure.query(async () => {
+    const all = await getAllAgents();
+    return all
+      .filter((a) => a.isActive === 1)
+      .map((a) => a.name);
+  }),
+
   /**
    * List all active (not completed) follow-ups, ordered by dueAt ascending.
    */

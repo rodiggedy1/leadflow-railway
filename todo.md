@@ -895,3 +895,5 @@
 - [x] Follow-ups modal: vitest tests for deriveStatus logic and runFollowUpReminders
 - [x] Follow-ups modal: wire "Reassign owner" button — trpc.followUps.reassign mutation + inline owner picker
 - [x] Follow-ups modal: wire "Change due time" button — trpc.followUps.updateDueAt mutation + inline date/time input
+- [x] Follow-ups modal: add "Team Issue" as a follow-up type
+- [x] Follow-ups modal: replace hardcoded OWNERS with real CS agents from DB
