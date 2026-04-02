@@ -2148,9 +2148,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           )}
                           <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                             {(() => {
-                              // Token-based markdown renderer: supports **bold** and [text](url)
+                              // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
                               const tokens: React.ReactNode[] = [];
-                              const linkRe = /\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]+)\)/g;
+                              // Combined regex: markdown links OR bare URLs (not already inside a markdown link)
+                              const combinedRe = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/[^\s<>"'\]\)]+)/g;
                               const boldRe = /\*\*([^*]+)\*\*/g;
                               let lastIdx = 0;
                               let match: RegExpExecArray | null;
@@ -2167,10 +2168,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 if (bLast < text.length) parts.push(<span key={`${keyPrefix}-t${bi}`}>{text.slice(bLast)}</span>);
                                 return parts;
                               };
-                              linkRe.lastIndex = 0;
-                              while ((match = linkRe.exec(msg.body)) !== null) {
+                              combinedRe.lastIndex = 0;
+                              while ((match = combinedRe.exec(msg.body)) !== null) {
                                 if (match.index > lastIdx) tokens.push(...renderBold(msg.body.slice(lastIdx, match.index), `pre-${match.index}`));
-                                tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">{match[1]}</a>);
+                                if (match[1] !== undefined) {
+                                  // Markdown [text](url)
+                                  tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">{match[1]}</a>);
+                                } else {
+                                  // Bare URL — strip trailing punctuation that's likely not part of the URL
+                                  const rawUrl = match[3].replace(/[.,!?;:]+$/, "");
+                                  tokens.push(<a key={`url-${match.index}`} href={rawUrl} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300 break-all">{rawUrl}</a>);
+                                }
                                 lastIdx = match.index + match[0].length;
                               }
                               if (lastIdx < msg.body.length) tokens.push(...renderBold(msg.body.slice(lastIdx), `tail`));
