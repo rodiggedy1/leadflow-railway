@@ -16,7 +16,7 @@ import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { signCleanerSession, verifyCleanerSession } from "./_core/cleanerAuth";
 import { parse as parseCookie } from "cookie";
-import { publicProcedure, cleanerProcedure, agentProcedure, router } from "./_core/trpc";
+import { publicProcedure, cleanerProcedure, agentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
@@ -710,7 +710,7 @@ export const cleanerRouter = router({
    * cleaner.getMagicLink — generate (or reuse) a valid magic link for a cleaner and return the URL.
    * Does NOT send an SMS — admin copies the link manually.
    */
-  getMagicLink: agentProcedure
+  getMagicLink: opsChatProcedure
     .input(z.object({
       cleanerProfileId: z.number().int().positive(),
       origin: z.string().url(),

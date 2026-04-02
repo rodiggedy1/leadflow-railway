@@ -856,3 +856,9 @@
 ## CS Inbox UX Improvements (Apr 2)
 - [x] Styled tooltips on icon-only buttons in CS thread header
 - [x] Auto-sync OpenPhone messages when a conversation card is selected
+
+## CS Chat Permissions Fix
+- [x] Switch all CS procedures from protectedProcedure (owner-only) to opsChatProcedure (agents + owner)
+  - listCsInbox, getCsUnreadCount, resolveSession, updateCsName, updateCsQueue, backfillCsNames
+  - getCleanerTodayJobs, getCleanerProfileByPhone, getClientProfile, csQuickReply, batchResolveNames
+  - getMagicLink (cleanerRouter)

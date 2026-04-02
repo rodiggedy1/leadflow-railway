@@ -1,7 +1,7 @@
 import { COOKIE_NAME, AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminAgentProcedure, agentProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminAgentProcedure, agentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
@@ -2492,7 +2492,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * listCsInbox — list all sessions that came in via the CS line (202-888-5362).
      * Accessible to all agents and admins.
      */
-    listCsInbox: protectedProcedure
+    listCsInbox: opsChatProcedure
       .input(z.object({ showResolved: z.boolean().optional().default(false) }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -2516,7 +2516,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.
      * Used to show the red badge on the CS tab.
      */
-    getCsUnreadCount: protectedProcedure
+    getCsUnreadCount: opsChatProcedure
       .input(z.object({ lastSeenTs: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -2541,7 +2541,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * resolveSession — marks a CS inbox session as resolved (archived).
      * Sets csResolvedAt to the current timestamp.
      */
-    resolveSession: protectedProcedure
+    resolveSession: opsChatProcedure
       .input(z.object({ sessionId: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -2555,7 +2555,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
     /**
      * updateCsName — update the display name for a CS inbox session.
      */
-    updateCsName: protectedProcedure
+    updateCsName: opsChatProcedure
       .input(z.object({ sessionId: z.number(), name: z.string().trim() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -2569,7 +2569,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
     /**
      * updateCsQueue — assign a CS inbox session to a queue label.
      */
-    updateCsQueue: protectedProcedure
+    updateCsQueue: opsChatProcedure
       .input(z.object({ sessionId: z.number(), queue: z.string() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -2585,7 +2585,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * that currently have a null leadName. Checks cleanerProfiles, completedJobs,
      * cleanerJobs, quoteLeads, and other sessions with the same phone.
      */
-    backfillCsNames: protectedProcedure
+    backfillCsNames: opsChatProcedure
       .mutation(async () => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
@@ -2657,7 +2657,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
      * Used by the Teams right panel in CsInbox.
      */
-    getCleanerTodayJobs: protectedProcedure
+    getCleanerTodayJobs: opsChatProcedure
       .input(z.object({ cleanerProfileId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -2695,7 +2695,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * getCleanerProfileByPhone — looks up a cleanerProfile by 10-digit phone.
      * Used by the Teams right panel to resolve cleanerProfileId from the session phone.
      */
-    getCleanerProfileByPhone: protectedProcedure
+    getCleanerProfileByPhone: opsChatProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -2714,7 +2714,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * Searches completedJobs (5yr history, E.164 format), cleanerJobs (recent + today, (xxx) format),
      * and quoteLeads (mixed format). All normalized to 10 digits before lookup.
      */
-    getClientProfile: protectedProcedure
+    getClientProfile: opsChatProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -2837,7 +2837,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * csQuickReply — generates a context-aware draft message for a CS inbox quick-reply button.
      * Reads the conversation history + client name and tailors the message to the tone.
      */
-    csQuickReply: protectedProcedure
+    csQuickReply: opsChatProcedure
       .input(z.object({
         action: z.enum(["send_quote", "make_it_right", "refer_friend", "running_late", "on_the_way", "review_rebook", "ai_suggest"]),
         clientName: z.string().optional(),
@@ -2911,7 +2911,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
      * { normalizedPhone10 -> resolvedName } in a single round-trip.
      * Priority: cleanerProfiles > completedJobs > cleanerJobs.customerName > quoteLeads
      */
-    batchResolveNames: protectedProcedure
+    batchResolveNames: opsChatProcedure
       .input(z.object({ phones: z.array(z.string()).max(100) }))
       .query(async ({ input }) => {
         const db = await getDb();
