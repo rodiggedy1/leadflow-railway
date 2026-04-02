@@ -747,12 +747,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <button
                             className="flex-1 text-left"
                             onClick={() => {
-                              const found = conversations.find((c) => c.id === item.id);
+                              const found = displayConversations.find((c) => c.id === item.id);
                               if (found) {
                                 setActiveQueue("All");
                                 setSelectedId(found.id);
                                 userNavigatedToId.current = found.id;
                                 triggerAutoDraft(found);
+                              } else {
+                                // Session exists in DB but not yet in filtered list — force select by id
+                                setActiveQueue("All");
+                                setSelectedId(item.id);
                               }
                             }}
                           >
