@@ -868,3 +868,4 @@
 - [ ] Replace TypingBubble with amber warning banner above compose box when another agent is typing (non-blocking, keeps AI draft editable)
 - [x] Tweak CS chat AI suggestion prompt for Teams queue: cleaner context (access issues, job size, callouts, field mgmt questions) instead of client context
 - [x] Improve CS chat AI suggestion tone: high-energy, presumptive, human — read full conversation intent, advance rather than re-ask decisions already made
+- [x] Rebuild CS chat AI prompt with expert SMS tone principles: no price hallucination, no cringe phrases, world-class human energy
