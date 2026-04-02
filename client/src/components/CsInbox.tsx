@@ -610,24 +610,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   ))}
                 </div>
               )}
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inbox</div>
-                  <div className="mt-2 text-3xl font-semibold">Today</div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center min-w-[74px]">
-                    <div className="text-xl font-semibold">15</div>
-                    <div className="text-xs text-slate-500 mt-1">online</div>
-                  </div>
-                  <button
-                    onClick={() => setNewConvOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 transition-colors"
-                    title="Start a new SMS conversation"
-                  >
-                    <PenSquare className="h-3.5 w-3.5" />
-                    New SMS
-                  </button>
+                  <div className="mt-1.5 text-3xl font-semibold">Today</div>
                 </div>
               </div>
 
@@ -852,51 +838,55 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                      <span>{selected.service}</span>
-                      <span>•</span>
-                      <span>{selected.location}</span>
-                      <span>•</span>
-                      <span>{selected.amount}</span>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-400">
+                      {selected.phone && <span className="font-mono tracking-wide">{selected.phone}</span>}
+                      {selected.service && <><span className="text-slate-300">·</span><span>{selected.service}</span></>}
+                      {selected.amount && <><span className="text-slate-300">·</span><span>{selected.amount}</span></>}
                     </div>
                   </div>
-                  <div className="flex gap-2 flex-wrap items-center">
-                    {/* Call via OpenPhone */}
-                    {selected && selected.phone && (
+                  <div className="flex items-center gap-1.5">
+                    {/* Call via OpenPhone — icon only */}
+                    {selected?.phone && (
                       <a
                         href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
                         title={`Call ${selected.phone} via OpenPhone`}
-                        className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors"
+                        className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                       >
-                        <Phone className="h-3.5 w-3.5" />
-                        {selected.phone}
+                        <Phone className="h-4 w-4" />
                       </a>
                     )}
-                    {/* Sync from OpenPhone — backfills outbound messages sent from the OpenPhone app */}
+                    {/* Sync from OpenPhone — icon only */}
                     {selected && selected.id > 0 && selected.phone && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-2xl border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800 transition-colors text-xs"
+                      <button
+                        type="button"
                         onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
                         disabled={syncOutbound.isPending}
-                        title="Pull in messages sent from the OpenPhone app"
+                        title="Sync messages from OpenPhone app"
+                        className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
-                        {syncOutbound.isPending ? "Syncing…" : "Sync OpenPhone"}
-                      </Button>
+                        <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
+                      </button>
                     )}
-                    {/* Resolve button — only for real CS sessions (not static demo) */}
+                    {/* New SMS — icon only */}
+                    <button
+                      type="button"
+                      onClick={() => setNewConvOpen(true)}
+                      title="Start a new SMS conversation"
+                      className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                    >
+                      <PenSquare className="h-4 w-4" />
+                    </button>
+                    {/* Resolve — kept as text button since it's a critical action */}
                     {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors"
+                      <button
+                        type="button"
                         onClick={() => resolveSession.mutate({ sessionId: selected.id })}
                         disabled={resolveSession.isPending}
+                        title="Resolve conversation"
+                        className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
                       >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        {resolveSession.isPending ? "Resolving…" : "Resolve"}
-                      </Button>
+                        <CheckCircle2 className="h-4 w-4" />
+                      </button>
                     )}
                   </div>
                 </div>
