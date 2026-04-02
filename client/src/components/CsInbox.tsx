@@ -55,6 +55,8 @@ import {
   FileText,
   DollarSign,
   ClipboardList,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import {
   Tooltip,
@@ -271,6 +273,56 @@ function jobStatusStyle(s: JobStatus): string {
   }
 }
 
+// ─── Follow-up types (mirrored from FollowUpsModal) ─────────────────────────
+type FuPriority = "High" | "Normal" | "Low";
+type FuStatus = "Due soon" | "High priority" | "Needs decision" | "Queued";
+interface FuHistoryEntry { text: string; time: string; }
+interface FollowUpItem {
+  id: number;
+  name: string;
+  nextStep: string;
+  dueAt: number;
+  owner: string;
+  type: string;
+  priority: FuPriority;
+  internalNote: string | null;
+  customerFacingMove: string | null;
+  history: FuHistoryEntry[];
+  completedAt: number | null;
+  reminderSentAt: number | null;
+}
+function fuDeriveStatus(item: FollowUpItem): FuStatus {
+  if (item.priority === "High") return "High priority";
+  const diff = item.dueAt - Date.now();
+  if (diff < 0 || diff < 2 * 60 * 60 * 1000) return "Due soon";
+  if (item.type === "Reschedule") return "Needs decision";
+  return "Queued";
+}
+function fuFormatDue(dueAt: number): { date: string; time: string } {
+  const d = new Date(dueAt);
+  const now = new Date();
+  const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  return {
+    date: isToday ? "Today" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+  };
+}
+function fuStatusStyle(s: FuStatus): string {
+  switch (s) {
+    case "High priority": return "bg-red-50 text-red-600 border border-red-200";
+    case "Due soon":      return "bg-amber-50 text-amber-700 border border-amber-200";
+    case "Needs decision":return "bg-blue-50 text-blue-700 border border-blue-200";
+    default:              return "bg-slate-50 text-slate-500 border border-slate-200";
+  }
+}
+function fuPriorityDot(p: FuPriority): string {
+  switch (p) {
+    case "High":   return "bg-red-500";
+    case "Normal": return "bg-slate-400";
+    default:       return "bg-slate-300";
+  }
+}
+
 type CsInboxProps = { onSwitchTab?: (tab: "today" | "channels" | "cs") => void };
 export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [activeQueue, setActiveQueue] = useState<Queue | "All">("All");
@@ -278,6 +330,25 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
   const [showResolved, setShowResolved] = useState(false);
+  // Follow-ups panel state
+  const [followUpsExpanded, setFollowUpsExpanded] = useState(true);
+  const [selectedFollowUp, setSelectedFollowUp] = useState<FollowUpItem | null>(null);
+  const { data: followUpItems = [], isLoading: fuLoading } = trpc.followUps.list.useQuery(
+    undefined,
+    { staleTime: 60_000, refetchInterval: 2 * 60_000 }
+  );
+  const { data: fuAgents = [] } = trpc.followUps.listAgents.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const fuUtils = trpc.useUtils();
+  const fuComplete = trpc.followUps.complete.useMutation({ onSuccess: () => { fuUtils.followUps.list.invalidate(); setSelectedFollowUp(null); } });
+  const fuAddNote = trpc.followUps.addNote.useMutation({ onSuccess: () => fuUtils.followUps.list.invalidate() });
+  const fuReassign = trpc.followUps.reassign.useMutation({ onSuccess: () => { fuUtils.followUps.list.invalidate(); } });
+  const fuUpdateDue = trpc.followUps.updateDueAt.useMutation({ onSuccess: () => { fuUtils.followUps.list.invalidate(); } });
+  const [fuNoteInput, setFuNoteInput] = useState("");
+  const [fuAddingNote, setFuAddingNote] = useState(false);
+  const [fuReassigning, setFuReassigning] = useState(false);
+  const [fuSelectedOwner, setFuSelectedOwner] = useState("");
+  const [fuChangingDue, setFuChangingDue] = useState(false);
+  const [fuDueValue, setFuDueValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
@@ -1587,6 +1658,248 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* ─── Follow-ups panel ─────────────────────────────── */}
+                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]"> 
+                  <CardContent className="p-0">
+                    {/* Header row */}
+                    <button
+                      onClick={() => setFollowUpsExpanded((v) => !v)}
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50/60 transition rounded-[28px]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4 text-violet-500" />
+                        <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Follow-ups</span>
+                        {followUpItems.length > 0 && (
+                          <span className="text-xs font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
+                            {followUpItems.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {fuLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />}
+                        {followUpsExpanded
+                          ? <ChevronUp className="h-4 w-4 text-slate-400" />
+                          : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                      </div>
+                    </button>
+
+                    {followUpsExpanded && (
+                      <div className="px-4 pb-4 space-y-2">
+                        {followUpItems.length === 0 && !fuLoading && (
+                          <div className="text-center py-6 text-sm text-slate-400">
+                            No active follow-ups
+                          </div>
+                        )}
+                        {followUpItems.map((fu) => {
+                          const fuItem = fu as unknown as FollowUpItem;
+                          const status = fuDeriveStatus(fuItem);
+                          const { date: dd, time: dt } = fuFormatDue(fuItem.dueAt);
+                          const isOverdue = fuItem.dueAt < Date.now();
+                          return (
+                            <button
+                              key={fuItem.id}
+                              onClick={() => {
+                                setSelectedFollowUp(fuItem);
+                                setFuReassigning(false);
+                                setFuChangingDue(false);
+                                setFuAddingNote(false);
+                                setFuNoteInput("");
+                                setFuSelectedOwner(fuItem.owner);
+                                const d = new Date(fuItem.dueAt);
+                                const pad = (n: number) => String(n).padStart(2, "0");
+                                setFuDueValue(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+                              }}
+                              className="w-full text-left bg-white border border-slate-200 rounded-2xl px-3.5 py-3 hover:border-violet-300 hover:shadow-sm transition group"
+                            >
+                              {/* Name + status */}
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <span className="font-semibold text-slate-900 text-sm leading-tight truncate">{fuItem.name}</span>
+                                <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0", fuStatusStyle(status))}>
+                                  {status}
+                                </span>
+                              </div>
+                              {/* Next step */}
+                              <p className="text-xs text-slate-500 mb-2 leading-relaxed line-clamp-2">{fuItem.nextStep}</p>
+                              {/* Meta chips */}
+                              <div className="flex flex-wrap gap-1">
+                                <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", isOverdue ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600")}>
+                                  {dd} · {dt}
+                                </span>
+                                <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                                  {fuItem.owner}
+                                </span>
+                                <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">
+                                  {fuItem.type}
+                                </span>
+                                {fuItem.priority === "High" && (
+                                  <span className="text-[10px] font-medium bg-red-50 text-red-600 px-2 py-0.5 rounded-full">High</span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Follow-up detail Sheet */}
+                <Sheet open={!!selectedFollowUp} onOpenChange={(o) => { if (!o) setSelectedFollowUp(null); }}>
+                  <SheetContent side="right" className="w-[420px] p-0 flex flex-col overflow-hidden">
+                    <SheetHeader className="px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Follow-up Detail</p>
+                          <SheetTitle className="text-xl font-bold text-slate-900 leading-tight">{selectedFollowUp?.name}</SheetTitle>
+                        </div>
+                        <span className={cn("text-sm font-semibold px-3 py-1.5 rounded-lg",
+                          selectedFollowUp?.priority === "High" ? "bg-red-50 text-red-600 border border-red-200"
+                          : selectedFollowUp?.priority === "Normal" ? "bg-slate-50 text-slate-600 border border-slate-200"
+                          : "bg-slate-50 text-slate-400 border border-slate-200"
+                        )}>{selectedFollowUp?.priority}</span>
+                      </div>
+                    </SheetHeader>
+
+                    {selectedFollowUp && (
+                      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                        {/* Next action */}
+                        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-4">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Next Action</p>
+                          <h3 className="text-base font-bold text-slate-900 mb-3">{selectedFollowUp.nextStep}</h3>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(() => { const { date: dd, time: dt } = fuFormatDue(selectedFollowUp.dueAt); const st = fuDeriveStatus(selectedFollowUp); return (<>
+                              <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">{dd} · {dt}</span>
+                              <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">Owner: {selectedFollowUp.owner}</span>
+                              <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">{selectedFollowUp.type}</span>
+                              <span className={cn("text-xs px-2.5 py-1 rounded-full", fuStatusStyle(st))}>{st}</span>
+                            </>); })()}
+                          </div>
+                        </div>
+
+                        {/* Notes row */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-4">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Internal Note</p>
+                            <p className="text-sm text-slate-600 leading-relaxed">{selectedFollowUp.internalNote || "—"}</p>
+                          </div>
+                          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-4">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Customer-Facing Move</p>
+                            <p className="text-sm text-slate-600 leading-relaxed">{selectedFollowUp.customerFacingMove || "—"}</p>
+                          </div>
+                        </div>
+
+                        {/* Ownership mini-cards */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-white border border-slate-200 rounded-xl px-3 py-3">
+                            <p className="text-[10px] text-slate-400 mb-1">Owner</p>
+                            <p className="text-sm font-bold text-slate-900">{selectedFollowUp.owner}</p>
+                          </div>
+                          <div className="bg-white border border-slate-200 rounded-xl px-3 py-3">
+                            <p className="text-[10px] text-slate-400 mb-1">Priority</p>
+                            <p className={cn("text-sm font-bold", selectedFollowUp.priority === "High" ? "text-red-600" : "text-slate-900")}>{selectedFollowUp.priority}</p>
+                          </div>
+                          <div className="bg-white border border-slate-200 rounded-xl px-3 py-3">
+                            <p className="text-[10px] text-slate-400 mb-1">Due</p>
+                            <p className="text-sm font-bold text-slate-900">{fuFormatDue(selectedFollowUp.dueAt).date} · {fuFormatDue(selectedFollowUp.dueAt).time}</p>
+                          </div>
+                        </div>
+
+                        {/* History */}
+                        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">History</p>
+                              <p className="text-sm font-bold text-slate-900">What happened so far</p>
+                            </div>
+                            <button
+                              onClick={() => setFuAddingNote(true)}
+                              className="text-xs font-semibold bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-full hover:bg-slate-50 transition"
+                            >Add note</button>
+                          </div>
+                          <div className="space-y-2">
+                            {(selectedFollowUp.history ?? []).map((h, i) => (
+                              <div key={i} className="bg-slate-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+                                <p className="text-sm text-slate-700">{h.text}</p>
+                                <span className="text-xs text-slate-400 shrink-0">{h.time}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {fuAddingNote && (
+                            <div className="mt-3 flex gap-2">
+                              <input
+                                autoFocus
+                                value={fuNoteInput}
+                                onChange={(e) => setFuNoteInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && fuNoteInput.trim()) {
+                                    fuAddNote.mutate({ id: selectedFollowUp.id, text: fuNoteInput.trim() });
+                                    setFuNoteInput(""); setFuAddingNote(false);
+                                  }
+                                }}
+                                placeholder="Add a note..."
+                                className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+                              />
+                              <button
+                                onClick={() => { if (fuNoteInput.trim()) { fuAddNote.mutate({ id: selectedFollowUp.id, text: fuNoteInput.trim() }); setFuNoteInput(""); setFuAddingNote(false); } }}
+                                className="text-xs font-semibold bg-slate-900 text-white px-3 py-2 rounded-xl hover:bg-slate-700 transition"
+                              >Add</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Footer actions */}
+                    {selectedFollowUp && (
+                      <div className="px-5 pb-5 pt-3 border-t border-slate-100 space-y-2 shrink-0">
+                        <button
+                          onClick={() => fuComplete.mutate({ id: selectedFollowUp.id })}
+                          disabled={fuComplete.isPending}
+                          className="w-full bg-slate-900 text-white text-sm font-semibold rounded-xl py-2.5 hover:bg-slate-700 transition disabled:opacity-50"
+                        >{fuComplete.isPending ? "Marking…" : "Mark completed"}</button>
+
+                        {fuReassigning ? (
+                          <div className="flex gap-2">
+                            <select
+                              value={fuSelectedOwner}
+                              onChange={(e) => setFuSelectedOwner(e.target.value)}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
+                            >
+                              {fuAgents.map((o) => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                            <button
+                              onClick={() => fuReassign.mutate({ id: selectedFollowUp.id, owner: fuSelectedOwner })}
+                              disabled={fuReassign.isPending}
+                              className="text-sm font-semibold bg-slate-900 text-white px-4 rounded-xl hover:bg-slate-700 transition disabled:opacity-50"
+                            >{fuReassign.isPending ? "…" : "Save"}</button>
+                            <button onClick={() => setFuReassigning(false)} className="text-sm font-medium bg-white border border-slate-200 text-slate-600 px-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
+                          </div>
+                        ) : fuChangingDue ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="datetime-local"
+                              value={fuDueValue}
+                              onChange={(e) => setFuDueValue(e.target.value)}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                            />
+                            <button
+                              onClick={() => { const ts = new Date(fuDueValue).getTime(); if (!isNaN(ts)) fuUpdateDue.mutate({ id: selectedFollowUp.id, dueAt: ts }); }}
+                              disabled={fuUpdateDue.isPending}
+                              className="text-sm font-semibold bg-slate-900 text-white px-4 rounded-xl hover:bg-slate-700 transition disabled:opacity-50"
+                            >{fuUpdateDue.isPending ? "…" : "Save"}</button>
+                            <button onClick={() => setFuChangingDue(false)} className="text-sm font-medium bg-white border border-slate-200 text-slate-600 px-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => { setFuReassigning(true); setFuChangingDue(false); }} className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition">Reassign owner</button>
+                            <button onClick={() => { setFuChangingDue(true); setFuReassigning(false); }} className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition">Change due time</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </SheetContent>
+                </Sheet>
 
                 <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
                   <CardContent className="p-5">

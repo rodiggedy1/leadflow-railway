@@ -900,3 +900,4 @@
 - [x] Bug: Save button in new follow-up form does nothing — fixed: DB type enum missing Team Issue, history column needed explicit default in insert
 - [x] Follow-ups modal: post a compact summary card into command chat when a new follow-up is created
 - [x] Bug: AI priority queue resurrects dismissed/past items — fixed: tightened window to 24h, filter by last customer message recency, dismissal now permanent
+- [x] CS inbox right panel: add Follow-ups section above AI priority queue with clickable cards that open inline detail
