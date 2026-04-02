@@ -2511,26 +2511,16 @@ STAGE DETECTION — return the stage the conversation is currently in:
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(100);
 
-        // Augment each session with:
-        //   lastInboundAt  — ts of the most recent role:"user" message (for sort)
-        //   hasUnanswered  — true when the last message in history is from the customer
+        // Augment each session with hasUnanswered flag only.
+        // Sort order comes from the DB: ORDER BY updatedAt DESC (most recent activity first).
         type HistoryEntry = { role: string; ts?: number };
         const augmented = sessions.map((s) => {
           let history: HistoryEntry[] = [];
           try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
-          const inboundEntries = history.filter((m) => m.role === "user");
-          const lastInboundAt = inboundEntries.length > 0
-            ? Math.max(...inboundEntries.map((m) => m.ts ?? 0))
-            : (s.createdAt instanceof Date ? s.createdAt.getTime() : new Date(s.createdAt as string).getTime());
+          // hasUnanswered: last message in history is from the customer with no agent reply after it
           const lastEntry = history[history.length - 1];
           const hasUnanswered = !!lastEntry && lastEntry.role === "user";
-          return { ...s, lastInboundAt, hasUnanswered };
-        });
-
-        // Sort: unanswered first (by lastInboundAt desc), then answered (by lastInboundAt desc)
-        augmented.sort((a, b) => {
-          if (a.hasUnanswered !== b.hasUnanswered) return a.hasUnanswered ? -1 : 1;
-          return b.lastInboundAt - a.lastInboundAt;
+          return { ...s, hasUnanswered };
         });
 
         return augmented;

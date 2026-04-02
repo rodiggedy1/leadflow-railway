@@ -77,7 +77,7 @@ type Conversation = {
   id: number;
   name: string;
   initials: string;
-  queue: Queue;
+  queue: Queue | null;
   service: string;
   location: string;
   amount: string;
@@ -326,7 +326,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         id: row.id,
         name,
         initials,
-        queue: ((row as any).csQueue ?? (row.leadSource === "cs-inbound-cleaner" ? "Teams" : "Needs attention")) as Queue,
+        queue: ((row as any).csQueue ?? (row.leadSource === "cs-inbound-cleaner" ? "Teams" : null)) as Queue | null,
         service: row.leadSource === "cs-inbound-cleaner" ? "Cleaner" : "CS inquiry",
         location: row.leadPhone || "",
         amount: "",
@@ -523,7 +523,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     csQuickReply.mutate({
       action,
       clientName: selected.name ?? undefined,
-      queue: selected.queue,
+      queue: selected.queue ?? undefined,
       messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
     });
   }
@@ -582,7 +582,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     csQuickReply.mutate({
       action: "ai_suggest",
       clientName: conv.name ?? undefined,
-      queue: conv.queue,
+      queue: conv.queue ?? undefined,
       messageHistory: JSON.stringify(
         conv.messages.map((m) => ({
           role: m.sender === "client" ? "user" : "assistant",
@@ -609,7 +609,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
-  const tone = selected ? queueTone(selected.queue) : { label: "Needs attention" as Queue, ...queueStyles["Needs attention"] };
+  const tone = selected?.queue ? queueTone(selected.queue) : { label: null, tone: "bg-slate-100 text-slate-500 border-slate-200", dot: "bg-slate-400" };
 
   const priorityItems = [
     { name: "Jillian", reason: "waiting 12 min • job starts soon", queue: "Needs attention" },
@@ -751,7 +751,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </div>
                 <div className="mt-4 space-y-2.5">
                   {filtered.map((conversation) => {
-                    const q = queueTone(conversation.queue as Queue);
+                    const q = conversation.queue ? queueTone(conversation.queue) : { tone: "bg-slate-100 text-slate-500 border-slate-200", label: null };
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     return (
@@ -792,9 +792,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             <div className="mt-2 text-sm text-slate-600 line-clamp-2">{conversation.lastMessage}</div>
                             <div className="mt-3 flex items-center justify-between gap-3">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
-                                  {conversation.queue}
-                                </Badge>
+                                {conversation.queue && (
+                                  <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
+                                    {conversation.queue}
+                                  </Badge>
+                                )}
                                 {(() => {
                                   const t = deriveTone(conversation.messages);
                                   return (
