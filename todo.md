@@ -865,3 +865,5 @@
 
 ## CS Chat Typing Indicator
 - [x] Port existing typing indicator to CS chat (useTypingIndicator hook + TypingBubble, channelKey = cs:${sessionId})
+- [ ] Replace TypingBubble with amber warning banner above compose box when another agent is typing (non-blocking, keeps AI draft editable)
+- [x] Tweak CS chat AI suggestion prompt for Teams queue: cleaner context (access issues, job size, callouts, field mgmt questions) instead of client context

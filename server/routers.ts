@@ -2842,20 +2842,38 @@ STAGE DETECTION — return the stage the conversation is currently in:
         action: z.enum(["send_quote", "make_it_right", "refer_friend", "running_late", "on_the_way", "review_rebook", "ai_suggest"]),
         clientName: z.string().optional(),
         messageHistory: z.string().optional(),
+        queue: z.string().optional(), // "Teams" = cleaner conversation, otherwise client
       }))
       .mutation(async ({ input }) => {
         const firstName = input.clientName?.split(" ")[0] ?? "there";
+        const isTeams = input.queue === "Teams";
         const allMessages: Array<{ role: string; content: string }> = (() => {
           try { return JSON.parse(input.messageHistory ?? "[]"); } catch { return []; }
         })();
         const recentMessages = allMessages.slice(-6);
         const conversationSnippet = recentMessages
-          .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
+          .map((m) => `${m.role === "user" ? (isTeams ? "Cleaner" : "Client") : "Agent"}: ${m.content}`)
           .join("\n");
-        const systemPrompt = `You are a world-class customer service agent for Maids in Black, a premium home cleaning company serving the DC/MD/VA area. You write short, human, warm SMS messages. Never use emojis. Never sound corporate or scripted. Always sound like a real person who cares.`;
 
-        // AI Suggest: analyze conversation and pick best action + write draft
+        // ── System prompts ────────────────────────────────────────────────────
+        const systemPrompt = isTeams
+          ? `You are a field operations manager for Maids in Black, a premium home cleaning company in the DC/MD/VA area. You are texting one of your cleaning team members named ${firstName}. You write short, direct, supportive SMS messages. Never use emojis. Never sound corporate. Sound like a real manager who has their team's back and gets things done quickly. Common situations: access issues (can't get into the job), job size questions (bigger than expected), callouts (can't make it to work), field management questions (supplies, parking, timing), and requests for larger or better jobs.`
+          : `You are a world-class customer service agent for Maids in Black, a premium home cleaning company serving the DC/MD/VA area. You write short, human, warm SMS messages. Never use emojis. Never sound corporate or scripted. Always sound like a real person who cares.`;
+
+        // ── AI Suggest: analyze conversation and pick best action + write draft ─
         if (input.action === "ai_suggest") {
+          if (isTeams) {
+            // Teams: free-form AI response based on what the cleaner said
+            const result = await invokeLLM({
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: `You are a field operations manager responding to a text from your cleaner ${firstName}. Read the conversation below and write the ideal next SMS reply. Be direct and helpful. Address their specific issue — whether it's an access problem, a job size concern, a callout, a field management question, or a request for more/better work. Keep it under 3 sentences. No emojis. Start with "Hey ${firstName},". IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}` },
+              ],
+            });
+            const draft = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
+            return { draft, suggestedAction: null };
+          }
+          // Client: pick best action + write draft
           const result = await invokeLLM({
             messages: [
               { role: "system", content: systemPrompt },
@@ -2886,7 +2904,17 @@ STAGE DETECTION — return the stage the conversation is currently in:
           }
         }
 
-        const actionPrompts: Record<string, string> = {
+        // ── Named quick-reply actions ─────────────────────────────────────────
+        // Teams gets its own set of field-management action prompts
+        const teamsActionPrompts: Record<string, string> = {
+          send_quote: `Write a brief SMS to a cleaner named ${firstName} acknowledging their request for bigger or better jobs. Start with "Hey ${firstName},". Let them know you'll keep them in mind for larger jobs and appreciate their initiative. Keep it to 2 sentences. No emojis. IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.`,
+          make_it_right: `Write a brief SMS to a cleaner named ${firstName} who is having an access issue at a job site. Start with "Hey ${firstName},". Acknowledge the problem and give them a clear next step (e.g., try the lockbox, call the client, wait a few minutes). Keep it to 2 sentences. No emojis. IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.`,
+          refer_friend: `Write a brief SMS to a cleaner named ${firstName} encouraging them to refer another cleaner to join the team. Start with "Hey ${firstName},". Mention there's a referral bonus and keep it friendly. Keep it to 2 sentences. No emojis. IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.`,
+          running_late: `Write a brief SMS to a cleaner named ${firstName} who is running late to a job. Start with "Hey ${firstName},". Acknowledge the delay and remind them to text the client directly if they haven't already. Keep it to 1-2 sentences. No emojis. IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.`,
+          on_the_way: `Write a brief SMS to a cleaner named ${firstName} confirming they should head to their next job. Start with "Hey ${firstName},". Give a quick heads-up about the job (e.g., client is expecting them, check the notes). Keep it to 1 sentence. No emojis. IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.`,
+          review_rebook: `Write a brief SMS to a cleaner named ${firstName} following up after a job. Start with "Hey ${firstName},". Thank them for their work today and let them know about their next scheduled job or that you'll be in touch. Keep it to 2 sentences. No emojis. IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.`,
+        };
+        const clientActionPrompts: Record<string, string> = {
           send_quote: `Write a friendly, confident SMS quote message for a home cleaning service. The client's name is "${firstName}" — start the message with "Hey ${firstName},". Based on the conversation, craft a natural price/availability message. If no specific details are known, write a warm message offering to send a custom quote. Keep it under 2 sentences. No emojis. Sound human, not corporate. IMPORTANT: use the actual name "${firstName}" — never write [Client Name] or any placeholder.`,
           make_it_right: `Write a sincere, empathetic de-escalation SMS for a home cleaning service. The client's name is "${firstName}" — start the message with "Hey ${firstName},". Acknowledge the issue without being defensive, and offer to make it right. Keep it under 3 sentences. No emojis. Sound genuine and caring. IMPORTANT: use the actual name "${firstName}" — never write [Client Name] or any placeholder.`,
           refer_friend: `Write a warm, natural referral ask SMS for a home cleaning service. The client's name is "${firstName}" — start the message with "Hey ${firstName},". Invite them to refer a friend and mention they'll both benefit. Keep it under 2 sentences. No emojis. Sound appreciative, not salesy. IMPORTANT: use the actual name "${firstName}" — never write [Client Name] or any placeholder.`,
@@ -2894,6 +2922,7 @@ STAGE DETECTION — return the stage the conversation is currently in:
           on_the_way: `Write a brief, upbeat SMS letting a client know their cleaner is on the way. The client's name is "${firstName}" — start the message with "Hey ${firstName},". Keep it to 1 sentence. No emojis. Sound warm and professional. IMPORTANT: use the actual name "${firstName}" — never write [Client Name] or any placeholder.`,
           review_rebook: `Write a warm post-job SMS asking for a review and offering to rebook. The client's name is "${firstName}" — start the message with "Hey ${firstName},". Naturally ask for a Google review and mention scheduling the next clean. Keep it under 3 sentences. No emojis. Sound genuine, not scripted. IMPORTANT: use the actual name "${firstName}" — never write [Client Name] or any placeholder.`,
         };
+        const actionPrompts = isTeams ? teamsActionPrompts : clientActionPrompts;
         const userPrompt = conversationSnippet
           ? `Recent conversation:\n${conversationSnippet}\n\n${actionPrompts[input.action]}`
           : actionPrompts[input.action];

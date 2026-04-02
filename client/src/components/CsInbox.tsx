@@ -506,6 +506,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     csQuickReply.mutate({
       action,
       clientName: selected.name ?? undefined,
+      queue: selected.queue,
       messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
     });
   }
@@ -564,6 +565,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     csQuickReply.mutate({
       action: "ai_suggest",
       clientName: conv.name ?? undefined,
+      queue: conv.queue,
       messageHistory: JSON.stringify(
         conv.messages.map((m) => ({
           role: m.sender === "client" ? "user" : "assistant",
