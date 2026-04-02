@@ -2511,17 +2511,22 @@ STAGE DETECTION — return the stage the conversation is currently in:
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(100);
 
-        // Augment each session with hasUnanswered flag only.
-        // Sort order comes from the DB: ORDER BY updatedAt DESC (most recent activity first).
+        // Augment and sort by last message ts in messageHistory.
+        // We cannot rely on updatedAt because MySQL ON UPDATE CURRENT_TIMESTAMP fires
+        // on every .set() call (including agent replies), which bumps replied threads
+        // to the top and breaks recency order.
         type HistoryEntry = { role: string; ts?: number };
         const augmented = sessions.map((s) => {
           let history: HistoryEntry[] = [];
           try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
-          // hasUnanswered: last message in history is from the customer with no agent reply after it
           const lastEntry = history[history.length - 1];
+          const lastMsgTs = lastEntry?.ts ?? s.updatedAt.getTime();
           const hasUnanswered = !!lastEntry && lastEntry.role === "user";
-          return { ...s, hasUnanswered };
+          return { ...s, lastMsgTs, hasUnanswered };
         });
+
+        // Sort: most recent last message first
+        augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
         return augmented;
       }),
