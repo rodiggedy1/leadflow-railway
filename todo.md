@@ -862,3 +862,6 @@
   - listCsInbox, getCsUnreadCount, resolveSession, updateCsName, updateCsQueue, backfillCsNames
   - getCleanerTodayJobs, getCleanerProfileByPhone, getClientProfile, csQuickReply, batchResolveNames
   - getMagicLink (cleanerRouter)
+
+## CS Chat Typing Indicator
+- [x] Port existing typing indicator to CS chat (useTypingIndicator hook + TypingBubble, channelKey = cs:${sessionId})

@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { TypingBubble } from "@/components/TypingBubble";
 import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 import { trpc } from "@/lib/trpc";
@@ -363,6 +365,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
+
+  // Typing presence — broadcast when this agent is composing, show others typing
+  const csChannelKey = effectiveSelectedId ? `cs:${effectiveSelectedId}` : "";
+  const { typers, onKeyPress: onTypingKeyPress, onBlur: onTypingBlur } = useTypingIndicator(csChannelKey);
 
   // Keep refs in sync so resolveSession.onSuccess can read latest values
   filteredRef.current = filtered;
@@ -963,6 +969,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </div>
               </div>
 
+              {/* Typing indicator — shows when another agent is composing a reply */}
+              {typers.length > 0 && (
+                <div className="px-5 pb-1">
+                  <TypingBubble typers={typers} />
+                </div>
+              )}
               <div className="shrink-0 border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
@@ -1006,10 +1018,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       value={compose}
                       onChange={(e) => { setCompose(e.target.value); }}
                       onKeyDown={(e) => {
+                        onTypingKeyPress();
                         if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
-                                             sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
                         }
                       }}
+                      onBlur={onTypingBlur}
                     />
                     <div className="flex flex-col gap-2 shrink-0">
                       <Button
