@@ -869,3 +869,4 @@
 - [x] Tweak CS chat AI suggestion prompt for Teams queue: cleaner context (access issues, job size, callouts, field mgmt questions) instead of client context
 - [x] Improve CS chat AI suggestion tone: high-energy, presumptive, human — read full conversation intent, advance rather than re-ask decisions already made
 - [x] Rebuild CS chat AI prompt with expert SMS tone principles: no price hallucination, no cringe phrases, world-class human energy
+- [ ] Fine-tune CS chat AI prompt: add genuine warmth and excitement (client inviting us into their home), not cold/dry, not fake corporate
