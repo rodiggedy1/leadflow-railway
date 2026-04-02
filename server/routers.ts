@@ -2574,15 +2574,17 @@ STAGE DETECTION — return the stage the conversation is currently in:
     /**
      * getCsPriorityQueue — returns top 3 AI-prioritized CS sessions.
      * Uses cached csPriorityTag if set, otherwise runs AI analysis on recent open sessions.
-     * Only returns sessions not dismissed in the last 24h.
+     * Only returns sessions whose last CUSTOMER message arrived within the last 24h.
+     * Dismissed sessions are permanently excluded (no expiry).
      */
     getCsPriorityQueue: opsChatProcedure
       .query(async () => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
 
-        // Fetch all open CS sessions updated in the last 72h
-        const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+        const now = Date.now();
+        // Pre-filter: only sessions touched in the last 24h (server-side)
+        const cutoff24h = now - 24 * 60 * 60 * 1000;
         const sessions = await db
           .select()
           .from(conversationSessions)
@@ -2593,7 +2595,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
                 eq(conversationSessions.leadSource, "cs-inbound-cleaner")
               ),
               isNull(conversationSessions.csResolvedAt),
-              sql`${conversationSessions.updatedAt} > FROM_UNIXTIME(${Math.floor(cutoff / 1000)})`
+              // Only sessions touched in the last 24h
+              sql`${conversationSessions.updatedAt} > FROM_UNIXTIME(${Math.floor(cutoff24h / 1000)})`
             )
           )
           .orderBy(desc(conversationSessions.updatedAt))
@@ -2601,14 +2604,26 @@ STAGE DETECTION — return the stage the conversation is currently in:
 
         if (sessions.length === 0) return [];
 
-        // Build summaries for AI analysis — only sessions with enough content
+        // Build summaries — apply two additional filters:
+        //   1. Skip permanently dismissed sessions (csPriorityDismissedAt is set, no expiry).
+        //   2. Skip sessions whose last CUSTOMER message is older than 24h.
+        //      This prevents stale conversations from being resurrected even if an agent
+        //      touched the row recently (e.g. added a note or changed a field).
         const summaries = sessions
           .map((s) => {
+            // Permanently dismissed — never show again
+            const dismissedAt = (s as any).csPriorityDismissedAt ?? 0;
+            if (dismissedAt) return null;
             let msgs: Array<{ role: string; content: string; ts?: number }> = [];
             try { msgs = JSON.parse(s.messageHistory ?? "[]"); } catch { msgs = []; }
             if (msgs.length === 0) return null;
+            // Find the last inbound (customer) message
+            const lastCustomerMsg = [...msgs].reverse().find((m) => m.role === "user");
+            const lastCustomerTs = lastCustomerMsg?.ts ?? 0;
+            // Skip if the last customer message is older than 24h
+            if (lastCustomerTs && lastCustomerTs < cutoff24h) return null;
             const recent = msgs.slice(-6).map((m) => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`).join("\n");
-            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: msgs.slice(-1)[0]?.ts ?? 0 };
+            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: lastCustomerTs || now };
           })
           .filter(Boolean) as Array<{ id: number; name: string; recent: string; msgCount: number; lastTs: number }>;
 
@@ -2675,14 +2690,12 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
         }
 
         // Persist tags to DB and build response
-        const now = Date.now();
+        // Note: `now` is already declared above; dismissed sessions were already
+        // filtered out in the summaries step, so no second check needed here.
         const result = [];
         for (const item of priorityItems) {
           const session = sessions.find((s) => s.id === item.id);
           if (!session) continue;
-          // Skip if dismissed within last 4h
-          const dismissedAt = (session as any).csPriorityDismissedAt ?? 0;
-          if (dismissedAt && now - dismissedAt < 4 * 60 * 60 * 1000) continue;
           // Persist tag
           await db
             .update(conversationSessions)
@@ -2701,7 +2714,9 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
 
     /**
      * dismissCsPriority — agent dismisses a session from the priority queue.
-     * Sets csPriorityDismissedAt so it won't reappear for 4h.
+     * Sets csPriorityDismissedAt permanently — dismissed sessions never reappear
+     * unless the customer sends a new message (which creates a fresh session or
+     * resets the timestamp check in getCsPriorityQueue).
      */
     dismissCsPriority: opsChatProcedure
       .input(z.object({ sessionId: z.number() }))
