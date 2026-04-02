@@ -110,6 +110,12 @@ export async function buildJadePriceReveal(params: {
     ? ` (including ${resolvedExtras.map(e => e.label.toLowerCase()).join(", ")})`
     : "";
 
+  // Recurring price = one-time price minus 15% discount, rounded to nearest dollar.
+  // The DB template uses {recurringprice} — just the number, "$" is in the template.
+  // Also handle the typo variant $(recurringprice} that may appear in saved scripts.
+  const recurringPriceNum = Math.round((grandTotal > basePrice ? grandTotal : basePrice) * 0.85);
+  const recurringPriceForTemplate = `${recurringPriceNum}`;
+
   const fallback = `Perfect. We handle a lot of ${bedrooms} bed / ${bathrooms} bath homes — no problem at all.\n\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹\n\nFor a home like yours, most clients land around ${totalDisplay}. That covers everything, no hidden fees or surprises${extrasLine}.\n\nI've got ${day} at 9am or 1pm — which one should I lock in?`;
 
   // Use template from DB; substitute dynamic values.
@@ -122,6 +128,8 @@ export async function buildJadePriceReveal(params: {
       "{bedrooms}": bedrooms,
       "{bathrooms}": bathrooms,
       "{price}": priceForTemplate,
+      "{recurringprice}": recurringPriceForTemplate,
+      "$(recurringprice}": recurringPriceForTemplate,
       "{day}": day,
       "{extrasLine}": extrasLine,
     }
