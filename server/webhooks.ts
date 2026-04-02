@@ -118,6 +118,7 @@ export function registerWebhookRoutes(app: Express) {
       const rawPhone: string = msg.from;
       // OpenPhone uses 'text' field; fall back to 'body' for compatibility
       const inboundText: string = msg.text ?? msg.body ?? "";
+      const mediaUrls: string[] = (msg.media ?? []).map((m: any) => m.url ?? m.src ?? m.mediaUrl).filter(Boolean);
 
       // Idempotency key: OpenPhone has at-least-once delivery semantics and may
       // retry the same event. Use the message ID to deduplicate.

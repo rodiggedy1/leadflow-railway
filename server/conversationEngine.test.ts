@@ -632,18 +632,36 @@ describe("Stage Guard Rule — no stage advances without a valid answer", () => 
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  it("WIDGET_SIZING: reply with both rooms advances to AVAILABILITY", async () => {
+  it("WIDGET_SIZING: Flow B (default) reply with both rooms advances to SLOT_CHOICE", async () => {
     const ctx = makeContext({
       stage: "WIDGET_SIZING",
       quotedPrice: "TBD",
       serviceType: "Standard Cleaning",
       bedrooms: null as any,
       bathrooms: null as any,
+      // smsFlow not set → defaults to "B"
     });
     const result = await processLeadReply("3 bed 2 bath", ctx);
 
-    expect(result.nextStage).toBe("AVAILABILITY");
+    // Flow B: price reveal → SLOT_CHOICE (not AVAILABILITY)
+    expect(result.nextStage).toBe("SLOT_CHOICE");
     expect(result.reply).toContain("$");
+    expect(mockLLM).not.toHaveBeenCalled();
+  });
+
+  it("WIDGET_SIZING: Flow A reply with both rooms advances to AVAILABILITY", async () => {
+    const ctx = makeContext({
+      stage: "WIDGET_SIZING",
+      quotedPrice: "TBD",
+      serviceType: "Standard Cleaning",
+      bedrooms: null as any,
+      bathrooms: null as any,
+      smsFlow: "A",
+    });
+    const result = await processLeadReply("3 bed 2 bath", ctx);
+
+    // Flow A: availability question → AVAILABILITY
+    expect(result.nextStage).toBe("AVAILABILITY");
     expect(mockLLM).not.toHaveBeenCalled();
   });
 

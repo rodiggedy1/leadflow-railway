@@ -654,10 +654,31 @@ async function handleWidgetSizingReply(
 
   if (bedrooms && bathrooms) {
     const price = lookupPrice(bedrooms, bathrooms);
-    const englishReply = `Great! For a ${bedrooms} / ${bathrooms} home, a Standard Cleaning is $${price}. Ready to schedule? We have openings this week — would any of those work for you?`;
+    const flowVariant = (context.smsFlow ?? "B").toUpperCase();
+    const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+    let reply: string;
+    let nextStage: string;
+    if (flowVariant === "A") {
+      // Flow A (Madison): send availability question
+      reply = await buildAvailabilityMessage(context.extras);
+      nextStage = "AVAILABILITY";
+    } else {
+      // Flow B (Jade): send price reveal with day offer using DB template (supports {recurringprice})
+      const slots = getNextAvailableSlots(2);
+      const dayLabel = slots[0]?.shortLabel ?? "this week";
+      reply = await buildJadePriceReveal({
+        firstName,
+        bedrooms,
+        bathrooms,
+        price,
+        extras: context.extras,
+        day: dayLabel,
+      });
+      nextStage = "SLOT_CHOICE";
+    }
     return {
-      reply: englishReply,
-      nextStage: "AVAILABILITY",
+      reply,
+      nextStage: nextStage as any,
       extractedData: {
         bedrooms,
         bathrooms,

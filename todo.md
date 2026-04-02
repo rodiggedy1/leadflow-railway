@@ -886,3 +886,4 @@
 - [x] Replace tel: links with openphone://dial?number= in CS chat call buttons
 - [x] Fix all call buttons to use openphone://call?to= scheme across entire app (CsInbox, CommandChat, OpsChat, AdminDashboard, AgentDashboard, KanbanBoard, DailyRecapModal, ControlTowerTab)
 - [x] Add {recurringprice} placeholder (price minus 15%) to buildJadePriceReveal substitution in aiService.ts
+- [ ] Audit and fix entire Jade widget flow to use DB templates instead of hardcoded strings throughout all stages
