@@ -1101,8 +1101,11 @@ async function handleCsInboundMessage(msg: any) {
   const inboundText = msg.text ?? msg.body ?? "";
   const messageId: string | undefined = msg.id;
   const now = Date.now();
-  // Extract MMS media URLs (photos/images sent via SMS)
-  const mediaUrls: string[] = (msg.media ?? []).map((m: any) => m.url ?? m.src ?? m.mediaUrl).filter(Boolean);
+  // Extract MMS media URLs — OpenPhone may use 'media', 'attachments', or 'mediaUrls'
+  const rawMediaArray: any[] = msg.media ?? msg.attachments ?? msg.mediaUrls ?? [];
+  const mediaUrls: string[] = rawMediaArray
+    .map((m: any) => typeof m === 'string' ? m : (m.url ?? m.src ?? m.mediaUrl ?? m.href ?? null))
+    .filter(Boolean);
 
   // Dedup by messageId — OpenPhone retries can fire the same event twice
   if (messageId) {
@@ -1232,9 +1235,10 @@ async function handleCsInboundMessage(msg: any) {
     let history: Array<{ role: string; content: string; ts?: number }> = [];
     try { history = JSON.parse(existingSession.messageHistory ?? "[]"); } catch { history = []; }
 
-    // Content dedup: skip if identical message already stored within 10s
+    // Content dedup: skip if identical non-empty message already stored within 10s
+    // Never dedup photo-only messages (empty text) — each photo is a distinct message
     const recent = history.slice(-3);
-    const isDup = recent.some(m => m.role === "user" && m.content === inboundText && now - (m.ts ?? 0) < 10_000);
+    const isDup = inboundText.trim() !== "" && recent.some(m => m.role === "user" && m.content === inboundText && now - (m.ts ?? 0) < 10_000);
     if (isDup) {
       console.log(`[CS] Content dedup: identical message already in history for session ${existingSession.id}. Skipping.`);
       return;
