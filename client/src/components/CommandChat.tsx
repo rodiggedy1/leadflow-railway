@@ -2765,48 +2765,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           <div className="border-t border-slate-200" />
 
-          {/* Manual Issues */}
-          <div>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
-            {cmdLoading ? (
-              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-            ) : manualIssues.length === 0 ? (
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
-                <p className="text-xs text-slate-400">No open manual issues</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {manualIssues.map((issue) => (
-                  <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
-                    <div className="flex items-start justify-between gap-1">
-                      <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
-                      <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
-                    </div>
-                    {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
-                    {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
-                      <button
-                        onClick={() => {
-                          setResolveIssueMessageId(issue.messageId);
-                          setResolveIssueTitle(issue.title);
-                          setResolveIssueNote(issue.note ?? "");
-                          setResolveIssueNoteText("");
-                          setResolveIssueOpen(true);
-                        }}
-                        className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
-                      >
-                        Resolve
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-slate-200" />
-
           {/* ── Follow-ups Panel ── */}
           <div>
             <button
@@ -2856,6 +2814,48 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   })}
                 </div>
               )
+            )}
+          </div>
+
+          <div className="border-t border-slate-200" />
+
+          {/* Manual Issues */}
+          <div>
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
+            {cmdLoading ? (
+              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+            ) : manualIssues.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
+                <p className="text-xs text-slate-400">No open manual issues</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {manualIssues.map((issue) => (
+                  <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
+                    <div className="flex items-start justify-between gap-1">
+                      <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
+                      <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
+                    </div>
+                    {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
+                    {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
+                      <button
+                        onClick={() => {
+                          setResolveIssueMessageId(issue.messageId);
+                          setResolveIssueTitle(issue.title);
+                          setResolveIssueNote(issue.note ?? "");
+                          setResolveIssueNoteText("");
+                          setResolveIssueOpen(true);
+                        }}
+                        className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
+                      >
+                        Resolve
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
