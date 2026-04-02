@@ -883,3 +883,4 @@
 - [x] Add Call client widget on job card (tel: link to customer phone)
 - [x] Add SMS client widget on job card (sms: link to customer phone)
 - [x] Add Launch27 booking link on job card (opens booking in new tab)
+- [x] Replace tel: links with openphone://dial?number= in CS chat call buttons

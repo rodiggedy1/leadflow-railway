@@ -1157,7 +1157,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
                             : null;
                           const clientPhone10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
-                          const callHref = clientPhone10 ? `tel:+1${clientPhone10}` : null;
+                          const callHref = clientPhone10 ? `openphone://dial?number=+1${clientPhone10}` : null;
                           const smsHref = clientPhone10 ? `sms:+1${clientPhone10}` : null;
                           return (
                             <div
@@ -1541,7 +1541,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         className="rounded-2xl justify-start h-12 w-full"
                         onClick={() => {
                           const phone = selected?.phone?.replace(/\D/g, "").slice(-10);
-                          if (phone) window.open(`tel:+1${phone}`, "_self");
+                          if (phone) window.location.href = `openphone://dial?number=+1${phone}`;
                         }}
                       >
                         <Phone className="h-4 w-4 mr-2" />
@@ -1672,7 +1672,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
             ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
             : null;
           const clientPhone10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
-          const callHref = clientPhone10 ? `tel:+1${clientPhone10}` : null;
+          const callHref = clientPhone10 ? `openphone://dial?number=+1${clientPhone10}` : null;
           const smsHref = clientPhone10 ? `sms:+1${clientPhone10}` : null;
           let checklist: { text: string; checked: boolean }[] = [];
           try { checklist = JSON.parse(job.checklistItems ?? "[]"); } catch { checklist = []; }
