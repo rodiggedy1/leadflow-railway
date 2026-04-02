@@ -51,12 +51,22 @@ import {
   ExternalLink,
   Link2,
   Copy,
+  MessageSquarePlus,
+  FileText,
+  DollarSign,
+  ClipboardList,
 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -425,6 +435,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       utils.leads.listCsInbox.invalidate();
     },
   });
+
+  // Job drawer state — which job card is open in the side sheet
+  type JobItem = NonNullable<typeof cleanerTodayJobs>[number];
+  const [selectedJobDrawer, setSelectedJobDrawer] = useState<JobItem | null>(null);
 
   // Lightbox for photo enlargement (multi-photo swipe)
   const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null);
@@ -1139,61 +1153,128 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           const time = job.serviceDateTime
                             ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                             : "—";
+                          const launch27Url = job.bookingId
+                            ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
+                            : null;
+                          const clientPhone10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+                          const callHref = clientPhone10 ? `tel:+1${clientPhone10}` : null;
+                          const smsHref = clientPhone10 ? `sms:+1${clientPhone10}` : null;
                           return (
                             <div
                               key={job.id}
-                              className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm space-y-3"
+                              className="rounded-[20px] border border-slate-200 bg-white shadow-sm overflow-hidden"
                             >
-                              {/* Time + status row */}
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                                  <Clock3 className="h-4 w-4 text-slate-400" />
-                                  {time}
+                              {/* Clickable main body */}
+                              <button
+                                type="button"
+                                className="w-full text-left p-4 space-y-3 hover:bg-slate-50 transition-colors"
+                                onClick={() => setSelectedJobDrawer(job)}
+                              >
+                                {/* Time + status row */}
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                                    <Clock3 className="h-4 w-4 text-slate-400" />
+                                    {time}
+                                  </div>
+                                  <Badge
+                                    className={`rounded-full border text-xs font-medium hover:bg-transparent ${
+                                      jobStatusStyle(job.jobStatus as JobStatus)
+                                    }`}
+                                  >
+                                    {jobStatusLabel(job.jobStatus as JobStatus)}
+                                  </Badge>
                                 </div>
-                                <Badge
-                                  className={`rounded-full border text-xs font-medium hover:bg-transparent ${
-                                    jobStatusStyle(job.jobStatus as JobStatus)
-                                  }`}
-                                >
-                                  {jobStatusLabel(job.jobStatus as JobStatus)}
-                                </Badge>
+
+                                {/* Client name */}
+                                <div className="flex items-start gap-2 text-sm text-slate-700">
+                                  <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                  <span className="font-medium">{job.customerName || "—"}</span>
+                                </div>
+
+                                {/* Address */}
+                                {job.jobAddress && (
+                                  <div className="flex items-start gap-2 text-sm text-slate-500">
+                                    <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                    <span className="leading-5 text-left">{job.jobAddress}</span>
+                                  </div>
+                                )}
+
+                                {/* Service type */}
+                                {job.serviceType && (
+                                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-1.5 text-xs text-slate-600">
+                                    {job.serviceType}
+                                  </div>
+                                )}
+
+                                {/* Issue note */}
+                                {job.jobStatus === "issue_at_property" && job.issueNote && (
+                                  <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-800 flex items-start gap-2">
+                                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                                    {job.issueNote}
+                                  </div>
+                                )}
+
+                                {/* Running late note */}
+                                {job.jobStatus === "running_late" && job.delayMinutes && (
+                                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                                    Running {job.delayMinutes} min late
+                                  </div>
+                                )}
+
+                                {/* Hint to open details */}
+                                <div className="flex items-center gap-1 text-xs text-slate-400 pt-0.5">
+                                  <FileText className="h-3 w-3" />
+                                  Tap to view details
+                                </div>
+                              </button>
+
+                              {/* Action bar */}
+                              <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50">
+                                {callHref && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={callHref}
+                                        className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                                      >
+                                        <Phone className="h-3.5 w-3.5" />
+                                        Call client
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Call {job.customerName}</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {smsHref && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={smsHref}
+                                        className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                      >
+                                        <MessageSquarePlus className="h-3.5 w-3.5" />
+                                        SMS client
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Text {job.customerName}</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {launch27Url && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={launch27Url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="ml-auto flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                        L27
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Open in Launch27</TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
-
-                              {/* Client name */}
-                              <div className="flex items-start gap-2 text-sm text-slate-700">
-                                <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                <span className="font-medium">{job.customerName || "—"}</span>
-                              </div>
-
-                              {/* Address */}
-                              {job.jobAddress && (
-                                <div className="flex items-start gap-2 text-sm text-slate-500">
-                                  <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                  <span className="leading-5">{job.jobAddress}</span>
-                                </div>
-                              )}
-
-                              {/* Service type */}
-                              {job.serviceType && (
-                                <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-1.5 text-xs text-slate-600">
-                                  {job.serviceType}
-                                </div>
-                              )}
-
-                              {/* Issue note */}
-                              {job.jobStatus === "issue_at_property" && job.issueNote && (
-                                <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-800 flex items-start gap-2">
-                                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                                  {job.issueNote}
-                                </div>
-                              )}
-
-                              {/* Running late note */}
-                              {job.jobStatus === "running_late" && job.delayMinutes && (
-                                <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-                                  Running {job.delayMinutes} min late
-                                </div>
-                              )}
                             </div>
                           );
                         })
@@ -1572,6 +1653,155 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         </div>
       </div>
     )}
+
+    {/* Job Details Drawer */}
+    <Sheet open={!!selectedJobDrawer} onOpenChange={(open) => { if (!open) setSelectedJobDrawer(null); }}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        {selectedJobDrawer && (() => {
+          const job = selectedJobDrawer;
+          const time = job.serviceDateTime
+            ? new Date(job.serviceDateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "—";
+          const launch27Url = job.bookingId
+            ? `https://maidsinblack.launch27.com/admin/bookings/${job.bookingId}`
+            : null;
+          const clientPhone10 = (job.customerPhone ?? "").replace(/[^\d]/g, "").slice(-10);
+          const callHref = clientPhone10 ? `tel:+1${clientPhone10}` : null;
+          const smsHref = clientPhone10 ? `sms:+1${clientPhone10}` : null;
+          let checklist: { text: string; checked: boolean }[] = [];
+          try { checklist = JSON.parse(job.checklistItems ?? "[]"); } catch { checklist = []; }
+          return (
+            <>
+              <SheetHeader className="mb-6">
+                <SheetTitle className="text-lg font-semibold">
+                  {job.customerName || "Job Details"}
+                </SheetTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className={`rounded-full border text-xs font-medium hover:bg-transparent ${jobStatusStyle(job.jobStatus as JobStatus)}`}>
+                    {jobStatusLabel(job.jobStatus as JobStatus)}
+                  </Badge>
+                  <span className="text-sm text-slate-500 flex items-center gap-1">
+                    <Clock3 className="h-3.5 w-3.5" />{time}
+                  </span>
+                </div>
+              </SheetHeader>
+
+              {/* Quick action buttons */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {callHref && (
+                  <a href={callHref} className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors">
+                    <Phone className="h-4 w-4" /> Call client
+                  </a>
+                )}
+                {smsHref && (
+                  <a href={smsHref} className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors">
+                    <MessageSquarePlus className="h-4 w-4" /> SMS client
+                  </a>
+                )}
+                {launch27Url && (
+                  <a href={launch27Url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors">
+                    <ExternalLink className="h-4 w-4" /> Open in Launch27
+                  </a>
+                )}
+              </div>
+
+              <div className="space-y-5">
+                {/* Job info */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <div className="text-xs uppercase tracking-[0.15em] text-slate-400 font-medium">Job info</div>
+                  {job.jobAddress && (
+                    <div className="flex items-start gap-2 text-sm text-slate-700">
+                      <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                      <span>{job.jobAddress}</span>
+                    </div>
+                  )}
+                  {job.serviceType && (
+                    <div className="flex items-start gap-2 text-sm text-slate-700">
+                      <Briefcase className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                      <span>{job.serviceType}</span>
+                    </div>
+                  )}
+                  {(job.bedrooms || job.bathrooms) && (
+                    <div className="flex items-center gap-3 text-sm text-slate-600">
+                      {job.bedrooms && <span>{job.bedrooms} bed</span>}
+                      {job.bathrooms && <span>{job.bathrooms} bath</span>}
+                    </div>
+                  )}
+                  {job.jobRevenue && (
+                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <DollarSign className="h-4 w-4 text-slate-400 shrink-0" />
+                      <span className="font-medium">${job.jobRevenue}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Issue / delay alerts */}
+                {job.jobStatus === "issue_at_property" && job.issueNote && (
+                  <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-500 mt-0.5 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-rose-700 mb-1">Issue at property</div>
+                      <div className="text-sm text-rose-800">{job.issueNote}</div>
+                    </div>
+                  </div>
+                )}
+                {job.jobStatus === "running_late" && job.delayMinutes && (
+                  <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4">
+                    <div className="text-xs font-semibold text-amber-700 mb-1">Running late</div>
+                    <div className="text-sm text-amber-800">{job.delayMinutes} minutes behind schedule</div>
+                  </div>
+                )}
+
+                {/* Customer notes */}
+                {job.customerNotes && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.15em] text-slate-400 font-medium mb-2">Customer notes</div>
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{job.customerNotes}</p>
+                  </div>
+                )}
+
+                {/* AI checklist */}
+                {checklist.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.15em] text-slate-400 font-medium mb-3 flex items-center gap-1.5">
+                      <ClipboardList className="h-3.5 w-3.5" /> Checklist
+                    </div>
+                    <div className="space-y-2">
+                      {checklist.map((item, i) => (
+                        <div key={i} className={`flex items-start gap-2 text-sm ${item.checked ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                          <div className={`mt-0.5 h-4 w-4 rounded border shrink-0 flex items-center justify-center ${
+                            item.checked ? "bg-emerald-100 border-emerald-300" : "border-slate-300"
+                          }`}>
+                            {item.checked && <Check className="h-2.5 w-2.5 text-emerald-600" />}
+                          </div>
+                          {item.text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Staff notes */}
+                {job.staffNotes && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.15em] text-slate-400 font-medium mb-2">Staff notes</div>
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{job.staffNotes}</p>
+                  </div>
+                )}
+
+                {/* Admin notes */}
+                {job.adminNotes && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.15em] text-amber-600 font-medium mb-2">Admin notes</div>
+                    <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">{job.adminNotes}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
+      </SheetContent>
+    </Sheet>
 
     {/* Lightbox overlay */}
     {lightbox && lightboxUrl && (

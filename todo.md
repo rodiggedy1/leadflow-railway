@@ -871,3 +871,15 @@
 - [x] Rebuild CS chat AI prompt with expert SMS tone principles: no price hallucination, no cringe phrases, world-class human energy
 - [ ] Fine-tune CS chat AI prompt: add genuine warmth and excitement (client inviting us into their home), not cold/dry, not fake corporate
 - [ ] Rebuild CS chat AI prompt with 10 real brand-voice few-shot examples from owner
+
+## CS Chat Teams Job Card Enhancements
+- [ ] Make job card clickable to open job details drawer (notes, client info, job details)
+- [ ] Add call widget button on job card (click-to-call cleaner)
+- [ ] Add SMS widget button on job card (quick SMS to cleaner)
+- [ ] Add Launch27 booking link on job card
+
+## CS Chat Teams Job Card Enhancements
+- [x] Make job cards clickable to open full job details drawer (notes, checklist, status, client info)
+- [x] Add Call client widget on job card (tel: link to customer phone)
+- [x] Add SMS client widget on job card (sms: link to customer phone)
+- [x] Add Launch27 booking link on job card (opens booking in new tab)

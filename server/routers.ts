@@ -2678,8 +2678,14 @@ STAGE DETECTION — return the stage the conversation is currently in:
             bedrooms: cleanerJobs.bedrooms,
             bathrooms: cleanerJobs.bathrooms,
             customerNotes: cleanerJobs.customerNotes,
+            staffNotes: cleanerJobs.staffNotes,
+            adminNotes: cleanerJobs.adminNotes,
+            checklistItems: cleanerJobs.checklistItems,
             issueNote: cleanerJobs.issueNote,
             delayMinutes: cleanerJobs.delayMinutes,
+            customerPhone: cleanerJobs.customerPhone,
+            bookingId: cleanerJobs.bookingId,
+            jobRevenue: cleanerJobs.jobRevenue,
           })
           .from(cleanerJobs)
           .where(
