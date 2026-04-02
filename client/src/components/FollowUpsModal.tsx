@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { trpc } from "@/lib/trpc";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -14,23 +15,46 @@ interface HistoryEntry {
 }
 
 interface FollowUp {
-  id: string;
+  id: number;
   name: string;
   nextStep: string;
-  dueDate: string;
-  dueTime: string;
+  dueAt: number;
   owner: string;
   type: FollowUpType;
   priority: Priority;
-  status: FollowUpStatus;
-  internalNote: string;
-  customerFacingMove: string;
+  internalNote: string | null;
+  customerFacingMove: string | null;
   history: HistoryEntry[];
+  completedAt: number | null;
+  reminderSentAt: number | null;
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+function deriveStatus(item: FollowUp): FollowUpStatus {
+  if (item.priority === "High") return "High priority";
+  const now = Date.now();
+  const diff = item.dueAt - now;
+  if (diff < 0) return "Due soon";
+  if (diff < 2 * 60 * 60 * 1000) return "Due soon";
+  if (item.type === "Reschedule") return "Needs decision";
+  return "Queued";
+}
 
-const MOCK_FOLLOWUPS: FollowUp[] = [
+function formatDue(dueAt: number): { date: string; time: string } {
+  const d = new Date(dueAt);
+  const now = new Date();
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const date = isToday
+    ? "Today"
+    : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return { date, time };
+}
+
+// ─── (mock data removed — using real DB) ────────────────────────────────────
+const _UNUSED_PLACEHOLDER = [
   {
     id: "1",
     name: "Jessica R.",
@@ -190,7 +214,10 @@ function QueueView({
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {items.map((item) => (
+        {items.map((item) => {
+          const { date: dDate, time: dTime } = formatDue(item.dueAt);
+          const status = deriveStatus(item);
+          return (
           <button
             key={item.id}
             onClick={() => onSelect(item)}
@@ -198,12 +225,12 @@ function QueueView({
           >
             <div className="flex items-start justify-between gap-2 mb-1">
               <span className="font-bold text-slate-900 text-sm leading-tight">{item.name}</span>
-              <StatusBadge status={item.status} />
+              <StatusBadge status={status} />
             </div>
             <p className="text-sm text-slate-500 mb-2.5">{item.nextStep}</p>
             <div className="flex flex-wrap gap-1.5">
               <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
-                {item.dueDate} · {item.dueTime}
+                {dDate} · {dTime}
               </span>
               <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
                 Owner: {item.owner}
@@ -213,7 +240,8 @@ function QueueView({
               </span>
             </div>
           </button>
-        ))}
+          );
+        })}
 
         {/* Why this matters */}
         <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl px-4 py-4 mt-1">
@@ -245,11 +273,15 @@ function QueueView({
 
 function NewFollowUpView({
   onBack,
-  onSave,
+  onSaved,
 }: {
   onBack: () => void;
-  onSave: (item: Omit<FollowUp, "id" | "status" | "history">) => void;
+  onSaved: () => void;
 }) {
+  const utils = trpc.useUtils();
+  const createMutation = trpc.followUps.create.useMutation({
+    onSuccess: () => { utils.followUps.list.invalidate(); onSaved(); },
+  });
   const [selectedType, setSelectedType] = useState<FollowUpType | null>(null);
   const [owner, setOwner] = useState("Madison");
   const [priority, setPriority] = useState<Priority>("Normal");
@@ -264,16 +296,18 @@ function NewFollowUpView({
 
   function handleSave() {
     if (!selectedType || !name.trim()) return;
-    onSave({
+    const combined = `${dueDate} ${dueTime}`;
+    const parsed = new Date(combined);
+    const dueAt = isNaN(parsed.getTime()) ? Date.now() + 2 * 60 * 60 * 1000 : parsed.getTime();
+    createMutation.mutate({
       name: name.trim(),
       nextStep: nextStep ?? "Follow up",
-      dueDate,
-      dueTime,
+      dueAt,
       owner,
       type: selectedType,
       priority,
-      internalNote: note,
-      customerFacingMove: customerMove,
+      internalNote: note || undefined,
+      customerFacingMove: customerMove || undefined,
     });
   }
 
@@ -474,17 +508,22 @@ function DetailView({
 }: {
   item: FollowUp;
   onBack: () => void;
-  onComplete: (id: string) => void;
+  onComplete: () => void;
   onClose: () => void;
 }) {
+  const utils = trpc.useUtils();
+  const completeMutation = trpc.followUps.complete.useMutation({
+    onSuccess: () => { utils.followUps.list.invalidate(); onComplete(); },
+  });
+  const addNoteMutation = trpc.followUps.addNote.useMutation({
+    onSuccess: () => utils.followUps.list.invalidate(),
+  });
   const [noteInput, setNoteInput] = useState("");
-  const [history, setHistory] = useState(item.history);
   const [addingNote, setAddingNote] = useState(false);
 
   function handleAddNote() {
     if (!noteInput.trim()) return;
-    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setHistory((prev) => [...prev, { text: noteInput.trim(), time }]);
+    addNoteMutation.mutate({ id: item.id, text: noteInput.trim() });
     setNoteInput("");
     setAddingNote(false);
   }
@@ -518,9 +557,10 @@ function DetailView({
             Next Action
           </p>
           <h3 className="text-lg font-bold text-slate-900 mb-3">{item.nextStep}</h3>
+          {(() => { const { date: dd, time: dt } = formatDue(item.dueAt); const st = deriveStatus(item); return (
           <div className="flex flex-wrap gap-1.5">
             <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
-              {item.dueDate} · {item.dueTime}
+              {dd} · {dt}
             </span>
             <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
               Owner: {item.owner}
@@ -529,9 +569,10 @@ function DetailView({
               {item.type}
             </span>
             <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
-              Source: {item.status}
+              {st}
             </span>
           </div>
+          ); })()}
         </div>
 
         {/* Notes row */}
@@ -564,7 +605,7 @@ function DetailView({
           </div>
           <div className="bg-white border border-slate-200 rounded-xl px-3 py-3">
             <p className="text-[10px] text-slate-400 mb-1">Due</p>
-            <p className="text-sm font-bold text-slate-900">{item.dueDate} · {item.dueTime}</p>
+            <p className="text-sm font-bold text-slate-900">{formatDue(item.dueAt).date} · {formatDue(item.dueAt).time}</p>
           </div>
         </div>
 
@@ -585,7 +626,7 @@ function DetailView({
             </button>
           </div>
           <div className="space-y-2">
-            {history.map((h, i) => (
+            {item.history.map((h, i) => (
               <div key={i} className="bg-slate-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
                 <p className="text-sm text-slate-700">{h.text}</p>
                 <span className="text-xs text-slate-400 shrink-0">{h.time}</span>
@@ -616,10 +657,11 @@ function DetailView({
       {/* Actions footer */}
       <div className="px-5 pb-5 pt-3 border-t border-slate-100 space-y-2">
         <button
-          onClick={() => onComplete(item.id)}
-          className="w-full bg-slate-900 text-white text-sm font-semibold rounded-xl py-2.5 hover:bg-slate-700 transition"
+          onClick={() => completeMutation.mutate({ id: item.id })}
+          disabled={completeMutation.isPending}
+          className="w-full bg-slate-900 text-white text-sm font-semibold rounded-xl py-2.5 hover:bg-slate-700 transition disabled:opacity-50"
         >
-          Mark completed
+          {completeMutation.isPending ? "Marking…" : "Mark completed"}
         </button>
         <div className="grid grid-cols-2 gap-2">
           <button className="text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-xl py-2 hover:bg-slate-50 transition">
@@ -645,13 +687,19 @@ interface FollowUpsModalProps {
 
 export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
   const [view, setView] = useState<View>("queue");
-  const [selectedItem, setSelectedItem] = useState<FollowUp | null>(null);
-  const [items, setItems] = useState<FollowUp[]>(MOCK_FOLLOWUPS);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  const { data: rawItems = [], isLoading } = trpc.followUps.list.useQuery(undefined, {
+    enabled: open,
+    refetchInterval: open ? 30_000 : false,
+  });
+  const items = rawItems as FollowUp[];
+  const selectedItem = items.find((i) => i.id === selectedId) ?? null;
 
   if (!open) return null;
 
   function handleSelect(item: FollowUp) {
-    setSelectedItem(item);
+    setSelectedId(item.id);
     setView("detail");
   }
 
@@ -660,23 +708,7 @@ export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
   }
 
   function handleBack() {
-    setSelectedItem(null);
-    setView("queue");
-  }
-
-  function handleSave(data: Omit<FollowUp, "id" | "status" | "history">) {
-    const newItem: FollowUp = {
-      ...data,
-      id: String(Date.now()),
-      status: "Queued",
-      history: [],
-    };
-    setItems((prev) => [newItem, ...prev]);
-    setView("queue");
-  }
-
-  function handleComplete(id: string) {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    setSelectedId(null);
     setView("queue");
   }
 
@@ -699,13 +731,13 @@ export default function FollowUpsModal({ open, onClose }: FollowUpsModalProps) {
           />
         )}
         {view === "new" && (
-          <NewFollowUpView onBack={handleBack} onSave={handleSave} />
+          <NewFollowUpView onBack={handleBack} onSaved={handleBack} />
         )}
         {view === "detail" && selectedItem && (
           <DetailView
             item={selectedItem}
             onBack={handleBack}
-            onComplete={handleComplete}
+            onComplete={handleBack}
             onClose={onClose}
           />
         )}

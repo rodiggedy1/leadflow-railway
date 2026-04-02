@@ -19,6 +19,7 @@
 import cron from "node-cron";
 import { runNightlySync } from "./cronSync";
 import { runSilenceFollowUp, runScheduledFollowUp, runFollowUpDueAlerts } from "./followUpCron";
+import { runFollowUpReminders } from "./followUpsRouter";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
@@ -94,6 +95,20 @@ async function recordSyncRun(params: {
 export function startInternalCron(): void {
   // ── Silence follow-up: every 5 minutes ──────────────────────────────────────
   // Nudges leads who haven't replied 5+ minutes after the AI sent a message.
+  // ── Ops follow-up due-time reminders: every 5 minutes ────────────────────────
+  // Sends owner notification + activity log entry when a follow-up hits its dueAt.
+  cron.schedule("0 */5 * * * *", async () => {
+    try {
+      const result = await runFollowUpReminders();
+      if (result.sent > 0) {
+        console.log(`[InternalCron] FollowUpReminders — checked: ${result.checked}, sent: ${result.sent}`);
+      }
+      await recordHeartbeat("followup-reminders", `checked: ${result.checked}, sent: ${result.sent}`, result.sent > 0);
+    } catch (err) {
+      console.error("[InternalCron] FollowUpReminders failed:", err);
+    }
+  }, { timezone: "America/New_York" });
+
   cron.schedule("0 */5 * * * *", async () => {
     try {
       const result = await runSilenceFollowUp();

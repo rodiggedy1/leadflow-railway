@@ -887,3 +887,9 @@
 - [x] Fix all call buttons to use openphone://call?to= scheme across entire app (CsInbox, CommandChat, OpsChat, AdminDashboard, AgentDashboard, KanbanBoard, DailyRecapModal, ControlTowerTab)
 - [x] Add {recurringprice} placeholder (price minus 15%) to buildJadePriceReveal substitution in aiService.ts
 - [ ] Audit and fix entire Jade widget flow to use DB templates instead of hardcoded strings throughout all stages
+
+- [x] Follow-ups modal: add follow_ups DB table (id, name, nextStep, dueAt, owner, type, priority, internalNote, customerFacingMove, history JSON, completedAt, reminderSentAt)
+- [x] Follow-ups modal: tRPC procedures — list, create, complete, addNote
+- [x] Follow-ups modal: wire FollowUpsModal to real DB (replace mock data with trpc.followUps.*)
+- [x] Follow-ups modal: due-time reminder cron (runFollowUpReminders, runs every 5 min via internalCron)
+- [x] Follow-ups modal: vitest tests for deriveStatus logic and runFollowUpReminders

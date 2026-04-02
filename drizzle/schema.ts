@@ -1846,3 +1846,58 @@ export const systemConfig = mysqlTable("system_config", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type SystemConfig = typeof systemConfig.$inferSelect;
+
+/**
+ * followUpPriorities / followUpTypes — enums for the follow-up table
+ */
+export const followUpPriorities = ["High", "Normal", "Low"] as const;
+export type FollowUpPriority = (typeof followUpPriorities)[number];
+
+export const followUpTypes = [
+  "Lead callback",
+  "Customer issue",
+  "Reschedule",
+  "Voicemail",
+] as const;
+export type FollowUpType = (typeof followUpTypes)[number];
+
+/**
+ * followUps — one row per ops follow-up item created in CommandChat.
+ *
+ * dueAt       → Unix ms timestamp for when the follow-up is due (used by cron reminders)
+ * completedAt → Set when agent marks it done; NULL = active
+ * reminderSentAt → Set when the due-time reminder notification has been sent (prevents double-send)
+ */
+export const followUps = mysqlTable("follow_ups", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Display name — customer name or job label */
+  name: varchar("name", { length: 255 }).notNull(),
+  /** What the agent needs to do next */
+  nextStep: varchar("nextStep", { length: 255 }).notNull(),
+  /** Unix ms timestamp for when this follow-up is due */
+  dueAt: bigint("dueAt", { mode: "number" }).notNull(),
+  /** Owner name (agent name) */
+  owner: varchar("owner", { length: 100 }).notNull(),
+  /** Follow-up type */
+  type: mysqlEnum("type", followUpTypes as unknown as [string, ...string[]]).notNull(),
+  /** Priority level */
+  priority: mysqlEnum("priority", followUpPriorities as unknown as [string, ...string[]]).default("Normal").notNull(),
+  /** Internal ops note — not shown to customer */
+  internalNote: text("internalNote"),
+  /** What the agent will say or do with the customer */
+  customerFacingMove: text("customerFacingMove"),
+  /** JSON array of history entries: [{text: string, time: string, ts: number}] */
+  history: text("history").default("[]").notNull(),
+  /** Unix ms timestamp when a due-time reminder notification was sent (null = not yet sent) */
+  reminderSentAt: bigint("reminderSentAt", { mode: "number" }),
+  /** Unix ms timestamp when agent marked this complete (null = still active) */
+  completedAt: bigint("completedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  idxDueAt: index("idx_fu_due_at").on(table.dueAt),
+  idxCompletedAt: index("idx_fu_completed_at").on(table.completedAt),
+}));
+
+export type FollowUp = typeof followUps.$inferSelect;
+export type InsertFollowUp = typeof followUps.$inferInsert;

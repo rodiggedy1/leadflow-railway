@@ -30,6 +30,7 @@ import { settingsRouter } from "./settingsRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { opsChatRouter } from "./opsChatRouter";
+import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
 import { sendPushToAgent, sendPushToAll } from "./webPush";
@@ -4199,6 +4200,7 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
   commandCenter: commandCenterRouter,
   fieldMgmt: fieldMgmtRouter,
   opsChat: opsChatRouter,
+  followUps: followUpsRouter,
 
   tools: router({
     generateFirstMessage: agentProcedure
