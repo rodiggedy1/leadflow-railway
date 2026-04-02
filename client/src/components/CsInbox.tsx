@@ -611,11 +611,30 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   }, [showEmojiPicker]);
   const tone = selected?.queue ? queueTone(selected.queue) : { label: null, tone: "bg-slate-100 text-slate-500 border-slate-200", dot: "bg-slate-400" };
 
-  const priorityItems = [
-    { name: "Jillian", reason: "waiting 12 min • job starts soon", queue: "Needs attention" },
-    { name: "Monica", reason: "high-ticket lead • wants tomorrow", queue: "Hot leads" },
-    { name: "Priya", reason: "great review moment • rebook chance", queue: "Post-job" },
-  ];
+  // ── AI priority queue ──────────────────────────────────────────────────────
+  const { data: priorityItems = [], isLoading: priorityLoading } = trpc.leads.getCsPriorityQueue.useQuery(
+    undefined,
+    { staleTime: 2 * 60 * 1000, refetchInterval: 3 * 60 * 1000 }
+  );
+  const dismissPriority = trpc.leads.dismissCsPriority.useMutation({
+    onSuccess: () => utils.leads.getCsPriorityQueue.invalidate(),
+  });
+
+  function priorityTagStyle(tag: string) {
+    switch (tag) {
+      case "angry":   return { bg: "bg-red-50",    border: "border-red-300",    dot: "bg-red-500",    badge: "bg-red-100 text-red-700",    label: "Angry" };
+      case "cancel":  return { bg: "bg-orange-50", border: "border-orange-300", dot: "bg-orange-500", badge: "bg-orange-100 text-orange-700", label: "Cancel risk" };
+      case "booking": return { bg: "bg-emerald-50",border: "border-emerald-300",dot: "bg-emerald-500",badge: "bg-emerald-100 text-emerald-700",label: "Booking" };
+      default:        return { bg: "bg-amber-50",  border: "border-amber-300",  dot: "bg-amber-500",  badge: "bg-amber-100 text-amber-700",  label: "Urgent" };
+    }
+  }
+
+  function timeSince(ms: number) {
+    const diff = Date.now() - ms;
+    if (diff < 60_000) return "just now";
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    return `${Math.floor(diff / 3600_000)}h ago`;
+  }
 
   return (
     <>
@@ -707,35 +726,59 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               </div>
 
               <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Bot className="h-4 w-4" /> AI priority queue
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Bot className="h-4 w-4" /> AI priority queue
+                  </div>
+                  {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />}
                 </div>
                 <div className="mt-3 space-y-2">
-                  {priorityItems.map((item, idx) => (
-                    <button
-                      key={item.name}
-                      onClick={() => {
-                        const found = conversations.find((c) => c.name.startsWith(item.name));
-                        if (found) {
-                          setActiveQueue("All");
-                          setSelectedId(found.id);
-                          userNavigatedToId.current = found.id;
-                          triggerAutoDraft(found);
-                        }
-                      }}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium">
-                          {idx + 1}. {item.name}
+                  {priorityItems.length === 0 && !priorityLoading && (
+                    <div className="text-xs text-slate-400 text-center py-2">No urgent items right now</div>
+                  )}
+                  {priorityItems.map((item, idx) => {
+                    const style = priorityTagStyle(item.tag);
+                    return (
+                      <div
+                        key={item.id}
+                        className={`w-full rounded-2xl border ${style.border} ${style.bg} px-3 py-3 text-left shadow-sm`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <button
+                            className="flex-1 text-left"
+                            onClick={() => {
+                              const found = conversations.find((c) => c.id === item.id);
+                              if (found) {
+                                setActiveQueue("All");
+                                setSelectedId(found.id);
+                                userNavigatedToId.current = found.id;
+                                triggerAutoDraft(found);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              {/* Pulse dot */}
+                              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
+                                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${style.dot}`} />
+                              </span>
+                              <span className="text-sm font-semibold">{idx + 1}. {item.name}</span>
+                              <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
+                            </div>
+                            <div className="mt-1 text-xs text-slate-600 pl-4">{item.reason}</div>
+                            <div className="mt-1 text-[10px] text-slate-400 pl-4">{timeSince(item.taggedAt)}</div>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
+                            className="shrink-0 mt-0.5 text-slate-300 hover:text-slate-500 transition-colors"
+                            title="Dismiss"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
                         </div>
-                        <Badge variant="outline" className="rounded-full">
-                          {item.queue}
-                        </Badge>
                       </div>
-                      <div className="mt-1 text-xs text-slate-500">{item.reason}</div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

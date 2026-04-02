@@ -299,6 +299,18 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   aiClosingRecCachedAt: timestamp("aiClosingRecCachedAt"),
   /** messageHistory length at time of cache — used to detect staleness */
   aiClosingRecMsgLen: int("aiClosingRecMsgLen"),
+  /**
+   * AI-assigned priority tag for the CS priority queue.
+   * One of: "angry" | "cancel" | "booking" | "urgent" | null
+   * Set by the AI when it detects a high-priority situation in the conversation.
+   */
+  csPriorityTag: varchar("csPriorityTag", { length: 32 }),
+  /** Reason text shown in the priority queue card (AI-generated, 1 short sentence) */
+  csPriorityReason: varchar("csPriorityReason", { length: 200 }),
+  /** Unix ms timestamp when the AI tagged this session as priority */
+  csPriorityTaggedAt: bigint("csPriorityTaggedAt", { mode: "number" }),
+  /** Unix ms timestamp when an agent dismissed this from the priority queue */
+  csPriorityDismissedAt: bigint("csPriorityDismissedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

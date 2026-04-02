@@ -2571,6 +2571,150 @@ STAGE DETECTION — return the stage the conversation is currently in:
         return { success: true };
       }),
     /**
+     * getCsPriorityQueue — returns top 3 AI-prioritized CS sessions.
+     * Uses cached csPriorityTag if set, otherwise runs AI analysis on recent open sessions.
+     * Only returns sessions not dismissed in the last 24h.
+     */
+    getCsPriorityQueue: opsChatProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+
+        // Fetch all open CS sessions updated in the last 72h
+        const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(
+            and(
+              or(
+                eq(conversationSessions.leadSource, "cs-inbound"),
+                eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+              ),
+              isNull(conversationSessions.csResolvedAt),
+              sql`${conversationSessions.updatedAt} > FROM_UNIXTIME(${Math.floor(cutoff / 1000)})`
+            )
+          )
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(30);
+
+        if (sessions.length === 0) return [];
+
+        // Build summaries for AI analysis — only sessions with enough content
+        const summaries = sessions
+          .map((s) => {
+            let msgs: Array<{ role: string; content: string; ts?: number }> = [];
+            try { msgs = JSON.parse(s.messageHistory ?? "[]"); } catch { msgs = []; }
+            if (msgs.length === 0) return null;
+            const recent = msgs.slice(-6).map((m) => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`).join("\n");
+            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: msgs.slice(-1)[0]?.ts ?? 0 };
+          })
+          .filter(Boolean) as Array<{ id: number; name: string; recent: string; msgCount: number; lastTs: number }>;
+
+        if (summaries.length === 0) return [];
+
+        // Ask AI to identify top 3 priority conversations
+        const { invokeLLM } = await import("./_core/llm");
+        const prompt = `You are a CS manager reviewing ${summaries.length} customer service conversations for a cleaning company. Identify the top 3 that need IMMEDIATE human attention.
+
+Priority criteria (in order):
+1. angry — customer is upset, frustrated, or threatening to leave
+2. cancel — customer wants to cancel or reschedule
+3. booking — customer is trying to book or has a strong purchase intent
+4. urgent — any other time-sensitive situation
+
+Conversations:
+${summaries.map((s, i) => `[${i + 1}] ID:${s.id} Name:${s.name}\n${s.recent}`).join("\n\n")}
+
+Return ONLY a JSON array of up to 3 objects. Each object must have:
+- id: number (the conversation ID)
+- tag: one of "angry" | "cancel" | "booking" | "urgent"
+- reason: string (max 8 words, plain text, no punctuation at end, e.g. "wants to cancel tomorrow's cleaning")
+
+If fewer than 3 conversations need attention, return fewer. Return [] if none are urgent.`;
+
+        let priorityItems: Array<{ id: number; tag: string; reason: string }> = [];
+        try {
+          const res = await invokeLLM({
+            messages: [{ role: "user", content: prompt }],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "priority_queue",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "number" },
+                          tag: { type: "string" },
+                          reason: { type: "string" },
+                        },
+                        required: ["id", "tag", "reason"],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ["items"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          const raw = res?.choices?.[0]?.message?.content ?? "{}";
+          const parsed = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw));
+          priorityItems = (parsed.items ?? []).slice(0, 3);
+        } catch (e) {
+          console.warn("[CsPriority] AI analysis failed:", e);
+          return [];
+        }
+
+        // Persist tags to DB and build response
+        const now = Date.now();
+        const result = [];
+        for (const item of priorityItems) {
+          const session = sessions.find((s) => s.id === item.id);
+          if (!session) continue;
+          // Skip if dismissed within last 4h
+          const dismissedAt = (session as any).csPriorityDismissedAt ?? 0;
+          if (dismissedAt && now - dismissedAt < 4 * 60 * 60 * 1000) continue;
+          // Persist tag
+          await db
+            .update(conversationSessions)
+            .set({ csPriorityTag: item.tag, csPriorityReason: item.reason, csPriorityTaggedAt: now } as any)
+            .where(eq(conversationSessions.id, item.id));
+          result.push({
+            id: item.id,
+            name: session.leadName || session.leadPhone || "Unknown",
+            tag: item.tag,
+            reason: item.reason,
+            taggedAt: now,
+          });
+        }
+        return result;
+      }),
+
+    /**
+     * dismissCsPriority — agent dismisses a session from the priority queue.
+     * Sets csPriorityDismissedAt so it won't reappear for 4h.
+     */
+    dismissCsPriority: opsChatProcedure
+      .input(z.object({ sessionId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ csPriorityDismissedAt: Date.now() } as any)
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
      * updateCsName — update the display name for a CS inbox session.
      */
     updateCsName: opsChatProcedure
