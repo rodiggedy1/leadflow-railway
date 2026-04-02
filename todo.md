@@ -906,3 +906,4 @@
 - [x] CommandChat right panel: move Follow-ups section above Manual Issues
 - [x] CS chat right panel: restore AI insight section with live AI advice about the selected conversation
 - [x] CS chat right panel: remove Follow-ups queue card, replace with single "Add Follow-up" button that opens the new follow-up form
+- [x] CS chat: inline AI nudge cards — contextual action suggestions (upsell, follow-up, objection counter, running late, credit offer) appear at bottom of chat thread with Use/Create/Dismiss actions

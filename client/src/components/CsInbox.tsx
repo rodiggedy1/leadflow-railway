@@ -610,10 +610,31 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     }
   );
 
-  // Mark conversation as viewed when selected changes
+  // AI nudges — inline action chips shown at the bottom of the chat thread
+  const [dismissedNudges, setDismissedNudges] = useState<Set<string>>(new Set());
+  const [followUpNudgeNote, setFollowUpNudgeNote] = useState<string | undefined>(undefined);
+  const [followUpNudgeName, setFollowUpNudgeName] = useState<string | undefined>(undefined);
+  const { data: nudgesData, isFetching: nudgesLoading } = trpc.leads.getCsNudges.useQuery(
+    {
+      sessionId: selected?.id ?? 0,
+      messageHistory: insightMsgHistory,
+      clientName: selected?.name ?? undefined,
+      queue: selected?.queue ?? undefined,
+      clientProfile: clientProfileSummary,
+    },
+    {
+      enabled: !!(selected && selected.id > 0 && selected.messages.length > 0),
+      refetchOnWindowFocus: false,
+      staleTime: 90_000,
+    }
+  );
+  const activeNudges = (nudgesData?.nudges ?? []).filter((n) => !dismissedNudges.has(n.label));
+
+  // Mark conversation as viewed when selected changes; also reset dismissed nudges
   useEffect(() => {
     if (effectiveSelectedId != null) {
       setLastViewedMap((prev) => ({ ...prev, [effectiveSelectedId]: Date.now() }));
+      setDismissedNudges(new Set());
     }
   }, [effectiveSelectedId]);
 
@@ -1085,8 +1106,87 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </motion.div>
                   ))}
                 </div>
-              </div>
 
+                {/* ── AI Nudge Cards ─────────────────────────────────────────────────── */}
+                {(nudgesLoading || activeNudges.length > 0) && (
+                  <div className="mt-4 mb-1">
+                    {/* Header row */}
+                    <div className="flex items-center gap-1.5 mb-2 px-1">
+                      <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                      <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wider">
+                        AI Suggestions
+                      </span>
+                      {nudgesLoading && <RefreshCw className="h-3 w-3 text-violet-400 animate-spin ml-1" />}
+                    </div>
+                    {/* Nudge chips */}
+                    <div className="flex flex-col gap-2">
+                      {activeNudges.map((nudge) => {
+                        const isMessage = nudge.type === "message";
+                        const isFollowup = nudge.type === "followup";
+                        return (
+                          <div
+                            key={nudge.label}
+                            className="flex items-start gap-2 bg-violet-50 border border-violet-200 rounded-2xl px-3.5 py-2.5 group"
+                          >
+                            {/* Icon */}
+                            <div className="mt-0.5 shrink-0">
+                              {isMessage && <MessageSquarePlus className="h-4 w-4 text-violet-500" />}
+                              {isFollowup && <ClipboardList className="h-4 w-4 text-violet-500" />}
+                              {!isMessage && !isFollowup && <Sparkles className="h-4 w-4 text-violet-500" />}
+                            </div>
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-violet-900 leading-tight">{nudge.label}</p>
+                              {nudge.fillText && (
+                                <p className="text-xs text-violet-700 mt-0.5 leading-relaxed line-clamp-2">{nudge.fillText}</p>
+                              )}
+                            </div>
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {isMessage && nudge.fillText && (
+                                <button
+                                  type="button"
+                                  title="Use this reply"
+                                  onClick={() => {
+                                    setCompose(nudge.fillText!);
+                                    setDismissedNudges((prev) => new Set(Array.from(prev).concat(nudge.label)));
+                                  }}
+                                  className="text-[11px] font-semibold text-violet-700 bg-violet-100 hover:bg-violet-200 px-2.5 py-1 rounded-full transition"
+                                >
+                                  Use
+                                </button>
+                              )}
+                              {isFollowup && (
+                                <button
+                                  type="button"
+                                  title="Create follow-up"
+                                  onClick={() => {
+                                    setFollowUpNudgeNote(nudge.fillText);
+                                    setFollowUpNudgeName(selected?.name ?? undefined);
+                                    setAddFollowUpOpen(true);
+                                    setDismissedNudges((prev) => new Set(Array.from(prev).concat(nudge.label)));
+                                  }}
+                                  className="text-[11px] font-semibold text-violet-700 bg-violet-100 hover:bg-violet-200 px-2.5 py-1 rounded-full transition"
+                                >
+                                  Create
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                title="Dismiss"
+                                onClick={() => setDismissedNudges((prev) => new Set(Array.from(prev).concat(nudge.label)))}
+                                className="w-5 h-5 flex items-center justify-center rounded-full text-violet-400 hover:text-violet-600 hover:bg-violet-100 transition"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* Typing indicator — shows when another agent is composing a reply */}
               {typers.length > 0 && (
                 <div className="px-5 pb-1">
@@ -2013,8 +2113,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     {/* ─── Add Follow-up modal ─────────────────────────── */}
     <FollowUpsModal
       open={addFollowUpOpen}
-      onClose={() => setAddFollowUpOpen(false)}
+      onClose={() => { setAddFollowUpOpen(false); setFollowUpNudgeNote(undefined); setFollowUpNudgeName(undefined); }}
       initialView="new"
+      initialNote={followUpNudgeNote}
+      initialName={followUpNudgeName}
     />
     </>
   );

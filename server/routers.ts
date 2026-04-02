@@ -3233,6 +3233,50 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
         const insight = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
         return { insight };
       }),
+    /**
+     * getCsNudges — generates 2-4 inline AI action nudges for the CS chat window.
+     * Each nudge has a type (message | followup | action), a short label, and an
+     * optional pre-filled text for the compose box.
+     */
+    getCsNudges: opsChatProcedure
+      .input(z.object({
+        sessionId: z.number(),
+        messageHistory: z.string(),
+        clientName: z.string().optional(),
+        queue: z.string().optional(),
+        clientProfile: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const isTeams = input.queue === "Teams";
+        const messages: Array<{ role: string; content: string }> = (() => {
+          try { return JSON.parse(input.messageHistory); } catch { return []; }
+        })();
+        if (messages.length === 0) return { nudges: [] };
+        const recent = messages.slice(-10);
+        const snippet = recent
+          .map((m) => `${m.role === "user" ? (isTeams ? "Cleaner" : "Client") : "Agent"}: ${m.content}`)
+          .join("\n");
+        const firstName = input.clientName?.split(" ")[0] ?? "the client";
+        const profileCtx = input.clientProfile
+          ? `\n\nCLIENT HISTORY:\n${input.clientProfile}`
+          : "";
+        const systemPrompt = isTeams
+          ? `You are an operations manager for Maids in Black. Analyze this SMS conversation with a cleaner and return 2-4 specific, actionable nudges for the agent. Each nudge must be one of these types:\n- "message": a suggested SMS reply the agent should send (provide the exact text in fillText)\n- "followup": suggest creating a follow-up task (provide a short description in fillText)\n- "action": an internal action the agent should take (no fillText needed)\n\nReturn ONLY valid JSON: { "nudges": [ { "type": "message"|"followup"|"action", "label": "short action label (max 8 words)", "fillText": "optional text" } ] }\nBe specific. No generic advice. Focus on what matters RIGHT NOW.`
+          : `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this SMS conversation with ${firstName} and return 2-4 specific, actionable nudges for the agent. Each nudge must be one of these types:\n- "message": a suggested SMS reply the agent should send (provide the exact text in fillText)\n- "followup": suggest creating a follow-up task (provide a short description in fillText)\n- "action": an internal action the agent should take (no fillText needed)\n\nExamples of good nudges:\n- { type: "message", label: "Counter price objection", fillText: "We understand budget matters — our satisfaction guarantee means if anything is missed, we come back free of charge." }\n- { type: "followup", label: "Set callback in 1 hour", fillText: "Call back to confirm booking" }\n- { type: "message", label: "Upsell biweekly plan", fillText: "Since you loved the clean, many clients save 15% by switching to biweekly — want me to set that up?" }\n- { type: "action", label: "Issue $20 credit to retain" }\n- { type: "message", label: "Send running-late update", fillText: "Hi! Your cleaner is running about 15 min behind — they're on their way and excited to get started!" }\n\nReturn ONLY valid JSON: { "nudges": [ { "type": "message"|"followup"|"action", "label": "short action label (max 8 words)", "fillText": "optional text" } ] }${profileCtx}`;
+        const result = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `CONVERSATION:\n${snippet}\n\nReturn your nudges JSON now.` },
+          ],
+          response_format: { type: "json_object" } as any,
+        });
+        let nudges: Array<{ type: string; label: string; fillText?: string }> = [];
+        try {
+          const raw = JSON.parse((result.choices?.[0]?.message?.content as string) ?? "{}");
+          nudges = Array.isArray(raw.nudges) ? raw.nudges.slice(0, 4) : [];
+        } catch { nudges = []; }
+        return { nudges };
+      }),
 
     /**
      * batchResolveNames — given an array of raw phone strings, returns a map of
