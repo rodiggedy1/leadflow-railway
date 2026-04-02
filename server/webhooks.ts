@@ -1252,6 +1252,11 @@ async function handleCsInboundMessage(msg: any) {
     if (resolvedName && !existingSession.leadName) {
       updatePayload.leadName = resolvedName;
     }
+    // Auto-unresolve: if this session was resolved, a new inbound message reopens it
+    if ((existingSession as any).csResolvedAt) {
+      updatePayload.csResolvedAt = null;
+      console.log(`[CS] Auto-unresolving session ${existingSession.id} — new inbound message received`);
+    }
     await db
       .update(conversationSessions)
       .set(updatePayload as any)
