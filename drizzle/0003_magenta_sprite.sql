@@ -1,0 +1,1 @@
+ALTER TABLE `follow_ups` MODIFY COLUMN `type` enum('Lead callback','Customer issue','Reschedule','Voicemail','Team Issue') NOT NULL;

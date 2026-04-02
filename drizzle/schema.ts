@@ -1858,6 +1858,7 @@ export const followUpTypes = [
   "Customer issue",
   "Reschedule",
   "Voicemail",
+  "Team Issue",
 ] as const;
 export type FollowUpType = (typeof followUpTypes)[number];
 

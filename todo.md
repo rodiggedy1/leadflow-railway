@@ -897,3 +897,4 @@
 - [x] Follow-ups modal: wire "Change due time" button — trpc.followUps.updateDueAt mutation + inline date/time input
 - [x] Follow-ups modal: add "Team Issue" as a follow-up type
 - [x] Follow-ups modal: replace hardcoded OWNERS with real CS agents from DB
+- [x] Bug: Save button in new follow-up form does nothing — fixed: DB type enum missing Team Issue, history column needed explicit default in insert
