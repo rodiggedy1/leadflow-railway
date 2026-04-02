@@ -50,6 +50,11 @@ import {
   Link2,
   Copy,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -433,6 +438,14 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
+
+  // Auto-sync OpenPhone outbound messages when a conversation is selected
+  useEffect(() => {
+    if (!selectedId || !selected || selected.id <= 0 || !selected.phone) return;
+    // Fire-and-forget: silently pull in any outbound messages from the OpenPhone app
+    syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   // Magic link for Teams conversations
   const [magicLinkAction, setMagicLinkAction] = useState<"send" | "copy" | null>(null);
@@ -845,48 +858,64 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {/* Call via OpenPhone — icon only */}
+                    {/* Call via OpenPhone */}
                     {selected?.phone && (
-                      <a
-                        href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
-                        title={`Call ${selected.phone} via OpenPhone`}
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                      >
-                        <Phone className="h-4 w-4" />
-                      </a>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
+                            className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                          >
+                            <Phone className="h-4 w-4" />
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">Call via OpenPhone</TooltipContent>
+                      </Tooltip>
                     )}
-                    {/* Sync from OpenPhone — icon only */}
+                    {/* Sync from OpenPhone */}
                     {selected && selected.id > 0 && selected.phone && (
-                      <button
-                        type="button"
-                        onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
-                        disabled={syncOutbound.isPending}
-                        title="Sync messages from OpenPhone app"
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
+                            disabled={syncOutbound.isPending}
+                            className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
+                          >
+                            <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">{syncOutbound.isPending ? 'Syncing…' : 'Sync OpenPhone messages'}</TooltipContent>
+                      </Tooltip>
                     )}
-                    {/* New SMS — icon only */}
-                    <button
-                      type="button"
-                      onClick={() => setNewConvOpen(true)}
-                      title="Start a new SMS conversation"
-                      className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors"
-                    >
-                      <PenSquare className="h-4 w-4" />
-                    </button>
-                    {/* Resolve — kept as text button since it's a critical action */}
+                    {/* New SMS */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setNewConvOpen(true)}
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                        >
+                          <PenSquare className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">New SMS conversation</TooltipContent>
+                    </Tooltip>
+                    {/* Resolve */}
                     {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
-                      <button
-                        type="button"
-                        onClick={() => resolveSession.mutate({ sessionId: selected.id })}
-                        disabled={resolveSession.isPending}
-                        title="Resolve conversation"
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => resolveSession.mutate({ sessionId: selected.id })}
+                            disabled={resolveSession.isPending}
+                            className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">{resolveSession.isPending ? 'Resolving…' : 'Resolve conversation'}</TooltipContent>
+                      </Tooltip>
                     )}
                   </div>
                 </div>

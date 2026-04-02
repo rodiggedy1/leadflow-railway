@@ -852,3 +852,7 @@
 - [x] Multi-photo swipe in lightbox — left/right arrows + keyboard nav when message has multiple photos
 - [x] Phone icon next to customer number — initiates OpenPhone call via deep link
 - [x] Start SMS from scratch — "New SMS" button opens dialog to send first message to any phone number
+
+## CS Inbox UX Improvements (Apr 2)
+- [x] Styled tooltips on icon-only buttons in CS thread header
+- [x] Auto-sync OpenPhone messages when a conversation card is selected
