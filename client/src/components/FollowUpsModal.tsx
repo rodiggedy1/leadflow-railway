@@ -765,10 +765,11 @@ interface FollowUpsModalProps {
   open: boolean;
   onClose: () => void;
   initialItemId?: number | null;
+  initialView?: View;
 }
 
-export default function FollowUpsModal({ open, onClose, initialItemId }: FollowUpsModalProps) {
-  const [view, setView] = useState<View>(initialItemId ? "detail" : "queue");
+export default function FollowUpsModal({ open, onClose, initialItemId, initialView }: FollowUpsModalProps) {
+  const [view, setView] = useState<View>(initialItemId ? "detail" : (initialView ?? "queue"));
   const [selectedId, setSelectedId] = useState<number | null>(initialItemId ?? null);
 
   // When initialItemId changes (e.g. clicking a different card), update state
@@ -776,8 +777,10 @@ export default function FollowUpsModal({ open, onClose, initialItemId }: FollowU
     if (initialItemId) {
       setSelectedId(initialItemId);
       setView("detail");
+    } else if (open) {
+      setView(initialView ?? "queue");
     }
-  }, [initialItemId]);
+  }, [initialItemId, open, initialView]);
 
   const { data: rawItems = [], isLoading } = trpc.followUps.list.useQuery(undefined, {
     enabled: open,
