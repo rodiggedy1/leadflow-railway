@@ -413,6 +413,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
   });
 
+  // Lightbox for photo enlargement
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   // Magic link for Teams conversations
   const [magicLinkAction, setMagicLinkAction] = useState<"send" | "copy" | null>(null);
   const getMagicLink = trpc.cleaner.getMagicLink.useMutation({
@@ -544,6 +547,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   ];
 
   return (
+    <>
     <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
         <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
@@ -864,13 +868,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       {message.media && message.media.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {message.media.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setLightboxUrl(url)}
+                              className="focus:outline-none"
+                              title="Click to enlarge"
+                            >
                               <img
                                 src={url}
                                 alt="MMS photo"
-                                className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                                className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity"
                               />
-                            </a>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -1409,5 +1419,42 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         </div>
       </div>
     </div>
+
+    {/* Lightbox overlay */}
+    {lightboxUrl && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        onClick={() => setLightboxUrl(null)}
+      >
+        {/* Close button */}
+        <button
+          type="button"
+          className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
+          onClick={() => setLightboxUrl(null)}
+          title="Close"
+        >
+          <X className="h-6 w-6" />
+        </button>
+        {/* Open in new tab */}
+        <a
+          href={lightboxUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute top-4 left-4 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
+          onClick={(e) => e.stopPropagation()}
+          title="Open original"
+        >
+          <ExternalLink className="h-5 w-5" />
+        </a>
+        {/* Image */}
+        <img
+          src={lightboxUrl}
+          alt="Enlarged photo"
+          className="max-w-[90vw] max-h-[90vh] rounded-2xl object-contain shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+    </>
   );
 }

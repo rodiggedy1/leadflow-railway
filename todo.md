@@ -843,3 +843,7 @@
 - [x] "Send magic link" button — generates cleaner portal one-tap login link and sends via SMS
 - [x] "Copy magic link" button — generates link and copies to clipboard
 - [x] Graceful fallback message when no cleaner profile is linked to the conversation
+## CS Chat Photo Lightbox
+- [x] Replace anchor-download behavior with click-to-enlarge lightbox for received MMS photos
+- [x] Lightbox: full-screen dark overlay, close on backdrop click or X button, open-original button (top-left)
+- [x] Thumbnail cursor changed to zoom-in to signal enlargeable
