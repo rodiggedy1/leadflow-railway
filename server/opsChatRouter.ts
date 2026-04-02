@@ -2063,6 +2063,78 @@ export const opsChatRouter = router({
     }),
 
   /**
+   * startCsConversation — agent initiates a new outbound CS conversation from scratch.
+   * If an open session already exists for the phone, returns it instead of creating a duplicate.
+   */
+  startCsConversation: opsChatProcedure
+    .input(z.object({
+      phone: z.string().min(7).max(20),  // raw phone — will be normalised to E.164
+      firstMessage: z.string().min(1).max(1600),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+
+      // Normalise to E.164 (+1XXXXXXXXXX for US numbers)
+      const raw = input.phone.replace(/[^\d+]/g, "");
+      const e164 = raw.startsWith("+") ? raw : `+1${raw.replace(/^1/, "")}`;
+
+      // Check for an existing open CS session
+      const existing = await db
+        .select()
+        .from(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.leadPhone, e164),
+            isNull(conversationSessions.csResolvedAt),
+          )
+        )
+        .limit(1);
+
+      let sessionId: number;
+      if (existing.length > 0) {
+        sessionId = existing[0].id;
+      } else {
+        // Create a new agent-initiated CS session
+        const [result] = await db
+          .insert(conversationSessions)
+          .values({
+            leadPhone: e164,
+            leadName: e164,          // placeholder — agent can rename later
+            stage: "QUOTE_SENT",
+            messageHistory: "[]",
+            aiMode: 0,               // agent-driven; no AI auto-replies
+            csQueue: "Needs attention",
+            leadSource: "cs_initiated",
+          });
+        sessionId = (result as any).insertId;
+      }
+
+      // Send the first SMS via the CS OpenPhone number
+      const { sendSms } = await import("./openphone");
+      const env = await import("./_core/env");
+      const csNumberId = env.ENV.openPhoneCsNumberId;
+      await sendSms({ to: e164, content: input.firstMessage, ...(csNumberId ? { fromNumberId: csNumberId } : {}) });
+
+      // Append the message to history
+      const [session] = await db
+        .select()
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, sessionId))
+        .limit(1);
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try { history = JSON.parse(session?.messageHistory ?? "[]"); } catch { history = []; }
+      const agentName = ctx.user?.name ?? "Agent";
+      history.push({ role: "assistant", content: input.firstMessage, ts: Date.now(), senderName: agentName });
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify(history) })
+        .where(eq(conversationSessions.id, sessionId));
+
+      return { sessionId, isNew: existing.length === 0 };
+    }),
+
+  /**
    * syncCsOutboundMessages — manually trigger a sync of OpenPhone outbound messages
    * for a specific CS conversation. Useful for backfilling messages sent from the
    * OpenPhone app before this feature was deployed.

@@ -24,6 +24,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   CircleDot,
   Clock3,
   Headphones,
@@ -31,6 +32,7 @@ import {
   MapPin,
   MessageSquare,
   Phone,
+  PenSquare,
   Search,
   Send,
   Sparkles,
@@ -413,11 +415,42 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
   });
 
-  // Lightbox for photo enlargement
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Lightbox for photo enlargement (multi-photo swipe)
+  const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null);
+  const lightboxUrl = lightbox ? lightbox.urls[lightbox.idx] : null;
+  const openLightbox = (urls: string[], idx: number) => setLightbox({ urls, idx });
+  const closeLightbox = () => setLightbox(null);
+  const lightboxPrev = () => setLightbox(lb => lb && lb.idx > 0 ? { ...lb, idx: lb.idx - 1 } : lb);
+  const lightboxNext = () => setLightbox(lb => lb && lb.idx < lb.urls.length - 1 ? { ...lb, idx: lb.idx + 1 } : lb);
+  // Keyboard nav for lightbox
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") lightboxPrev();
+      if (e.key === "ArrowRight") lightboxNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
 
   // Magic link for Teams conversations
   const [magicLinkAction, setMagicLinkAction] = useState<"send" | "copy" | null>(null);
+
+  // New conversation from scratch
+  const [newConvOpen, setNewConvOpen] = useState(false);
+  const [newConvPhone, setNewConvPhone] = useState("");
+  const [newConvMsg, setNewConvMsg] = useState("");
+  const startConv = trpc.opsChat.startCsConversation.useMutation({
+    onSuccess: (data) => {
+      setNewConvOpen(false);
+      setNewConvPhone("");
+      setNewConvMsg("");
+      utils.leads.listCsInbox.invalidate();
+      toast.success(data.isNew ? "Conversation started" : "Existing conversation opened");
+    },
+    onError: (err) => toast.error(err.message),
+  });
   const getMagicLink = trpc.cleaner.getMagicLink.useMutation({
     onSuccess: async ({ url, cleanerName }) => {
       if (magicLinkAction === "copy") {
@@ -582,9 +615,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inbox</div>
                   <div className="mt-2 text-3xl font-semibold">Today</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center min-w-[74px]">
-                  <div className="text-xl font-semibold">15</div>
-                  <div className="text-xs text-slate-500 mt-1">online</div>
+                <div className="flex flex-col items-end gap-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center min-w-[74px]">
+                    <div className="text-xl font-semibold">15</div>
+                    <div className="text-xs text-slate-500 mt-1">online</div>
+                  </div>
+                  <button
+                    onClick={() => setNewConvOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+                    title="Start a new SMS conversation"
+                  >
+                    <PenSquare className="h-3.5 w-3.5" />
+                    New SMS
+                  </button>
                 </div>
               </div>
 
@@ -818,6 +861,17 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap items-center">
+                    {/* Call via OpenPhone */}
+                    {selected && selected.phone && (
+                      <a
+                        href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
+                        title={`Call ${selected.phone} via OpenPhone`}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        {selected.phone}
+                      </a>
+                    )}
                     {/* Sync from OpenPhone — backfills outbound messages sent from the OpenPhone app */}
                     {selected && selected.id > 0 && selected.phone && (
                       <Button
@@ -871,7 +925,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             <button
                               key={i}
                               type="button"
-                              onClick={() => setLightboxUrl(url)}
+                              onClick={() => openLightbox(message.media!, i)}
                               className="focus:outline-none"
                               title="Click to enlarge"
                             >
@@ -1420,18 +1474,82 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       </div>
     </div>
 
+    {/* New Conversation dialog */}
+    {newConvOpen && (
+      <div
+        className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        onClick={() => setNewConvOpen(false)}
+      >
+        <div
+          className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm mx-4 flex flex-col gap-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">New SMS conversation</h3>
+            <button
+              type="button"
+              onClick={() => setNewConvOpen(false)}
+              className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Phone number</label>
+              <input
+                type="tel"
+                placeholder="+1 (555) 000-0000"
+                value={newConvPhone}
+                onChange={(e) => setNewConvPhone(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">First message</label>
+              <textarea
+                placeholder="Type your opening message…"
+                value={newConvMsg}
+                onChange={(e) => setNewConvMsg(e.target.value)}
+                rows={3}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setNewConvOpen(false)}
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!newConvPhone.trim() || !newConvMsg.trim() || startConv.isPending}
+              onClick={() => startConv.mutate({ phone: newConvPhone.trim(), firstMessage: newConvMsg.trim() })}
+              className="rounded-2xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+            >
+              {startConv.isPending ? "Sending…" : "Send & open"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* Lightbox overlay */}
-    {lightboxUrl && (
+    {lightbox && lightboxUrl && (
       <div
         className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-        onClick={() => setLightboxUrl(null)}
+        onClick={closeLightbox}
       >
         {/* Close button */}
         <button
           type="button"
           className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
-          onClick={() => setLightboxUrl(null)}
-          title="Close"
+          onClick={closeLightbox}
+          title="Close (Esc)"
         >
           <X className="h-6 w-6" />
         </button>
@@ -1446,11 +1564,39 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         >
           <ExternalLink className="h-5 w-5" />
         </a>
+        {/* Prev arrow */}
+        {lightbox.idx > 0 && (
+          <button
+            type="button"
+            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/25 p-3 text-white transition-colors"
+            onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}
+            title="Previous (←)"
+          >
+            <ChevronLeft className="h-7 w-7" />
+          </button>
+        )}
+        {/* Next arrow */}
+        {lightbox.idx < lightbox.urls.length - 1 && (
+          <button
+            type="button"
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/25 p-3 text-white transition-colors"
+            onClick={(e) => { e.stopPropagation(); lightboxNext(); }}
+            title="Next (→)"
+          >
+            <ChevronRight className="h-7 w-7" />
+          </button>
+        )}
+        {/* Photo counter */}
+        {lightbox.urls.length > 1 && (
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-xs text-white">
+            {lightbox.idx + 1} / {lightbox.urls.length}
+          </div>
+        )}
         {/* Image */}
         <img
           src={lightboxUrl}
           alt="Enlarged photo"
-          className="max-w-[90vw] max-h-[90vh] rounded-2xl object-contain shadow-2xl"
+          className="max-w-[80vw] max-h-[85vh] rounded-2xl object-contain shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         />
       </div>

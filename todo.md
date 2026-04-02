@@ -847,3 +847,8 @@
 - [x] Replace anchor-download behavior with click-to-enlarge lightbox for received MMS photos
 - [x] Lightbox: full-screen dark overlay, close on backdrop click or X button, open-original button (top-left)
 - [x] Thumbnail cursor changed to zoom-in to signal enlargeable
+
+## CS Chat: Three New Features
+- [x] Multi-photo swipe in lightbox — left/right arrows + keyboard nav when message has multiple photos
+- [x] Phone icon next to customer number — initiates OpenPhone call via deep link
+- [x] Start SMS from scratch — "New SMS" button opens dialog to send first message to any phone number
