@@ -1244,18 +1244,24 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                     <TooltipContent>Call {job.customerName}</TooltipContent>
                                   </Tooltip>
                                 )}
-                                {smsHref && (
+                                {clientPhone10 && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <a
-                                        href={smsHref}
+                                      <button
+                                        type="button"
                                         className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setNewConvPhone(job.customerPhone ?? "");
+                                          setNewConvMsg("");
+                                          setNewConvOpen(true);
+                                        }}
                                       >
                                         <MessageSquarePlus className="h-3.5 w-3.5" />
                                         SMS client
-                                      </a>
+                                      </button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Text {job.customerName}</TooltipContent>
+                                    <TooltipContent>Text {job.customerName} via CS chat</TooltipContent>
                                   </Tooltip>
                                 )}
                                 {launch27Url && (
@@ -1693,10 +1699,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     <Phone className="h-4 w-4" /> Call client
                   </a>
                 )}
-                {smsHref && (
-                  <a href={smsHref} className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors">
+                {job.customerPhone && (
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                    onClick={() => {
+                      setNewConvPhone(job.customerPhone ?? "");
+                      setNewConvMsg("");
+                      setNewConvOpen(true);
+                      setSelectedJobDrawer(null);
+                    }}
+                  >
                     <MessageSquarePlus className="h-4 w-4" /> SMS client
-                  </a>
+                  </button>
                 )}
                 {launch27Url && (
                   <a href={launch27Url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition-colors">
