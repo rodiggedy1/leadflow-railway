@@ -3192,6 +3192,48 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
         const draft = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
         return { draft, suggestedAction: null };
       }),
+
+    /**
+     * getCsConvInsight — generates a concise AI insight / action recommendation
+     * for the currently selected CS conversation. Takes the last N messages plus
+     * optional client profile context and returns a 1-3 sentence advisory.
+     */
+    getCsConvInsight: opsChatProcedure
+      .input(z.object({
+        sessionId: z.number(),
+        messageHistory: z.string(), // JSON array of {role, content} objects
+        clientName: z.string().optional(),
+        queue: z.string().optional(),
+        clientProfile: z.string().optional(), // brief text summary of booking history
+      }))
+      .query(async ({ input }) => {
+        const isTeams = input.queue === "Teams";
+        const messages: Array<{ role: string; content: string }> = (() => {
+          try { return JSON.parse(input.messageHistory); } catch { return []; }
+        })();
+        if (messages.length === 0) return { insight: "" };
+        // Use last 12 messages for context
+        const recent = messages.slice(-12);
+        const snippet = recent
+          .map((m) => `${m.role === "user" ? (isTeams ? "Cleaner" : "Client") : "Agent"}: ${m.content}`)
+          .join("\n");
+        const firstName = input.clientName?.split(" ")[0] ?? "the client";
+        const profileCtx = input.clientProfile
+          ? `\n\nCLIENT HISTORY:\n${input.clientProfile}`
+          : "";
+        const systemPrompt = isTeams
+          ? `You are an operations manager for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this SMS conversation with a cleaner and give a 1-2 sentence operational insight: what is happening and what is the single most important action to take right now. Be direct and specific. No fluff. No bullet points.`
+          : `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this SMS conversation with a client named ${firstName} and give a 1-3 sentence insight: what is the client's situation or mood, what is the single most important action the agent should take right now, and any risk or opportunity to flag. Be specific and actionable. No fluff. No bullet points.${profileCtx}`;
+        const result = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `CONVERSATION:\n${snippet}\n\nProvide your insight now.` },
+          ],
+        });
+        const insight = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
+        return { insight };
+      }),
+
     /**
      * batchResolveNames — given an array of raw phone strings, returns a map of
      * { normalizedPhone10 -> resolvedName } in a single round-trip.

@@ -635,6 +635,49 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     { enabled: !!clientPhone, refetchOnWindowFocus: false, refetchInterval: 120_000 }
   );
 
+  // Build a brief client profile summary for the AI insight prompt
+  const clientProfileSummary = useMemo(() => {
+    if (!clientProfile) return undefined;
+    const parts: string[] = [];
+    if (clientProfile.name) parts.push(`Name: ${clientProfile.name}`);
+    if (clientProfile.totalBookings) parts.push(`Total bookings: ${clientProfile.totalBookings}`);
+    if (clientProfile.avgPrice) parts.push(`Avg price: $${clientProfile.avgPrice}`);
+    if (clientProfile.frequency) parts.push(`Frequency: ${clientProfile.frequency}`);
+    if (clientProfile.todayJob) parts.push(`Has a job TODAY at ${clientProfile.todayJob.jobAddress ?? ""} (${clientProfile.todayJob.serviceType ?? ""}), status: ${clientProfile.todayJob.jobStatus ?? ""}`);
+    if (clientProfile.recentJobs?.length) {
+      const last = clientProfile.recentJobs[0];
+      parts.push(`Last job: ${last.date ?? ""} — ${last.serviceType ?? ""} — ${last.status}`);
+    }
+    return parts.join("; ");
+  }, [clientProfile]);
+
+  // AI insight query — fires when a conversation is selected and has messages
+  const insightMsgHistory = useMemo(() => {
+    if (!selected?.messages?.length) return "[]";
+    return JSON.stringify(
+      selected.messages.map((m) => ({
+        role: m.sender === "client" ? "user" : "assistant",
+        content: m.text,
+      }))
+    );
+  }, [selected?.id, selected?.messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { data: insightData, isFetching: insightLoading } = trpc.leads.getCsConvInsight.useQuery(
+    {
+      sessionId: selected?.id ?? 0,
+      messageHistory: insightMsgHistory,
+      clientName: selected?.name ?? undefined,
+      queue: selected?.queue ?? undefined,
+      clientProfile: clientProfileSummary,
+    },
+    {
+      enabled: !!(selected && selected.id > 0 && selected.messages.length > 0),
+      refetchOnWindowFocus: false,
+      // Re-fetch when the conversation changes or a new message arrives
+      staleTime: 60_000, // treat as fresh for 60s to avoid hammering LLM on every render
+    }
+  );
+
   // Mark conversation as viewed when selected changes
   useEffect(() => {
     if (effectiveSelectedId != null) {
@@ -1652,8 +1695,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
                         <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
                           <Bot className="h-4 w-4" /> AI insight
+                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-blue-400" />}
                         </div>
-                        <div className="mt-2 text-sm leading-6 text-blue-900">{selected.aiInsight}</div>
+                        {insightLoading && !insightData?.insight ? (
+                          <div className="mt-2 space-y-1.5">
+                            <div className="h-3 w-full rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-4/5 rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-3/5 rounded bg-blue-200/60 animate-pulse" />
+                          </div>
+                        ) : insightData?.insight ? (
+                          <div className="mt-2 text-sm leading-6 text-blue-900">{insightData.insight}</div>
+                        ) : (
+                          <div className="mt-2 text-xs text-blue-400 italic">Select a conversation with messages to generate insight.</div>
+                        )}
                       </div>
                     </div>
                   </CardContent>

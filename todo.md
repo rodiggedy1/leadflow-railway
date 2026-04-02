@@ -904,3 +904,4 @@
 - [x] CS inbox: move Follow-ups section to left panel (below AI priority queue, above search bar) — actually user wants it in CommandChat right panel below issues
 - [x] CommandChat right panel: add Follow-ups section below "No open issues" / AI issues area
 - [x] CommandChat right panel: move Follow-ups section above Manual Issues
+- [x] CS chat right panel: restore AI insight section with live AI advice about the selected conversation
