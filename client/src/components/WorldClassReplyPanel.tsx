@@ -123,10 +123,23 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
   const lastAssistantMsg = [...history].reverse().find(m => m.role === "assistant");
 
   return (
-    <div
-      className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
-      style={{ height: "min(680px, 75vh)", minHeight: "520px" }}
-    >
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/20"
+        onClick={() => { handleReset(); onClose(); }}
+      />
+      <div
+        className="fixed z-50 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-2xl"
+        style={{
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(640px, 90vw)",
+          height: "min(680px, 80vh)",
+          minHeight: "480px",
+        }}
+      >
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 shrink-0 rounded-t-xl">
         <div className="flex items-center gap-2.5">
@@ -288,6 +301,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
         </div>
         <p className="text-[10px] text-slate-400 mt-1.5 text-right">Enter to send · Shift+Enter for new line</p>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
