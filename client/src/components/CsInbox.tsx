@@ -1298,6 +1298,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       onBlur={onTypingBlur}
                     />
                     <div className="flex flex-col gap-2 shrink-0">
+                      <div className="flex flex-row gap-1.5">
                       <Button
                         variant="outline"
                         size="icon"
@@ -1326,6 +1327,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       >
                         <Sparkles className="h-3.5 w-3.5" />
                       </Button>
+                      </div>
                       <Button
                         className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
                         disabled={!compose.trim() || sendMessage.isPending || !selected}
