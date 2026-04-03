@@ -623,12 +623,17 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       clientProfile: clientProfileSummary,
     },
     {
-      enabled: !!(selected && selected.id > 0 && selected.messages.length > 0),
+      // Only fire for queues where a nudge is actually useful
+      enabled: !!(selected && selected.id > 0 && selected.messages.length > 0 &&
+        (selected.queue === "Needs attention" || selected.queue === "Follow up")),
       refetchOnWindowFocus: false,
       staleTime: 90_000,
     }
   );
-  const activeNudges = (nudgesData?.nudges ?? []).filter((n) => !dismissedNudges.has(n.label));
+  // Show at most 1 nudge — the highest-priority one
+  const activeNudges = (nudgesData?.nudges ?? [])
+    .filter((n) => !dismissedNudges.has(n.label))
+    .slice(0, 1);
 
   // Mark conversation as viewed when selected changes; also reset dismissed nudges
   useEffect(() => {
