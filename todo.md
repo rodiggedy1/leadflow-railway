@@ -928,3 +928,5 @@
 - [x] FEATURE: Command Chat — mention history drawer ("See all mentions" button opens slide-in panel with all @mention messages, timestamps, author avatars, and jump-to links)
 
 - [x] BUG: Online status dots — fixed: added 90s presence ping heartbeat; widened online threshold to 5 min, away to 20 min
+
+- [x] BUG: Diane's photo not showing in message bubbles — fixed: getAllAgentPhotoMap now emits both short name ("Diane") and full OAuth name ("Diane Ruiz") as keys pointing to the same photo

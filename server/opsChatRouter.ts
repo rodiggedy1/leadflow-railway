@@ -1742,15 +1742,35 @@ export const opsChatRouter = router({
       for (const row of rows) {
         photos[row.name] = row.profilePhotoUrl ?? null;
       }
+      // Also emit each agent's FULL name from the users table as an alias key.
+      // This handles cases where messages are stored with the OAuth full name (e.g. "Diane Ruiz")
+      // but the agents table only has the short name (e.g. "Diane").
+      const allUsers = await db
+        .select({ name: users.name, profilePhotoUrl: users.profilePhotoUrl })
+        .from(users);
+      for (const userRow of allUsers) {
+        if (!userRow.name) continue;
+        // Find a matching agent by first-name prefix (case-insensitive)
+        const firstName = userRow.name.split(/\s+/)[0].toLowerCase();
+        const matchingAgent = rows.find(
+          r => r.name.toLowerCase().startsWith(firstName) || firstName.startsWith(r.name.toLowerCase())
+        );
+        if (matchingAgent) {
+          const photo = matchingAgent.profilePhotoUrl ?? userRow.profilePhotoUrl ?? null;
+          // Emit both the agent short name AND the user full name as keys
+          photos[matchingAgent.name] = photo;
+          photos[userRow.name] = photo;
+        }
+      }
       // Also include the owner's photo from users table (owner has no agents row)
       if (ctx.opsCaller.isOwner) {
-        const [userRow] = await db
+        const [ownerRow] = await db
           .select({ name: users.name, profilePhotoUrl: users.profilePhotoUrl })
           .from(users)
           .where(eq(users.openId, ctx.opsCaller.id))
           .limit(1);
-        if (userRow?.name && userRow.profilePhotoUrl) {
-          photos[userRow.name] = userRow.profilePhotoUrl;
+        if (ownerRow?.name && ownerRow.profilePhotoUrl) {
+          photos[ownerRow.name] = ownerRow.profilePhotoUrl;
         }
       }
       return { photos };
