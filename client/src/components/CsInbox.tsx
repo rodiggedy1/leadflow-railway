@@ -483,11 +483,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [newConvPhone, setNewConvPhone] = useState("");
   const [newConvMsg, setNewConvMsg] = useState("");
   const startConv = trpc.opsChat.startCsConversation.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setNewConvOpen(false);
       setNewConvPhone("");
       setNewConvMsg("");
-      utils.leads.listCsInbox.invalidate();
+      // Refresh the inbox list, then select the new/existing conversation
+      await utils.leads.listCsInbox.invalidate();
+      setSelectedId(data.sessionId);
       toast.success(data.isNew ? "Conversation started" : "Existing conversation opened");
     },
     onError: (err) => toast.error(err.message),
