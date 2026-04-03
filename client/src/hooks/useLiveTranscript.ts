@@ -146,14 +146,15 @@ export function useLiveTranscript(opts: UseLiveTranscriptOptions = {}) {
 
         const audioTracks = sysStream.getAudioTracks();
         if (audioTracks.length === 0) {
-          // User didn't check "Share tab audio" in the Chrome dialog
+          // User didn't check "Share tab audio" in the Chrome dialog.
+          // Reset to idle so they can retry immediately.
           for (const t of tracksRef.current) t.stop();
           tracksRef.current = [];
           const msg =
-            'No system audio captured. In Chrome\'s sharing dialog, check the "Share tab audio" checkbox and try again.';
+            'No audio captured. In Chrome\'s dialog, check "Share tab audio" then try again.';
           setError(msg);
           opts.onError?.(msg);
-          setStatus("error");
+          setStatus("idle"); // idle, not error — allows immediate retry
           return;
         }
 

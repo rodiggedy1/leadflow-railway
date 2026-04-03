@@ -484,8 +484,12 @@ export default function LiveCallAssist() {
       }
     },
     onError: (msg) => {
-      toast.error(`Live audio error: ${msg}`);
+      toast.error(msg, { duration: 6000 });
       setLiveMode(false);
+      // If it's the "no audio" error, re-open the picker so the user can retry
+      if (msg.includes('Share tab audio') || msg.includes('No audio captured')) {
+        setTimeout(() => setShowSourcePicker(true), 300);
+      }
     },
   });
 
