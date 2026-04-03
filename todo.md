@@ -915,3 +915,5 @@
 - [x] FEATURE: Cleaner portal — add finishing_up and wrapping_up job statuses with bidirectional auto-link (one tap updates both jobs)
 - [x] POLISH: CS inbox debrief card — more whitespace, clearer section separation
 - [x] POLISH: CS inbox quick action buttons — icon + label treatment
+- [ ] POLISH: Command Chat — replace priority alerts pill with online agent avatars
+- [ ] POLISH: Command Chat — full UI cohesion pass (spacing, bubbles, input, team feel)
