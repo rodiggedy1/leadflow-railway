@@ -118,21 +118,20 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
     <>
       {/* Backdrop — stops clicks on the chat behind it */}
       <div
-        className="absolute inset-0 z-30 bg-black/10 backdrop-blur-[1px]"
+        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
         onClick={onClose}
       />
 
-      {/* Panel — absolutely positioned at the bottom, flex column */}
+      {/* Panel — fixed overlay, centered, escapes all overflow-hidden clipping */}
       <div
         className={cn(
-          "absolute bottom-0 left-0 right-0 z-40 bg-white rounded-t-2xl",
-          "shadow-[0_-8px_40px_rgba(15,23,42,0.16)] border-t border-slate-200",
+          "fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white rounded-2xl",
+          "shadow-2xl border border-slate-200",
           "flex flex-col",
           "transition-all duration-200 ease-out",
           visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
-        style={{ maxHeight: "60vh" }}
-        // Prevent backdrop click from bubbling through the panel itself
+        style={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "520px" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
