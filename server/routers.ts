@@ -1565,6 +1565,7 @@ export const appRouter = router({
           .select({
             id: openphoneCallRecordings.id,
             callDebrief: openphoneCallRecordings.callDebrief,
+            recordingUrl: openphoneCallRecordings.recordingUrl,
           })
           .from(openphoneCallRecordings)
           .where(eq(openphoneCallRecordings.sessionId, input.sessionId))
@@ -1574,11 +1575,16 @@ export const appRouter = router({
         if (!withDebrief?.callDebrief) return null;
         try {
           const parsed = JSON.parse(withDebrief.callDebrief as string);
+          const recordingUrl = withDebrief.recordingUrl as string | null;
+          // Exclude synthetic backfill placeholder URLs
+          const audioUrl = recordingUrl && !recordingUrl.includes('synthetic-backfill') ? recordingUrl : null;
           return {
+            grade: (parsed.grade as string) || null,
             wentWell: parsed.wentWell as string,
             improve: parsed.improve as string,
             nextLine: parsed.nextLine as string,
             generatedAt: parsed.generatedAt as number,
+            audioUrl,
           };
         } catch {
           return null;

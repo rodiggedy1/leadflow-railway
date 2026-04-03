@@ -1854,38 +1854,65 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 )}
 
                 {/* ─── Post-call AI Debrief card ───────────────────── */}
-                {showDebrief && (
-                  <Card className="rounded-[28px] border-purple-200 bg-purple-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-purple-600" />
-                          <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Call debrief</span>
+                {showDebrief && (() => {
+                  const grade = callDebrief!.grade;
+                  const gradeColors: Record<string, string> = {
+                    A: 'bg-green-100 text-green-700 border-green-300',
+                    B: 'bg-blue-100 text-blue-700 border-blue-300',
+                    C: 'bg-amber-100 text-amber-700 border-amber-300',
+                    D: 'bg-orange-100 text-orange-700 border-orange-300',
+                    F: 'bg-red-100 text-red-700 border-red-300',
+                  };
+                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
+                  return (
+                    <Card className="rounded-[28px] border-purple-200 bg-purple-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-purple-600" />
+                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Call debrief</span>
+                            {grade && (
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-xs font-bold ${gradeColor}`}>
+                                {grade}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
+                            className="text-purple-400 hover:text-purple-600 text-xs"
+                          >
+                            ×
+                          </button>
                         </div>
-                        <button
-                          onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
-                          className="text-purple-400 hover:text-purple-600 text-xs"
-                        >
-                          ×
-                        </button>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <span className="text-green-600 text-xs mt-0.5">✔</span>
-                          <p className="text-xs text-purple-800 leading-snug">{callDebrief!.wentWell}</p>
+                        {/* Audio player — only shown when a real recording URL exists */}
+                        {callDebrief!.audioUrl && (
+                          <div className="mb-3">
+                            <audio
+                              controls
+                              src={callDebrief!.audioUrl}
+                              className="w-full h-8 rounded-xl"
+                              style={{ accentColor: '#7c3aed' }}
+                            />
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex gap-2">
+                            <span className="text-green-600 text-xs mt-0.5">✔</span>
+                            <p className="text-xs text-purple-800 leading-snug">{callDebrief!.wentWell}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className="text-amber-500 text-xs mt-0.5">▲</span>
+                            <p className="text-xs text-purple-800 leading-snug">{callDebrief!.improve}</p>
+                          </div>
+                          <div className="mt-1 rounded-xl bg-purple-100 border border-purple-200 px-3 py-2">
+                            <p className="text-[10px] text-purple-500 font-medium mb-0.5">Next time, say:</p>
+                            <p className="text-xs text-purple-900 italic leading-snug">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <span className="text-amber-500 text-xs mt-0.5">▲</span>
-                          <p className="text-xs text-purple-800 leading-snug">{callDebrief!.improve}</p>
-                        </div>
-                        <div className="mt-1 rounded-xl bg-purple-100 border border-purple-200 px-3 py-2">
-                          <p className="text-[10px] text-purple-500 font-medium mb-0.5">Next time, say:</p>
-                          <p className="text-xs text-purple-900 italic leading-snug">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
 
                 {/* ─── Add Follow-up button ─────────────────────────── */}
                 <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">

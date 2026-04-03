@@ -1108,20 +1108,28 @@ async function generatePostCallDebrief(
     .map((turn) => `${turn.identifier === 'agent' ? 'Agent' : 'Customer'}: ${turn.content}`)
     .join('\n');
 
-  const systemPrompt = `You are an expert home services sales coach. Analyze this call transcript and produce a concise 3-bullet debrief for the agent.
+  const systemPrompt = `You are an expert home services sales coach. Analyze this call transcript and produce a concise debrief for the agent.
 
 Return ONLY a JSON object with exactly these keys:
 {
+  "grade": "A single letter grade: A, B, C, D, or F",
   "wentWell": "One sentence — what the agent did well on this call",
   "improve": "One sentence — the single most important thing to improve",
   "nextLine": "The exact word-for-word line the agent should use next time to handle the key moment better"
 }
 
+Grade criteria:
+- A: Excellent — closed or made a strong attempt, great rapport, handled objections well
+- B: Good — solid process, minor missed opportunities
+- C: Average — adequate but missed key objection handling or follow-through
+- D: Poor — poor engagement, lost the lead unnecessarily
+- F: Failed — unprofessional or completely failed to follow process
+
 Be specific and actionable. Reference actual moments from the transcript. No fluff.`;
 
   const userPrompt = `Call transcript:\n${transcriptText}`;
 
-  let debrief: { wentWell: string; improve: string; nextLine: string; generatedAt: number } | null = null;
+  let debrief: { grade: string; wentWell: string; improve: string; nextLine: string; generatedAt: number } | null = null;
   try {
     const response = await invokeLLM({
       messages: [
@@ -1135,6 +1143,8 @@ Be specific and actionable. Reference actual moments from the transcript. No flu
     const cleaned = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
     const parsed = JSON.parse(cleaned);
     if (parsed.wentWell && parsed.improve && parsed.nextLine) {
+      const validGrades = ['A', 'B', 'C', 'D', 'F'];
+      if (!validGrades.includes(parsed.grade)) parsed.grade = 'C';
       debrief = { ...parsed, generatedAt: Date.now() };
     }
   } catch (err) {
