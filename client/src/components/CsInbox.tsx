@@ -294,7 +294,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
   });
 
-  const { data: csData } = trpc.leads.listCsInbox.useQuery({ showResolved }, { refetchOnWindowFocus: false });
+  const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved }, { refetchOnWindowFocus: false });
 
   // Collect all phones from real sessions for batch name resolution
   const allPhones = useMemo(
@@ -495,8 +495,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       setNewConvOpen(false);
       setNewConvPhone("");
       setNewConvMsg("");
-      // Refresh the inbox list, then select the new/existing conversation
-      await utils.leads.listCsInbox.invalidate();
+      // Refetch the inbox list first so the new session is in the list before we select it
+      await refetchInbox();
       setSelectedId(data.sessionId);
       // Scroll to bottom after messages load (slight delay for render)
       setTimeout(() => {

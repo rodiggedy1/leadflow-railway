@@ -579,10 +579,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const senderPhotoMap: Record<string, string | null> = useMemo(() => agentPhotoData?.photos ?? {}, [agentPhotoData?.photos]);
   // All agent names available for @mention autocomplete (exclude self)
-  const mentionNames = useMemo(
-    () => Object.keys(senderPhotoMap).filter(n => n && n !== callerName).sort(),
-    [senderPhotoMap, callerName]
-  );
+  const mentionNames = useMemo(() => {
+    const all = Object.keys(senderPhotoMap).filter(n => n && n !== callerName);
+    // Deduplicate: if two names share the same first name, keep only the longer (full) name
+    const byFirst: Record<string, string> = {};
+    for (const name of all) {
+      const first = name.split(" ")[0].toLowerCase();
+      if (!byFirst[first] || name.length > byFirst[first].length) {
+        byFirst[first] = name;
+      }
+    }
+    return Object.values(byFirst).sort();
+  }, [senderPhotoMap, callerName]);
   const mentionSuggestions = useMemo(
     () => mentionQuery === null ? [] : mentionNames.filter(n => n.toLowerCase().startsWith(mentionQuery.toLowerCase())),
     [mentionNames, mentionQuery]

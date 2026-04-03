@@ -943,3 +943,6 @@
 - [x] FEATURE: CS chat — auto-scroll to bottom of message list after outbound send opens the thread (400ms delay after setSelectedId)
 
 - [x] BUG: startCsConversation — root cause: listCsInbox sourceFilter excluded 'cs_initiated'; added it so agent-initiated conversations now appear in the inbox
+
+- [x] BUG: CS chat — view now switches correctly after send: replaced invalidate() with refetch() so list is populated before setSelectedId fires
+- [x] BUG: Command Chat @mention dropdown — deduplicated by first name; only the longer/full name is kept (Diane Ruiz, not both Diane + Diane Ruiz)
