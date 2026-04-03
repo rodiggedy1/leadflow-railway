@@ -34,7 +34,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
   const [history, setHistory] = useState<Message[]>([]);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const mutation = trpc.opsChat.objectionReply.useMutation({
@@ -43,9 +43,9 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
     },
   });
 
-  // Scroll to bottom whenever history changes
+  // Scroll to top whenever a new response arrives
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [history, mutation.isPending]);
 
   // Dismiss on Escape
@@ -126,7 +126,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
       </div>
 
       {/* Body — scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-3 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-4 py-3 space-y-3">
         {!hasConversation ? (
           /* Empty state — preset grid */
           <div>
@@ -200,7 +200,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
               </div>
             )}
 
-            <div ref={bottomRef} />
+
           </div>
         )}
       </div>
