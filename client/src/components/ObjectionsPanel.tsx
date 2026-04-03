@@ -126,7 +126,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
     const text = customInput.trim();
     if (!text || mutation.isPending) return;
     setCustomInput("");
-    handleObjection(text);
+    handleObjection(text, true);
   };
 
   const handleCopy = (text: string) => {
