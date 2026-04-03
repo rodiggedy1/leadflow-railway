@@ -125,7 +125,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
   return (
     <div
       className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
-      style={{ maxHeight: "min(360px, 40vh)", minHeight: "160px" }}
+      style={{ height: "min(600px, 65vh)", minHeight: "420px" }}
     >
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 shrink-0 rounded-t-xl">
