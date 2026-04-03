@@ -946,6 +946,28 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             {JOB_STATUSES.map(s => {
               const isActive = job.jobStatus === s.key;
               const isPending = statusMutation.isPending && statusMutation.variables?.status === s.key;
+
+              // ── Contextual visibility: finishing_up and wrapping_up are mutually exclusive ──
+              if (s.key === "finishing_up") {
+                // Only show when this job is currently active (in_progress or arrived)
+                const isCurrentlyActive =
+                  job.jobStatus === "in_progress" ||
+                  job.jobStatus === "arrived" ||
+                  job.jobStatus === "finishing_up";
+                if (!isCurrentlyActive) return null;
+              }
+              if (s.key === "wrapping_up") {
+                // Only show when this job hasn't started yet AND there's a previous job not yet completed
+                const isNotStarted = !job.jobStatus || job.jobStatus === "wrapping_up";
+                if (!isNotStarted) return null;
+                const sorted = [...allJobs]
+                  .filter(j => j.bookingStatus !== "cancelled" && j.bookingStatus !== "rescheduled")
+                  .sort((a, b) => (a.serviceDateTime ?? "").localeCompare(b.serviceDateTime ?? ""));
+                const myIdx = sorted.findIndex(j => j.id === job.id);
+                const prevJob = myIdx > 0 ? sorted[myIdx - 1] : null;
+                if (!prevJob || prevJob.bookingStatus === "completed") return null;
+              }
+
               return (
                 <button
                   key={s.key}
