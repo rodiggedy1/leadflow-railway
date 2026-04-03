@@ -1356,7 +1356,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           {(() => {
                             const displayName = message.senderName && message.senderName !== "OpenPhone"
                               ? message.senderName
-                              : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : message.sender;
+                              : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : (message.sender as string);
                             const isAgent = message.sender === "agent";
                             const photoUrl = isAgent && displayName !== "Agent" ? (agentPhotoMap[displayName] ?? null) : null;
                             const initials = displayName.split(/\s+/).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();

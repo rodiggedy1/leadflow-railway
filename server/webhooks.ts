@@ -1462,7 +1462,22 @@ async function handleCsOutboundMessage(msg: any) {
     return;
   }
 
-  history.push({ role: "assistant", content: outboundText, ts: now, senderName: "OpenPhone" });
+  // Resolve userId to real name (best-effort)
+  let outboundSenderName = "OpenPhone";
+  const outboundUserId: string | undefined = msg.userId;
+  if (outboundUserId) {
+    try {
+      const uRes = await fetch(`https://api.openphone.com/v1/users/${encodeURIComponent(outboundUserId)}`, {
+        headers: { Authorization: process.env.OPENPHONE_API_KEY ?? "" },
+      });
+      if (uRes.ok) {
+        const uJson = await uRes.json() as any;
+        const u = uJson?.data;
+        if (u?.firstName) outboundSenderName = `${u.firstName} ${u.lastName ?? ""}`.trim();
+      }
+    } catch { /* ignore */ }
+  }
+  history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName });
   if (history.length > 20) history = history.slice(-20);
 
   await db
@@ -1515,6 +1530,20 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
   const outbound = messages.filter((m: any) => m.direction === "outgoing");
   if (outbound.length === 0) return;
 
+  // Build userId → name map from OpenPhone users API (best-effort, cached per call)
+  const opUserMap: Record<string, string> = {};
+  try {
+    const usersRes = await fetch("https://api.openphone.com/v1/users", {
+      headers: { Authorization: apiKey },
+    });
+    if (usersRes.ok) {
+      const usersJson = await usersRes.json() as any;
+      for (const u of (usersJson?.data ?? [])) {
+        if (u.id) opUserMap[u.id] = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
+      }
+    }
+  } catch { /* ignore — fall back to "OpenPhone" */ }
+
   // Load current session history
   const [session] = await db
     .select({ messageHistory: conversationSessions.messageHistory })
@@ -1535,6 +1564,7 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
     if (!text.trim()) continue;
     const msgId: string = m.id ?? "";
     const msgTs = m.createdAt ? new Date(m.createdAt).getTime() : 0;
+    const senderName = (m.userId && opUserMap[m.userId]) ? opUserMap[m.userId] : "OpenPhone";
 
     // Skip if already synced by ID
     if (msgId && syncedIds.has(msgId)) continue;
@@ -1545,7 +1575,7 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
     );
     if (isDup) continue;
 
-    history.push({ role: "assistant", content: text, ts: msgTs, senderName: "OpenPhone", opMsgId: msgId });
+    history.push({ role: "assistant", content: text, ts: msgTs, senderName, opMsgId: msgId });
     added++;
   }
 
