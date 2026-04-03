@@ -1264,9 +1264,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         const callTime = rec.callStartedAt instanceof Date
                           ? rec.callStartedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                           : new Date(rec.callStartedAt as string).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                        let debriefParsed: { wentWell?: string; improve?: string; nextLine?: string; summary?: string } | null = null;
+                        let debriefParsed: { grade?: string; wentWell?: string; improve?: string; nextLine?: string; summary?: string } | null = null;
                         try { if (rec.callDebrief) debriefParsed = JSON.parse(rec.callDebrief as string); } catch { /* ignore */ }
                         const summary = debriefParsed?.summary || debriefParsed?.wentWell || null;
+                        const grade = debriefParsed?.grade?.toUpperCase() ?? null;
+                        const gradeColor: Record<string, string> = { A: "bg-emerald-500", B: "bg-blue-500", C: "bg-amber-500", D: "bg-orange-500", F: "bg-red-500" };
+                        const gradeBg = grade ? (gradeColor[grade] ?? "bg-slate-500") : null;
                         const hasRecording = !!(rec.recordingUrl && !(rec.recordingUrl as string).includes("synthetic-backfill"));
 
                         // Parse transcript for expandable viewer
@@ -1288,6 +1291,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 <Phone className="h-3 w-3 text-slate-300" />
                                 <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">Call {rec.direction === "incoming" ? "Inbound" : "Outbound"}</span>
                                 {durationStr && <span className="text-[10px] text-slate-400">&middot; {durationStr}</span>}
+                                {grade && (
+                                  <span className={`ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>
+                                    {grade}
+                                  </span>
+                                )}
                                 <span className="ml-auto text-[10px] text-slate-500">{callTime}</span>
                               </div>
                               {/* Headline */}

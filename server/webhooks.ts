@@ -25,6 +25,7 @@ import { and, desc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
+import { transcribeAudio } from "./_core/voiceTranscription";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
 import type { ChatMessage, ConversationContext } from "./conversationEngine";
@@ -1031,9 +1032,68 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
       });
 
     console.log(`[CallRecording] Stored recording for callId=${callId} sessionId=${session.id}`);
+
+    // Fire Whisper transcription + debrief in the background (non-blocking).
+    // Runs regardless of whether OpenPhone sends a transcript webhook.
+    if (recording.url && durationSeconds >= 20) {
+      setTimeout(() => {
+        transcribeAndDebriefRecording(callId, recording.url as string).catch((err) =>
+          console.error(`[CallRecording] Background transcribe/debrief failed for callId=${callId}:`, err)
+        );
+      }, 5_000); // 5s delay to let the recording settle
+    }
   } catch (err) {
     console.error("[CallRecording] handleCallRecordingCompleted error:", err);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// transcribeAndDebriefRecording
+// Uses Whisper to transcribe a recording URL, stores the transcript, then runs
+// generatePostCallDebrief. Called as a background job after recording is stored.
+// ─────────────────────────────────────────────────────────────────────────────
+async function transcribeAndDebriefRecording(callId: string, recordingUrl: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  // Skip if transcript already exists (e.g. OpenPhone transcript webhook arrived first)
+  const existing = await db
+    .select({ transcript: openphoneCallRecordings.transcript })
+    .from(openphoneCallRecordings)
+    .where(eq(openphoneCallRecordings.openphoneCallId, callId))
+    .limit(1);
+  if (existing[0]?.transcript) {
+    console.log(`[Whisper] Transcript already exists for callId=${callId} — skipping`);
+    return;
+  }
+
+  console.log(`[Whisper] Transcribing callId=${callId}`);
+  const result = await transcribeAudio({ audioUrl: recordingUrl });
+
+  if ('error' in result) {
+    console.warn(`[Whisper] Transcription failed for callId=${callId}: ${result.error}`);
+    return;
+  }
+
+  // Convert Whisper segments to OpenPhone-style dialogue turns
+  const rawText = result.text ?? '';
+  if (!rawText.trim()) {
+    console.warn(`[Whisper] Empty transcript for callId=${callId}`);
+    return;
+  }
+
+  // Store as a single-turn transcript (Whisper doesn't diarize speakers)
+  const dialogue = [{ identifier: 'transcript', content: rawText, start: 0, end: result.segments?.length ? result.segments[result.segments.length - 1].end : 0 }];
+
+  await db
+    .update(openphoneCallRecordings)
+    .set({ transcript: JSON.stringify(dialogue) })
+    .where(eq(openphoneCallRecordings.openphoneCallId, callId));
+
+  console.log(`[Whisper] Transcript stored for callId=${callId}`);
+
+  // Generate debrief
+  await generatePostCallDebrief(callId, dialogue);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
