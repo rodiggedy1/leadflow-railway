@@ -998,6 +998,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // Unread tagged message ids (messages that @mention callerName and arrived after lastSeen)
   const [unreadTagIds, setUnreadTagIds] = useState<number[]>(() => []);
+  // Mention history drawer state
+  const [showMentionHistory, setShowMentionHistory] = useState(false);
   // Live floating pill: shown when a new @mention arrives while the panel IS visible
   const [livePill, setLivePill] = useState<{ from: string; body: string } | null>(null);
   const livePillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1014,10 +1016,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const mentionPattern = useMemo(() => {
     if (effectiveNames.size === 0) return null;
     const alts = Array.from(effectiveNames)
-      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .map(n => n.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'))
       .join('|');
     return new RegExp(`@(${alts})(?:\\b|\\s|$)`, 'i');
   }, [effectiveNames]);
+
+  // ALL messages that mention the current user (not just unread) — used for the history drawer
+  const allMentions = useMemo(() => {
+    if (!mentionPattern) return [];
+    return channelMsgs
+      .filter(m => !effectiveNames.has(m.from) && mentionPattern.test(m.body))
+      .slice() // copy before reversing
+      .reverse(); // newest first
+  }, [channelMsgs, mentionPattern, effectiveNames]);
 
   // Compute unread tagged messages whenever channelMsgs changes
   useEffect(() => {
@@ -1594,6 +1605,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
+                  onClick={() => setShowMentionHistory(true)}
+                  className="text-xs text-amber-600 hover:text-amber-800 transition"
+                >
+                  See all
+                </button>
+                <span className="text-amber-300 text-xs">|</span>
+                <button
                   onClick={jumpToNextMention}
                   className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
                 >
@@ -1606,6 +1624,132 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Mention History Drawer — slide-in from right */}
+          {showMentionHistory && (
+            <div className="absolute inset-0 z-40 flex">
+              {/* Backdrop */}
+              <div
+                className="flex-1 bg-black/20"
+                onClick={() => setShowMentionHistory(false)}
+              />
+              {/* Drawer panel */}
+              <div className="w-80 bg-white flex flex-col shadow-2xl border-l border-slate-200 animate-in slide-in-from-right-4 duration-200">
+                {/* Drawer header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm font-semibold text-slate-800">Mentions</span>
+                    {allMentions.length > 0 && (
+                      <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-1.5 py-0.5 rounded-full">
+                        {allMentions.length}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowMentionHistory(false)}
+                    className="text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {/* Drawer body */}
+                <div className="flex-1 overflow-y-auto">
+                  {allMentions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 py-16 text-slate-400">
+                      <Bell className="h-8 w-8 opacity-30" />
+                      <p className="text-sm">No mentions yet</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {allMentions.map((msg) => {
+                        const isUnread = unreadTagIds.includes(msg.id);
+                        const photoUrl = senderPhotoMap[msg.from] ?? null;
+                        const initials = msg.from.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                        const color = senderHex(msg.from);
+                        // Highlight @mention in the body
+                        const highlightedBody = msg.body.replace(
+                          mentionPattern!,
+                          (match) => `<mark class="bg-amber-100 text-amber-800 rounded px-0.5">${match}</mark>`
+                        );
+                        return (
+                          <div
+                            key={msg.id}
+                            className={cn(
+                              "px-4 py-3 hover:bg-slate-50 transition group",
+                              isUnread && "bg-amber-50/60"
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Avatar */}
+                              <div className="relative shrink-0">
+                                {photoUrl ? (
+                                  <img
+                                    src={photoUrl}
+                                    alt={msg.from}
+                                    className="w-8 h-8 rounded-full object-cover shadow-sm"
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
+                                    style={{ background: color }}
+                                  >
+                                    {initials}
+                                  </div>
+                                )}
+                                {isUnread && (
+                                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-white" />
+                                )}
+                              </div>
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                  <span className="text-xs font-semibold text-slate-700 truncate">{msg.from}</span>
+                                  <span className="text-[10px] text-slate-400 shrink-0">
+                                    {new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                    {" "}
+                                    {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                                  </span>
+                                </div>
+                                <p
+                                  className="text-xs text-slate-600 line-clamp-3 leading-relaxed"
+                                  dangerouslySetInnerHTML={{ __html: highlightedBody }}
+                                />
+                                <button
+                                  onClick={() => {
+                                    setShowMentionHistory(false);
+                                    setTimeout(() => scrollToCmdMsg(msg.id), 150);
+                                  }}
+                                  className="mt-1.5 text-[10px] font-semibold text-violet-600 hover:text-violet-800 opacity-0 group-hover:opacity-100 transition flex items-center gap-1"
+                                >
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                  Jump to message
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {/* Drawer footer */}
+                {unreadTagIds.length > 0 && (
+                  <div className="shrink-0 px-4 py-3 border-t border-slate-100 bg-slate-50">
+                    <button
+                      onClick={() => {
+                        setShowMentionHistory(false);
+                        markTagsSeen();
+                      }}
+                      className="w-full text-xs font-semibold text-slate-500 hover:text-slate-700 transition"
+                    >
+                      Mark all {unreadTagIds.length} as read
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

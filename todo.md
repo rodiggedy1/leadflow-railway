@@ -924,3 +924,5 @@
 - [x] BUG: Command Chat avatar row — owner (Rohan/RG) photo not showing in top avatar row (getAgentStatusList injects owner entry from users table when not in agents)
 
 - [x] BUG: @mention banner — clicking Jump now navigates one-by-one (15→14→13→0); X still dismisses all; button shows count Jump (14)
+
+- [x] FEATURE: Command Chat — mention history drawer ("See all mentions" button opens slide-in panel with all @mention messages, timestamps, author avatars, and jump-to links)
