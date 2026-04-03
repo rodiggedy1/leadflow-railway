@@ -708,6 +708,18 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     return { lastBooking, complaintHistory, careAbout };
   }, [selected, clientProfile]);
 
+  // ── Post-call AI Debrief — fetched from DB after call.transcript.completed webhook ──
+  const { data: callDebrief, isLoading: debriefLoading } = trpc.leads.getLatestCallDebrief.useQuery(
+    { sessionId: selected?.id ?? 0 },
+    {
+      enabled: !!selected?.id,
+      staleTime: 60_000,
+      refetchInterval: 90_000, // poll every 90s so it appears shortly after the 60s debrief job runs
+    }
+  );
+  const [debriefDismissed, setDebriefDismissed] = useState<Record<number, boolean>>({});
+  const showDebrief = !!callDebrief && selected?.id != null && !debriefDismissed[selected.id];
+
   // Mark conversation as viewed when selected changes
   useEffect(() => {
     if (effectiveSelectedId != null) {
@@ -1837,6 +1849,40 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           </Button>
                         </div>
                       ) : null}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* ─── Post-call AI Debrief card ───────────────────── */}
+                {showDebrief && (
+                  <Card className="rounded-[28px] border-purple-200 bg-purple-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4 text-purple-600" />
+                          <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Call debrief</span>
+                        </div>
+                        <button
+                          onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
+                          className="text-purple-400 hover:text-purple-600 text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <span className="text-green-600 text-xs mt-0.5">✔</span>
+                          <p className="text-xs text-purple-800 leading-snug">{callDebrief!.wentWell}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-amber-500 text-xs mt-0.5">▲</span>
+                          <p className="text-xs text-purple-800 leading-snug">{callDebrief!.improve}</p>
+                        </div>
+                        <div className="mt-1 rounded-xl bg-purple-100 border border-purple-200 px-3 py-2">
+                          <p className="text-[10px] text-purple-500 font-medium mb-0.5">Next time, say:</p>
+                          <p className="text-xs text-purple-900 italic leading-snug">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 )}

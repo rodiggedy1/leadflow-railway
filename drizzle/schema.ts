@@ -1528,6 +1528,12 @@ export const openphoneCallRecordings = mysqlTable("openphone_call_recordings", {
    * Shape: { categories: [{name, score, maxScore, feedback}], strengths: string[], improvements: string[], coachingTips: string[], summary: string }
    */
   scoreData: text("scoreData"),
+  /**
+   * AI-generated post-call debrief as JSON.
+   * Shape: { wentWell: string, improve: string, nextLine: string, generatedAt: number }
+   * Populated ~60s after call.transcript.completed webhook fires.
+   */
+  callDebrief: text("callDebrief"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxSession: index("idx_ocr_session").on(table.sessionId),

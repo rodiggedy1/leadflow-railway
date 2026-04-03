@@ -38,6 +38,7 @@ import { handleRatingReply } from "./qualityRouter";
 import { processLeadReply as processReactivationReply } from "./conversationEngine";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
+import { invokeLLM } from "./_core/llm";
 import { sendPushToAll } from "./webPush";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
@@ -1077,10 +1078,81 @@ async function handleCallTranscriptCompleted(event: any): Promise<void> {
       console.warn(`[CallTranscript] No recording row found for callId=${callId} — transcript will be lost`);
     } else {
       console.log(`[CallTranscript] Transcript saved for callId=${callId} (${dialogue.length} turns)`);
+      // Fire post-call debrief job 60 seconds after transcript arrives
+      setTimeout(() => {
+        generatePostCallDebrief(callId, dialogue).catch((err) =>
+          console.error(`[CallDebrief] Background job failed for callId=${callId}:`, err)
+        );
+      }, 60_000);
     }
   } catch (err) {
     console.error("[CallTranscript] handleCallTranscriptCompleted error:", err);
   }
+}
+
+/**
+ * generatePostCallDebrief — runs 60s after a call transcript is saved.
+ * Produces a 3-bullet AI debrief (what went well, what to improve, exact line to use next time)
+ * and stores it in openphone_call_recordings.callDebrief as JSON.
+ * The CS inbox reads this and renders it as a card in the conversation thread.
+ */
+async function generatePostCallDebrief(
+  callId: string,
+  dialogue: { identifier: string; content: string; start: number; end: number }[]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  // Format transcript for the AI
+  const transcriptText = dialogue
+    .map((turn) => `${turn.identifier === 'agent' ? 'Agent' : 'Customer'}: ${turn.content}`)
+    .join('\n');
+
+  const systemPrompt = `You are an expert home services sales coach. Analyze this call transcript and produce a concise 3-bullet debrief for the agent.
+
+Return ONLY a JSON object with exactly these keys:
+{
+  "wentWell": "One sentence — what the agent did well on this call",
+  "improve": "One sentence — the single most important thing to improve",
+  "nextLine": "The exact word-for-word line the agent should use next time to handle the key moment better"
+}
+
+Be specific and actionable. Reference actual moments from the transcript. No fluff.`;
+
+  const userPrompt = `Call transcript:\n${transcriptText}`;
+
+  let debrief: { wentWell: string; improve: string; nextLine: string; generatedAt: number } | null = null;
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+    const rawContent = response?.choices?.[0]?.message?.content ?? '';
+    const raw = typeof rawContent === 'string' ? rawContent : '';
+    // Strip markdown fences if present
+    const cleaned = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (parsed.wentWell && parsed.improve && parsed.nextLine) {
+      debrief = { ...parsed, generatedAt: Date.now() };
+    }
+  } catch (err) {
+    console.error(`[CallDebrief] AI parse error for callId=${callId}:`, err);
+    return;
+  }
+
+  if (!debrief) {
+    console.warn(`[CallDebrief] No valid debrief produced for callId=${callId}`);
+    return;
+  }
+
+  await db
+    .update(openphoneCallRecordings)
+    .set({ callDebrief: JSON.stringify(debrief) } as any)
+    .where(eq(openphoneCallRecordings.openphoneCallId, callId));
+
+  console.log(`[CallDebrief] Debrief stored for callId=${callId}`);
 }
 
 /**

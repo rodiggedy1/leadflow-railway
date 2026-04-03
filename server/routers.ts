@@ -1552,9 +1552,40 @@ export const appRouter = router({
           .where(eq(openphoneCallRecordings.sessionId, input.sessionId))
           .orderBy(openphoneCallRecordings.callStartedAt);
       }),
-
     /**
-     * leads.getSessionsWithRecordings — returns a map of sessionId → { hasRecording, hasTranscript, callScore }
+     * leads.getLatestCallDebrief — returns the most recent AI post-call debrief
+     * for a session. Used to show the debrief card in the CS inbox chat thread.
+     */
+    getLatestCallDebrief: adminAgentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const rows = await db
+          .select({
+            id: openphoneCallRecordings.id,
+            callDebrief: openphoneCallRecordings.callDebrief,
+          })
+          .from(openphoneCallRecordings)
+          .where(eq(openphoneCallRecordings.sessionId, input.sessionId))
+          .orderBy(desc(openphoneCallRecordings.id))
+          .limit(10);
+        const withDebrief = rows.find((r) => r.callDebrief);
+        if (!withDebrief?.callDebrief) return null;
+        try {
+          const parsed = JSON.parse(withDebrief.callDebrief as string);
+          return {
+            wentWell: parsed.wentWell as string,
+            improve: parsed.improve as string,
+            nextLine: parsed.nextLine as string,
+            generatedAt: parsed.generatedAt as number,
+          };
+        } catch {
+          return null;
+        }
+      }),
+    /**
+     * leads.getSessionsWithRecordingss — returns a map of sessionId → { hasRecording, hasTranscript, callScore }
      * Used to show call/transcript indicator badges on lead list rows without a heavy JOIN.
      */
     getSessionsWithRecordings: adminAgentProcedure
