@@ -237,7 +237,16 @@ export default function LiveCallAssist() {
     if (!text || mutation.isPending) return;
 
     // Build full conversation string for AI — include current customer line
+    // On the very first submission (conversation is empty), prepend the static opening line
+    // so the AI knows the opener was already delivered and doesn't repeat it.
+    const openingLineText = isOutbound
+      ? `Hey ${leadName ? leadName.split(" ")[0] : "[Name]"}! This is ${agentName ? agentName.split(" ")[0] : "[Agent]"} calling from Maids in Black — you filled out a quote request and I just wanted to make sure you got taken care of. Do you have two minutes?`
+      : `Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Agent]"}! You called at the perfect time — how can I help you today?`;
+    const prependOpener = conversation.length === 0
+      ? [{ id: -2, speaker: "agent" as const, text: openingLineText }]
+      : [];
     const lines = [
+      ...prependOpener,
       ...conversation,
       { id: -1, speaker: "customer" as const, text },
     ];
@@ -441,7 +450,14 @@ export default function LiveCallAssist() {
           setCustomerInput(prev => {
             if (prev.trim()) {
               // Trigger submit via the same path as manual submit
+              const liveOpeningLineText = isOutbound
+                ? `Hey ${leadName ? leadName.split(" ")[0] : "[Name]"}! This is ${agentName ? agentName.split(" ")[0] : "[Agent]"} calling from Maids in Black — you filled out a quote request and I just wanted to make sure you got taken care of. Do you have two minutes?`
+                : `Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Agent]"}! You called at the perfect time — how can I help you today?`;
+              const livePrependOpener = conversation.length === 0
+                ? [{ id: -2, speaker: "agent" as const, text: liveOpeningLineText }]
+                : [];
               const lines = [
+                ...livePrependOpener,
                 ...conversation,
                 { id: -1, speaker: "customer" as const, text: prev.trim() },
               ];
