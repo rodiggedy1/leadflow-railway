@@ -909,3 +909,6 @@
 - [x] AI Priority Queue (CS chat sidebar): only surface conversations where last customer message arrived AFTER a fixed cutoff — no historical conversations ever appear
 - [x] AI Upsell Detector: CS inbox right sidebar shows emerald card with AI-detected upsell opportunity (deep clean, add-ons, recurring) with ready-to-use pitch that pre-fills compose box
 - [ ] Post-call instant debrief: 60s after call.transcript.completed webhook, run AI 3-bullet debrief and SMS it to the support line
+
+- [x] BUG: Cleaner portal — completed jobs revert to incomplete (trace and fix persistence issue)
+- [x] FEATURE: Cleaner portal — add uncomplete/undo button so cleaners can correct a mistaken completion

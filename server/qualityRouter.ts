@@ -1331,10 +1331,21 @@ export const qualityRouter = router({
 
             if (existing) {
               const previousStatus = existing.bookingStatus;
+              // CRITICAL: Never let a Launch27 sync overwrite a cleaner-set terminal status.
+              // Launch27 doesn't know when a cleaner marks a job done in our app — it always
+              // returns "assigned", which would silently revert "completed" back to "assigned"
+              // every hour. Preserve the local status for completed/cancelled/rescheduled jobs.
+              const isTerminalStatus =
+                previousStatus === "completed" ||
+                previousStatus === "cancelled" ||
+                previousStatus === "rescheduled";
+              const syncData = isTerminalStatus
+                ? (({ bookingStatus, ...rest }) => rest)(jobData)  // strip bookingStatus from update
+                : jobData;
               // Update existing record with latest data from Launch27
               await db
                 .update(cleanerJobs)
-                .set(jobData)
+                .set(syncData)
                 .where(eq(cleanerJobs.id, existing.id));
               updated++;
 

@@ -338,6 +338,51 @@ export const cleanerRouter = router({
     }),
 
   /**
+   * cleaner.uncompleteJob — cleaner undoes a mistaken completion.
+   * Reverts bookingStatus and jobStatus back to "in_progress" so the cleaner
+   * can re-complete the job correctly (e.g. upload photos, fix an error).
+   * Only allowed within 24 hours of completion.
+   */
+  uncompleteJob: cleanerProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Verify ownership
+      const jobRows = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          and(
+            eq(cleanerJobs.id, input.cleanerJobId),
+            eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+          )
+        )
+        .limit(1);
+      const job = jobRows[0];
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
+      if (job.bookingStatus !== "completed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Job is not marked completed" });
+      }
+      // Only allow within 24 hours of completion
+      if (job.completedAt) {
+        const hoursAgo = (Date.now() - new Date(job.completedAt).getTime()) / (1000 * 60 * 60);
+        if (hoursAgo > 24) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot undo completion after 24 hours" });
+        }
+      }
+      await db
+        .update(cleanerJobs)
+        .set({
+          bookingStatus: "assigned",
+          jobStatus: "in_progress",
+          completedAt: null,
+        })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+      return { success: true };
+    }),
+
+  /**
    * cleaner.updateJobStatus — cleaner updates the status of their job.
    * Auto-transitions: arrived → in_progress
    * Notifications: running_late and issue_at_property alert the owner.

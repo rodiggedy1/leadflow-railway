@@ -375,6 +375,16 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
     onSettled: () => setCompleting(false),
   });
 
+  const [uncompleting, setUncompleting] = useState(false);
+  const uncompleteMutation = trpc.cleaner.uncompleteJob.useMutation({
+    onSuccess: () => {
+      toast.success("Completion undone — job is back in progress.");
+      onStatusUpdated();
+    },
+    onError: (err) => toast.error(err.message),
+    onSettled: () => setUncompleting(false),
+  });
+
   const toggleChecklistMutation = trpc.cleaner.toggleChecklistItem.useMutation({
     onError: (err) => toast.error(`Failed to save: ${err.message}`),
   });
@@ -501,9 +511,24 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
         </div>
         <div className="flex items-center gap-2">
           {isComplete && (
-            <Badge className="bg-emerald-600/30 text-emerald-300 border-emerald-600/40 text-xs">
-              <CheckCheck className="w-3 h-3 mr-1" />Complete
-            </Badge>
+            <>
+              <Badge className="bg-emerald-600/30 text-emerald-300 border-emerald-600/40 text-xs">
+                <CheckCheck className="w-3 h-3 mr-1" />Complete
+              </Badge>
+              <button
+                className="text-slate-500 hover:text-amber-400 transition-colors text-xs underline underline-offset-2 disabled:opacity-40"
+                onClick={() => {
+                  if (window.confirm("Undo completion? The job will go back to In Progress.")) {
+                    setUncompleting(true);
+                    uncompleteMutation.mutate({ cleanerJobId: job.id });
+                  }
+                }}
+                disabled={uncompleting}
+                title="Undo completion"
+              >
+                {uncompleting ? <Loader2 className="w-3 h-3 animate-spin inline" /> : "Undo"}
+              </button>
+            </>
           )}
           {job.photoSubmitted === 1 && (
             <Badge className="bg-blue-600/30 text-blue-300 border-blue-600/40 text-xs">
