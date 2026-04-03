@@ -1047,7 +1047,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
+          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
