@@ -101,21 +101,24 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
 
   if (!open) return null;
 
-  const handleObjection = (text: string) => {
+  const handleObjection = (text: string, replace = false) => {
     if (mutation.isPending) return;
     setActiveObjection(text);
     const userMsg: Message = { role: "user", content: text };
     // If this is a preset objection, return the cached script instantly — no LLM call
     const cached = PRESET_SCRIPTS[text];
-    if (cached && history.length === 0) {
+    if (cached) {
       setHistory([userMsg, { role: "assistant", content: cached }]);
+      mutation.reset();
       return;
     }
-    const newHistory = [...history, userMsg];
+    // Custom input: if replacing, start fresh; otherwise append for follow-ups
+    const base = replace ? [] : history;
+    const newHistory = [...base, userMsg];
     setHistory(newHistory);
     mutation.mutate({
       objection: text,
-      history: history,
+      history: replace ? [] : history,
     });
   };
 
