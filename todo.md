@@ -926,3 +926,5 @@
 - [x] BUG: @mention banner — clicking Jump now navigates one-by-one (15→14→13→0); X still dismisses all; button shows count Jump (14)
 
 - [x] FEATURE: Command Chat — mention history drawer ("See all mentions" button opens slide-in panel with all @mention messages, timestamps, author avatars, and jump-to links)
+
+- [x] BUG: Online status dots — fixed: added 90s presence ping heartbeat; widened online threshold to 5 min, away to 20 min

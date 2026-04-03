@@ -1147,6 +1147,20 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Owners don't have an agents record so this is always null for them.
   const myAwayStatus: string | null = agentMe?.awayStatus ?? null;
 
+  // Presence heartbeat — ping every 90 seconds so our status dot stays green.
+  // The server updates lastSeenAt on every opsChatProcedure call, but if the user
+  // is idle (no tRPC calls), lastSeenAt drifts and the dot goes grey.
+  const pingPresenceMutation = trpc.opsChat.pingPresence.useMutation();
+  useEffect(() => {
+    const isLoggedIn = Boolean(user) || Boolean(agentMe);
+    if (!isLoggedIn) return;
+    // Ping immediately on mount, then every 90 seconds
+    pingPresenceMutation.mutate();
+    const interval = setInterval(() => pingPresenceMutation.mutate(), 90_000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(user), Boolean(agentMe)]);
+
   // Mutation to persist away status to the DB
   const setAwayStatusMutation = trpc.agents.setAwayStatus.useMutation({
     onSuccess: () => {
@@ -1357,9 +1371,9 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       }
       const diffMin = ag.lastSeenAt ? Math.floor((now - ag.lastSeenAt) / 60_000) : null;
       if (diffMin === null) { map[ag.name] = "offline"; }
-      else if (diffMin <= 2) { map[ag.name] = "online"; }
-      else if (diffMin <= 15) { map[ag.name] = "away"; }
-      else { map[ag.name] = "offline"; }
+      else if (diffMin <= 5) { map[ag.name] = "online"; }  // online: seen in last 5 min
+      else if (diffMin <= 20) { map[ag.name] = "away"; }   // away: seen in last 20 min
+      else { map[ag.name] = "offline"; }                   // offline: not seen in 20+ min
     }
     return map;
   }, [agentStatusData?.agents]);

@@ -1816,6 +1816,41 @@ export const opsChatRouter = router({
       return { agents: agentResults };
     }),
 
+  // ── Presence Ping ──────────────────────────────────────────
+
+  /**
+   * pingPresence — lightweight mutation called every 2 minutes from the client.
+   * Updates lastSeenAt for the current caller so their status dot stays green.
+   */
+  pingPresence: opsChatProcedure
+    .mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { ok: true };
+      const now = new Date();
+      if (ctx.opsCaller.isOwner) {
+        // Owner: update agents row by name
+        const ownerName = ctx.opsCaller.name;
+        if (ownerName) {
+          await db.update(agents)
+            .set({ lastSeenAt: now })
+            .where(eq(agents.name, ownerName))
+            .execute()
+            .catch(() => { /* ignore if no row */ });
+        }
+      } else {
+        // Agent: update by email
+        const agentEmail = (ctx.opsCaller as { email?: string }).email;
+        if (agentEmail) {
+          await db.update(agents)
+            .set({ lastSeenAt: now })
+            .where(eq(agents.email, agentEmail))
+            .execute()
+            .catch(() => { /* ignore */ });
+        }
+      }
+      return { ok: true };
+    }),
+
   // ── Direct Messages ──────────────────────────────────────────────────────────
 
   /**
