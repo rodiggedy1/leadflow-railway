@@ -1343,7 +1343,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                         >
                           <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
-                            <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender === "agent" ? "Agent" : message.sender}</span>
+                            <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender === "agent" ? "Agent" : message.sender === "user" ? "Customer" : message.sender}</span>
                           </div>
                           {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
                           {message.media && message.media.length > 0 && (
