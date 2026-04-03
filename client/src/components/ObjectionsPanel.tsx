@@ -95,7 +95,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
 
   return (
     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
-      style={{ maxHeight: "480px", minHeight: "320px" }}
+      style={{ maxHeight: "min(380px, calc(100vh - 220px))", minHeight: "200px" }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-rose-50 to-orange-50 shrink-0">

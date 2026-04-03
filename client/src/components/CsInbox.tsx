@@ -1233,9 +1233,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <TypingBubble typers={typers} />
                 </div>
               )}
-              <div className="shrink-0 border-t border-slate-100 px-5 py-4 md:px-6 bg-white/95 backdrop-blur-sm relative">
-                <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
-                <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
+              <div className="shrink-0 border-t border-slate-100 px-5 py-4 md:px-6 bg-white/95 backdrop-blur-sm">
+                <div className="relative">
+                  <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
+                  <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
+                </div>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
                     <Button key={action} variant="outline" className="rounded-full h-10">
