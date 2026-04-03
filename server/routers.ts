@@ -3272,36 +3272,37 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
           ? `\nHome size: ${input.bedrooms ?? "?"} / ${input.bathrooms ?? "?"}`
           : "";
         const serviceCtx = service ? `\nBooked service: ${service}` : "";
-        const systemPrompt = `You are a senior sales coach for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this CS conversation and determine if there is a genuine upsell opportunity.
+        const systemPrompt = `You are a senior sales coach for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this CS conversation and determine if there is a genuine upsell opportunity for one of our add-on services.
 
-UPSELL SIGNALS to look for:
-- First-time customer (no prior bookings or totalBookings is 0)
-- Move-in or move-out situation
-- Large home (3+ bedrooms)
-- Mentions of pets, kids, or allergies
-- Post-renovation or construction dust
-- Customer mentions it has been a long time since last clean
-- Customer seems price-sensitive but engaged (could benefit from recurring discount)
-- AirBnB or rental property
-- Standard clean booked but home sounds like it needs more
-
-AVAILABLE UPSELLS:
-- Deep Cleaning (instead of Standard) — for first-timers, move-ins, long gaps, post-reno
-- Inside Oven Cleaning — for customers who mention cooking or kitchen focus
-- Inside Fridge Cleaning — for move-outs or thorough resets
-- Inside Cabinets — for move-ins/outs
-- Laundry (wash and fold) — for busy families
-- Recurring discount — for price-sensitive customers: suggest biweekly to save 15%
+SIGNAL TO ADD-ON MAPPING (pick the single best match):
+- First-time customer / long gap since last clean / post-reno / dirty home -> Deep Cleaning upgrade
+- Move-in or move-out -> Move-In/Move-Out package (+$60) OR Inside Cabinets (+$30)
+- Customer mentions oven, cooking, baking -> Clean Inside Oven (+$30)
+- Customer mentions fridge, moving out, fresh start -> Clean Inside Fridge (+$25 empty / +$40 full)
+- Customer mentions pets or pet hair -> I Have Pets add-on (+$15)
+- Customer mentions dirty windows, natural light -> Clean Interior Windows (+$40)
+- Customer mentions basement -> Clean Finished Basement (+$60)
+- Customer mentions eco-friendly, green, allergies, chemical-sensitive -> Green Cleaning (+$20)
+- Customer mentions clutter, disorganized, overwhelmed -> 2 Hours of Organizing (+$80)
+- Customer mentions laundry piling up, busy family -> Load of Laundry (+$20)
+- Customer mentions dirty walls, kids drawing on walls -> Wipe Walls (+$35)
+- Customer mentions garage -> Sweep Garage (+$25)
+- Customer mentions balcony, patio, outdoor space -> Balcony Sweep (+$20)
+- Customer mentions microwave -> Clean Inside Microwave (+$15)
+- Customer mentions dishes in sink -> Wash Dishes (+$20)
+- Customer mentions pool deck -> Pool Deck (+$45)
+- Customer mentions shed, pool house -> Shed/Pool House (+$50)
+- Customer seems price-sensitive but engaged -> Recurring biweekly plan (saves 15%)
 
 IMPORTANT: You MUST respond with valid JSON only. No explanation, no markdown, just JSON.
 
 If you detect a clear upsell signal, respond EXACTLY like this example:
-{"detected": true, "signal": "Customer is a first-time client with a large home", "pitch": "Since this is your first time with us, I'd love to set you up with a deep clean to really get everything fresh — it makes a huge difference!", "upsellType": "Deep Cleaning"}
+{"detected": true, "signal": "Customer mentioned their oven needs attention", "pitch": "By the way, we also offer an inside oven cleaning for just $30 — want us to add that to your booking today?", "upsellType": "Clean Inside Oven (+$30)"}
 
-If no clear signal, respond EXACTLY like this:
+If no clear signal exists in the conversation, respond EXACTLY like this:
 {"detected": false}
 
-Be somewhat generous — if there is any reasonable signal, flag it.${profileCtx}${sizeCtx}${serviceCtx}`;
+Be somewhat generous — if there is any reasonable signal, flag it. Only respond with detected:false if the conversation has no upsell signals at all.${profileCtx}${sizeCtx}${serviceCtx}`;
         const result = await invokeLLM({
           messages: [
             { role: "system", content: systemPrompt },
