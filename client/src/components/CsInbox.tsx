@@ -1325,7 +1325,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
                         type="button"
                       >
-                        <Sparkles className="h-3.5 w-3.5" />
+                        <Sparkles className="h-3.5 w-3.5 animate-pulse" />
                       </Button>
                       </div>
                       <Button
