@@ -2224,10 +2224,15 @@ export const opsChatRouter = router({
       let sessionId: number;
       if (existing.length > 0) {
         sessionId = existing[0].id;
-        // If the existing session still has the raw phone as name, backfill it now
+        // Always ensure the session surfaces in the CS inbox and has the right name
+        const updates: Record<string, unknown> = {
+          csQueue: existing[0].csQueue ?? "Needs attention",
+          leadSource: "cs_initiated",
+        };
         if (resolvedName && (existing[0].leadName === e164 || !existing[0].leadName)) {
-          await db.update(conversationSessions).set({ leadName: resolvedName } as any).where(eq(conversationSessions.id, sessionId));
+          updates.leadName = resolvedName;
         }
+        await db.update(conversationSessions).set(updates as any).where(eq(conversationSessions.id, sessionId));
       } else {
         // Create a new agent-initiated CS session with resolved name
         const [result] = await db
