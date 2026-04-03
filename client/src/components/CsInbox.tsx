@@ -965,17 +965,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[24px] border px-4 py-4 text-left shadow-sm transition hover:shadow-md ${
+                        className={`w-full rounded-[20px] border px-3.5 py-3.5 text-left transition-all duration-150 hover:shadow-md hover:-translate-y-[1px] ${
                           selected.id === conversation.id
-                            ? "border-slate-900 bg-white"
+                            ? "border-slate-900 bg-white shadow-md ring-1 ring-slate-900/5"
                             : (conversation as any).hasUnanswered
-                              ? "border-orange-300 bg-orange-50 shadow-orange-100"
-                              : "border-slate-200 bg-white"
+                              ? "border-orange-300 bg-orange-50 shadow-sm shadow-orange-100"
+                              : isUnread
+                                ? "border-slate-300 bg-white shadow-sm"
+                                : "border-slate-200 bg-white shadow-sm"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className="relative shrink-0">
-                            <Avatar className="h-11 w-11 border border-slate-200">
+                            <Avatar className={`h-10 w-10 border ${isUnread ? 'border-teal-300' : 'border-slate-200'}`}>
                               <AvatarFallback className="bg-slate-100 text-slate-700">
                                 {conversation.initials}
                               </AvatarFallback>
@@ -987,13 +989,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className={`truncate ${isUnread ? "font-bold text-slate-900" : "font-semibold"}`}>{conversation.name}</div>
-                                <div className="text-sm text-slate-500 truncate mt-0.5">{conversation.service}</div>
+                                <div className={`truncate text-sm ${isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}>{conversation.name}</div>
+                                <div className="text-xs text-slate-400 truncate mt-0.5">{conversation.service}</div>
                               </div>
-                              <div className="text-xs text-slate-400 whitespace-nowrap">{conversation.wait}</div>
+                              <div className={`text-[11px] whitespace-nowrap ${isUnread ? 'text-teal-600 font-semibold' : 'text-slate-400'}`}>{conversation.wait}</div>
                             </div>
-                            <div className="mt-2 text-sm text-slate-600 line-clamp-2">{conversation.lastMessage}</div>
-                            <div className="mt-3 flex items-center justify-between gap-3">
+                            <div className={`mt-1.5 text-xs line-clamp-1 ${isUnread ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>{conversation.lastMessage}</div>
+                            <div className="mt-2 flex items-center justify-between gap-3">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {conversation.queue && (
                                   <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
@@ -1053,7 +1055,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         </form>
                       ) : (
                         <div className="flex items-center gap-2 group">
-                          <h2 className="text-3xl font-semibold tracking-tight">{selected.name}</h2>
+                          <h2 className="text-2xl font-bold tracking-tight text-slate-900">{selected.name}</h2>
                           <button
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
@@ -1156,13 +1158,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
-                <div className="space-y-3">
+                <motion.div
+                  key={selected?.id ?? 0}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.15 }}
+                  className="space-y-3"
+                >
                   {(selected?.messages ?? []).map((message, idx) => (
                     <motion.div
                       key={`${message.time}-${idx}`}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.04 }}
+                      transition={{ delay: Math.min(idx * 0.03, 0.3) }}
                       className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                     >
                       <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
@@ -1194,7 +1202,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <div className="mt-2 text-xs opacity-60">{message.time}</div>
                     </motion.div>
                   ))}
-                </div>
+                </motion.div>
               </div>
 
               {/* Typing indicator — shows when another agent is composing a reply */}
@@ -1203,7 +1211,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <TypingBubble typers={typers} />
                 </div>
               )}
-              <div className="shrink-0 border-t border-slate-200 px-5 py-4 md:px-6 bg-white">
+              <div className="shrink-0 border-t border-slate-100 px-5 py-4 md:px-6 bg-white/95 backdrop-blur-sm">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
                     <Button key={action} variant="outline" className="rounded-full h-10">
@@ -1211,17 +1219,20 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </Button>
                   ))}
                 </div>
-                <div className={`rounded-[24px] border p-3 transition-colors ${autoDraftLoading ? "border-violet-200 bg-violet-50/40" : "border-slate-200 bg-slate-50"}`}>
+                <div className={`rounded-[20px] border p-3.5 transition-all duration-200 ${autoDraftLoading ? "border-violet-300 bg-violet-50/60 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/80"}`}>
                   {autoDraftLoading && (
-                    <div className="flex items-center gap-1.5 mb-2 text-xs text-violet-600">
+                    <div className="flex items-center gap-1.5 mb-2.5 text-xs font-medium text-violet-600">
                       <RefreshCw className="h-3 w-3 animate-spin" />
-                      AI is drafting a reply...
+                      <span>AI is drafting a reply…</span>
                     </div>
                   )}
                   {!autoDraftLoading && compose && (
-                    <div className="flex items-center gap-1.5 mb-2 text-xs text-violet-500">
-                      <Bot className="h-3 w-3" />
-                      AI draft — review before sending
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
+                        <Bot className="h-3 w-3" />
+                        AI draft
+                      </span>
+                      <span className="text-xs text-slate-400">Review before sending</span>
                     </div>
                   )}
                   <div className="relative flex items-start gap-3">
@@ -1241,7 +1252,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       </div>
                     )}
                     <textarea
-                      className="flex-1 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-slate-900 min-h-[96px] resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 text-sm"
+                      className="flex-1 rounded-xl bg-transparent border-0 px-1 py-1 text-slate-900 min-h-[80px] resize-none focus:outline-none text-sm leading-relaxed placeholder:text-slate-400"
                       placeholder={autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
                       value={compose}
                       onChange={(e) => { setCompose(e.target.value); }}
@@ -1265,7 +1276,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         <Smile className="h-4 w-4" />
                       </Button>
                       <Button
-                        className="rounded-2xl h-14 px-6 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base gap-2 shrink-0 disabled:opacity-40"
+                        className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
                         disabled={!compose.trim() || sendMessage.isPending || !selected}
                         onClick={() => {
                           if (!selected || !compose.trim()) return;
