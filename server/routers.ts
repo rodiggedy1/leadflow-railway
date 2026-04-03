@@ -1948,7 +1948,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
      * and optional lead context. Returns the single best thing for the agent to say
      * right now, based on world-class home service sales technique.
      */
-    getLiveCallSuggestions: agentProcedure
+    getLiveCallSuggestions: opsChatProcedure
       .input(z.object({
         stage: z.string().min(1),
         transcript: z.string().max(6000),
