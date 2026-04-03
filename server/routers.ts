@@ -3253,7 +3253,7 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
         bedrooms: z.string().optional(),
         bathrooms: z.string().optional(),
       }))
-      .query(async ({ input }) => {
+      .mutation(async ({ input }) => {
         const messages: Array<{ role: string; content: string }> = (() => {
           try { return JSON.parse(input.messageHistory); } catch { return []; }
         })();

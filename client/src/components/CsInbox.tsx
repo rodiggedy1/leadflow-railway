@@ -613,24 +613,40 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   // Upsell opportunity detector — only fires for non-Teams, non-Deep-clean conversations
   const isTeamsConv = selected?.queue === "Teams";
-  const { data: upsellData, isFetching: upsellLoading, isLoading: upsellFirstLoad } = trpc.leads.getUpsellOpportunity.useQuery(
-    {
-      sessionId: selected?.id ?? 0,
-      messageHistory: insightMsgHistory,
-      clientName: selected?.name ?? undefined,
-      clientProfile: clientProfileSummary,
-      serviceType: selected?.service ?? undefined,
+  const [upsellResult, setUpsellResult] = useState<{ upsell: { signal: string; pitch: string; upsellType: string } | null } | null>(null);
+  const [upsellLoading, setUpsellLoading] = useState(false);
+  const [upsellFetchedForId, setUpsellFetchedForId] = useState<number | null>(null);
+  const upsellMutation = trpc.leads.getUpsellOpportunity.useMutation({
+    onSuccess: (data) => {
+      setUpsellResult(data);
+      setUpsellLoading(false);
     },
-    {
-      enabled: !!(selected && selected.id > 0 && selected.messages.length >= 3 && !isTeamsConv),
-      refetchOnWindowFocus: false,
-      staleTime: 90_000,
-    }
-  );
+    onError: () => setUpsellLoading(false),
+  });
+  // Trigger upsell check when conversation changes (if eligible)
+  useEffect(() => {
+    if (!selected || selected.id <= 0 || selected.messages.length < 3 || isTeamsConv) return;
+    if (upsellFetchedForId === selected.id) return; // already fetched for this conversation
+    const service = (selected.service ?? "").toLowerCase();
+    if (service.includes("deep clean")) return;
+    setUpsellFetchedForId(selected.id);
+    setUpsellResult(null);
+    setUpsellLoading(true);
+    upsellMutation.mutate({
+      sessionId: selected.id,
+      messageHistory: insightMsgHistory,
+      clientName: selected.name ?? undefined,
+      clientProfile: clientProfileSummary ?? undefined,
+      serviceType: selected.service ?? undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, insightMsgHistory]);
   const [upsellDismissed, setUpsellDismissed] = useState<number | null>(null);
-  const showUpsell = !!(upsellData?.upsell && upsellDismissed !== selected?.id);
-  // Only show the card while loading on the very first fetch (not on background refetches)
-  const showUpsellCard = showUpsell || upsellFirstLoad;
+  const showUpsell = !!(upsellResult?.upsell && upsellDismissed !== selected?.id);
+  // Show card while loading (first fetch) or when result is available
+  const showUpsellCard = showUpsell || upsellLoading;
+  // Alias upsellData for the render section below
+  const upsellData = upsellResult;
 
   // Mark conversation as viewed when selected changes
   useEffect(() => {
