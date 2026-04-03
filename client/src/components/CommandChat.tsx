@@ -1043,7 +1043,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     prevTagCountRef.current = newCount;
   }, [channelMsgs, mentionPattern, effectiveNames, isVisible, lsKey]);
 
-  // Mark all @mentions as seen (called on banner dismiss or scroll-to-first)
+  // Mark all @mentions as seen (called on banner X dismiss)
   function markTagsSeen() {
     const maxId = channelMsgs.reduce((m, msg) => Math.max(m, msg.id), 0);
     try { localStorage.setItem(lsKey, String(maxId)); } catch {}
@@ -1051,6 +1051,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     if (livePillTimer.current) clearTimeout(livePillTimer.current);
     setLivePill(null);
     prevTagCountRef.current = 0;
+  }
+
+  // Jump to the FIRST unread mention, then remove it from the queue.
+  // Saves that ID as the new lastSeen floor only if it’s the last remaining mention.
+  // This way the count decrements 15 → 14 → … → 0 one jump at a time.
+  function jumpToNextMention() {
+    if (unreadTagIds.length === 0) return;
+    const [firstId, ...rest] = unreadTagIds;
+    scrollToCmdMsg(firstId);
+    if (rest.length === 0) {
+      // Last mention consumed — mark all seen
+      markTagsSeen();
+    } else {
+      // Still more to go — just remove the first one from the queue
+      // Save firstId as the new floor so it won’t reappear on remount
+      try { localStorage.setItem(lsKey, String(firstId)); } catch {}
+      setUnreadTagIds(rest);
+    }
   }
 
   // When panel becomes visible, auto-mark tags as seen after a short delay
@@ -1576,14 +1594,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => {
-                    const firstId = unreadTagIds[0];
-                    if (firstId) scrollToCmdMsg(firstId);
-                    markTagsSeen();
-                  }}
+                  onClick={jumpToNextMention}
                   className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
                 >
-                  Jump
+                  Jump {unreadTagIds.length > 1 ? `(${unreadTagIds.length})` : ""}
                 </button>
                 <button
                   onClick={markTagsSeen}

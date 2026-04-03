@@ -922,3 +922,5 @@
 - [x] BUG: Command Chat avatar row — online status dots not showing green/amber (added lastSeenAt heartbeat for owner in opsChatProcedure; getAgentStatusList now injects owner from users table)
 - [x] BUG: Command Chat message bubbles — agent photos not showing in bubbles (getAllAgentPhotoMap now includes owner photo; staleTime=0 + 30s refetch)
 - [x] BUG: Command Chat avatar row — owner (Rohan/RG) photo not showing in top avatar row (getAgentStatusList injects owner entry from users table when not in agents)
+
+- [x] BUG: @mention banner — clicking Jump now navigates one-by-one (15→14→13→0); X still dismisses all; button shows count Jump (14)
