@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { X, Loader2, Copy, Check, RotateCcw, Send, Sparkles, Pencil } from "lucide-react";
 
@@ -74,7 +75,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
   const handleInsert = (text: string) => { onInsert?.(text); onClose(); };
   const handleReset = () => { setHistory([]); setScenarioInput(""); mutation.reset(); };
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={() => { handleReset(); onClose(); }} />
       <div
@@ -211,6 +212,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
