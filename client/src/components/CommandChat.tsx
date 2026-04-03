@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import FAQPanel from "@/components/FAQPanel";
+import ObjectionsPanel from "@/components/ObjectionsPanel";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -534,6 +535,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
+  const [objectionOpen, setObjectionOpen] = useState(false);
   const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
   const { data: fuPanelItems = [] } = trpc.followUps.list.useQuery(undefined, { staleTime: 60_000, refetchInterval: 2 * 60_000 });
@@ -2550,6 +2552,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Composer */}
         <div className="relative shrink-0">
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
+        <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
         <div className="px-6 py-3 border-t border-slate-100 bg-white">
           {/* Quick-action chips */}
           <div className="flex gap-2 mb-3 items-center justify-center w-full">
@@ -2844,6 +2847,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     🎤 Voice
                   </button>
                 )}
+                {/* Objections */}
+                <button
+                  className="rounded-full px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
+                  onClick={() => setObjectionOpen(true)}
+                >
+                  🛡️ Objections
+                </button>
                 {/* Emoji */}
                 <div ref={emojiRef} className="relative">
                   <button
