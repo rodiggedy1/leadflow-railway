@@ -613,7 +613,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   // Upsell opportunity detector — only fires for non-Teams, non-Deep-clean conversations
   const isTeamsConv = selected?.queue === "Teams";
-  const { data: upsellData, isFetching: upsellLoading } = trpc.leads.getUpsellOpportunity.useQuery(
+  const { data: upsellData, isFetching: upsellLoading, isLoading: upsellFirstLoad } = trpc.leads.getUpsellOpportunity.useQuery(
     {
       sessionId: selected?.id ?? 0,
       messageHistory: insightMsgHistory,
@@ -629,6 +629,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   );
   const [upsellDismissed, setUpsellDismissed] = useState<number | null>(null);
   const showUpsell = !!(upsellData?.upsell && upsellDismissed !== selected?.id);
+  // Only show the card while loading on the very first fetch (not on background refetches)
+  const showUpsellCard = showUpsell || upsellFirstLoad;
 
   // Mark conversation as viewed when selected changes
   useEffect(() => {
@@ -1666,7 +1668,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </Card>
 
                 {/* ─── AI Upsell Opportunity card ─────────────────── */}
-                {(showUpsell || upsellLoading) && (
+                {showUpsellCard && (
                   <Card className="rounded-[28px] border-emerald-200 bg-emerald-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
                     <CardContent className="p-4">
                       <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">

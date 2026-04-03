@@ -3258,10 +3258,9 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
           try { return JSON.parse(input.messageHistory); } catch { return []; }
         })();
         if (messages.length === 0) return { upsell: null };
-        // Only run for standard clean or unknown service type
+        // Skip only if explicitly a deep clean already booked
         const service = (input.serviceType ?? "").toLowerCase();
-        const isStandardOrUnknown = !service || service.includes("standard");
-        if (!isStandardOrUnknown) return { upsell: null };
+        if (service.includes("deep clean")) return { upsell: null };
         const recent = messages.slice(-16);
         const snippet = recent
           .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
@@ -3272,10 +3271,11 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
         const sizeCtx = (input.bedrooms || input.bathrooms)
           ? `\nHome size: ${input.bedrooms ?? "?"} / ${input.bathrooms ?? "?"}`
           : "";
+        const serviceCtx = service ? `\nBooked service: ${service}` : "";
         const systemPrompt = `You are a senior sales coach for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this CS conversation and determine if there is a genuine upsell opportunity.
 
 UPSELL SIGNALS to look for:
-- First-time customer (no prior bookings)
+- First-time customer (no prior bookings or totalBookings is 0)
 - Move-in or move-out situation
 - Large home (3+ bedrooms)
 - Mentions of pets, kids, or allergies
@@ -3283,6 +3283,7 @@ UPSELL SIGNALS to look for:
 - Customer mentions it has been a long time since last clean
 - Customer seems price-sensitive but engaged (could benefit from recurring discount)
 - AirBnB or rental property
+- Standard clean booked but home sounds like it needs more
 
 AVAILABLE UPSELLS:
 - Deep Cleaning (instead of Standard) — for first-timers, move-ins, long gaps, post-reno
@@ -3292,33 +3293,37 @@ AVAILABLE UPSELLS:
 - Laundry (wash and fold) — for busy families
 - Recurring discount — for price-sensitive customers: suggest biweekly to save 15%
 
-If you detect a clear upsell signal, respond with JSON:
-{"detected": true, "signal": "<1 sentence: what signal you detected>", "pitch": "<exactly what the agent should say — 1-2 natural sentences, conversational, not pushy>", "upsellType": "<Deep Cleaning|Inside Oven|Inside Fridge|Inside Cabinets|Laundry|Recurring>"}
+IMPORTANT: You MUST respond with valid JSON only. No explanation, no markdown, just JSON.
 
-If no clear signal, respond with JSON:
+If you detect a clear upsell signal, respond EXACTLY like this example:
+{"detected": true, "signal": "Customer is a first-time client with a large home", "pitch": "Since this is your first time with us, I'd love to set you up with a deep clean to really get everything fresh — it makes a huge difference!", "upsellType": "Deep Cleaning"}
+
+If no clear signal, respond EXACTLY like this:
 {"detected": false}
 
-Be conservative — only flag genuine opportunities, not every conversation.${profileCtx}${sizeCtx}`;
+Be somewhat generous — if there is any reasonable signal, flag it.${profileCtx}${sizeCtx}${serviceCtx}`;
         const result = await invokeLLM({
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: `CONVERSATION:\n${snippet}\n\nAnalyze for upsell opportunity. Respond with JSON only.` },
+            { role: "user", content: `CONVERSATION:\n${snippet}\n\nRespond with JSON only.` },
           ],
-          response_format: { type: "json_object" } as any,
         });
         const rawContent = result.choices?.[0]?.message?.content;
-        const raw = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? {});
+        let raw = typeof rawContent === "string" ? rawContent.trim() : "";
+        // Strip markdown code fences if present
+        raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
         try {
           const parsed = JSON.parse(raw);
           if (!parsed.detected) return { upsell: null };
           return {
             upsell: {
-              signal: parsed.signal as string,
-              pitch: parsed.pitch as string,
-              upsellType: parsed.upsellType as string,
+              signal: (parsed.signal as string) || "",
+              pitch: (parsed.pitch as string) || "",
+              upsellType: (parsed.upsellType as string) || "Upgrade",
             },
           };
-        } catch {
+        } catch (e) {
+          console.error("[getUpsellOpportunity] JSON parse failed:", raw);
           return { upsell: null };
         }
       }),
