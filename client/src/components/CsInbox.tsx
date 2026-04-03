@@ -72,6 +72,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { senderHex } from "@/lib/senderColor";
 import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import FAQPanel from "@/components/FAQPanel";
@@ -303,6 +304,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   });
 
   const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved }, { refetchOnWindowFocus: false });
+
+  // Agent photo map for avatars in message bubbles
+  const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const agentPhotoMap: Record<string, string | null> = useMemo(
+    () => agentPhotoData?.photos ?? {},
+    [agentPhotoData?.photos]
+  );
 
   // Collect all phones from real sessions for batch name resolution
   const allPhones = useMemo(
@@ -1342,9 +1353,31 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           transition={{ delay: Math.min(i * 0.02, 0.3) }}
                           className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                         >
-                          <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
-                            <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : message.sender}</span>
-                          </div>
+                          {(() => {
+                            const displayName = message.senderName && message.senderName !== "OpenPhone"
+                              ? message.senderName
+                              : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : message.sender;
+                            const isAgent = message.sender === "agent";
+                            const photoUrl = isAgent && displayName !== "Agent" ? (agentPhotoMap[displayName] ?? null) : null;
+                            const initials = displayName.split(/\s+/).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                            const color = senderHex(displayName);
+                            return (
+                              <div className="flex items-center gap-1.5 mb-1">
+                                {isAgent && (
+                                  <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 shadow-sm">
+                                    {photoUrl ? (
+                                      <img src={photoUrl} alt={displayName} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: color }}>
+                                        {initials}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
+                              </div>
+                            );
+                          })()}
                           {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
                           {message.media && message.media.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
