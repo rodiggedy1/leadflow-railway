@@ -125,7 +125,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
   return (
     <div
       className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
-      style={{ height: "min(600px, 65vh)", minHeight: "420px" }}
+      style={{ height: "min(680px, 75vh)", minHeight: "520px" }}
     >
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 shrink-0 rounded-t-xl">
@@ -171,9 +171,9 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
                   key={s.label}
                   onClick={() => handleQuickScenario(s.label)}
                   disabled={mutation.isPending}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-violet-50 hover:border-violet-200 text-left text-xs font-semibold text-slate-700 transition disabled:opacity-50"
+                  className="flex items-center gap-2 px-3 py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-violet-50 hover:border-violet-200 text-left text-sm font-semibold text-slate-700 transition disabled:opacity-50"
                 >
-                  <span className="text-base leading-none shrink-0">{s.emoji}</span>
+                  <span className="text-xl leading-none shrink-0">{s.emoji}</span>
                   <span className="leading-tight">{s.label}</span>
                 </button>
               ))}
