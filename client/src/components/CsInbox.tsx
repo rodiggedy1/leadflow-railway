@@ -744,6 +744,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [debriefDismissed, setDebriefDismissed] = useState<Record<number, boolean>>({});
   const showDebrief = !!callDebrief && selected?.id != null && !debriefDismissed[selected.id];
 
+  // ── Call recordings — fetched for the selected session and merged inline ──
+  const { data: callRecordings = [] } = trpc.leads.getCallRecordings.useQuery(
+    { sessionId: selected?.id ?? 0 },
+    { enabled: !!selected?.id, staleTime: 60_000, refetchInterval: 120_000 }
+  );
+
   // Mark conversation as viewed when selected changes
   useEffect(() => {
     if (effectiveSelectedId != null) {
@@ -1189,43 +1195,130 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   transition={{ duration: 0.15 }}
                   className="space-y-3"
                 >
-                  {(selected?.messages ?? []).map((message, idx) => (
-                    <motion.div
-                      key={`${message.time}-${idx}`}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(idx * 0.03, 0.3) }}
-                      className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
-                    >
-                      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
-                        <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender}</span>
-                        {message.senderName === "OpenPhone" && (
-                          <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 normal-case tracking-normal">via OpenPhone</span>
-                        )}
-                      </div>
-                      {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
-                      {message.media && message.media.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {message.media.map((url, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => openLightbox(message.media!, i)}
-                              className="focus:outline-none"
-                              title="Click to enlarge"
-                            >
-                              <img
-                                src={url}
-                                alt="MMS photo"
-                                className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity"
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <div className="mt-2 text-xs opacity-60">{message.time}</div>
-                    </motion.div>
-                  ))}
+                  {/* Merge SMS messages and call recordings into a single chronological timeline */}
+                  {(() => {
+                    type SmsItem = { kind: "sms"; ts: number; message: (typeof selected)["messages"][0]; idx: number };
+                    type CallItem = { kind: "call"; ts: number; rec: (typeof callRecordings)[0] };
+                    type TimelineItem = SmsItem | CallItem;
+
+                    const callItems: CallItem[] = (callRecordings ?? []).map((rec) => ({
+                      kind: "call" as const,
+                      ts: rec.callStartedAt instanceof Date ? rec.callStartedAt.getTime() : new Date(rec.callStartedAt as string).getTime(),
+                      rec,
+                    }));
+                    const sortedCalls = [...callItems].sort((a, b) => a.ts - b.ts);
+
+                    const smsMsgs = selected?.messages ?? [];
+                    const allItems: TimelineItem[] = [];
+                    smsMsgs.forEach((message, idx) => {
+                      allItems.push({ kind: "sms" as const, ts: idx, message, idx });
+                    });
+                    // Append calls at end sorted by callStartedAt
+                    sortedCalls.forEach((c) => allItems.push(c));
+
+                    return allItems.map((item, i) => {
+                      if (item.kind === "call") {
+                        const rec = item.rec;
+                        const durationStr = rec.durationSeconds
+                          ? rec.durationSeconds >= 60
+                            ? `${Math.floor(rec.durationSeconds / 60)}m ${rec.durationSeconds % 60}s`
+                            : `${rec.durationSeconds}s`
+                          : "";
+                        const callTime = rec.callStartedAt instanceof Date
+                          ? rec.callStartedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : new Date(rec.callStartedAt as string).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                        let debriefParsed: { wentWell?: string; improve?: string; nextLine?: string; summary?: string } | null = null;
+                        try { if (rec.callDebrief) debriefParsed = JSON.parse(rec.callDebrief as string); } catch { /* ignore */ }
+                        const summary = debriefParsed?.summary || debriefParsed?.wentWell || null;
+                        const hasRecording = rec.recordingUrl && !(rec.recordingUrl as string).includes("synthetic-backfill");
+                        return (
+                          <motion.div
+                            key={`call-${rec.id}`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                            className="flex justify-start"
+                          >
+                            <div className="max-w-[78%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                              {/* Header */}
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
+                                <Phone className="h-3 w-3 text-slate-300" />
+                                <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">Call {rec.direction === "incoming" ? "Inbound" : "Outbound"}</span>
+                                {durationStr && <span className="text-[10px] text-slate-400">&middot; {durationStr}</span>}
+                                <span className="ml-auto text-[10px] text-slate-500">{callTime}</span>
+                              </div>
+                              {/* Headline */}
+                              <div className="px-3 pt-2.5 pb-1.5 bg-slate-50 border-b border-slate-100">
+                                <p className="text-sm font-medium text-slate-700">
+                                  {rec.direction === "incoming" ? "Inbound" : "Outbound"} call &middot; {rec.callerPhone}
+                                  {rec.status === "no-answer" && <span className="ml-2 text-xs text-red-500">No answer</span>}
+                                </p>
+                              </div>
+                              {/* Summary + recording */}
+                              <div className="px-3 py-2.5 bg-white">
+                                {summary && (
+                                  <p className="text-sm text-slate-600 leading-relaxed mb-2">{summary}</p>
+                                )}
+                                {hasRecording && (
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
+                                    <audio
+                                      controls
+                                      src={rec.recordingUrl as string}
+                                      className="w-full h-8 rounded-lg"
+                                    />
+                                  </div>
+                                )}
+                                {!summary && !hasRecording && (
+                                  <p className="text-xs text-slate-400 italic">No summary available yet</p>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
+                      // SMS bubble
+                      const { message, idx } = item;
+                      return (
+                        <motion.div
+                          key={`${message.time}-${idx}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                          className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
+                        >
+                          <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
+                            <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender}</span>
+                            {message.senderName === "OpenPhone" && (
+                              <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 normal-case tracking-normal">via OpenPhone</span>
+                            )}
+                          </div>
+                          {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
+                          {message.media && message.media.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {message.media.map((url, mi) => (
+                                <button
+                                  key={mi}
+                                  type="button"
+                                  onClick={() => openLightbox(message.media!, mi)}
+                                  className="focus:outline-none"
+                                  title="Click to enlarge"
+                                >
+                                  <img
+                                    src={url}
+                                    alt="MMS photo"
+                                    className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 text-xs opacity-60">{message.time}</div>
+                        </motion.div>
+                      );
+                    });
+                  })()}
                 </motion.div>
               </div>
 
