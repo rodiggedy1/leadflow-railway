@@ -2552,40 +2552,40 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <div className="px-6 py-3 border-t border-slate-100 bg-white">
           {/* Quick-action chips */}
-          <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="flex gap-2 mb-3 items-center overflow-x-auto">
             <button
               onClick={() => setBroadcastOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-slate-900 text-white hover:bg-slate-700 flex items-center gap-1.5 shadow-sm"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-slate-900 text-white hover:bg-slate-700 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <Radio className="h-3 w-3" /> Broadcast
             </button>
             <button
               onClick={() => setIssueOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-1.5 shadow-sm"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <AlertTriangle className="h-3 w-3" /> Issue
             </button>
             <button
               onClick={() => setReminderOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 flex items-center gap-1.5 shadow-sm"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <Bell className="h-3 w-3" /> Reminder
             </button>
             <button
               onClick={() => setPinOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1.5 shadow-sm"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <Pin className="h-3 w-3" /> Pin
             </button>
             <button
               onClick={() => setFollowUpsOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5 shadow-sm"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <ClipboardList className="h-3 w-3" /> Follow-ups
             </button>
             <button
               onClick={() => setFaqOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 shadow-sm"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <BookOpen className="h-3 w-3" /> FAQ
             </button>
@@ -2593,7 +2593,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             {awayStatus ? (
               // Currently away — show "I'm Back" button to clear status
               <button
-                className="text-xs font-semibold rounded-full px-4 py-2 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5"
+                className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm shrink-0"
                 onClick={() => {
                   if (imBackFiredRef.current) return;
                   imBackFiredRef.current = true;
@@ -2608,7 +2608,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               // Not away — show Away picker
               <Popover open={awayOpen} onOpenChange={setAwayOpen}>
                 <PopoverTrigger asChild>
-                  <button className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5">
+                  <button className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0">
                     <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
                     Away
                   </button>
