@@ -938,3 +938,6 @@
 - [x] FEATURE: CS chat new outbound conversation — auto-populate leadName using same backfillCsNames chain (completedJobs → cleanerJobs → quoteLeads → other sessions); also backfills existing sessions with raw phone as name
 
 - [x] BUG: CS chat outbound SMS to existing conversation — fixed: when existing session found, now always sets csQueue + leadSource=cs_initiated so it surfaces in the CS inbox filter, then setSelectedId selects it
+
+- [x] FEATURE: CS chat new outbound modal — show "Existing conversation found — will reopen it" warning when phone already has an open session
+- [x] FEATURE: CS chat — auto-scroll to bottom of message list after outbound send opens the thread (400ms delay after setSelectedId)

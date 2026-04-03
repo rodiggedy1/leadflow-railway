@@ -482,6 +482,14 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [newConvPhone, setNewConvPhone] = useState("");
   const [newConvMsg, setNewConvMsg] = useState("");
+
+  // Detect if the typed phone already has an open session in the inbox
+  const existingConvForPhone = useMemo(() => {
+    if (!newConvPhone.trim()) return null;
+    const typed10 = newConvPhone.replace(/[^\d]/g, "").slice(-10);
+    if (typed10.length < 10) return null;
+    return liveConversations.find((c) => c.phone.replace(/[^\d]/g, "").slice(-10) === typed10) ?? null;
+  }, [newConvPhone, liveConversations]);
   const startConv = trpc.opsChat.startCsConversation.useMutation({
     onSuccess: async (data) => {
       setNewConvOpen(false);
@@ -490,6 +498,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       // Refresh the inbox list, then select the new/existing conversation
       await utils.leads.listCsInbox.invalidate();
       setSelectedId(data.sessionId);
+      // Scroll to bottom after messages load (slight delay for render)
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 400);
       toast.success(data.isNew ? "Conversation started" : "Existing conversation opened");
     },
     onError: (err) => toast.error(err.message),
@@ -2075,6 +2089,15 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 autoFocus
               />
             </div>
+            {existingConvForPhone && (
+              <div className="flex items-start gap-2 rounded-2xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 text-xs text-amber-800">
+                <span className="mt-0.5 shrink-0">⚠️</span>
+                <span>
+                  <span className="font-semibold">{existingConvForPhone.name}</span> already has an open conversation.
+                  Sending will reopen it.
+                </span>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">First message</label>
               <textarea
