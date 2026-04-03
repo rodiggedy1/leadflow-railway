@@ -1221,7 +1221,28 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     // Merge sort both lists by ts
                     const allItems: TimelineItem[] = [...smsItems, ...callItems].sort((a, b) => a.ts - b.ts);
 
-                    return allItems.map((item, i) => {
+                    // Track last date for date separators
+                    let lastDateStr = "";
+
+                    return allItems.flatMap((item, i) => {
+                      const itemDate = new Date(item.ts);
+                      const dateStr = itemDate.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+                      const today = new Date();
+                      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+                      const isToday = itemDate.toDateString() === today.toDateString();
+                      const isYesterday = itemDate.toDateString() === yesterday.toDateString();
+                      const displayDate = isToday ? "Today" : isYesterday ? "Yesterday" : dateStr;
+                      const showSeparator = item.ts > 100 && dateStr !== lastDateStr;
+                      if (showSeparator) lastDateStr = dateStr;
+                      const separator = showSeparator ? (
+                        <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-2">
+                          <div className="flex-1 h-px bg-slate-200" />
+                          <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{displayDate}</span>
+                          <div className="flex-1 h-px bg-slate-200" />
+                        </div>
+                      ) : null;
+                      const elements: React.ReactNode[] = separator ? [separator] : [];
+
                       if (item.kind === "call") {
                         const rec = item.rec;
                         const durationStr = rec.durationSeconds
@@ -1242,7 +1263,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         let transcriptTurns: TranscriptTurn[] = [];
                         try { if (rec.transcript) transcriptTurns = JSON.parse(rec.transcript as string); } catch { /* ignore */ }
 
-                        return (
+                        elements.push(
                           <motion.div
                             key={`call-${rec.id}`}
                             initial={{ opacity: 0, y: 8 }}
@@ -1308,11 +1329,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             </div>
                           </motion.div>
                         );
+                        return elements;
                       }
 
                       // SMS bubble
                       const { message, idx } = item;
-                      return (
+                      elements.push(
                         <motion.div
                           key={`${message.time}-${idx}`}
                           initial={{ opacity: 0, y: 8 }}
@@ -1321,10 +1343,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                         >
                           <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-60">
-                            <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender}</span>
-                            {message.senderName === "OpenPhone" && (
-                              <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 normal-case tracking-normal">via OpenPhone</span>
-                            )}
+                            <span>{message.senderName && message.senderName !== "OpenPhone" ? message.senderName : message.sender === "agent" ? "Agent" : message.sender}</span>
                           </div>
                           {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
                           {message.media && message.media.length > 0 && (
@@ -1349,6 +1368,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <div className="mt-2 text-xs opacity-60">{message.time}</div>
                         </motion.div>
                       );
+                      return elements;
                     });
                   })()}
                 </motion.div>

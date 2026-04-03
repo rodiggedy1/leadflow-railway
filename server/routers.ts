@@ -2567,7 +2567,17 @@ STAGE DETECTION — return the stage the conversation is currently in:
         // Sort: most recent last message first
         augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
-        return augmented;
+        // Deduplicate by phone number — keep only the most recent session per phone
+        const seenPhones = new Set<string>();
+        const deduped = augmented.filter((s) => {
+          const phone = s.leadPhone?.trim();
+          if (!phone) return true; // keep sessions without a phone (edge case)
+          if (seenPhones.has(phone)) return false;
+          seenPhones.add(phone);
+          return true;
+        });
+
+        return deduped;
       }),
     /**
      * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.
