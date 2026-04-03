@@ -963,12 +963,18 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
     const callStartedAt = call.createdAt ? new Date(call.createdAt) : new Date();
     const durationSeconds: number = call.duration ?? 0;
 
-    // Extract the external (lead) phone number from participants
-    const participants: Array<{ phoneNumber?: string; type?: string }> = call.participants ?? [];
-    const externalParticipant = participants.find(p => p.type === "external");
-    const rawPhone = externalParticipant?.phoneNumber;
+    // Extract the external (lead) phone number from participants.
+    // OpenPhone sends participants as a flat string array of phone numbers.
+    // The internal/agent numbers are the CS line and main line — the external
+    // participant is whichever number is NOT one of those.
+    const participants: string[] = call.participants ?? [];
+    const internalNumbers = [
+      normalizePhone(ENV.openPhoneFromNumber ?? ""),
+      normalizePhone("+12028885362"), // CS line
+    ].filter(Boolean);
+    const rawPhone = participants.find(p => !internalNumbers.includes(normalizePhone(p)));
     if (!rawPhone) {
-      console.warn(`[CallRecording] No external participant phone for callId=${callId}`);
+      console.warn(`[CallRecording] No external participant phone for callId=${callId}, participants=${JSON.stringify(participants)}`);
       return;
     }
     const leadPhone = normalizePhone(rawPhone);
