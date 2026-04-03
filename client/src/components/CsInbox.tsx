@@ -55,6 +55,7 @@ import {
   FileText,
   DollarSign,
   ClipboardList,
+  TrendingUp,
 } from "lucide-react";
 import {
   Tooltip,
@@ -609,6 +610,25 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       staleTime: 60_000, // treat as fresh for 60s to avoid hammering LLM on every render
     }
   );
+
+  // Upsell opportunity detector — only fires for non-Teams, non-Deep-clean conversations
+  const isTeamsConv = selected?.queue === "Teams";
+  const { data: upsellData, isFetching: upsellLoading } = trpc.leads.getUpsellOpportunity.useQuery(
+    {
+      sessionId: selected?.id ?? 0,
+      messageHistory: insightMsgHistory,
+      clientName: selected?.name ?? undefined,
+      clientProfile: clientProfileSummary,
+      serviceType: selected?.service ?? undefined,
+    },
+    {
+      enabled: !!(selected && selected.id > 0 && selected.messages.length >= 3 && !isTeamsConv),
+      refetchOnWindowFocus: false,
+      staleTime: 90_000,
+    }
+  );
+  const [upsellDismissed, setUpsellDismissed] = useState<number | null>(null);
+  const showUpsell = !!(upsellData?.upsell && upsellDismissed !== selected?.id);
 
   // Mark conversation as viewed when selected changes
   useEffect(() => {
@@ -1644,6 +1664,51 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* ─── AI Upsell Opportunity card ─────────────────── */}
+                {(showUpsell || upsellLoading) && (
+                  <Card className="rounded-[28px] border-emerald-200 bg-emerald-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+                        <TrendingUp className="h-4 w-4" /> Upsell opportunity
+                        {upsellLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-emerald-400" />}
+                        {showUpsell && (
+                          <button
+                            className="ml-auto text-emerald-400 hover:text-emerald-600 transition-colors"
+                            onClick={() => setUpsellDismissed(selected?.id ?? null)}
+                            title="Dismiss"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {upsellLoading && !upsellData?.upsell ? (
+                        <div className="mt-2 space-y-1.5">
+                          <div className="h-3 w-full rounded bg-emerald-200/60 animate-pulse" />
+                          <div className="h-3 w-4/5 rounded bg-emerald-200/60 animate-pulse" />
+                        </div>
+                      ) : showUpsell && upsellData?.upsell ? (
+                        <div className="mt-2 space-y-2">
+                          <div className="text-xs text-emerald-600 font-medium">{upsellData.upsell.upsellType}</div>
+                          <div className="text-xs text-emerald-700 italic">{upsellData.upsell.signal}</div>
+                          <div className="rounded-xl bg-white border border-emerald-200 px-3 py-2 text-sm text-emerald-900 leading-5">
+                            &ldquo;{upsellData.upsell.pitch}&rdquo;
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+                            onClick={() => {
+                              setCompose(upsellData.upsell!.pitch);
+                              toast.success("Upsell pitch copied to compose box");
+                            }}
+                          >
+                            Use this pitch
+                          </Button>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* ─── Add Follow-up button ─────────────────────────── */}
                 <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">

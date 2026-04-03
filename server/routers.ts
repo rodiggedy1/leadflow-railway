@@ -3237,6 +3237,92 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
       }),
 
     /**
+     * getUpsellOpportunity — detects upsell signals in a CS conversation and
+     * returns a structured upsell prompt when a customer has booked a standard
+     * clean but signals (large home, first-time, move-in, pet owner, etc.)
+     * suggest they'd benefit from a deep clean or specific add-ons.
+     * Returns null when no upsell opportunity is detected.
+     */
+    getUpsellOpportunity: opsChatProcedure
+      .input(z.object({
+        sessionId: z.number(),
+        messageHistory: z.string(),
+        clientName: z.string().optional(),
+        clientProfile: z.string().optional(),
+        serviceType: z.string().optional(),
+        bedrooms: z.string().optional(),
+        bathrooms: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const messages: Array<{ role: string; content: string }> = (() => {
+          try { return JSON.parse(input.messageHistory); } catch { return []; }
+        })();
+        if (messages.length === 0) return { upsell: null };
+        // Only run for standard clean or unknown service type
+        const service = (input.serviceType ?? "").toLowerCase();
+        const isStandardOrUnknown = !service || service.includes("standard");
+        if (!isStandardOrUnknown) return { upsell: null };
+        const recent = messages.slice(-16);
+        const snippet = recent
+          .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
+          .join("\n");
+        const profileCtx = input.clientProfile
+          ? `\n\nCLIENT HISTORY:\n${input.clientProfile}`
+          : "";
+        const sizeCtx = (input.bedrooms || input.bathrooms)
+          ? `\nHome size: ${input.bedrooms ?? "?"} / ${input.bathrooms ?? "?"}`
+          : "";
+        const systemPrompt = `You are a senior sales coach for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this CS conversation and determine if there is a genuine upsell opportunity.
+
+UPSELL SIGNALS to look for:
+- First-time customer (no prior bookings)
+- Move-in or move-out situation
+- Large home (3+ bedrooms)
+- Mentions of pets, kids, or allergies
+- Post-renovation or construction dust
+- Customer mentions it has been a long time since last clean
+- Customer seems price-sensitive but engaged (could benefit from recurring discount)
+- AirBnB or rental property
+
+AVAILABLE UPSELLS:
+- Deep Cleaning (instead of Standard) — for first-timers, move-ins, long gaps, post-reno
+- Inside Oven Cleaning — for customers who mention cooking or kitchen focus
+- Inside Fridge Cleaning — for move-outs or thorough resets
+- Inside Cabinets — for move-ins/outs
+- Laundry (wash and fold) — for busy families
+- Recurring discount — for price-sensitive customers: suggest biweekly to save 15%
+
+If you detect a clear upsell signal, respond with JSON:
+{"detected": true, "signal": "<1 sentence: what signal you detected>", "pitch": "<exactly what the agent should say — 1-2 natural sentences, conversational, not pushy>", "upsellType": "<Deep Cleaning|Inside Oven|Inside Fridge|Inside Cabinets|Laundry|Recurring>"}
+
+If no clear signal, respond with JSON:
+{"detected": false}
+
+Be conservative — only flag genuine opportunities, not every conversation.${profileCtx}${sizeCtx}`;
+        const result = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `CONVERSATION:\n${snippet}\n\nAnalyze for upsell opportunity. Respond with JSON only.` },
+          ],
+          response_format: { type: "json_object" } as any,
+        });
+        const rawContent = result.choices?.[0]?.message?.content;
+        const raw = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? {});
+        try {
+          const parsed = JSON.parse(raw);
+          if (!parsed.detected) return { upsell: null };
+          return {
+            upsell: {
+              signal: parsed.signal as string,
+              pitch: parsed.pitch as string,
+              upsellType: parsed.upsellType as string,
+            },
+          };
+        } catch {
+          return { upsell: null };
+        }
+      }),
+    /**
      * batchResolveNames — given an array of raw phone strings, returns a map of
      * { normalizedPhone10 -> resolvedName } in a single round-trip.
      * Priority: cleanerProfiles > completedJobs > cleanerJobs.customerName > quoteLeads
