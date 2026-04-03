@@ -5715,10 +5715,10 @@ async function getAgentSessionFromCtx(ctx: { req: { headers: { cookie?: string }
   const token = parseCookie(cookieHeader)[AGENT_COOKIE_NAME] ?? null;
   const session = await verifyAgentSession(token);
   if (!session) throw new Error("Agent not authenticated");
-  // Verify agent is still active in DB
+  // Verify agent is still active in DB and use fresh name from DB (not stale JWT name)
   const agent = await getAgentById(session.agentId);
   if (!agent || !agent.isActive) throw new Error("Agent account is inactive or not found");
-  return session;
+  return { ...session, agentName: agent.name };
 }
 
 /**

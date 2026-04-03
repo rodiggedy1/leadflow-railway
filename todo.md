@@ -949,3 +949,4 @@
 
 - [ ] FEATURE: FAQ pill in CS chat and Command Chat — slide-up panel with AI Q&A backed by maidinblack.com content
 - [ ] Add World-Class AI Response pencil button to CS Chat: click pencil → type scenario → get Disney/Ritz-Carlton quality response with copy-to-compose
+- [x] Fix CS Chat agent messages showing wrong agent name (Rohan's name on Ianique's messages) — getAgentSessionFromCtx now returns fresh agent.name from DB instead of stale JWT name
