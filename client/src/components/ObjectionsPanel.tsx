@@ -94,7 +94,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
   const hasConversation = history.length > 0;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden"
+    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
       style={{ maxHeight: "480px", minHeight: "320px" }}
     >
       {/* Header */}
