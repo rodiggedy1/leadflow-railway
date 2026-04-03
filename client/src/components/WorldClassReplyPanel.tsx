@@ -125,7 +125,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
   return (
     <div
       className="absolute bottom-full left-0 right-0 z-50 mb-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-2xl"
-      style={{ maxHeight: "min(440px, calc(100vh - 220px))", minHeight: "220px" }}
+      style={{ maxHeight: "min(360px, 40vh)", minHeight: "160px" }}
     >
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 shrink-0 rounded-t-xl">
@@ -256,7 +256,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
       </div>
 
       {/* ── Input bar ── */}
-      <div className="shrink-0 border-t border-slate-100 px-3 py-2.5 bg-white rounded-b-xl">
+      <div className="shrink-0 border-t border-violet-100 px-3 py-3 bg-violet-50/40 rounded-b-xl">
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
@@ -268,15 +268,15 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
                 handleSubmit();
               }
             }}
-            placeholder="Describe the situation… e.g. 'Customer says cleaner missed the bathroom' (Enter to send)"
-            rows={1}
-            className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 transition"
-            style={{ minHeight: "36px", maxHeight: "80px" }}
+            placeholder="Describe the situation… e.g. 'Customer says cleaner missed the bathroom' (Shift+Enter for new line, Enter to send)"
+            rows={3}
+            className="flex-1 resize-none rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 transition leading-relaxed"
+            style={{ minHeight: "72px", maxHeight: "120px" }}
           />
           <button
             onClick={() => handleSubmit()}
             disabled={!scenarioInput.trim() || mutation.isPending}
-            className="shrink-0 flex items-center justify-center h-9 w-9 rounded-xl bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-40 transition"
+            className="shrink-0 flex items-center justify-center h-10 w-10 rounded-xl bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-40 transition"
             title="Get world-class response"
           >
             {mutation.isPending ? (
@@ -286,6 +286,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
             )}
           </button>
         </div>
+        <p className="text-[10px] text-slate-400 mt-1.5 text-right">Enter to send · Shift+Enter for new line</p>
       </div>
     </div>
   );
