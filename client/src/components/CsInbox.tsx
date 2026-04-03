@@ -1877,27 +1877,33 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
                   return (
                     <Card className="rounded-[28px] border-purple-200 bg-purple-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-3">
+                      <CardContent className="p-5">
+                        {/* Header row */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-100 border border-purple-200">
+                              <Phone className="h-3.5 w-3.5 text-purple-600" />
+                            </div>
+                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-purple-600" />
-                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Call debrief</span>
                             {grade && (
-                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-xs font-bold ${gradeColor}`}>
+                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full border-2 text-sm font-bold ${gradeColor}`}>
                                 {grade}
                               </span>
                             )}
+                            <button
+                              onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
+                              className="flex items-center justify-center w-6 h-6 rounded-full text-purple-300 hover:text-purple-600 hover:bg-purple-100 transition-colors text-base leading-none"
+                            >
+                              ×
+                            </button>
                           </div>
-                          <button
-                            onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
-                            className="text-purple-400 hover:text-purple-600 text-xs"
-                          >
-                            ×
-                          </button>
                         </div>
-                        {/* Audio player — only shown when a real recording URL exists */}
+
+                        {/* Audio player */}
                         {callDebrief!.audioUrl && (
-                          <div className="mb-3">
+                          <div className="mb-4">
                             <audio
                               controls
                               src={callDebrief!.audioUrl}
@@ -1906,70 +1912,101 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             />
                           </div>
                         )}
-                        <div className="flex flex-col gap-2">
-                          <div className="flex gap-2">
-                            <span className="text-green-600 text-xs mt-0.5">✔</span>
-                            <p className="text-xs text-purple-800 leading-snug">{callDebrief!.wentWell}</p>
+
+                        {/* Divider */}
+                        <div className="border-t border-purple-200/70 mb-4" />
+
+                        {/* Went well */}
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className="text-green-500 text-xs">✔</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
                           </div>
-                          <div className="flex gap-2">
-                            <span className="text-amber-500 text-xs mt-0.5">▲</span>
-                            <p className="text-xs text-purple-800 leading-snug">{callDebrief!.improve}</p>
+                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.wentWell}</p>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-purple-200/50 mb-3" />
+
+                        {/* Improve */}
+                        <div className="mb-4">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className="text-amber-500 text-xs">▲</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
                           </div>
-                          <div className="mt-1 rounded-xl bg-purple-100 border border-purple-200 px-3 py-2">
-                            <p className="text-[10px] text-purple-500 font-medium mb-0.5">Next time, say:</p>
-                            <p className="text-xs text-purple-900 italic leading-snug">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
-                          </div>
+                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.improve}</p>
+                        </div>
+
+                        {/* Next line suggestion */}
+                        <div className="rounded-2xl bg-white border border-purple-200 px-4 py-3">
+                          <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1.5">Next time, say:</p>
+                          <p className="text-sm text-purple-900 italic leading-relaxed">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
                         </div>
                       </CardContent>
                     </Card>
                   );
                 })()}
 
-                {/* ─── Add Follow-up button ─────────────────────────── */}
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-                  <CardContent className="p-4">
-                    <Button
-                      variant="outline"
-                      className="rounded-2xl justify-start h-12 w-full border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300"
-                      onClick={() => setAddFollowUpOpen(true)}
-                    >
-                      <ClipboardList className="h-4 w-4 mr-2" />
-                      Add follow-up
-                    </Button>
-                  </CardContent>
-                </Card>
-
-
+                {/* ─── Actions card (merged: follow-up + call + share link) ─── */}
                 <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
                   <CardContent className="p-5">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</div>
-                    <div className="mt-4 flex flex-col gap-3">
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl justify-start h-12 w-full"
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-4">Actions</div>
+                    <div className="flex flex-col gap-2.5">
+
+                      {/* Call client */}
+                      <button
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-violet-300 hover:bg-violet-50 transition-all duration-150"
                         onClick={() => {
                           const phone = selected?.phone?.replace(/\D/g, "").slice(-10);
                           if (phone) window.location.href = `openphone://call?to=+1${phone}`;
                         }}
                       >
-                        <Phone className="h-4 w-4 mr-2" />
-                        Call client
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl justify-start h-12 w-full"
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-violet-100 group-hover:bg-violet-200 transition-colors shrink-0">
+                          <Phone className="h-4 w-4 text-violet-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Call client</div>
+                          <div className="text-[11px] text-slate-400">Open in OpenPhone</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-violet-400 transition-colors" />
+                      </button>
+
+                      {/* Share booking link */}
+                      <button
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50 transition-all duration-150"
                         onClick={() => {
                           const link = `${window.location.origin}/book`;
                           navigator.clipboard.writeText(link).then(() => {
-                            // brief visual feedback via title flash
                             const btn = document.activeElement as HTMLButtonElement;
                             if (btn) { const orig = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = orig; }, 1500); }
                           });
                         }}
                       >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Share magic link
-                      </Button>
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-blue-100 group-hover:bg-blue-200 transition-colors shrink-0">
+                          <Mail className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Share booking link</div>
+                          <div className="text-[11px] text-slate-400">Copy to clipboard</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors" />
+                      </button>
+
+                      {/* Add follow-up */}
+                      <button
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-amber-300 hover:bg-amber-50 transition-all duration-150"
+                        onClick={() => setAddFollowUpOpen(true)}
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-amber-100 group-hover:bg-amber-200 transition-colors shrink-0">
+                          <ClipboardList className="h-4 w-4 text-amber-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Add follow-up</div>
+                          <div className="text-[11px] text-slate-400">Schedule a reminder</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-amber-400 transition-colors" />
+                      </button>
+
                     </div>
                   </CardContent>
                 </Card>
