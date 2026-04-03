@@ -1158,7 +1158,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
     enabled: Boolean(user) || Boolean(agentMe),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 0, // always fresh — photos change when agents upload new ones
+    refetchInterval: 30_000, // re-fetch every 30s so new photos appear without reload
     retry: false,
   });
   // senderPhotoMap: name -> photoUrl (null = use colored initial)

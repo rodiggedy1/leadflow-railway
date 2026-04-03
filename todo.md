@@ -917,3 +917,8 @@
 - [x] POLISH: CS inbox quick action buttons — icon + label treatment
 - [x] POLISH: Command Chat — replace priority alerts pill with online agent avatars
 - [x] POLISH: Command Chat — full UI cohesion pass (spacing, bubbles, input, team feel)
+
+- [x] BUG: Command Chat avatar row — agent photos not loading (synced Diane+Rohan photos from users table to agents table; uploadProfilePhoto now syncs to both tables)
+- [x] BUG: Command Chat avatar row — online status dots not showing green/amber (added lastSeenAt heartbeat for owner in opsChatProcedure; getAgentStatusList now injects owner from users table)
+- [x] BUG: Command Chat message bubbles — agent photos not showing in bubbles (getAllAgentPhotoMap now includes owner photo; staleTime=0 + 30s refetch)
+- [x] BUG: Command Chat avatar row — owner (Rohan/RG) photo not showing in top avatar row (getAgentStatusList injects owner entry from users table when not in agents)

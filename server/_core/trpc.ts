@@ -100,6 +100,21 @@ export const opsChatProcedure = t.procedure.use(
 
     // First try Manus OAuth (owner)
     if (ctx.user) {
+      // Fire-and-forget lastSeenAt heartbeat for owner (non-blocking)
+      // Owner may have a row in agents table — update it so they appear online
+      try {
+        const { getDb } = await import("../db");
+        const { agents } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (db && ctx.user.name) {
+          db.update(agents)
+            .set({ lastSeenAt: new Date() })
+            .where(eq(agents.name, ctx.user.name))
+            .execute()
+            .catch(() => { /* ignore */ });
+        }
+      } catch { /* ignore */ }
       return next({
         ctx: {
           ...ctx,

@@ -1659,6 +1659,11 @@ export const opsChatRouter = router({
       if (isOwner) {
         // Owner: store in users table by openId
         await db.update(users).set({ profilePhotoUrl: url }).where(eq(users.openId, callerId));
+        // Also sync to agents table by name (owner may have an agents row for presence tracking)
+        const ownerName = ctx.opsCaller.name;
+        if (ownerName) {
+          await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.name, ownerName)).catch(() => { /* ignore if no row */ });
+        }
       } else if (agentEmail) {
         // Agent: store in agents table by email
         await db.update(agents).set({ profilePhotoUrl: url }).where(eq(agents.email, agentEmail));
@@ -1727,7 +1732,7 @@ export const opsChatRouter = router({
    * Used by OpsChat/CommandChat to build a sender-name → photoUrl lookup map.
    */
   getAllAgentPhotoMap: opsChatProcedure
-    .query(async () => {
+    .query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return { photos: {} };
       const rows = await db
@@ -1737,6 +1742,17 @@ export const opsChatRouter = router({
       for (const row of rows) {
         photos[row.name] = row.profilePhotoUrl ?? null;
       }
+      // Also include the owner's photo from users table (owner has no agents row)
+      if (ctx.opsCaller.isOwner) {
+        const [userRow] = await db
+          .select({ name: users.name, profilePhotoUrl: users.profilePhotoUrl })
+          .from(users)
+          .where(eq(users.openId, ctx.opsCaller.id))
+          .limit(1);
+        if (userRow?.name && userRow.profilePhotoUrl) {
+          photos[userRow.name] = userRow.profilePhotoUrl;
+        }
+      }
       return { photos };
     }),
 
@@ -1745,7 +1761,7 @@ export const opsChatRouter = router({
    * Used by the Agent Status panel in the sidebar.
    */
   getAgentStatusList: opsChatProcedure
-    .query(async () => {
+    .query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return { agents: [] };
       const rows = await db
@@ -1762,18 +1778,42 @@ export const opsChatRouter = router({
         .from(agents)
         .where(eq(agents.isActive, 1))
         .orderBy(agents.name);
-      return {
-        agents: rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          email: r.email,
-          photoUrl: r.profilePhotoUrl ?? null,
-          lastSeenAt: r.lastSeenAt ? r.lastSeenAt.getTime() : null,
-          isAdmin: r.isAdmin === 1,
-          awayStatus: r.awayStatus ?? null,
-          awaySetAt: r.awaySetAt ? r.awaySetAt.getTime() : null,
-        })),
-      };
+      const agentResults = rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email ?? null,
+        photoUrl: r.profilePhotoUrl ?? null,
+        lastSeenAt: r.lastSeenAt ? r.lastSeenAt.getTime() : null,
+        isAdmin: r.isAdmin === 1,
+        awayStatus: r.awayStatus ?? null,
+        awaySetAt: r.awaySetAt ? r.awaySetAt.getTime() : null,
+      }));
+      // If the caller is the owner AND they don't have an agents row, inject them from users table
+      // This ensures the owner appears in the avatar row with their photo and online status
+      if (ctx.opsCaller.isOwner) {
+        const ownerName = ctx.opsCaller.name;
+        const alreadyIncluded = agentResults.some(a => a.name === ownerName);
+        if (!alreadyIncluded) {
+          const [userRow] = await db
+            .select({ name: users.name, profilePhotoUrl: users.profilePhotoUrl })
+            .from(users)
+            .where(eq(users.openId, ctx.opsCaller.id))
+            .limit(1);
+          if (userRow) {
+            agentResults.push({
+              id: -1,
+              name: userRow.name ?? ownerName,
+              email: undefined as unknown as string, // owner has no agents email row
+              photoUrl: userRow.profilePhotoUrl ?? null,
+              lastSeenAt: Date.now(), // owner is always online when they make this request
+              isAdmin: true,
+              awayStatus: null,
+              awaySetAt: null,
+            });
+          }
+        }
+      }
+      return { agents: agentResults };
     }),
 
   // ── Direct Messages ──────────────────────────────────────────────────────────
