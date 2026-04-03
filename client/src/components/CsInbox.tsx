@@ -1048,9 +1048,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
           {/* ── CENTER: Thread ── */}
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
-            <CardContent className="p-0 flex flex-col flex-1 min-h-0 relative">
-              <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
-              <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
@@ -1235,7 +1233,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <TypingBubble typers={typers} />
                 </div>
               )}
-              <div className="shrink-0 border-t border-slate-100 px-5 py-4 md:px-6 bg-white/95 backdrop-blur-sm">
+              <div className="shrink-0 border-t border-slate-100 px-5 py-4 md:px-6 bg-white/95 backdrop-blur-sm relative">
+                <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
+                <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
                     <Button key={action} variant="outline" className="rounded-full h-10">
