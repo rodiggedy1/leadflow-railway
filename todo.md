@@ -934,3 +934,5 @@
 - [x] BUG: Online status fixed — root cause: OAuth name "Rohan G" ≠ agents name "Rohan Gilkes"; fixed by first-name prefix matching in opsChatProcedure heartbeat, pingPresence, and getAgentStatusList (owner always shows green when they make the request)
 
 - [x] BUG: CS chat manual SMS send — fixed: startConv onSuccess now calls setSelectedId(data.sessionId) after invalidating the inbox list, so the new/existing conversation is immediately selected and visible
+
+- [x] FEATURE: CS chat new outbound conversation — auto-populate leadName using same backfillCsNames chain (completedJobs → cleanerJobs → quoteLeads → other sessions); also backfills existing sessions with raw phone as name

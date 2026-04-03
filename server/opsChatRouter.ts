@@ -18,6 +18,7 @@ import { sendPushToAll } from "./webPush";
 import {
   cleanerJobs,
   cleanerProfiles,
+  completedJobs,
   conversationSessions,
   fieldMgmtLog,
   jobPhotos,
@@ -31,8 +32,9 @@ import {
   opsReminders,
   agents,
   users,
+  quoteLeads,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, isNull, like, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, like, lte, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -2193,16 +2195,46 @@ export const opsChatRouter = router({
         )
         .limit(1);
 
+      // Resolve customer name using the same lookup chain as backfillCsNames
+      const p10 = e164.replace(/[^\d]/g, "").slice(-10);
+      let resolvedName: string | null = null;
+      // 1. completedJobs (E.164)
+      if (!resolvedName) {
+        const [r] = await db.select({ name: completedJobs.name }).from(completedJobs).where(eq(completedJobs.phone, e164)).limit(1);
+        if (r?.name) resolvedName = r.name;
+      }
+      // 2. cleanerJobs.customerName
+      if (!resolvedName) {
+        const [r] = await db.select({ customerName: cleanerJobs.customerName }).from(cleanerJobs).where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${p10}`).limit(1);
+        if (r?.customerName) resolvedName = r.customerName;
+      }
+      // 3. quoteLeads
+      if (!resolvedName) {
+        const [r] = await db.select({ name: quoteLeads.name }).from(quoteLeads).where(sql`REGEXP_REPLACE(${quoteLeads.phone}, '[^0-9]', '') LIKE ${'%' + p10}`).limit(1);
+        if (r?.name) resolvedName = r.name;
+      }
+      // 4. Other sessions with same phone that have a name
+      if (!resolvedName) {
+        const [r] = await db.select({ leadName: conversationSessions.leadName }).from(conversationSessions)
+          .where(and(eq(conversationSessions.leadPhone, e164), sql`${conversationSessions.leadName} IS NOT NULL AND ${conversationSessions.leadName} != '' AND ${conversationSessions.leadName} != ${e164}`))
+          .orderBy(desc(conversationSessions.updatedAt)).limit(1);
+        if (r?.leadName) resolvedName = r.leadName;
+      }
+
       let sessionId: number;
       if (existing.length > 0) {
         sessionId = existing[0].id;
+        // If the existing session still has the raw phone as name, backfill it now
+        if (resolvedName && (existing[0].leadName === e164 || !existing[0].leadName)) {
+          await db.update(conversationSessions).set({ leadName: resolvedName } as any).where(eq(conversationSessions.id, sessionId));
+        }
       } else {
-        // Create a new agent-initiated CS session
+        // Create a new agent-initiated CS session with resolved name
         const [result] = await db
           .insert(conversationSessions)
           .values({
             leadPhone: e164,
-            leadName: e164,          // placeholder — agent can rename later
+            leadName: resolvedName ?? e164,  // use real name if found, else phone as fallback
             stage: "QUOTE_SENT",
             messageHistory: "[]",
             aiMode: 0,               // agent-driven; no AI auto-replies
