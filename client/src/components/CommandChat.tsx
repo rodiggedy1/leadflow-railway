@@ -26,7 +26,7 @@ import {
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
-  CalendarDays, Headphones, Radio } from "lucide-react";
+  CalendarDays, Headphones, Radio, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
+import FAQPanel from "@/components/FAQPanel";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -532,6 +533,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
   const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
   const { data: fuPanelItems = [] } = trpc.followUps.list.useQuery(undefined, { staleTime: 60_000, refetchInterval: 2 * 60_000 });
@@ -2546,7 +2548,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>{/* end relative wrapper */}
 
         {/* Composer */}
-        <div className="px-6 py-3 border-t border-slate-100 bg-white shrink-0">
+        <div className="relative shrink-0">
+        <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
+        <div className="px-6 py-3 border-t border-slate-100 bg-white">
           {/* Quick-action chips */}
           <div className="flex gap-2 mb-3 flex-wrap">
             <button
@@ -2578,6 +2582,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5 shadow-sm"
             >
               <ClipboardList className="h-3 w-3" /> Follow-ups
+            </button>
+            <button
+              onClick={() => setFaqOpen(true)}
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 shadow-sm"
+            >
+              <BookOpen className="h-3 w-3" /> FAQ
             </button>
 {/* Away / I'm Back toggle */}
             {awayStatus ? (
@@ -2869,6 +2879,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
           </div>{/* end relative wrapper for @mention dropdown */}
         </div>
+        </div>{/* end relative composer wrapper */}
       </div>
       {/* ── Right drag handle + collapse-expand toggle ── */}
       <div

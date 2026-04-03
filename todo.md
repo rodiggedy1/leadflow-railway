@@ -946,3 +946,5 @@
 
 - [x] BUG: CS chat — view now switches correctly after send: replaced invalidate() with refetch() so list is populated before setSelectedId fires
 - [x] BUG: Command Chat @mention dropdown — deduplicated by first name; only the longer/full name is kept (Diane Ruiz, not both Diane + Diane Ruiz)
+
+- [ ] FEATURE: FAQ pill in CS chat and Command Chat — slide-up panel with AI Q&A backed by maidinblack.com content

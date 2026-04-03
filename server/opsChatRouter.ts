@@ -2285,6 +2285,41 @@ export const opsChatRouter = router({
       await syncCsOutboundMessages(input.leadPhone, input.sessionId);
       return { ok: true };
     }),
+
+  /**
+   * faqAsk — agent asks a question, AI answers using the Maids in Black knowledge base.
+   * Supports multi-turn: pass the previous messages array for follow-up questions.
+   */
+  faqAsk: opsChatProcedure
+    .input(z.object({
+      question: z.string().min(1).max(500),
+      history: z.array(z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      })).optional().default([]),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const { MAIDS_IN_BLACK_KNOWLEDGE_BASE } = await import("./knowledgeBase");
+
+      const systemPrompt = `You are an internal FAQ assistant for Maids in Black agents.
+Answer questions concisely and accurately using the knowledge base below.
+If the answer is not in the knowledge base, say so clearly — do not make up information.
+Keep answers short (2-4 sentences max) unless detail is specifically needed.
+Speak directly to the agent, not the customer.
+
+${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
+
+      const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system", content: systemPrompt },
+        ...input.history.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        { role: "user", content: input.question },
+      ];
+
+      const result = await invokeLLM({ messages });
+      const answer = result.choices?.[0]?.message?.content ?? "Sorry, I couldn't generate an answer. Please try again.";
+      return { answer };
+    }),
 });
 
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
