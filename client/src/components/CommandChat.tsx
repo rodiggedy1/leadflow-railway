@@ -26,7 +26,7 @@ import {
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
-  CalendarDays, Headphones } from "lucide-react";
+  CalendarDays, Headphones, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -70,6 +70,8 @@ interface CommandChatProps {
   onSetAwayStatus?: (status: string | null) => void;
   /** Map of senderName -> "online" | "away" | "offline" for status dot overlays on avatars */
   senderStatusMap?: Record<string, "online" | "away" | "offline">;
+  /** Full agent list with id/name/photoUrl/awayStatus for the online presence bar */
+  agentList?: Array<{ id: number; name: string; photoUrl: string | null; awayStatus: string | null }>;
   /** True when this panel is currently visible (not hidden by display:none). Used for @mention tracking. */
   isVisible?: boolean;
   /** All possible names for the current user (handles OAuth name vs DB name mismatch). Used for @mention detection. */
@@ -522,7 +524,7 @@ function HotLeadsTray({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, isVisible, myNames: myNamesProp }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
@@ -1312,7 +1314,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* Ops Snapshot */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <p className="text-xs font-semibold text-slate-500 mb-3">Ops Snapshot</p>
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Ops Snapshot</p>
             {cmdLoading ? (
               <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
             ) : (
@@ -1392,7 +1394,45 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="flex items-center gap-2">
             <Megaphone className="h-4 w-4 text-slate-500 shrink-0" />
             <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">MIB Command Chat</h2>
-            <span className="hidden sm:inline text-[10px] font-medium bg-red-50 text-red-500 border border-red-100 rounded-full px-2 py-0.5 whitespace-nowrap">Priority alerts from job threads</span>
+            {/* Online agent presence row */}
+            {agentList && agentList.length > 0 && (() => {
+              const MAX_SHOW = 6;
+              const visible = agentList.slice(0, MAX_SHOW);
+              const overflow = agentList.length - MAX_SHOW;
+              return (
+                <div className="hidden sm:flex items-center ml-2" style={{ gap: 0 }}>
+                  {visible.map((ag, idx) => {
+                    const status = senderStatusMap?.[ag.name] ?? "offline";
+                    const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
+                    const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = (ag.name.charCodeAt(0) * 37) % 360;
+                    return (
+                      <div key={ag.id} className="relative" title={`${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
+                        {ag.photoUrl ? (
+                          <img src={ag.photoUrl} alt={ag.name} className="w-7 h-7 rounded-full object-cover border-2 border-white shadow-sm" />
+                        ) : (
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm"
+                            style={{ background: `hsl(${hue}, 55%, 52%)` }}
+                          >
+                            {initials}
+                          </div>
+                        )}
+                        <span className={cn(
+                          "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
+                          dotColor
+                        )} />
+                      </div>
+                    );
+                  })}
+                  {overflow > 0 && (
+                    <div className="w-7 h-7 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[9px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -6 }}>
+                      +{overflow}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {/* Live revenue ticker */}
             {todayRevenue > 0 && (
               <span
@@ -2132,16 +2172,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     >
                       {/* Avatar circle for other people's messages */}
                       {!isMine && !isAlert && (
-                        <div className="relative w-7 h-7 shrink-0 mt-1 mr-2">
+                        <div className="relative w-8 h-8 shrink-0 mt-0.5 mr-2">
                           <div
-                            className="w-full h-full rounded-full overflow-hidden"
+                            className="w-full h-full rounded-full overflow-hidden shadow-sm"
                             title={msg.from}
                           >
                             {authorPhoto ? (
                               <img src={authorPhoto} alt={msg.from ?? ""} className="w-full h-full object-cover" />
                             ) : (
                               <div
-                                className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white"
+                                className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white"
                                 style={{ backgroundColor: authorColor }}
                               >
                                 {authorInitial}
@@ -2173,8 +2213,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           isMine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"
                         )}>
                           {!isMine && (
-                            <p className="text-[10px] font-semibold mb-1" style={{ color: isAlert ? "#94a3b8" : authorColor }}>
-                              {msg.from} · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                            <p className="text-[11px] font-bold mb-1.5 leading-none" style={{ color: isAlert ? "#94a3b8" : authorColor }}>
+                              {msg.from}
+                              <span className="font-normal text-slate-400 ml-1">
+                                · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                              </span>
                             </p>
                           )}
                           {/* WhatsApp-style quoted block with vivid sender accent */}
@@ -2342,33 +2385,33 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="flex gap-2 mb-3 flex-wrap">
             <button
               onClick={() => setBroadcastOpen(true)}
-              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-slate-900 text-white hover:bg-slate-700"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-slate-900 text-white hover:bg-slate-700 flex items-center gap-1.5 shadow-sm"
             >
-              Broadcast Update
+              <Radio className="h-3 w-3" /> Broadcast
             </button>
             <button
               onClick={() => setIssueOpen(true)}
-              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-red-200 text-red-700 hover:bg-red-50"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-1.5 shadow-sm"
             >
-              Open Issue
+              <AlertTriangle className="h-3 w-3" /> Issue
             </button>
             <button
               onClick={() => setReminderOpen(true)}
-              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-sky-200 text-sky-700 hover:bg-sky-50"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 flex items-center gap-1.5 shadow-sm"
             >
-              Set Reminder
+              <Bell className="h-3 w-3" /> Reminder
             </button>
             <button
               onClick={() => setPinOpen(true)}
-              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-amber-300 text-amber-700 hover:bg-amber-50"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1.5 shadow-sm"
             >
-              Pin Note
+              <Pin className="h-3 w-3" /> Pin
             </button>
             <button
               onClick={() => setFollowUpsOpen(true)}
-              className="text-xs font-semibold rounded-full px-4 py-2 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50"
+              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5 shadow-sm"
             >
-              Follow-ups
+              <ClipboardList className="h-3 w-3" /> Follow-ups
             </button>
 {/* Away / I'm Back toggle */}
             {awayStatus ? (
@@ -2530,8 +2573,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           )}
           <div
             className={cn(
-              "rounded-2xl border bg-slate-50 p-3 transition",
-              isDragging ? "border-slate-900 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200"
+              "rounded-2xl border p-3 transition",
+              isDragging ? "border-slate-400 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200 bg-white shadow-sm"
             )}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -2555,7 +2598,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   setMentionQuery(null);
                 }
               }}
-              placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Type a message or drop photos…"}
+              placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team… (Enter to send, Shift+Enter for new line)"}
               rows={2}
               className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
               onKeyDown={(e) => {
@@ -2652,10 +2695,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 size="sm"
                 onClick={handleSend}
                 disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0)}
-                className="rounded-xl"
+                className="rounded-xl px-4 font-semibold shadow-sm"
               >
                 <Send className="h-3.5 w-3.5 mr-1.5" /> Send
-               </Button>
+              </Button>
             </div>
           </div>
           </div>{/* end relative wrapper for @mention dropdown */}

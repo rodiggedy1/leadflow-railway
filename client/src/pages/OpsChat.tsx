@@ -2558,6 +2558,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setAwayStatusMutation.mutate({ status: status as "away_sec" | "lunch" | "back15" | "eod" | null });
             }}
             senderStatusMap={senderStatusMap}
+            agentList={agentStatusData?.agents ?? []}
             isVisible={activeTab === "channels" && activeChannel === "command"}
             myNames={myNames}
           />
