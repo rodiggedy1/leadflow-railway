@@ -1723,27 +1723,57 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       )}
 
                       {/* ─── Customer Memory Card ───────────────────────── */}
-                      {customerMemory && (
-                        <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-4">
-                          <div className="flex items-center gap-2 text-sm font-medium text-amber-800 mb-3">
-                            <Brain className="h-4 w-4" /> Know before you reply
+                      {customerMemory && (() => {
+                        const isHighRisk = (selected?.stats.complaints ?? 0) >= 2;
+                        return (
+                          <div className={`rounded-[24px] border p-4 ${
+                            isHighRisk
+                              ? "border-rose-300 bg-rose-50 ring-1 ring-rose-200"
+                              : "border-amber-200 bg-amber-50"
+                          }`}>
+                            <div className={`flex items-center gap-2 text-sm font-medium mb-3 ${
+                              isHighRisk ? "text-rose-800" : "text-amber-800"
+                            }`}>
+                              {isHighRisk
+                                ? <AlertTriangle className="h-4 w-4 text-rose-500" />
+                                : <Brain className="h-4 w-4" />
+                              }
+                              Know before you reply
+                              {isHighRisk && (
+                                <span className="ml-auto text-xs font-semibold bg-rose-100 text-rose-700 border border-rose-200 rounded-full px-2 py-0.5">
+                                  Escalate to senior rep
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
+                                  isHighRisk ? "text-rose-400" : "text-amber-500"
+                                }`}>Last job</span>
+                                <span className={`text-xs leading-4 ${
+                                  isHighRisk ? "text-rose-900" : "text-amber-900"
+                                }`}>{customerMemory.lastBooking}</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
+                                  isHighRisk ? "text-rose-400" : "text-amber-500"
+                                }`}>History</span>
+                                <span className={`text-xs leading-4 font-medium ${
+                                  isHighRisk ? "text-rose-800" : "text-amber-900"
+                                }`}>{customerMemory.complaintHistory}</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wide w-16 ${
+                                  isHighRisk ? "text-rose-400" : "text-amber-500"
+                                }`}>Profile</span>
+                                <span className={`text-xs leading-4 ${
+                                  isHighRisk ? "text-rose-900" : "text-amber-900"
+                                }`}>{customerMemory.careAbout}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="space-y-2">
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 shrink-0 text-xs font-bold text-amber-500 uppercase tracking-wide w-16">Last job</span>
-                              <span className="text-xs text-amber-900 leading-4">{customerMemory.lastBooking}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 shrink-0 text-xs font-bold text-amber-500 uppercase tracking-wide w-16">History</span>
-                              <span className="text-xs text-amber-900 leading-4">{customerMemory.complaintHistory}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 shrink-0 text-xs font-bold text-amber-500 uppercase tracking-wide w-16">Profile</span>
-                              <span className="text-xs text-amber-900 leading-4">{customerMemory.careAbout}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
                         <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
