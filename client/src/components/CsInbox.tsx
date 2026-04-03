@@ -58,6 +58,7 @@ import {
   TrendingUp,
   Brain,
   BookOpen,
+  ShieldAlert,
 } from "lucide-react";
 import {
   Tooltip,
@@ -74,6 +75,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import FAQPanel from "@/components/FAQPanel";
+import ObjectionsPanel from "@/components/ObjectionsPanel";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner";
@@ -286,6 +288,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   // Follow-up modal state (CS chat — add only, no queue)
   const [addFollowUpOpen, setAddFollowUpOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
+  const [objectionsOpen, setObjectionsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
@@ -1047,6 +1050,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0 relative">
               <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
+              <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
@@ -1359,6 +1363,15 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     >
                       <BookOpen className="h-3.5 w-3.5" />
                       FAQ
+                    </Button>
+                    {/* Objections pill */}
+                    <Button
+                      variant="outline"
+                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
+                      onClick={() => setObjectionsOpen(true)}
+                    >
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      Objections
                     </Button>
                   </div>
                 </div>
