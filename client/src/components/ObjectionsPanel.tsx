@@ -117,7 +117,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
             </button>
           )}
           <button
-            onClick={onClose}
+            onClick={() => { handleReset(); onClose(); }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/60 transition"
           >
             <X className="h-4 w-4" />
@@ -186,7 +186,7 @@ export default function ObjectionsPanel({ open, onClose }: Props) {
               <div className="pt-1">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Try another objection</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {PRESET_OBJECTIONS.filter(o => o.label !== activeObjection).slice(0, 4).map(obj => (
+                  {PRESET_OBJECTIONS.filter(o => o.label !== activeObjection).map(obj => (
                     <button
                       key={obj.id}
                       onClick={() => handleObjection(obj.label)}
