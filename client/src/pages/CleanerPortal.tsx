@@ -330,6 +330,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPayoutRules, setShowPayoutRules] = useState(false);
+  const [showBonusDetails, setShowBonusDetails] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [completing, setCompleting] = useState(false);
@@ -684,8 +685,16 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             </div>
           </div>
 
-          {/* Detailed line items */}
-          <div className="bg-slate-900/40 divide-y divide-slate-800/60">
+          {/* See bonus details toggle */}
+          <button
+            onClick={() => setShowBonusDetails(v => !v)}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors border-t border-slate-800/60"
+          >
+            <span>{showBonusDetails ? "Hide bonus details ↑" : "See bonus details ↓"}</span>
+          </button>
+
+          {/* Detailed line items — collapsible */}
+          {showBonusDetails && <div className="bg-slate-900/40 divide-y divide-slate-800/60">
 
           {/* Base pay row */}
           <div className="flex justify-between items-start px-4 py-3">
@@ -898,8 +907,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               {formatCurrency(finalPay.toFixed(2))}
             </span>
           </div>
-
-          </div>{/* end divide-y */}
+          </div>}{/* end divide-y / showBonusDetails */}
         </div>{/* end outer card */}
 
         {/* Rating */}
