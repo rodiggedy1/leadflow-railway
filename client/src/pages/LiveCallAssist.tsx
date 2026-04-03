@@ -16,7 +16,7 @@ import {
   Phone, Loader2, Copy, Check, ArrowLeft, RotateCcw, X,
   Zap, Target, Star, ClipboardList, TrendingUp, Shield,
   SendHorizonal, MessageSquare, User, Plus, Minus,
-  Mic, MicOff, Radio,
+  Mic, MicOff, Radio, PhoneOutgoing, PhoneIncoming,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -109,7 +109,7 @@ export default function LiveCallAssist() {
       address:     decodeURIComponent(p.get("address") ?? ""),
     };
   }, []);
-  const isOutbound = !!urlParams;
+  const [isOutbound, setIsOutbound] = useState(!!urlParams);
 
   // Context fields (filled in as agent learns them during the call)
   const [leadName, setLeadName]       = useState(urlParams?.name ?? "");
@@ -421,12 +421,14 @@ export default function LiveCallAssist() {
   const liveCustomerBuffer = useRef<string[]>([]);
 
   const liveTranscript = useLiveTranscript({
-    onFinalTranscript: (text, _speaker) => {
-      // Buffer all speech — Deepgram speaker assignment is non-deterministic
-      // (speaker 0 is whoever speaks first, not necessarily the customer)
-      liveCustomerBuffer.current.push(text);
-      // Update the textarea so the agent can see what's being captured
-      setCustomerInput(_prev => liveCustomerBuffer.current.join(" "));
+    onFinalTranscript: (text, speaker) => {
+      // Outbound: agent dials customer → customer picks up first → speaker 0 = customer
+      // Inbound: customer calls us → agent answers first → speaker 1 = customer
+      const customerSpeaker = isOutbound ? 0 : 1;
+      if (speaker === customerSpeaker) {
+        liveCustomerBuffer.current.push(text);
+        setCustomerInput(() => liveCustomerBuffer.current.join(" "));
+      }
     },
     onUtteranceEnd: () => {
       // When Deepgram signals the customer finished speaking, auto-submit
@@ -712,6 +714,19 @@ export default function LiveCallAssist() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Inbound / Outbound toggle */}
+          <button
+            onClick={() => setIsOutbound(v => !v)}
+            title={isOutbound ? "Outbound call (you called them) — click to switch to Inbound" : "Inbound call (they called you) — click to switch to Outbound"}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors bg-white border-gray-300 text-gray-600 hover:border-violet-400 hover:text-violet-700"
+          >
+            {isOutbound ? (
+              <><PhoneOutgoing className="w-3.5 h-3.5" /> Outbound</>
+            ) : (
+              <><PhoneIncoming className="w-3.5 h-3.5" /> Inbound</>
+            )}
+          </button>
+          <div className="w-px h-5 bg-gray-200 shrink-0" />
           {/* Live Mode toggle */}
           <button
             onClick={toggleLiveMode}
