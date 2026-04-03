@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_jobs` MODIFY COLUMN `jobStatus` enum('on_the_way','arrived','running_late','in_progress','finishing_up','wrapping_up','completed','issue_at_property');

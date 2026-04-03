@@ -213,6 +213,25 @@ const STATUS_CONFIG: Record<string, StatusConfig> = {
     pulse: true,
     badgeClass: "bg-amber-100 text-amber-700",
   },
+  finishing_up: {
+    bg: "bg-teal-50",
+    border: "border-teal-400",
+    text: "text-teal-800",
+    dot: "bg-teal-500",
+    label: "Finishing Up",
+    icon: <CheckCircle2 className="w-3 h-3" />,
+    pulse: true,
+    badgeClass: "bg-teal-100 text-teal-700",
+  },
+  wrapping_up: {
+    bg: "bg-purple-50",
+    border: "border-purple-400",
+    text: "text-purple-800",
+    dot: "bg-purple-500",
+    label: "Finishing Previous Job",
+    icon: <Clock className="w-3 h-3" />,
+    badgeClass: "bg-purple-100 text-purple-700",
+  },
   issue_at_property: {
     bg: "bg-rose-50",
     border: "border-rose-400",
@@ -325,7 +344,7 @@ function JobBlock({
 
   const sc = getStatusConfig(job.jobStatus);
   const hasIssue = job.jobStatus === "issue_at_property" || job.jobStatus === "no_show";
-  const isActive = job.jobStatus === "in_progress" || job.jobStatus === "on_the_way" || job.jobStatus === "running_late";
+  const isActive = job.jobStatus === "in_progress" || job.jobStatus === "on_the_way" || job.jobStatus === "running_late" || job.jobStatus === "finishing_up" || job.jobStatus === "wrapping_up";
 
   const smsHealth = job.stepsSuccess / Math.max(job.totalSteps, 1);
   const smsColor = smsHealth >= 0.8 ? "bg-emerald-400" : smsHealth >= 0.4 ? "bg-amber-400" : "bg-rose-400";
@@ -1159,7 +1178,7 @@ export default function DayBoard({ jobs, isLoading, date, onDateChange, isFetchi
   // Summary stats (active jobs only)
   const stats = useMemo(() => {
     const total = activeJobs.length;
-    const active = activeJobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way").length;
+    const active = activeJobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way" || j.jobStatus === "finishing_up" || j.jobStatus === "wrapping_up").length;
     const issues = activeJobs.filter(j => j.jobStatus === "issue_at_property" || j.jobStatus === "no_show").length;
     const done   = activeJobs.filter(j => j.jobStatus === "completed").length;
     const smsFailed = activeJobs.reduce((acc, j) => acc + j.timeline.filter(e => e.status === "failed").length, 0);

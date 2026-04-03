@@ -912,3 +912,4 @@
 
 - [x] BUG: Cleaner portal — completed jobs revert to incomplete (trace and fix persistence issue)
 - [x] FEATURE: Cleaner portal — add uncomplete/undo button so cleaners can correct a mistaken completion
+- [x] FEATURE: Cleaner portal — add finishing_up and wrapping_up job statuses with bidirectional auto-link (one tap updates both jobs)

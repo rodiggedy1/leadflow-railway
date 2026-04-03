@@ -166,10 +166,12 @@ type Job = {
 };
 
 const JOB_STATUSES = [
-  { key: "on_the_way",       label: "On the Way",       color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
-  { key: "in_progress",      label: "In Progress",      color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
-  { key: "running_late",     label: "Running Late",     color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
-  { key: "issue_at_property",label: "Issue at Property",color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
+  { key: "on_the_way",       label: "On the Way",              color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
+  { key: "in_progress",      label: "In Progress",             color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
+  { key: "finishing_up",     label: "Finishing Up",            color: "bg-teal-600/30 text-teal-300 border-teal-600/40",     activeColor: "bg-teal-600 text-white" },
+  { key: "wrapping_up",      label: "Finishing Previous Job",  color: "bg-violet-600/30 text-violet-300 border-violet-600/40", activeColor: "bg-violet-600 text-white" },
+  { key: "running_late",     label: "Running Late",            color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
+  { key: "issue_at_property",label: "Issue at Property",       color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
 function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerName }: {

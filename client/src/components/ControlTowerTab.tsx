@@ -97,8 +97,10 @@ const STATUS_CONFIG: Record<string, { label: string; tone: string; barColor: str
   on_the_way:        { label: "En Route",          tone: "bg-sky-100 text-sky-700 border-sky-200",         barColor: "bg-sky-500",     riskLevel: "low" },
   arrived:           { label: "Arrived",           tone: "bg-indigo-100 text-indigo-700 border-indigo-200",barColor: "bg-indigo-500",  riskLevel: "low" },
   in_progress:       { label: "In Progress",       tone: "bg-violet-100 text-violet-700 border-violet-200",barColor: "bg-violet-500",  riskLevel: "low" },
-  running_late:      { label: "Running Late",      tone: "bg-amber-100 text-amber-700 border-amber-200",   barColor: "bg-amber-500",   riskLevel: "medium" },
-  completed:         { label: "Completed",         tone: "bg-emerald-100 text-emerald-700 border-emerald-200", barColor: "bg-emerald-500", riskLevel: "low" },
+  running_late:      { label: "Running Late",          tone: "bg-amber-100 text-amber-700 border-amber-200",    barColor: "bg-amber-500",   riskLevel: "medium" },
+  finishing_up:      { label: "Finishing Up",          tone: "bg-teal-100 text-teal-700 border-teal-200",        barColor: "bg-teal-500",    riskLevel: "low" },
+  wrapping_up:       { label: "Finishing Previous Job",tone: "bg-purple-100 text-purple-700 border-purple-200",  barColor: "bg-purple-500",  riskLevel: "low" },
+  completed:         { label: "Completed",             tone: "bg-emerald-100 text-emerald-700 border-emerald-200", barColor: "bg-emerald-500", riskLevel: "low" },
   issue_at_property: { label: "Issue",             tone: "bg-rose-100 text-rose-700 border-rose-200",      barColor: "bg-rose-500",    riskLevel: "high" },
   no_show:           { label: "No Show",           tone: "bg-rose-100 text-rose-700 border-rose-200",      barColor: "bg-rose-500",    riskLevel: "high" },
 };
@@ -434,7 +436,7 @@ export default function ControlTowerTab() {
   }, [selectedId, filteredJobs, activeJobs]);
 
   const totals = useMemo(() => ({
-    live:      activeJobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way" || j.jobStatus === "arrived").length,
+    live:      activeJobs.filter(j => j.jobStatus === "in_progress" || j.jobStatus === "on_the_way" || j.jobStatus === "arrived" || j.jobStatus === "finishing_up" || j.jobStatus === "wrapping_up").length,
     attention: activeJobs.filter(j => deriveRisk(j) === "high").length,
     completed: activeJobs.filter(j => j.jobStatus === "completed").length,
     messages:  activeJobs.reduce((acc, j) => acc + j.stepsSuccess, 0),

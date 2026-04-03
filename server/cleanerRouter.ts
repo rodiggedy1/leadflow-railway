@@ -391,7 +391,7 @@ export const cleanerRouter = router({
   updateJobStatus: cleanerProcedure
     .input(z.object({
       cleanerJobId: z.number(),
-      status: z.enum(["on_the_way", "arrived", "running_late", "in_progress", "completed", "issue_at_property"]),
+      status: z.enum(["on_the_way", "arrived", "running_late", "in_progress", "finishing_up", "wrapping_up", "completed", "issue_at_property"]),
       issueNote: z.string().max(500).optional(),
       etaLabel: z.string().max(50).optional(), // e.g. "30 minutes", "1 hour", "Don't know"
       delayMinutes: z.number().int().positive().optional(), // minutes late for running_late
@@ -522,6 +522,87 @@ export const cleanerRouter = router({
             changedAt: new Date(Date.now() + 100), // 100ms after to preserve order
           })
           .catch(err => console.error("[StatusHistory] insert error:", err));
+      }
+
+      // ── Bidirectional finishing_up / wrapping_up auto-link ─────────────────────
+      // When a cleaner taps "finishing_up" on Job A:
+      //   → Find their next job that day (same cleaner, next serviceDateTime after Job A)
+      //   → Auto-set that job's jobStatus to "wrapping_up" (if not already in a later state)
+      // When a cleaner taps "wrapping_up" on Job B:
+      //   → Find their previous job that day (same cleaner, last serviceDateTime before Job B)
+      //   → Auto-set that job's jobStatus to "finishing_up" (if not already completed)
+      // Both are fire-and-forget — they never block the response.
+      if (input.status === "finishing_up" || input.status === "wrapping_up") {
+        (async () => {
+          try {
+            if (!job.jobDate) return;
+            if (input.status === "finishing_up") {
+              // Find the next job for this cleaner on the same day
+              const allJobs = await db
+                .select({ id: cleanerJobs.id, serviceDateTime: cleanerJobs.serviceDateTime, jobStatus: cleanerJobs.jobStatus, bookingStatus: cleanerJobs.bookingStatus })
+                .from(cleanerJobs)
+                .where(
+                  and(
+                    eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
+                    eq(cleanerJobs.jobDate, job.jobDate)
+                  )
+                )
+                .orderBy(cleanerJobs.serviceDateTime);
+              const currentIdx = allJobs.findIndex(j => j.id === input.cleanerJobId);
+              const nextJob = currentIdx >= 0 ? allJobs[currentIdx + 1] : undefined;
+              if (
+                nextJob &&
+                nextJob.bookingStatus !== "completed" &&
+                nextJob.bookingStatus !== "cancelled" &&
+                nextJob.bookingStatus !== "rescheduled" &&
+                nextJob.jobStatus !== "on_the_way" &&
+                nextJob.jobStatus !== "arrived" &&
+                nextJob.jobStatus !== "in_progress" &&
+                nextJob.jobStatus !== "completed"
+              ) {
+                await db
+                  .update(cleanerJobs)
+                  .set({ jobStatus: "wrapping_up" })
+                  .where(eq(cleanerJobs.id, nextJob.id));
+                db.insert(jobStatusHistory)
+                  .values({ cleanerJobId: nextJob.id, status: "wrapping_up", source: "engine", changedAt: new Date() })
+                  .catch(() => {});
+                console.log(`[FinishingUp] Auto-set job ${nextJob.id} to wrapping_up (linked from job ${input.cleanerJobId})`);
+              }
+            } else {
+              // wrapping_up tapped on Job B — find the previous job
+              const allJobs = await db
+                .select({ id: cleanerJobs.id, serviceDateTime: cleanerJobs.serviceDateTime, jobStatus: cleanerJobs.jobStatus, bookingStatus: cleanerJobs.bookingStatus })
+                .from(cleanerJobs)
+                .where(
+                  and(
+                    eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
+                    eq(cleanerJobs.jobDate, job.jobDate)
+                  )
+                )
+                .orderBy(cleanerJobs.serviceDateTime);
+              const currentIdx = allJobs.findIndex(j => j.id === input.cleanerJobId);
+              const prevJob = currentIdx > 0 ? allJobs[currentIdx - 1] : undefined;
+              if (
+                prevJob &&
+                prevJob.bookingStatus !== "completed" &&
+                prevJob.jobStatus !== "completed" &&
+                prevJob.jobStatus !== "finishing_up"
+              ) {
+                await db
+                  .update(cleanerJobs)
+                  .set({ jobStatus: "finishing_up" })
+                  .where(eq(cleanerJobs.id, prevJob.id));
+                db.insert(jobStatusHistory)
+                  .values({ cleanerJobId: prevJob.id, status: "finishing_up", source: "engine", changedAt: new Date() })
+                  .catch(() => {});
+                console.log(`[WrappingUp] Auto-set job ${prevJob.id} to finishing_up (linked from job ${input.cleanerJobId})`);
+              }
+            }
+          } catch (err) {
+            console.error("[FinishingUp/WrappingUp] Auto-link error:", err);
+          }
+        })();
       }
 
       return { success: true, status: effectiveStatus };

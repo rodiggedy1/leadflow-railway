@@ -610,12 +610,14 @@ function TimelineEventRow({ event, isLast, onRetrySuccess }: { event: TimelineEv
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  on_the_way:        { label: "On the Way",        className: "bg-blue-50 text-blue-700 border-blue-200" },
-  arrived:           { label: "Arrived",            className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  running_late:      { label: "Running Late",       className: "bg-amber-50 text-amber-700 border-amber-200" },
-  in_progress:       { label: "In Progress",        className: "bg-violet-50 text-violet-700 border-violet-200" },
-  completed:         { label: "Completed",          className: "bg-green-50 text-green-700 border-green-200" },
-  issue_at_property: { label: "Issue at Property",  className: "bg-red-50 text-red-700 border-red-200" },
+  on_the_way:        { label: "On the Way",              className: "bg-blue-50 text-blue-700 border-blue-200" },
+  arrived:           { label: "Arrived",                className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  running_late:      { label: "Running Late",           className: "bg-amber-50 text-amber-700 border-amber-200" },
+  in_progress:       { label: "In Progress",            className: "bg-violet-50 text-violet-700 border-violet-200" },
+  finishing_up:      { label: "Finishing Up",           className: "bg-teal-50 text-teal-700 border-teal-200" },
+  wrapping_up:       { label: "Finishing Previous Job", className: "bg-purple-50 text-purple-700 border-purple-200" },
+  completed:         { label: "Completed",              className: "bg-green-50 text-green-700 border-green-200" },
+  issue_at_property: { label: "Issue at Property",      className: "bg-red-50 text-red-700 border-red-200" },
 };
 
 function JobStatusBadge({ status }: { status: string | null }) {
@@ -711,6 +713,8 @@ function JobCard({ job }: { job: JobWithTimeline }) {
           job.jobStatus === "completed"         ? "bg-green-500" :
           job.jobStatus === "issue_at_property" ? "bg-red-500" :
           job.jobStatus === "running_late"      ? "bg-amber-500" :
+          job.jobStatus === "finishing_up"      ? "bg-teal-500" :
+          job.jobStatus === "wrapping_up"       ? "bg-purple-500" :
           job.jobStatus                         ? "bg-blue-500" : "bg-gray-300"
         }`} />
 

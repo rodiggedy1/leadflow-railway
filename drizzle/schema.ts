@@ -996,6 +996,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
     "arrived",
     "running_late",
     "in_progress",
+    "finishing_up",
+    "wrapping_up",
     "completed",
     "issue_at_property",
   ]),
