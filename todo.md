@@ -906,3 +906,4 @@
 - [x] CommandChat right panel: move Follow-ups section above Manual Issues
 - [x] CS chat right panel: restore AI insight section with live AI advice about the selected conversation
 - [x] CS chat right panel: remove Follow-ups queue card, replace with single "Add Follow-up" button that opens the new follow-up form
+- [x] AI Priority Queue (CS chat sidebar): only surface conversations where last customer message arrived AFTER a fixed cutoff — no historical conversations ever appear

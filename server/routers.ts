@@ -2583,8 +2583,9 @@ STAGE DETECTION — return the stage the conversation is currently in:
         if (!db) throw new Error("Database unavailable");
 
         const now = Date.now();
-        // Pre-filter: only sessions touched in the last 24h (server-side)
-        const cutoff24h = now - 24 * 60 * 60 * 1000;
+        // Hard cutoff: only surface issues that arose AFTER this timestamp.
+        // Nothing from before this point will ever appear in the priority queue.
+        const PRIORITY_QUEUE_EPOCH = 1775176265846; // Apr 3 2026 ~00:10 ET
         const sessions = await db
           .select()
           .from(conversationSessions)
@@ -2595,8 +2596,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
                 eq(conversationSessions.leadSource, "cs-inbound-cleaner")
               ),
               isNull(conversationSessions.csResolvedAt),
-              // Only sessions touched in the last 24h
-              sql`${conversationSessions.updatedAt} > FROM_UNIXTIME(${Math.floor(cutoff24h / 1000)})`
+              // Only sessions updated after the hard epoch cutoff
+              sql`${conversationSessions.updatedAt} > FROM_UNIXTIME(${Math.floor(PRIORITY_QUEUE_EPOCH / 1000)})`
             )
           )
           .orderBy(desc(conversationSessions.updatedAt))
@@ -2620,10 +2621,11 @@ STAGE DETECTION — return the stage the conversation is currently in:
             // Find the last inbound (customer) message
             const lastCustomerMsg = [...msgs].reverse().find((m) => m.role === "user");
             const lastCustomerTs = lastCustomerMsg?.ts ?? 0;
-            // Skip if the last customer message is older than 24h
-            if (lastCustomerTs && lastCustomerTs < cutoff24h) return null;
+            // Skip if the last customer message arrived before the hard epoch cutoff
+            // This ensures only genuinely new issues surface, never historical ones
+            if (!lastCustomerTs || lastCustomerTs < PRIORITY_QUEUE_EPOCH) return null;
             const recent = msgs.slice(-6).map((m) => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`).join("\n");
-            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: lastCustomerTs || now };
+            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: lastCustomerTs };
           })
           .filter(Boolean) as Array<{ id: number; name: string; recent: string; msgCount: number; lastTs: number }>;
 
@@ -2714,9 +2716,9 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
 
     /**
      * dismissCsPriority — agent dismisses a session from the priority queue.
-     * Sets csPriorityDismissedAt permanently — dismissed sessions never reappear
-     * unless the customer sends a new message (which creates a fresh session or
-     * resets the timestamp check in getCsPriorityQueue).
+     * Sets csPriorityDismissedAt permanently — dismissed sessions NEVER reappear,
+     * even if the customer sends a new message. The only way a session re-enters
+     * the queue is if a new inbound session is created after PRIORITY_QUEUE_EPOCH.
      */
     dismissCsPriority: opsChatProcedure
       .input(z.object({ sessionId: z.number() }))
