@@ -941,3 +941,5 @@
 
 - [x] FEATURE: CS chat new outbound modal — show "Existing conversation found — will reopen it" warning when phone already has an open session
 - [x] FEATURE: CS chat — auto-scroll to bottom of message list after outbound send opens the thread (400ms delay after setSelectedId)
+
+- [x] BUG: startCsConversation — root cause: listCsInbox sourceFilter excluded 'cs_initiated'; added it so agent-initiated conversations now appear in the inbox

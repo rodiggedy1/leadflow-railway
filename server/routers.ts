@@ -2537,7 +2537,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
         if (!db) throw new Error("Database unavailable");
         const sourceFilter = or(
           eq(conversationSessions.leadSource, "cs-inbound"),
-          eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+          eq(conversationSessions.leadSource, "cs_initiated")
         );
         const resolvedFilter = input.showResolved
           ? undefined  // show all
@@ -2579,7 +2580,8 @@ STAGE DETECTION — return the stage the conversation is currently in:
         if (!db) return { count: 0 };
         const sourceFilter = or(
           eq(conversationSessions.leadSource, "cs-inbound"),
-          eq(conversationSessions.leadSource, "cs-inbound-cleaner")
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+          eq(conversationSessions.leadSource, "cs_initiated")
         );
         const sessions = await db
           .select({ id: conversationSessions.id, updatedAt: conversationSessions.updatedAt })
