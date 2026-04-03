@@ -421,17 +421,12 @@ export default function LiveCallAssist() {
   const liveCustomerBuffer = useRef<string[]>([]);
 
   const liveTranscript = useLiveTranscript({
-    onFinalTranscript: (text, speaker) => {
-      // speaker 0 = first speaker (customer), speaker 1 = agent
-      // We only feed customer lines (speaker 0) to the AI
-      if (speaker === 0) {
-        liveCustomerBuffer.current.push(text);
-        // Update the textarea so the agent can see what's being captured
-        setCustomerInput(prev => {
-          const buffered = liveCustomerBuffer.current.join(" ");
-          return buffered;
-        });
-      }
+    onFinalTranscript: (text, _speaker) => {
+      // Buffer all speech — Deepgram speaker assignment is non-deterministic
+      // (speaker 0 is whoever speaks first, not necessarily the customer)
+      liveCustomerBuffer.current.push(text);
+      // Update the textarea so the agent can see what's being captured
+      setCustomerInput(_prev => liveCustomerBuffer.current.join(" "));
     },
     onUtteranceEnd: () => {
       // When Deepgram signals the customer finished speaking, auto-submit
