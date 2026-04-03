@@ -2552,7 +2552,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <div className="px-6 py-3 border-t border-slate-100 bg-white">
           {/* Quick-action chips */}
-          <div className="flex gap-2 mb-3 items-center justify-between w-full">
+          <div className="flex gap-2 mb-3 items-center justify-center w-full">
             <button
               onClick={() => setBroadcastOpen(true)}
               className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-slate-900 text-white hover:bg-slate-700 flex items-center gap-1.5 shadow-sm shrink-0"
