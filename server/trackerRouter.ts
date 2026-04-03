@@ -642,9 +642,30 @@ Return a JSON object with this exact structure:
     }),
 
   /**
-   * Protected (admin): send tracker link to a single job by cleanerJobId.
-   * Used by the "Send Tracker Link" button on admin job cards.
+   * Admin: get (or generate) the tracker link for a single job without sending SMS.
+   * Used by the "Copy Tracker Link" button on admin job cards.
    */
+  getTrackerLink: agentProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const baseUrl = "https://quote.maidinblack.com";
+      const jobs = await db
+        .select()
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+      const job = jobs[0];
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      let token = job.trackerToken;
+      if (!token) {
+        token = generateToken();
+        await db.update(cleanerJobs).set({ trackerToken: token }).where(eq(cleanerJobs.id, job.id));
+      }
+      return { trackerUrl: `${baseUrl}/track/${token}` };
+    }),
+
   sendSingleLink: agentProcedure
     .input(z.object({ cleanerJobId: z.number() }))
     .mutation(async ({ input }) => {
@@ -665,16 +686,15 @@ Return a JSON object with this exact structure:
         await db.update(cleanerJobs).set({ trackerToken: token }).where(eq(cleanerJobs.id, job.id));
       }
       const trackerUrl = `${baseUrl}/track/${token}`;
-      // SMS DISABLED during testing — uncomment below when ready to go live
-      // const firstName = job.customerName?.split(" ")[0] ?? "there";
-      // const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Track your clean in real time here: ${trackerUrl}`;
-      // const result = await sendSms({ to: job.customerPhone, content: message }).catch(
-      //   (err: unknown) => ({ success: false, error: String(err) })
-      // );
-      // if (!result.success) {
-      //   throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: (result as { error?: string }).error ?? "SMS failed" });
-      // }
-      // await db.update(cleanerJobs).set({ trackerSmsSentAt: new Date() }).where(eq(cleanerJobs.id, job.id));
+      const firstName = job.customerName?.split(" ")[0] ?? "there";
+      const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Track your clean in real time here: ${trackerUrl}`;
+      const result = await sendSms({ to: job.customerPhone, content: message }).catch(
+        (err: unknown) => ({ success: false, error: String(err) })
+      );
+      if (!(result as { success: boolean }).success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: (result as { error?: string }).error ?? "SMS failed" });
+      }
+      await db.update(cleanerJobs).set({ trackerSmsSentAt: new Date() }).where(eq(cleanerJobs.id, job.id));
       return { success: true, trackerUrl };
     }),
 });

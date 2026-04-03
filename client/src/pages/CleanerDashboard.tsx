@@ -814,43 +814,79 @@ function SendTrackerLinkButton({ job }: { job: JobRow }) {
     },
   });
 
-  if (!job.customerPhone) return null;
+  const getLink = trpc.tracker.getTrackerLink.useMutation({
+    onSuccess: (data) => {
+      navigator.clipboard.writeText(data.trackerUrl).then(() => {
+        toast.success("Copied!", { description: data.trackerUrl });
+      });
+    },
+    onError: (err) => {
+      toast.error("Failed to get link", { description: err.message });
+    },
+  });
+
+  if (!job.customerPhone) {
+    // No phone — still allow copy
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs border-slate-300 text-slate-600 hover:bg-slate-50"
+        disabled={getLink.isPending}
+        onClick={() => getLink.mutate({ cleanerJobId: job.id })}
+      >
+        {getLink.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+        {getLink.isPending ? "Getting..." : "Copy Tracker Link"}
+      </Button>
+    );
+  }
 
   if (sent && !resending) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs text-emerald-600">
           <CheckCircle2 className="w-3 h-3" />
           Tracker Sent
         </span>
         <button
           className="text-xs text-sky-500 hover:text-sky-700 underline underline-offset-2 transition-colors"
-          onClick={() => {
-            setResending(true);
-            send.mutate({ cleanerJobId: job.id });
-          }}
+          onClick={() => { setResending(true); send.mutate({ cleanerJobId: job.id }); }}
         >
           Resend
+        </button>
+        <button
+          className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors"
+          onClick={() => getLink.mutate({ cleanerJobId: job.id })}
+        >
+          {getLink.isPending ? "Copying..." : "Copy link"}
         </button>
       </div>
     );
   }
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="gap-1.5 text-xs border-sky-300 text-sky-600 hover:bg-sky-50"
-      disabled={send.isPending}
-      onClick={() => send.mutate({ cleanerJobId: job.id })}
-    >
-      {send.isPending ? (
-        <Loader2 className="w-3 h-3 animate-spin" />
-      ) : (
-        <ExternalLink className="w-3 h-3" />
-      )}
-      {send.isPending ? "Sending..." : "Send Tracker Link"}
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs border-sky-300 text-sky-600 hover:bg-sky-50"
+        disabled={send.isPending}
+        onClick={() => send.mutate({ cleanerJobId: job.id })}
+      >
+        {send.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+        {send.isPending ? "Sending..." : "Send Tracker Link"}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs border-slate-300 text-slate-600 hover:bg-slate-50"
+        disabled={getLink.isPending}
+        onClick={() => getLink.mutate({ cleanerJobId: job.id })}
+      >
+        {getLink.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+        {getLink.isPending ? "Copying..." : "Copy Link"}
+      </Button>
+    </div>
   );
 }
 
