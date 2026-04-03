@@ -97,7 +97,7 @@ type Conversation = {
   phone: string;
   stats: { bookings: number; rating: string; complaints: number };
   aiInsight: string;
-  messages: { sender: MsgSender; text: string; time: string; senderName?: string; media?: string[] }[];
+  messages: { sender: MsgSender; text: string; time: string; ts?: number; senderName?: string; media?: string[] }[];
   quickActions: string[];
 };
 
@@ -357,6 +357,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system" as MsgSender,
           text: m.content,
           time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+          ts: m.ts as number | undefined,
           media: (m.media ?? []) as string[],
           senderName: m.senderName,
         })),
@@ -1201,20 +1202,24 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     type CallItem = { kind: "call"; ts: number; rec: (typeof callRecordings)[0] };
                     type TimelineItem = SmsItem | CallItem;
 
+                    // Build SMS items with real ts from messageHistory (already passed through)
+                    const smsMsgs = selected?.messages ?? [];
+                    const smsItems: SmsItem[] = smsMsgs.map((message, idx) => ({
+                      kind: "sms" as const,
+                      ts: message.ts ?? idx, // real epoch ms if available, else index
+                      message,
+                      idx,
+                    }));
+
+                    // Build call items with real epoch ms from callStartedAt
                     const callItems: CallItem[] = (callRecordings ?? []).map((rec) => ({
                       kind: "call" as const,
                       ts: rec.callStartedAt instanceof Date ? rec.callStartedAt.getTime() : new Date(rec.callStartedAt as string).getTime(),
                       rec,
                     }));
-                    const sortedCalls = [...callItems].sort((a, b) => a.ts - b.ts);
 
-                    const smsMsgs = selected?.messages ?? [];
-                    const allItems: TimelineItem[] = [];
-                    smsMsgs.forEach((message, idx) => {
-                      allItems.push({ kind: "sms" as const, ts: idx, message, idx });
-                    });
-                    // Append calls at end sorted by callStartedAt
-                    sortedCalls.forEach((c) => allItems.push(c));
+                    // Merge sort both lists by ts
+                    const allItems: TimelineItem[] = [...smsItems, ...callItems].sort((a, b) => a.ts - b.ts);
 
                     return allItems.map((item, i) => {
                       if (item.kind === "call") {
@@ -1230,7 +1235,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         let debriefParsed: { wentWell?: string; improve?: string; nextLine?: string; summary?: string } | null = null;
                         try { if (rec.callDebrief) debriefParsed = JSON.parse(rec.callDebrief as string); } catch { /* ignore */ }
                         const summary = debriefParsed?.summary || debriefParsed?.wentWell || null;
-                        const hasRecording = rec.recordingUrl && !(rec.recordingUrl as string).includes("synthetic-backfill");
+                        const hasRecording = !!(rec.recordingUrl && !(rec.recordingUrl as string).includes("synthetic-backfill"));
+
+                        // Parse transcript for expandable viewer
+                        type TranscriptTurn = { identifier: string; content: string; start?: number };
+                        let transcriptTurns: TranscriptTurn[] = [];
+                        try { if (rec.transcript) transcriptTurns = JSON.parse(rec.transcript as string); } catch { /* ignore */ }
+
                         return (
                           <motion.div
                             key={`call-${rec.id}`}
@@ -1239,7 +1250,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             transition={{ delay: Math.min(i * 0.02, 0.3) }}
                             className="flex justify-start"
                           >
-                            <div className="max-w-[78%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                            <div className="max-w-[82%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
                               {/* Header */}
                               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
                                 <Phone className="h-3 w-3 text-slate-300" />
@@ -1254,13 +1265,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                   {rec.status === "no-answer" && <span className="ml-2 text-xs text-red-500">No answer</span>}
                                 </p>
                               </div>
-                              {/* Summary + recording */}
+                              {/* Summary + recording + transcript */}
                               <div className="px-3 py-2.5 bg-white">
                                 {summary && (
-                                  <p className="text-sm text-slate-600 leading-relaxed mb-2">{summary}</p>
+                                  <p className="text-sm text-slate-600 leading-relaxed mb-2.5">{summary}</p>
                                 )}
-                                {hasRecording && (
-                                  <div>
+                                {hasRecording ? (
+                                  <div className="mb-2">
                                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
                                     <audio
                                       controls
@@ -1268,8 +1279,29 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                       className="w-full h-8 rounded-lg"
                                     />
                                   </div>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 mb-2">
+                                    <Phone className="h-2.5 w-2.5" /> No recording
+                                  </span>
                                 )}
-                                {!summary && !hasRecording && (
+                                {transcriptTurns.length > 0 && (
+                                  <details className="mt-1">
+                                    <summary className="cursor-pointer text-[10px] font-semibold text-violet-600 uppercase tracking-widest select-none hover:text-violet-800">
+                                      Transcript ({transcriptTurns.length} turns)
+                                    </summary>
+                                    <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                      {transcriptTurns.map((turn, ti) => (
+                                        <div key={ti} className="text-xs">
+                                          <span className={`font-semibold mr-1 ${turn.identifier?.toLowerCase().includes("agent") || turn.identifier?.toLowerCase().includes("assistant") ? "text-violet-600" : "text-slate-500"}`}>
+                                            {turn.identifier}:
+                                          </span>
+                                          <span className="text-slate-600">{turn.content}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                )}
+                                {!summary && !hasRecording && transcriptTurns.length === 0 && (
                                   <p className="text-xs text-slate-400 italic">No summary available yet</p>
                                 )}
                               </div>
