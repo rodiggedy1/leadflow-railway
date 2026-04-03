@@ -1314,67 +1314,78 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       </Button>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 items-center">
-                    {/* AI Robot button — suggests best action */}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="rounded-full h-8 w-8 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
-                      disabled={loadingAction !== null || !selected}
-                      onClick={() => fireQuickReply("ai_suggest")}
-                      title="AI Suggest — picks the best reply for this conversation"
-                    >
-                      {loadingAction === "ai_suggest" ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Bot className="h-4 w-4" />
-                      )}
-                    </Button>
-                    {/* Divider */}
-                    <div className="h-5 w-px bg-slate-200" />
-                    {([
-                      { action: "send_quote",    label: "Send quote",         icon: <Tag className="h-3.5 w-3.5" /> },
-                      { action: "make_it_right", label: "Make it right",      icon: <AlertTriangle className="h-3.5 w-3.5" /> },
-                      { action: "refer_friend",  label: "Refer a friend",     icon: <Users className="h-3.5 w-3.5" /> },
-                      { action: "running_late",  label: "Running late",       icon: <Clock3 className="h-3.5 w-3.5" /> },
-                      { action: "on_the_way",    label: "On the way",         icon: <MapPin className="h-3.5 w-3.5" /> },
-                      { action: "review_rebook", label: "Review + rebook",    icon: <Star className="h-3.5 w-3.5" /> },
-                    ] as const).map(({ action, label, icon }) => (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {/* Row 1: AI + Send quote + Make it right + Refer a friend + FAQ */}
+                    <div className="flex items-center gap-2">
                       <Button
-                        key={action}
                         variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3"
+                        size="icon"
+                        className="rounded-full h-8 w-8 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
                         disabled={loadingAction !== null || !selected}
-                        onClick={() => fireQuickReply(action)}
+                        onClick={() => fireQuickReply("ai_suggest")}
+                        title="AI Suggest — picks the best reply for this conversation"
                       >
-                        {loadingAction === action ? (
+                        {loadingAction === "ai_suggest" ? (
                           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <>{icon}</>
+                          <Bot className="h-4 w-4" />
                         )}
-                        {label}
                       </Button>
-                    ))}
-                    {/* Divider */}
-                    <div className="h-5 w-px bg-slate-200" />
-                    {/* FAQ pill */}
-                    <Button
-                      variant="outline"
-                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => setFaqOpen(true)}
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      FAQ
-                    </Button>
-                    {/* Objections pill */}
-                    <Button
-                      variant="outline"
-                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
-                      onClick={() => setObjectionsOpen(true)}
-                    >
-                      <ShieldAlert className="h-3.5 w-3.5" />
-                      Objections
-                    </Button>
+                      <div className="h-5 w-px bg-slate-200" />
+                      {([
+                        { action: "send_quote",    label: "Send quote",     icon: <Tag className="h-3.5 w-3.5" /> },
+                        { action: "make_it_right", label: "Make it right",  icon: <AlertTriangle className="h-3.5 w-3.5" /> },
+                        { action: "refer_friend",  label: "Refer a friend", icon: <Users className="h-3.5 w-3.5" /> },
+                      ] as const).map(({ action, label, icon }) => (
+                        <Button
+                          key={action}
+                          variant="outline"
+                          className="rounded-full text-xs gap-1.5 h-8 px-3"
+                          disabled={loadingAction !== null || !selected}
+                          onClick={() => fireQuickReply(action)}
+                        >
+                          {loadingAction === action ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : icon}
+                          {label}
+                        </Button>
+                      ))}
+                      <div className="h-5 w-px bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => setFaqOpen(true)}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        FAQ
+                      </Button>
+                    </div>
+                    {/* Row 2: Running late + On the way + Review + rebook + Objections */}
+                    <div className="flex items-center gap-2">
+                      {([
+                        { action: "running_late",  label: "Running late",    icon: <Clock3 className="h-3.5 w-3.5" /> },
+                        { action: "on_the_way",    label: "On the way",      icon: <MapPin className="h-3.5 w-3.5" /> },
+                        { action: "review_rebook", label: "Review + rebook", icon: <Star className="h-3.5 w-3.5" /> },
+                      ] as const).map(({ action, label, icon }) => (
+                        <Button
+                          key={action}
+                          variant="outline"
+                          className="rounded-full text-xs gap-1.5 h-8 px-3"
+                          disabled={loadingAction !== null || !selected}
+                          onClick={() => fireQuickReply(action)}
+                        >
+                          {loadingAction === action ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : icon}
+                          {label}
+                        </Button>
+                      ))}
+                      <div className="h-5 w-px bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
+                        onClick={() => setObjectionsOpen(true)}
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        Objections
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
