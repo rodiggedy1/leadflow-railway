@@ -1066,7 +1066,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Badge className={`rounded-full border cursor-pointer ${tone.tone} hover:opacity-80 transition-opacity`}>
-                            {selected.queue}
+                            {selected.queue || "Set status"}
                           </Badge>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-44">
