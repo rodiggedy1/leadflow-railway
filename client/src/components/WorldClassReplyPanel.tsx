@@ -80,11 +80,15 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert }: Props)
       <div
         className="fixed z-50 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
         style={{
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          margin: "auto",
           width: "min(600px, 92vw)",
+          height: "fit-content",
           maxHeight: "min(560px, 85vh)",
+          position: "fixed",
         }}
       >
         {/* Header */}
