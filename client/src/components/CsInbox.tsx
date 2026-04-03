@@ -56,6 +56,7 @@ import {
   DollarSign,
   ClipboardList,
   TrendingUp,
+  Brain,
 } from "lucide-react";
 import {
   Tooltip,
@@ -647,6 +648,65 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const showUpsellCard = showUpsell || upsellLoading;
   // Alias upsellData for the render section below
   const upsellData = upsellResult;
+
+  // ── Customer Memory Card — deterministic, no extra API call ──────────────
+  // Derived from clientProfile (booking history) + selected (complaint count, queue)
+  const customerMemory = useMemo(() => {
+    if (!selected) return null;
+
+    // Bullet 1: Last booking
+    let lastBooking: string;
+    if (clientProfile?.recentJobs?.length) {
+      const last = clientProfile.recentJobs[0];
+      const parts: string[] = [];
+      if (last.date) parts.push(last.date);
+      if (last.serviceType) parts.push(last.serviceType);
+      if (last.price) parts.push(`$${last.price}`);
+      lastBooking = parts.length ? parts.join(' · ') : 'No recent jobs found';
+    } else if (clientProfile?.lastBookingDate) {
+      lastBooking = clientProfile.lastBookingDate;
+    } else if (selected.stats.bookings === 0) {
+      lastBooking = 'First-time customer — no prior bookings';
+    } else {
+      lastBooking = `${selected.stats.bookings} prior booking${selected.stats.bookings !== 1 ? 's' : ''} (dates unavailable)`;
+    }
+
+    // Bullet 2: Complaint / issue history
+    let complaintHistory: string;
+    const complaintCount = selected.stats.complaints;
+    if (complaintCount === 0) {
+      complaintHistory = 'No complaint history — clean record';
+    } else if (complaintCount === 1) {
+      complaintHistory = '1 prior complaint on record';
+    } else {
+      complaintHistory = `${complaintCount} prior complaints — handle with care`;
+    }
+
+    // Bullet 3: What they care about (inferred from booking patterns)
+    let careAbout: string;
+    const freq = clientProfile?.frequency?.toLowerCase() ?? '';
+    const totalBookings = clientProfile?.totalBookings ?? selected.stats.bookings;
+    const avgPrice = clientProfile?.avgPrice;
+    if (freq.includes('weekly')) {
+      careAbout = 'Recurring weekly client — values consistency and reliability';
+    } else if (freq.includes('biweekly') || freq.includes('bi-weekly') || freq.includes('every 2')) {
+      careAbout = 'Biweekly recurring — values routine and a trusted team';
+    } else if (freq.includes('monthly')) {
+      careAbout = 'Monthly recurring — values a thorough deep clean each visit';
+    } else if (totalBookings >= 10) {
+      careAbout = `Loyal customer (${totalBookings} bookings) — values trust and familiarity`;
+    } else if (totalBookings >= 3) {
+      careAbout = `Repeat customer (${totalBookings} bookings) — building a relationship`;
+    } else if (selected.queue === 'Hot leads') {
+      careAbout = 'High-intent new inquiry — values quick, clear responses';
+    } else if (avgPrice && avgPrice >= 200) {
+      careAbout = `Premium spender (avg $${avgPrice}/visit) — values quality over price`;
+    } else {
+      careAbout = 'New or infrequent customer — make a great first impression';
+    }
+
+    return { lastBooking, complaintHistory, careAbout };
+  }, [selected, clientProfile]);
 
   // Mark conversation as viewed when selected changes
   useEffect(() => {
@@ -1658,6 +1718,29 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 {flag}
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ─── Customer Memory Card ───────────────────────── */}
+                      {customerMemory && (
+                        <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-4">
+                          <div className="flex items-center gap-2 text-sm font-medium text-amber-800 mb-3">
+                            <Brain className="h-4 w-4" /> Know before you reply
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-start gap-2">
+                              <span className="mt-0.5 shrink-0 text-xs font-bold text-amber-500 uppercase tracking-wide w-16">Last job</span>
+                              <span className="text-xs text-amber-900 leading-4">{customerMemory.lastBooking}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="mt-0.5 shrink-0 text-xs font-bold text-amber-500 uppercase tracking-wide w-16">History</span>
+                              <span className="text-xs text-amber-900 leading-4">{customerMemory.complaintHistory}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="mt-0.5 shrink-0 text-xs font-bold text-amber-500 uppercase tracking-wide w-16">Profile</span>
+                              <span className="text-xs text-amber-900 leading-4">{customerMemory.careAbout}</span>
+                            </div>
                           </div>
                         </div>
                       )}
