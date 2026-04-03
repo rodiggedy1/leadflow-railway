@@ -32,7 +32,7 @@ import {
   agents,
   users,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, like, lte, or } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -1808,12 +1808,18 @@ export const opsChatRouter = router({
         awayStatus: r.awayStatus ?? null,
         awaySetAt: r.awaySetAt ? r.awaySetAt.getTime() : null,
       }));
-      // If the caller is the owner AND they don't have an agents row, inject them from users table
-      // This ensures the owner appears in the avatar row with their photo and online status
+      // If the caller is the owner, mark them as online right now.
+      // Match by first-name prefix because OAuth name ("Rohan G") may differ from agents name ("Rohan Gilkes").
       if (ctx.opsCaller.isOwner) {
-        const ownerName = ctx.opsCaller.name;
-        const alreadyIncluded = agentResults.some(a => a.name === ownerName);
-        if (!alreadyIncluded) {
+        const ownerFirstName = ctx.opsCaller.name.split(/\s+/)[0].toLowerCase();
+        const ownerIdx = agentResults.findIndex(
+          a => a.name.toLowerCase().startsWith(ownerFirstName) || ownerFirstName.startsWith(a.name.toLowerCase())
+        );
+        if (ownerIdx >= 0) {
+          // Owner has an agents row — override lastSeenAt to now so they always appear green
+          agentResults[ownerIdx] = { ...agentResults[ownerIdx], lastSeenAt: Date.now() };
+        } else {
+          // Owner has no agents row — inject from users table
           const [userRow] = await db
             .select({ name: users.name, profilePhotoUrl: users.profilePhotoUrl })
             .from(users)
@@ -1822,10 +1828,10 @@ export const opsChatRouter = router({
           if (userRow) {
             agentResults.push({
               id: -1,
-              name: userRow.name ?? ownerName,
-              email: undefined as unknown as string, // owner has no agents email row
+              name: userRow.name ?? ctx.opsCaller.name,
+              email: undefined as unknown as string,
               photoUrl: userRow.profilePhotoUrl ?? null,
-              lastSeenAt: Date.now(), // owner is always online when they make this request
+              lastSeenAt: Date.now(),
               isAdmin: true,
               awayStatus: null,
               awaySetAt: null,
@@ -1848,12 +1854,13 @@ export const opsChatRouter = router({
       if (!db) return { ok: true };
       const now = new Date();
       if (ctx.opsCaller.isOwner) {
-        // Owner: update agents row by name
+        // Owner: update agents row by first-name prefix (OAuth name may differ from agents table name)
         const ownerName = ctx.opsCaller.name;
         if (ownerName) {
+          const firstName = ownerName.split(/\s+/)[0];
           await db.update(agents)
             .set({ lastSeenAt: now })
-            .where(eq(agents.name, ownerName))
+            .where(like(agents.name, `${firstName}%`))
             .execute()
             .catch(() => { /* ignore if no row */ });
         }

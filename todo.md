@@ -930,3 +930,5 @@
 - [x] BUG: Online status dots — fixed: added 90s presence ping heartbeat; widened online threshold to 5 min, away to 20 min
 
 - [x] BUG: Diane's photo not showing in message bubbles — fixed: getAllAgentPhotoMap now emits both short name ("Diane") and full OAuth name ("Diane Ruiz") as keys pointing to the same photo
+
+- [x] BUG: Online status fixed — root cause: OAuth name "Rohan G" ≠ agents name "Rohan Gilkes"; fixed by first-name prefix matching in opsChatProcedure heartbeat, pingPresence, and getAgentStatusList (owner always shows green when they make the request)
