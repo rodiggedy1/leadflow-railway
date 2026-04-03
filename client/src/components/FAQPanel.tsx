@@ -1,11 +1,11 @@
 /**
  * FAQPanel — slide-up drawer for agent FAQ queries.
  *
- * Fixes:
- *  - Panel uses flex-col with a flex-1 scroll area so the input is always
- *    pinned at the bottom and new messages scroll into view naturally.
- *  - Close (X) button is always visible in the header — no more getting stuck.
- *  - maxHeight is capped at 60vh so the panel never covers the whole screen.
+ * Rendering strategy:
+ *  - Uses `display:none` / conditional render instead of `translate-y-full`
+ *    to avoid being clipped by ancestor `overflow-hidden` containers.
+ *  - When open=false the panel is simply not rendered (no DOM presence).
+ *  - Fade+scale animation via CSS opacity/transform on mount.
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
@@ -35,32 +35,18 @@ interface FAQPanelProps {
 export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [visible, setVisible] = useState(false); // drives CSS animation
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const faqAsk = trpc.opsChat.faqAsk.useMutation({
-    onSuccess: (data) => {
-      const answer = typeof data.answer === "string" ? data.answer : String(data.answer);
-      setMessages((prev): Message[] => [
-        ...prev,
-        { role: "assistant", content: answer },
-      ]);
-    },
-    onError: (err) => {
-      setMessages((prev): Message[] => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Sorry, I couldn't get an answer right now. ${err.message}`,
-        },
-      ]);
-    },
-  });
-
-  // Focus textarea when panel opens
+  // Animate in/out: when open changes, trigger a one-frame delay for CSS transition
   useEffect(() => {
     if (open) {
+      // Mount first, then flip visible on next frame so transition fires
+      requestAnimationFrame(() => setVisible(true));
       setTimeout(() => textareaRef.current?.focus(), 120);
+    } else {
+      setVisible(false);
     }
   }, [open]);
 
@@ -69,7 +55,7 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, faqAsk.isPending]);
+  }, [messages]);
 
   // Close on Escape
   useEffect(() => {
@@ -80,18 +66,26 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+  const faqAsk = trpc.opsChat.faqAsk.useMutation({
+    onSuccess: (data) => {
+      const answer = typeof data.answer === "string" ? data.answer : String(data.answer);
+      setMessages((prev): Message[] => [...prev, { role: "assistant", content: answer }]);
+    },
+    onError: (err) => {
+      setMessages((prev): Message[] => [
+        ...prev,
+        { role: "assistant", content: `Sorry, I couldn't get an answer right now. ${err.message}` },
+      ]);
+    },
+  });
+
   const handleSend = useCallback(() => {
     const question = input.trim();
     if (!question || faqAsk.isPending) return;
-
     const history = messages;
     setMessages((prev): Message[] => [...prev, { role: "user", content: question }]);
     setInput("");
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
-
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     faqAsk.mutate({ question, history });
   }, [input, messages, faqAsk]);
 
@@ -115,30 +109,33 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
 
+  // Don't render anything when closed — avoids overflow-hidden clipping issues
+  if (!open) return null;
+
   const isEmpty = messages.length === 0 && !faqAsk.isPending;
 
   return (
     <>
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="absolute inset-0 z-30 bg-black/10 backdrop-blur-[1px]"
-          onClick={onClose}
-        />
-      )}
+      {/* Backdrop — stops clicks on the chat behind it */}
+      <div
+        className="absolute inset-0 z-30 bg-black/10 backdrop-blur-[1px]"
+        onClick={onClose}
+      />
 
-      {/* Slide-up panel — flex column so input stays pinned at bottom */}
+      {/* Panel — absolutely positioned at the bottom, flex column */}
       <div
         className={cn(
           "absolute bottom-0 left-0 right-0 z-40 bg-white rounded-t-2xl",
-          "shadow-[0_-8px_40px_rgba(15,23,42,0.14)] border-t border-slate-200",
+          "shadow-[0_-8px_40px_rgba(15,23,42,0.16)] border-t border-slate-200",
           "flex flex-col",
-          "transition-transform duration-300 ease-out",
-          open ? "translate-y-0" : "translate-y-full pointer-events-none"
+          "transition-all duration-200 ease-out",
+          visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
-        style={{ maxHeight: "60vh", minHeight: "0" }}
+        style={{ maxHeight: "60vh" }}
+        // Prevent backdrop click from bubbling through the panel itself
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header (always visible, always has X) ── */}
+        {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
@@ -163,9 +160,8 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
                 Clear
               </button>
             )}
-            {/* Always-visible close button */}
             <button
-              onClick={onClose}
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
               className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
               title="Close FAQ"
             >
@@ -174,12 +170,12 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
           </div>
         </div>
 
-        {/* ── Scrollable messages area — flex-1 so it fills remaining height ── */}
+        {/* ── Scrollable messages ── */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
           {isEmpty ? (
             <div className="py-4 text-center">
               <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-3">
-                <BookOpen className="h-4.5 w-4.5 text-emerald-500" />
+                <BookOpen className="h-5 w-5 text-emerald-500" />
               </div>
               <p className="text-sm font-medium text-slate-700 mb-1">
                 Ask anything about Maids in Black
@@ -254,14 +250,13 @@ export default function FAQPanel({ open, onClose, context }: FAQPanelProps) {
             </div>
           )}
 
-          {/* Scroll anchor — always at the bottom of the message list */}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* ── Input area (pinned at bottom) ── */}
+        {/* ── Input (pinned at bottom) ── */}
         <div className="px-5 pb-4 pt-3 border-t border-slate-100 shrink-0">
           <div className="flex items-end gap-2.5">
-            <div className="flex-1 relative">
+            <div className="flex-1">
               <Textarea
                 ref={textareaRef}
                 value={input}
