@@ -948,3 +948,4 @@
 - [x] BUG: Command Chat @mention dropdown — deduplicated by first name; only the longer/full name is kept (Diane Ruiz, not both Diane + Diane Ruiz)
 
 - [ ] FEATURE: FAQ pill in CS chat and Command Chat — slide-up panel with AI Q&A backed by maidinblack.com content
+- [ ] Add World-Class AI Response pencil button to CS Chat: click pencil → type scenario → get Disney/Ritz-Carlton quality response with copy-to-compose

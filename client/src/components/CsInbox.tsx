@@ -76,6 +76,7 @@ import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
+import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
 
 type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner";
@@ -289,6 +290,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [addFollowUpOpen, setAddFollowUpOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
   const [objectionsOpen, setObjectionsOpen] = useState(false);
+  const [worldClassOpen, setWorldClassOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
@@ -1237,6 +1239,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
                   <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
+                  <WorldClassReplyPanel
+                    open={worldClassOpen}
+                    onClose={() => setWorldClassOpen(false)}
+                    onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
+                  />
                 </div>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
@@ -1302,6 +1309,24 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         <Smile className="h-4 w-4" />
                       </Button>
                       <Button
+                        variant="outline"
+                        size="icon"
+                        className={`rounded-xl h-7 w-7 border-violet-200 transition-colors ${
+                          worldClassOpen
+                            ? "bg-violet-100 text-violet-700 border-violet-300"
+                            : "text-violet-500 hover:bg-violet-50 hover:text-violet-700"
+                        }`}
+                        onClick={() => {
+                          setWorldClassOpen((v) => !v);
+                          setFaqOpen(false);
+                          setObjectionsOpen(false);
+                        }}
+                        title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
+                        type="button"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
                         className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
                         disabled={!compose.trim() || sendMessage.isPending || !selected}
                         onClick={() => {
@@ -1352,7 +1377,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <Button
                         variant="outline"
                         className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => setFaqOpen(true)}
+                        onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
                       >
                         <BookOpen className="h-3.5 w-3.5" />
                         FAQ
@@ -1380,7 +1405,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <Button
                         variant="outline"
                         className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
-                        onClick={() => setObjectionsOpen(true)}
+                        onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
                       >
                         <ShieldAlert className="h-3.5 w-3.5" />
                         Objections
