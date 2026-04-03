@@ -694,7 +694,20 @@ export default function LiveCallAssist() {
             return (
               <button
                 key={stage.id}
-                onClick={() => setActiveStage(stage.id)}
+                onClick={() => {
+                  const stageIds = STAGES.map(s => s.id);
+                  const clickedIdx = stageIds.indexOf(stage.id);
+                  const currentIdx = stageIds.indexOf(activeStage);
+                  if (clickedIdx > currentIdx) {
+                    setDoneStages(prev => {
+                      const next = new Set(prev);
+                      for (let i = 0; i < clickedIdx; i++) next.add(stageIds[i]);
+                      return next;
+                    });
+                    setActiveStage(stage.id);
+                  }
+                }}
+                title={STAGES.map(s => s.id).indexOf(stage.id) <= STAGES.map(s => s.id).indexOf(activeStage) ? "Already completed" : "Jump to this stage"}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 border ${
                   isActive ? `${stage.bg} ${stage.border} shadow-sm`
                   : isDone ? "bg-green-50 border-green-200 text-green-700 opacity-80"
