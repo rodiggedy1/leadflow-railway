@@ -1312,10 +1312,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <Button
                         variant="outline"
                         size="icon"
-                        className={`rounded-xl h-7 w-7 border-violet-200 transition-colors ${
+                        className={`rounded-xl h-7 w-7 transition-colors ${
                           worldClassOpen
-                            ? "bg-violet-100 text-violet-700 border-violet-300"
-                            : "text-violet-500 hover:bg-violet-50 hover:text-violet-700"
+                            ? "bg-violet-700 text-white border-violet-700"
+                            : "bg-violet-600 text-white border-violet-600 hover:bg-violet-700"
                         }`}
                         onClick={() => {
                           setWorldClassOpen((v) => !v);
@@ -1325,7 +1325,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
                         type="button"
                       >
-                        <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                        <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
                       </Button>
                       </div>
                       <Button

@@ -1,4 +1,18 @@
 /* Hot Lead card shake animation */
+@keyframes sparkle-shake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  15%       { transform: rotate(-12deg) scale(1.15); }
+  30%       { transform: rotate(12deg) scale(1.15); }
+  45%       { transform: rotate(-8deg) scale(1.1); }
+  60%       { transform: rotate(8deg) scale(1.1); }
+  75%       { transform: rotate(-4deg) scale(1.05); }
+  90%       { transform: rotate(4deg) scale(1.05); }
+}
+
+.animate-sparkle-shake {
+  animation: sparkle-shake 1.4s ease-in-out infinite;
+}
+
 @keyframes lead-shake {
   0%, 100% { transform: translateX(0) rotate(0deg); }
   10%       { transform: translateX(-5px) rotate(-0.6deg); }
