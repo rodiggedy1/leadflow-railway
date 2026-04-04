@@ -1750,6 +1750,9 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
 //     status: "ringing" | "in-progress" | "completed",
 //     direction: "incoming" | "outgoing",
 //     phoneNumberId: string,
+//     participants: string[], // E.164 phone numbers involved (external party is here)
+//     from: string,          // may be present on some event types
+//     to: string[],          // may be present on some event types
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1798,22 +1801,41 @@ async function handleCallAnswered(event: any): Promise<void> {
   // Post the call_started card:
   //   - call.answered  → inbound call, correct agent confirmed
   //   - call.initiated → outbound call (call.answered may never fire for outbound)
-  // Skip call.ringing — on shared numbers it fires for the account owner before anyone answers.
-  const shouldPostCard = event?.type === "call.answered" || (event?.type === "call.initiated" && isOutbound);
+  //   - call.ringing with direction=outgoing → outbound call (OpenPhone fires this for outbound)
+  // Skip call.ringing for inbound — on shared numbers it fires for the account owner before anyone answers.
+  const shouldPostCard =
+    event?.type === "call.answered" ||
+    (event?.type === "call.initiated" && isOutbound) ||
+    (event?.type === "call.ringing" && isOutbound);
   if (!shouldPostCard) {
     const { broadcastOpsUpdate } = await import("./sseBroadcast");
     broadcastOpsUpdate("agent_status");
     return;
   }
-  // Look up customer name from quoteLeads for both inbound and outbound
+  // Look up customer name from quoteLeads for both inbound and outbound.
+  // OpenPhone webhook payloads use a `participants` array for the external phone number.
+  // call.from / call.to may not be present; fall back through all available fields.
   let callerLabel: string | null = null;
-  const callerPhone: string | null = isOutbound ? (call.to?.[0] ?? null) : (call.from ?? null);
+  // Determine the external phone number:
+  // - outbound: the destination is in call.to[0] or participants (excluding our own numbers)
+  // - inbound: the caller is in call.from or participants (excluding our own numbers)
+  const ownNumbers = new Set([
+    ENV.openPhoneFromNumber,
+    "+12028885362", // CS line
+  ].filter(Boolean));
+  const participantPhones: string[] = Array.isArray(call.participants) ? call.participants : [];
+  const externalParticipant = participantPhones.find((p: string) => !ownNumbers.has(p)) ?? null;
+  const callerPhone: string | null = isOutbound
+    ? (call.to?.[0] ?? externalParticipant ?? null)
+    : (call.from ?? externalParticipant ?? null);
   if (callerPhone) {
     try {
+      // Normalize before lookup so format differences don't cause misses
+      const normalizedCallerPhone = normalizePhone(callerPhone);
       const [lead] = await db
         .select({ name: quoteLeads.name })
         .from(quoteLeads)
-        .where(eq(quoteLeads.phone, callerPhone))
+        .where(eq(quoteLeads.phone, normalizedCallerPhone))
         .limit(1);
       callerLabel = lead?.name ?? callerPhone;
     } catch {
@@ -1845,7 +1867,7 @@ async function handleCallAnswered(event: any): Promise<void> {
     console.error("[CallStatus] Failed to post call_started card:", e);
   }
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
-  broadcastOpsUpdate("new_message");
+  broadcastOpsUpdate("new_message", { channel: "command" });
   broadcastOpsUpdate("agent_status");
 }
 
@@ -1897,7 +1919,7 @@ async function handleCallCompleted(event: any): Promise<void> {
   }
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("agent_status");
-  broadcastOpsUpdate("new_message");
+  broadcastOpsUpdate("new_message", { channel: "command" });
 }
 
 async function handleCallSummaryCompleted(event: any): Promise<void> {

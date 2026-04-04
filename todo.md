@@ -999,3 +999,8 @@
 - [x] Show customer name on outbound call cards (lookup call.to in quoteLeads)
 - [x] Clear stuck on-call badge in DB (force-clear all agents)
 - [x] Add TTL auto-expire: if onCallSince > 2 hours, auto-clear the badge
+
+- [x] Fix call card: show phone/name on card (currently shows "started a inbound call" with no contact info)
+- [x] Fix call card: outbound card not appearing (call.initiated not triggering card in UI)
+- [x] Fix call card: lag in appearance (new_message broadcast missing channel param, OpsChat onNewMessage only invalidates when channel is truthy)
+- [x] Fix call card: "a inbound" → "an inbound" grammar

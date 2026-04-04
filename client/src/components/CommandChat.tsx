@@ -560,6 +560,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onNewMessage: (channel) => {
       if (channel === "command" || !channel) {
         utils.opsChat.getCommandChatData.invalidate();
+        utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
       }
     },
     onJobUpdate: () => {
@@ -2334,6 +2335,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const agentName = (meta.agentName as string) ?? msg.from;
                   const direction = (meta.direction as string) ?? "incoming";
                   const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
+                  const callerLabel = (meta.callerLabel as string | null) ?? null;
                   return (
                     <div key={msg.id} className="flex justify-center my-1">
                       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 shadow-sm">
@@ -2342,7 +2344,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                         </span>
                         <PhoneCall className="h-3 w-3 text-emerald-600 shrink-0" />
-                        <span className="text-xs font-medium text-emerald-800">{agentName} started a {dirLabel} call</span>
+                        <span className="text-xs font-medium text-emerald-800">
+                          {agentName} {dirLabel === "outbound" ? "called" : "answered"}{callerLabel ? <> <span className="font-semibold">{callerLabel}</span></> : ""}
+                        </span>
                         <span className="text-[10px] text-emerald-400">{fmtMsgTime(msg.createdAt)}</span>
                       </div>
                     </div>
@@ -2356,12 +2360,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const durationLabel = (meta.durationLabel as string | null) ?? null;
                   const direction = (meta.direction as string) ?? "incoming";
                   const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
+                  // callerLabel not stored in call_ended metadata; look up from call_started if needed
                   return (
                     <div key={msg.id} className="flex justify-center my-1">
                       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 shadow-sm">
                         <PhoneOff className="h-3 w-3 text-slate-400 shrink-0" />
                         <span className="text-xs text-slate-600">
-                          {agentName} ended a {dirLabel} call{durationLabel ? <> &middot; <span className="font-medium">{durationLabel}</span></> : ""}
+                          {agentName} ended {dirLabel} call{durationLabel ? <> &middot; <span className="font-medium">{durationLabel}</span></> : ""}
                         </span>
                         <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                       </div>
