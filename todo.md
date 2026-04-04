@@ -1006,3 +1006,4 @@
 - [x] Fix call card: "a inbound" → "an inbound" grammar
 - [ ] Fix call card showing wrong agent name — shared number payload always has Rohan's userId, need to fetch real caller from OpenPhone API using callId
 - [x] For shared-number calls: show "An agent called X" instead of agent name, skip green badge on agent avatars
+- [x] Inbound shared-number calls: show "An agent received a call from X" instead of "An agent answered a call from X"

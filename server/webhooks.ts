@@ -1849,7 +1849,7 @@ async function handleCallAnswered(event: any): Promise<void> {
   }
   const agentLabel = isSharedCsNumber ? "An agent" : agent.name;
   const cardBody = callerLabel
-    ? `${agentLabel} ${isOutbound ? "called" : "answered a call from"} ${callerLabel}`
+    ? `${agentLabel} ${isOutbound ? "called" : "received a call from"} ${callerLabel}`
     : `${agentLabel} is on a ${direction} call`;
   // Post a call_started card to the command channel
   try {
