@@ -1928,48 +1928,40 @@ async function handleCallCompleted(event: any): Promise<void> {
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
-  // Find the agent before clearing so we can name them in the card
-  const [agent] = await db
-    .select({ id: agents.id, name: agents.name, onCallSince: agents.onCallSince })
-    .from(agents)
-    .where(eq(agents.onCallCallId, call.id))
-    .limit(1);
-  // Clear on-call status
+  // Clear on-call status (best-effort)
   await db
     .update(agents)
     .set({ onCallSince: null, onCallCallId: null } as any)
     .where(eq(agents.onCallCallId, call.id));
-  console.log(`[CallStatus] call.completed for callId=${call.id} — cleared on-call status`);
-  // Post a call_ended card
-  if (agent) {
-    const durationMs = agent.onCallSince ? Date.now() - agent.onCallSince : null;
-    const durationSec = durationMs ? Math.round(durationMs / 1000) : (call.duration ?? null);
-    const durationLabel = durationSec
-      ? durationSec >= 60
-        ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
-        : `${durationSec}s`
-      : null;
-    const isSharedCsNumber = call.phoneNumberId === ENV.openPhoneCsNumberId;
-    const agentLabel = isSharedCsNumber ? "An agent" : agent.name;
-    try {
-      await db.insert(opsChatMessages).values({
-        cleanerJobId: null,
-        channel: "command",
-        authorName: "📞 Call Status",
-        authorRole: "system",
-        body: `${agentLabel} ended a call${durationLabel ? ` · ${durationLabel}` : ""}`,
-        quickAction: "call_ended",
-        metadata: JSON.stringify({
-          agentName: agentLabel,
-          callId: call.id,
-          durationSec,
-          durationLabel,
-          direction: call.direction ?? "incoming",
-        }),
-      });
-    } catch (e) {
-      console.error("[CallStatus] Failed to post call_ended card:", e);
-    }
+  console.log(`[CallStatus] call.completed for callId=${call.id}`);
+  // Post a call details card — always, using data directly from the call payload
+  const durationSec: number | null = call.duration ?? null;
+  const durationLabel = durationSec
+    ? durationSec >= 60
+      ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
+      : `${durationSec}s`
+    : null;
+  const direction = call.direction ?? "incoming";
+  const dirLabel = direction === "outgoing" ? "Outbound" : "Inbound";
+  const otherParty = direction === "outgoing" ? (call.to ?? "") : (call.from ?? "");
+  try {
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "📞 Call",
+      authorRole: "system",
+      body: `${dirLabel} call · ${otherParty}${durationLabel ? ` · ${durationLabel}` : ""}`,
+      quickAction: "call_ended",
+      metadata: JSON.stringify({
+        callId: call.id,
+        direction,
+        otherParty,
+        durationSec,
+        durationLabel,
+      }),
+    });
+  } catch (e) {
+    console.error("[CallStatus] Failed to post call_ended card:", e);
   }
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("agent_status");
