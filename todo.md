@@ -970,3 +970,5 @@
 
 - [x] CS Chat priority queue: AI draft for Teams conversations uses operational language (not customer-facing)
 - [x] CS Chat priority queue: suppress conversations where an agent has already responded (only surface unanswered issues)
+
+- [x] Bug: agent messages disappear from CS chat when a new customer message arrives (history overwritten by webhook) — fixed race condition: re-read history fresh from DB before appending inbound message

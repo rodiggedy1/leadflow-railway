@@ -1379,9 +1379,17 @@ async function handleCsInboundMessage(msg: any) {
     .limit(1);
 
   if (existingSession) {
-    // Append to existing session
+    // Append to existing session.
+    // Re-read history fresh from DB to avoid a race condition where the agent
+    // sends a reply (via sendMessage) between our initial session read and this
+    // write — using the stale snapshot would overwrite the agent's message.
+    const [freshSession] = await db
+      .select({ messageHistory: conversationSessions.messageHistory })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.id, existingSession.id))
+      .limit(1);
     let history: Array<{ role: string; content: string; ts?: number }> = [];
-    try { history = JSON.parse(existingSession.messageHistory ?? "[]"); } catch { history = []; }
+    try { history = JSON.parse(freshSession?.messageHistory ?? "[]"); } catch { history = []; }
 
     // Content dedup: skip if identical non-empty message already stored within 10s
     // Never dedup photo-only messages (empty text) — each photo is a distinct message
