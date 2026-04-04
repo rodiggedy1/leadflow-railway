@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { processLeadReply } from "./conversationEngine";
@@ -1257,12 +1257,31 @@ Be specific and actionable. Reference actual moments from the transcript. No flu
 
   console.log(`[CallDebrief] Debrief stored for callId=${callId}`);
 
-  // Fetch the recording URL so we can include it in the card
+  // Fetch the recording URL and caller phone so we can look up the name
   const [rec] = await db
-    .select({ recordingUrl: openphoneCallRecordings.recordingUrl })
+    .select({ recordingUrl: openphoneCallRecordings.recordingUrl, callerPhone: openphoneCallRecordings.callerPhone })
     .from(openphoneCallRecordings)
     .where(eq(openphoneCallRecordings.openphoneCallId, callId))
     .limit(1);
+
+  // Look up caller name from multiple sources: leads, cleaners, team, candidates
+  let callerName: string | null = null;
+  if (rec?.callerPhone) {
+    const cp = rec.callerPhone;
+    // 1. quoteLeads (inbound leads)
+    const [lead] = await db.select({ name: quoteLeads.name }).from(quoteLeads).where(eq(quoteLeads.phone, cp)).limit(1);
+    if (lead?.name) { callerName = lead.name; }
+    // 2. cleanerProfiles (team / cleaners)
+    if (!callerName) {
+      const [cleaner] = await db.select({ name: cleanerProfiles.name }).from(cleanerProfiles).where(eq(cleanerProfiles.phone, cp)).limit(1);
+      if (cleaner?.name) { callerName = cleaner.name; }
+    }
+    // 3. candidates (hiring pipeline)
+    if (!callerName) {
+      const [cand] = await db.select({ firstName: candidates.firstName, lastName: candidates.lastName }).from(candidates).where(eq(candidates.phone, cp)).limit(1);
+      if (cand?.firstName) { callerName = `${cand.firstName} ${cand.lastName}`.trim(); }
+    }
+  }
 
   // Post a new call_debrief card to the command channel
   try {
@@ -1271,11 +1290,13 @@ Be specific and actionable. Reference actual moments from the transcript. No flu
       channel: "command",
       authorName: "🎙️ Call Debrief",
       authorRole: "system",
-      body: `Call debrief ready · Grade: ${debrief.grade}`,
+      body: callerName ? `Call debrief ready · ${callerName} · Grade: ${debrief.grade}` : `Call debrief ready · Grade: ${debrief.grade}`,
       quickAction: "call_debrief",
       metadata: JSON.stringify({
         callId,
         recordingUrl: rec?.recordingUrl ?? null,
+        callerName,
+        callerPhone: rec?.callerPhone ?? null,
         grade: debrief.grade,
         wentWell: debrief.wentWell,
         improve: debrief.improve,

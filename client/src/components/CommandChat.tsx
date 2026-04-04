@@ -2382,6 +2382,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const improve = (meta.improve as string | null) ?? null;
                   const nextLine = (meta.nextLine as string | null) ?? null;
                   const recordingUrl = (meta.recordingUrl as string | null) ?? null;
+                  const callerName = (meta.callerName as string | null) ?? null;
+                  const callerPhone = (meta.callerPhone as string | null) ?? null;
                   const gradeColors: Record<string, string> = {
                     A: "bg-green-100 text-green-700 border-green-300",
                     B: "bg-blue-100 text-blue-700 border-blue-300",
@@ -2399,7 +2401,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200">
                               <Phone className="h-3 w-3 text-purple-600" />
                             </div>
-                            <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+                            <div>
+                              <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+                              {(callerName || callerPhone) && (
+                                <p className="text-xs font-medium text-purple-900 mt-0.5">{callerName ?? callerPhone}</p>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {grade && (
