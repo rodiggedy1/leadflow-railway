@@ -1716,14 +1716,14 @@ async function handleCallAnswered(event: any): Promise<void> {
   // userId identifies the agent who answered (or initiated for outgoing)
   const opUserId: string | undefined = call.userId ?? call.answeredBy ?? call.initiatedBy;
   if (!opUserId) {
-    console.log(`[CallStatus] call.answered: no userId in payload, skipping`);
+    console.log(`[CallStatus] call.answered: no userId in payload, skipping (type=${event?.type})`);
     return;
   }
   const db = await getDb();
   if (!db) return;
   // Find the agent by openPhoneUserId
   const [agent] = await db
-    .select({ id: agents.id, name: agents.name })
+    .select({ id: agents.id, name: agents.name, onCallCallId: agents.onCallCallId })
     .from(agents)
     .where(eq(agents.openPhoneUserId, opUserId))
     .limit(1);
@@ -1731,12 +1731,20 @@ async function handleCallAnswered(event: any): Promise<void> {
     console.log(`[CallStatus] call.answered: no agent found for openPhoneUserId=${opUserId}`);
     return;
   }
+  // Deduplicate: if this call is already tracked, skip (call.ringing + call.answered both fire)
+  if (agent.onCallCallId === call.id) {
+    console.log(`[CallStatus] ${agent.name} already on call ${call.id}, skipping duplicate event (${event?.type})`);
+    return;
+  }
+  // Determine direction — outgoing if direction field says so OR if event is call.initiated
+  const isOutbound = call.direction === "outgoing" || event?.type === "call.initiated";
+  const direction = isOutbound ? "outgoing" : "incoming";
   const callStartedAt = Date.now();
   await db
     .update(agents)
     .set({ onCallSince: callStartedAt, onCallCallId: call.id } as any)
     .where(eq(agents.id, agent.id));
-  console.log(`[CallStatus] ${agent.name} is now on a call (callId=${call.id})`);
+  console.log(`[CallStatus] ${agent.name} is now on a ${direction} call (callId=${call.id}, type=${event?.type})`);
   // Post a call_started card to the command channel
   try {
     await db.insert(opsChatMessages).values({
@@ -1750,15 +1758,15 @@ async function handleCallAnswered(event: any): Promise<void> {
         agentName: agent.name,
         callId: call.id,
         startedAt: callStartedAt,
-        direction: call.direction ?? "incoming",
+        direction,
       }),
     });
   } catch (e) {
     console.error("[CallStatus] Failed to post call_started card:", e);
   }
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
-  broadcastOpsUpdate("agent_status");
   broadcastOpsUpdate("new_message");
+  broadcastOpsUpdate("agent_status");
 }
 
 async function handleCallCompleted(event: any): Promise<void> {

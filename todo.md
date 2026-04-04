@@ -980,3 +980,6 @@
 
 - [x] Auto-populate openPhoneUserId: fetch OpenPhone users via API, match to agents by name, write to DB
 - [x] Settings UI: show OpenPhone user match results, allow manual assignment for unmatched agents
+- [x] Fix call card direction label: outbound calls showing as "inbound"
+- [x] Fix call card latency: cards appearing late
+- [x] Fix outbound calls not showing green badge in Command Chat header
