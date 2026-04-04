@@ -105,3 +105,107 @@ describe("Teams action prompts", () => {
     }
   });
 });
+
+// ── Teams ai_suggest user prompt — operational language ───────────────────────
+function buildTeamsAiSuggestUserPrompt(firstName: string, conversationSnippet: string): string {
+  return `You are a field operations manager responding to a text from your cleaner ${firstName}. Read the conversation below and write the ideal next SMS reply. This is an INTERNAL operational message — be direct, action-oriented, and concise. Examples of the right tone: "Tell them to wait outside, I'll call the client now.", "Finish what you can and head out — I'll handle the client.", "Go ahead and skip it, I'll reschedule.", "Call me when you're done with the first room.". Keep it to 1-2 sentences. No emojis. No "Hey [name]," opener — just the action. IMPORTANT: use the actual name "${firstName}" only if you naturally address them, never write [Name] or any placeholder.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}`;
+}
+
+describe("Teams ai_suggest user prompt (operational language)", () => {
+  it("instructs the model to produce an INTERNAL operational message", () => {
+    const prompt = buildTeamsAiSuggestUserPrompt("Maria", "Cleaner: I can't get into the home");
+    expect(prompt).toContain("INTERNAL operational message");
+  });
+
+  it("provides concrete operational tone examples", () => {
+    const prompt = buildTeamsAiSuggestUserPrompt("Maria", "");
+    expect(prompt).toContain("Tell them to wait outside");
+    expect(prompt).toContain("I'll call the client now");
+  });
+
+  it("explicitly forbids 'Hey [name],' opener", () => {
+    const prompt = buildTeamsAiSuggestUserPrompt("Maria", "");
+    expect(prompt).toContain('No "Hey [name]," opener');
+  });
+
+  it("does NOT instruct the model to start with 'Hey [name],'", () => {
+    const prompt = buildTeamsAiSuggestUserPrompt("Maria", "");
+    // The old prompt said 'Start with "Hey ${firstName},"' — the new one must not
+    expect(prompt).not.toMatch(/Start with "Hey .+,"/);
+  });
+
+  it("keeps it short — 1-2 sentences", () => {
+    const prompt = buildTeamsAiSuggestUserPrompt("Maria", "");
+    expect(prompt).toContain("1-2 sentences");
+  });
+
+  it("still forbids placeholder names", () => {
+    const prompt = buildTeamsAiSuggestUserPrompt("Maria", "");
+    expect(prompt).toContain("never write [Name] or any placeholder");
+  });
+});
+
+// ── Priority queue: agent-responded suppression ───────────────────────────────
+describe("getCsPriorityQueue agent-responded suppression", () => {
+  // Mirror the filtering logic from getCsPriorityQueue
+  function shouldSuppressSession(msgs: Array<{ role: string; content: string; ts?: number }>, epoch: number): boolean {
+    if (msgs.length === 0) return true;
+    const lastCustomerMsg = [...msgs].reverse().find((m) => m.role === "user");
+    const lastCustomerTs = lastCustomerMsg?.ts ?? 0;
+    if (!lastCustomerTs || lastCustomerTs < epoch) return true;
+    // Suppress if the last message is from the agent (already responded)
+    const lastMsg = msgs[msgs.length - 1];
+    if (lastMsg && lastMsg.role !== "user") return true;
+    return false;
+  }
+  const EPOCH = 1000000; // arbitrary epoch for tests
+
+  it("suppresses a session where the agent has the last word", () => {
+    const msgs = [
+      { role: "user", content: "I can't get in", ts: EPOCH + 1000 },
+      { role: "assistant", content: "Try the lockbox", ts: EPOCH + 2000 },
+    ];
+    expect(shouldSuppressSession(msgs, EPOCH)).toBe(true);
+  });
+
+  it("surfaces a session where the customer has the last word", () => {
+    const msgs = [
+      { role: "assistant", content: "Try the lockbox", ts: EPOCH + 1000 },
+      { role: "user", content: "Still can't get in", ts: EPOCH + 2000 },
+    ];
+    expect(shouldSuppressSession(msgs, EPOCH)).toBe(false);
+  });
+
+  it("surfaces a session with only a customer message", () => {
+    const msgs = [
+      { role: "user", content: "Hello, is anyone there?", ts: EPOCH + 1000 },
+    ];
+    expect(shouldSuppressSession(msgs, EPOCH)).toBe(false);
+  });
+
+  it("suppresses a session with only an agent message", () => {
+    const msgs = [
+      { role: "assistant", content: "We'll be right with you", ts: EPOCH + 1000 },
+    ];
+    expect(shouldSuppressSession(msgs, EPOCH)).toBe(true);
+  });
+
+  it("suppresses a session where the last customer message is before the epoch", () => {
+    const msgs = [
+      { role: "user", content: "Old message", ts: EPOCH - 1000 },
+    ];
+    expect(shouldSuppressSession(msgs, EPOCH)).toBe(true);
+  });
+
+  it("suppresses an empty session", () => {
+    expect(shouldSuppressSession([], EPOCH)).toBe(true);
+  });
+
+  it("suppresses a system message as the last entry (not user)", () => {
+    const msgs = [
+      { role: "user", content: "Help!", ts: EPOCH + 1000 },
+      { role: "system", content: "Session transferred", ts: EPOCH + 2000 },
+    ];
+    expect(shouldSuppressSession(msgs, EPOCH)).toBe(true);
+  });
+});

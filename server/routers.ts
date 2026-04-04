@@ -2791,6 +2791,10 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             // Skip if the last customer message arrived before the hard epoch cutoff
             // This ensures only genuinely new issues surface, never historical ones
             if (!lastCustomerTs || lastCustomerTs < PRIORITY_QUEUE_EPOCH) return null;
+            // Skip if the last message in the thread is from the agent — the issue is already
+            // being handled. Only surface conversations where the customer/cleaner has the last word.
+            const lastMsg = msgs[msgs.length - 1];
+            if (lastMsg && lastMsg.role !== "user") return null;
             const isCleaner = s.leadSource === "cs-inbound-cleaner";
             const senderLabel = isCleaner ? "Team member" : "Customer";
             const recent = msgs.slice(-6).map((m) => `${m.role === "user" ? senderLabel : "Agent"}: ${m.content}`).join("\n");
@@ -3265,11 +3269,11 @@ CRITICAL RULES (never break these):
         // ── AI Suggest: analyze conversation and pick best action + write draft ─
         if (input.action === "ai_suggest") {
           if (isTeams) {
-            // Teams: free-form AI response based on what the cleaner said
+            // Teams: operational response — short, direct, action-oriented (internal ops, not customer-facing)
             const result = await invokeLLM({
               messages: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: `You are a field operations manager responding to a text from your cleaner ${firstName}. Read the conversation below and write the ideal next SMS reply. Be direct and helpful. Address their specific issue — whether it's an access problem, a job size concern, a callout, a field management question, or a request for more/better work. Keep it under 3 sentences. No emojis. Start with "Hey ${firstName},". IMPORTANT: use the actual name "${firstName}" — never write [Name] or any placeholder.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}` },
+                { role: "user", content: `You are a field operations manager responding to a text from your cleaner ${firstName}. Read the conversation below and write the ideal next SMS reply. This is an INTERNAL operational message — be direct, action-oriented, and concise. Examples of the right tone: "Tell them to wait outside, I'll call the client now.", "Finish what you can and head out — I'll handle the client.", "Go ahead and skip it, I'll reschedule.", "Call me when you're done with the first room.". Keep it to 1-2 sentences. No emojis. No "Hey [name]," opener — just the action. IMPORTANT: use the actual name "${firstName}" only if you naturally address them, never write [Name] or any placeholder.\n\nConversation:\n${conversationSnippet || "(no messages yet)"}` },
               ],
             });
             const draft = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
