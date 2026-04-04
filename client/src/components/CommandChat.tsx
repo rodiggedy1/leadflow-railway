@@ -73,7 +73,7 @@ interface CommandChatProps {
   /** Map of senderName -> "online" | "away" | "offline" for status dot overlays on avatars */
   senderStatusMap?: Record<string, "online" | "away" | "offline">;
   /** Full agent list with id/name/photoUrl/awayStatus for the online presence bar */
-  agentList?: Array<{ id: number; name: string; photoUrl: string | null; awayStatus: string | null }>;
+  agentList?: Array<{ id: number; name: string; photoUrl: string | null; awayStatus: string | null; onCallSince?: number | null }>;
   /** True when this panel is currently visible (not hidden by display:none). Used for @mention tracking. */
   isVisible?: boolean;
   /** All possible names for the current user (handles OAuth name vs DB name mismatch). Used for @mention detection. */
@@ -1447,22 +1447,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
                     const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                     const hue = (ag.name.charCodeAt(0) * 37) % 360;
+                    const isOnCall = Boolean(ag.onCallSince);
+                    const titleText = isOnCall
+                      ? `${ag.name} — on a call`
+                      : `${ag.name} — ${status}`;
                     return (
-                      <div key={ag.id} className="relative" title={`${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
+                      <div key={ag.id} className="relative" title={titleText} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
                         {ag.photoUrl ? (
-                          <img src={ag.photoUrl} alt={ag.name} className="w-7 h-7 rounded-full object-cover border-2 border-white shadow-sm" />
+                          <img src={ag.photoUrl} alt={ag.name} className={cn("w-7 h-7 rounded-full object-cover border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400 ring-offset-1")} />
                         ) : (
                           <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm"
+                            className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400 ring-offset-1")}
                             style={{ background: `hsl(${hue}, 55%, 52%)` }}
                           >
                             {initials}
                           </div>
                         )}
-                        <span className={cn(
-                          "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
-                          dotColor
-                        )} />
+                        {isOnCall ? (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white bg-green-500 flex items-center justify-center">
+                            <Phone className="w-1.5 h-1.5 text-white" />
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
+                            dotColor
+                          )} />
+                        )}
                       </div>
                     );
                   })}

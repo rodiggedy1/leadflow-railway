@@ -25,6 +25,8 @@ export type OpsStreamCallbacks = {
   onLeadUpdate?: () => void;
   onReactionUpdate?: () => void;
   onReminderUpdate?: () => void;
+  /** Called when an agent's on-call status changes */
+  onAgentStatus?: () => void;
   /** Called when the SSE connection is established or re-established */
   onConnected?: () => void;
 };
@@ -79,6 +81,9 @@ export function useOpsStream(callbacks: OpsStreamCallbacks) {
               break;
             case "reminder_update":
               cbRef.current.onReminderUpdate?.();
+              break;
+            case "agent_status":
+              cbRef.current.onAgentStatus?.();
               break;
             case "ping":
               // keepalive — no action needed

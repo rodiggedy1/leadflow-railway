@@ -1312,6 +1312,9 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       // reactions are fetched via mutation; trigger refetch via the callback
       refetchReactions();
     },
+    onAgentStatus: () => {
+      utils.opsChat.getAgentStatusList.invalidate();
+    },
   });
 
   // markRead mutation — called when opening a channel or job thread

@@ -972,3 +972,8 @@
 - [x] CS Chat priority queue: suppress conversations where an agent has already responded (only surface unanswered issues)
 
 - [x] Bug: agent messages disappear from CS chat when a new customer message arrives (history overwritten by webhook) — fixed race condition: re-read history fresh from DB before appending inbound message
+
+- [x] Agent on-call status: DB columns for active call tracking with TTL (openPhoneUserId, onCallSince, onCallCallId on agents table)
+- [x] Agent on-call status: OpenPhone call.ringing / call.answered / call.completed webhook handlers
+- [x] Agent on-call status: getAgentStatusList returns onCallSince with 2-hour TTL safety + SSE broadcast via agent_status event
+- [x] Agent on-call status: on-call badge (green phone icon + ring) on agent photos in Command Chat header

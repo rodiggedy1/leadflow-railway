@@ -14,6 +14,7 @@
  *   "job_update"      — a job status, flag, or issue changed
  *   "reaction_update" — a reaction was added or removed
  *   "reminder_update" — a reminder was set or fired
+ *   "agent_status"    — an agent's on-call status changed (call answered/completed)
  *   "ping"            — keepalive (sent every 25s to prevent proxy timeouts)
  */
 
@@ -25,6 +26,7 @@ export type OpsEventType =
   | "job_update"
   | "reaction_update"
   | "reminder_update"
+  | "agent_status"
   | "ping";
 
 export interface OpsEvent {

@@ -1796,10 +1796,13 @@ export const opsChatRouter = router({
           isAdmin: agents.isAdmin,
           awayStatus: agents.awayStatus,
           awaySetAt: agents.awaySetAt,
+          onCallSince: agents.onCallSince,
+          onCallCallId: agents.onCallCallId,
         })
         .from(agents)
         .where(eq(agents.isActive, 1))
         .orderBy(agents.name);
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
       const agentResults = rows.map((r) => ({
         id: r.id,
         name: r.name,
@@ -1809,6 +1812,8 @@ export const opsChatRouter = router({
         isAdmin: r.isAdmin === 1,
         awayStatus: r.awayStatus ?? null,
         awaySetAt: r.awaySetAt ? r.awaySetAt.getTime() : null,
+        // Auto-expire on-call status after 2h as a TTL safety net for missed webhooks
+        onCallSince: r.onCallSince && (Date.now() - r.onCallSince) < TWO_HOURS_MS ? r.onCallSince : null,
       }));
       // If the caller is the owner, mark them as online right now.
       // Match by first-name prefix because OAuth name ("Rohan G") may differ from agents name ("Rohan Gilkes").
@@ -1837,6 +1842,7 @@ export const opsChatRouter = router({
               isAdmin: true,
               awayStatus: null,
               awaySetAt: null,
+              onCallSince: null,
             });
           }
         }

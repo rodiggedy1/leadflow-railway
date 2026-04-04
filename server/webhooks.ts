@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { processLeadReply } from "./conversationEngine";
@@ -71,6 +71,17 @@ export function registerWebhookRoutes(app: Express) {
 
       if (event?.type === "call.transcript.completed" || event?.type === "callTranscript") {
         await handleCallTranscriptCompleted(event);
+        return;
+      }
+
+      // Track agent on-call status
+      if (event?.type === "call.ringing" || event?.type === "call.answered") {
+        handleCallAnswered(event).catch(e => console.error("[CallStatus] answered error:", e));
+        return;
+      }
+
+      if (event?.type === "call.completed") {
+        handleCallCompleted(event).catch(e => console.error("[CallStatus] completed error:", e));
         return;
       }
 
@@ -1669,4 +1680,66 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate: broadcastOpsUpdate2 } = await import("./sseBroadcast");
   broadcastOpsUpdate2("lead_update");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// handleCallAnswered / handleCallCompleted
+// Track which agent is currently on a call using OpenPhone call webhooks.
+//
+// Payload shape (call.ringing / call.answered / call.completed):
+//   event.data.object = {
+//     id: string,           // callId
+//     userId: string,       // OpenPhone user ID of the agent who answered
+//     answeredBy: string,   // same as userId for answered calls
+//     status: "ringing" | "in-progress" | "completed",
+//     direction: "incoming" | "outgoing",
+//     phoneNumberId: string,
+//   }
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function handleCallAnswered(event: any): Promise<void> {
+  const call = event?.data?.object;
+  if (!call?.id) return;
+  // userId identifies the agent who answered (or initiated for outgoing)
+  const opUserId: string | undefined = call.userId ?? call.answeredBy;
+  if (!opUserId) {
+    console.log(`[CallStatus] call.answered: no userId in payload, skipping`);
+    return;
+  }
+  const db = await getDb();
+  if (!db) return;
+  // Find the agent by openPhoneUserId
+  const [agent] = await db
+    .select({ id: agents.id, name: agents.name })
+    .from(agents)
+    .where(eq(agents.openPhoneUserId, opUserId))
+    .limit(1);
+  if (!agent) {
+    console.log(`[CallStatus] call.answered: no agent found for openPhoneUserId=${opUserId}`);
+    return;
+  }
+  await db
+    .update(agents)
+    .set({ onCallSince: Date.now(), onCallCallId: call.id } as any)
+    .where(eq(agents.id, agent.id));
+  console.log(`[CallStatus] ${agent.name} is now on a call (callId=${call.id})`);
+  // Broadcast so the Command Chat header updates in real time
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("agent_status");
+}
+
+async function handleCallCompleted(event: any): Promise<void> {
+  const call = event?.data?.object;
+  if (!call?.id) return;
+  const db = await getDb();
+  if (!db) return;
+  // Clear on-call status for the agent who was on this call
+  const result = await db
+    .update(agents)
+    .set({ onCallSince: null, onCallCallId: null } as any)
+    .where(eq(agents.onCallCallId, call.id));
+  console.log(`[CallStatus] call.completed for callId=${call.id} — cleared on-call status`);
+  // Broadcast so the Command Chat header updates in real time
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("agent_status");
 }

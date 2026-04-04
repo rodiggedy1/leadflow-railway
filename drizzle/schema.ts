@@ -382,6 +382,12 @@ export const agents = mysqlTable("agents", {
   awayStatus: varchar("awayStatus", { length: 32 }),
   /** Timestamp when awayStatus was last set — used for auto-dismiss logic */
   awaySetAt: timestamp("awaySetAt"),
+  /** OpenPhone user ID — maps call.answered/call.completed webhooks to this agent */
+  openPhoneUserId: varchar("openPhoneUserId", { length: 128 }),
+  /** Unix ms when the agent answered a call. Cleared on call.completed. Auto-expires after 2h. */
+  onCallSince: bigint("onCallSince", { mode: "number" }),
+  /** OpenPhone call ID of the active call — used to match call.completed events */
+  onCallCallId: varchar("onCallCallId", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
