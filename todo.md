@@ -997,3 +997,5 @@
 - [x] Post call_started card on call.initiated when direction is outgoing
 - [x] Show caller name/number on inbound call_started card (lookup from leads table)
 - [x] Show customer name on outbound call cards (lookup call.to in quoteLeads)
+- [x] Clear stuck on-call badge in DB (force-clear all agents)
+- [x] Add TTL auto-expire: if onCallSince > 2 hours, auto-clear the badge

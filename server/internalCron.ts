@@ -35,8 +35,8 @@ import {
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
-import { opsReminders, opsChatMessages } from "../drizzle/schema";
-import { and, isNull, lte } from "drizzle-orm";
+import { opsReminders, opsChatMessages, agents } from "../drizzle/schema";
+import { and, isNull, lte, lt, isNotNull } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -405,6 +405,33 @@ export function startInternalCron(): void {
     }
   }, AI_WARMUP_STARTUP_DELAY_MS);
 
+  // ── On-call badge TTL: every 5 minutes ─────────────────────────────────────
+  // Safety net: clear any on-call badge older than 2 hours.
+  // Handles cases where call.completed was missed (server restart, webhook drop).
+  cron.schedule("0 */5 * * * *", async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const cutoff = Date.now() - TWO_HOURS_MS;
+      const stale = await db
+        .select({ id: agents.id, name: agents.name })
+        .from(agents)
+        .where(and(isNotNull(agents.onCallSince), lt(agents.onCallSince, cutoff)));
+      if (stale.length > 0) {
+        await db
+          .update(agents)
+          .set({ onCallSince: null, onCallCallId: null } as any)
+          .where(and(isNotNull(agents.onCallSince), lt(agents.onCallSince, cutoff)));
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("agent_status");
+        console.log(`[InternalCron] OnCallTTL — cleared ${stale.length} stale badge(s): ${stale.map((a: { name: string }) => a.name).join(", ")}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] OnCallTTL failed:", msg);
+    }
+  });
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
