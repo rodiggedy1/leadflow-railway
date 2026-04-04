@@ -986,18 +986,27 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
     const callStartedAt = call.createdAt ? new Date(call.createdAt) : new Date();
     const durationSeconds: number = call.duration ?? 0;
 
-    // Extract the external (lead) phone number from participants.
-    // OpenPhone sends participants as a flat string array of phone numbers.
-    // The internal/agent numbers are the CS line and main line — the external
-    // participant is whichever number is NOT one of those.
+    // Extract the external (lead) phone number.
+    // OpenPhone v3 call.recording.completed may send participants as empty array;
+    // fall back to call.from / call.to based on direction.
     const participants: string[] = call.participants ?? [];
     const internalNumbers = [
       normalizePhone(ENV.openPhoneFromNumber ?? ""),
       normalizePhone("+12028885362"), // CS line
     ].filter(Boolean);
-    const rawPhone = participants.find(p => !internalNumbers.includes(normalizePhone(p)));
+    let rawPhone = participants.find(p => !internalNumbers.includes(normalizePhone(p)));
     if (!rawPhone) {
-      console.warn(`[CallRecording] No external participant phone for callId=${callId}, participants=${JSON.stringify(participants)}`);
+      // Fallback: derive from from/to fields
+      const fromPhone = call.from ?? "";
+      const toPhone = call.to ?? "";
+      if (direction === "outgoing") {
+        rawPhone = toPhone || undefined;
+      } else {
+        rawPhone = fromPhone || undefined;
+      }
+    }
+    if (!rawPhone) {
+      console.warn(`[CallRecording] No external participant phone for callId=${callId}, participants=${JSON.stringify(participants)}, from=${call.from}, to=${call.to}`);
       return;
     }
     const leadPhone = normalizePhone(rawPhone);
