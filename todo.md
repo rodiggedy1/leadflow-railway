@@ -991,3 +991,5 @@
 - [x] CS Risk 4: Create CS session for proactive outbound messages (agent texts first from OpenPhone)
 - [x] CS Risk 5: Switch inbound/outbound dedup to messageId-based (not content+time)
 - [x] CS Risk 6: Add 30s polling fallback to CsInbox in case SSE misses a lead_update
+- [ ] Fix CS number calls mapping to wrong agent (owner) in on-call header badge instead of actual agent
+- [x] Fix on-call badge dedup guard: allow badge update when different agent answers shared-number call

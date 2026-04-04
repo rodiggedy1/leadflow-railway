@@ -1774,11 +1774,18 @@ async function handleCallAnswered(event: any): Promise<void> {
     console.log(`[CallStatus] call.answered: no agent found for openPhoneUserId=${opUserId}`);
     return;
   }
-  // Deduplicate: if this call is already tracked, skip (call.ringing + call.answered both fire)
+  // Deduplicate: skip only if THIS agent already has this exact call tracked.
+  // Do NOT skip if a different agent previously had this call (shared number: ringing fires for
+  // the account owner, then call.answered fires for whoever actually picks up).
   if (agent.onCallCallId === call.id) {
     console.log(`[CallStatus] ${agent.name} already on call ${call.id}, skipping duplicate event (${event?.type})`);
     return;
   }
+  // If a different agent was previously set as on-call for this call ID, clear them first
+  await db
+    .update(agents)
+    .set({ onCallSince: null, onCallCallId: null } as any)
+    .where(and(eq(agents.onCallCallId, call.id), ne(agents.id, agent.id)));
   // Determine direction — outgoing if direction field says so OR if event is call.initiated
   const isOutbound = call.direction === "outgoing" || event?.type === "call.initiated";
   const direction = isOutbound ? "outgoing" : "incoming";
@@ -1815,6 +1822,12 @@ async function handleCallAnswered(event: any): Promise<void> {
 async function handleCallCompleted(event: any): Promise<void> {
   const call = event?.data?.object;
   if (!call?.id) return;
+  // Ignore calls on the CS line
+  const csNumberId = ENV.openPhoneCsNumberId;
+  if (csNumberId && call.phoneNumberId === csNumberId) {
+    console.log(`[CallStatus] Ignoring CS line call.completed ${call.id} — not tracking on-call badge for CS number`);
+    return;
+  }
   const db = await getDb();
   if (!db) return;
   // Find the agent before clearing so we can name them in the card
