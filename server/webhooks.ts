@@ -111,6 +111,9 @@ export function registerWebhookRoutes(app: Express) {
       // NOTE: This must run BEFORE the direction check so outbound agent replies
       // from the OpenPhone app are mirrored into the CS chat (direction=outgoing).
       const csNumberId = ENV.openPhoneCsNumberId;
+      if (!csNumberId) {
+        console.error("[Webhook] OPENPHONE_CS_PHONE_NUMBER_ID is not set — CS messages will NOT be intercepted and may be silently dropped. Set this env var immediately.");
+      }
       if (csNumberId && msg?.phoneNumberId === csNumberId) {
         if (msg.direction === "outgoing") {
           // Agent replied directly from OpenPhone app — mirror into CS chat
@@ -1415,7 +1418,12 @@ async function handleCsInboundMessage(msg: any) {
     let history: Array<{ role: string; content: string; ts?: number }> = [];
     try { history = JSON.parse(freshSession?.messageHistory ?? "[]"); } catch { history = []; }
 
-    // Content dedup: skip if identical non-empty message already stored within 10s
+    // Dedup by messageId first (most reliable) — OpenPhone retries can fire the same event twice
+    if (messageId && history.some((h: any) => h.opMsgId === messageId)) {
+      console.log(`[CS] messageId dedup: ${messageId} already in history for session ${existingSession.id}. Skipping.`);
+      return;
+    }
+    // Content dedup fallback: skip if identical non-empty message already stored within 10s
     // Never dedup photo-only messages (empty text) — each photo is a distinct message
     const recent = history.slice(-3);
     const isDup = inboundText.trim() !== "" && recent.some(m => m.role === "user" && m.content === inboundText && now - (m.ts ?? 0) < 10_000);
@@ -1423,9 +1431,8 @@ async function handleCsInboundMessage(msg: any) {
       console.log(`[CS] Content dedup: identical message already in history for session ${existingSession.id}. Skipping.`);
       return;
     }
-
-    history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
-    if (history.length > 20) history = history.slice(-20);
+    history.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+    if (history.length > 200) history = history.slice(-200);
 
     // Also backfill leadName if it was previously null and we now resolved one
     const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date() };
@@ -1541,16 +1548,40 @@ async function handleCsOutboundMessage(msg: any) {
     .limit(1);
 
   if (!session) {
-    console.log(`[CS Outbound] No CS session found for ${leadPhone} — skipping mirror`);
+    // Risk 4: Agent proactively texted from OpenPhone before any inbound — create a session
+    console.log(`[CS Outbound] No CS session found for ${leadPhone} — creating proactive outbound session`);
+    const history = [{ role: "assistant", content: outboundText, ts: now, senderName: "OpenPhone", opMsgId: messageId }];
+    try {
+      await db
+        .insert(conversationSessions)
+        .values({
+          leadPhone,
+          leadName: null,
+          leadEmail: null,
+          leadSource: "cs-inbound" as any,
+          messageHistory: JSON.stringify(history),
+          stage: "OPEN",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
+      console.log(`[CS Outbound] Created proactive session for ${leadPhone}`);
+      const { broadcastOpsUpdate: bcast } = await import("./sseBroadcast");
+      bcast("lead_update");
+    } catch (err) {
+      console.error(`[CS Outbound] Failed to create proactive session for ${leadPhone}:`, err);
+    }
     return;
   }
 
-  let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+  let history: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }> = [];
   try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
 
-  // Content dedup: skip if identical assistant message already stored within 15s
-  // (covers the case where agent sent from CS chat — already stored — and OpenPhone
-  // fires the outgoing webhook for the same message)
+  // Dedup by messageId first (most reliable)
+  if (messageId && history.some((h: any) => h.opMsgId === messageId)) {
+    console.log(`[CS Outbound] messageId dedup: ${messageId} already in history for session ${session.id} — skipping`);
+    return;
+  }
+  // Content dedup fallback: skip if identical assistant message already stored within 15s
   const recent = history.slice(-3);
   const isDup = recent.some(
     m => m.role === "assistant" && m.content === outboundText && now - (m.ts ?? 0) < 15_000
@@ -1575,8 +1606,8 @@ async function handleCsOutboundMessage(msg: any) {
       }
     } catch { /* ignore */ }
   }
-  history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName });
-  if (history.length > 20) history = history.slice(-20);
+  history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName, opMsgId: messageId });
+  if (history.length > 200) history = history.slice(-200);
 
   await db
     .update(conversationSessions)
@@ -1606,23 +1637,35 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
     return;
   }
 
-  // Fetch last 20 messages for this conversation from OpenPhone
+  // Fetch last 50 messages for this conversation from OpenPhone, with 1 retry on failure
   let messages: any[] = [];
-  try {
-    const url = `https://api.openphone.com/v1/messages?phoneNumberId=${encodeURIComponent(csNumberId)}&participants=${encodeURIComponent(leadPhone)}&maxResults=20`;
-    const res = await fetch(url, {
-      headers: { Authorization: apiKey, "Content-Type": "application/json" },
-    });
-    if (!res.ok) {
-      console.warn(`[CS Sync] OpenPhone API ${res.status} for ${leadPhone}`);
-      return;
+  const fetchWithRetry = async (attempt: number): Promise<void> => {
+    try {
+      const url = `https://api.openphone.com/v1/messages?phoneNumberId=${encodeURIComponent(csNumberId)}&participants=${encodeURIComponent(leadPhone)}&maxResults=50`;
+      const res = await fetch(url, {
+        headers: { Authorization: apiKey, "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        if (attempt < 2) {
+          console.warn(`[CS Sync] OpenPhone API ${res.status} for ${leadPhone} — retrying in 2s`);
+          await new Promise(r => setTimeout(r, 2000));
+          return fetchWithRetry(attempt + 1);
+        }
+        console.warn(`[CS Sync] OpenPhone API ${res.status} for ${leadPhone} after ${attempt} attempts — giving up`);
+        return;
+      }
+      const json = await res.json() as any;
+      messages = json?.data ?? [];
+    } catch (err) {
+      if (attempt < 2) {
+        console.warn(`[CS Sync] Fetch error for ${leadPhone} — retrying in 2s:`, err);
+        await new Promise(r => setTimeout(r, 2000));
+        return fetchWithRetry(attempt + 1);
+      }
+      console.warn(`[CS Sync] Fetch error for ${leadPhone} after ${attempt} attempts — giving up:`, err);
     }
-    const json = await res.json() as any;
-    messages = json?.data ?? [];
-  } catch (err) {
-    console.warn("[CS Sync] Fetch error:", err);
-    return;
-  }
+  };
+  await fetchWithRetry(1);
 
   // Filter to outbound messages only
   const outbound = messages.filter((m: any) => m.direction === "outgoing");
@@ -1681,7 +1724,7 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
 
   // Sort by ts to maintain chronological order
   history.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
-  if (history.length > 40) history = history.slice(-40);
+  if (history.length > 200) history = history.slice(-200);
 
   await db
     .update(conversationSessions)
