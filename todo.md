@@ -951,3 +951,7 @@
 - [ ] Add World-Class AI Response pencil button to CS Chat: click pencil → type scenario → get Disney/Ritz-Carlton quality response with copy-to-compose
 - [x] Fix CS Chat agent messages showing wrong agent name (Rohan's name on Ianique's messages) — getAgentSessionFromCtx now returns fresh agent.name from DB instead of stale JWT name
 - [x] Fix Live Call Assist not generating AI responses after first prompt — getLiveCallSuggestions was using agentProcedure (requires agent cookie) but admins use Manus OAuth; changed to opsChatProcedure which accepts both
+- [x] Fix Live Call Assist stage looping — AI re-asks questions already in transcript
+- [x] Rewrite Live Call Assist system prompt — sharp, human, high-converting, no bland generic questions
+- [x] Remove currentStage from AI response — AI no longer auto-advances stage pills (stage tracking was causing loops)
+- [x] Fix knownFields to populate from context panel for ALL calls
