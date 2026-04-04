@@ -1031,8 +1031,7 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
       sessions[sessions.length - 1];
 
     if (!session) {
-      console.warn(`[CallRecording] No session found for leadPhone=${leadPhone} — skipping storage`);
-      return;
+      console.warn(`[CallRecording] No session found for leadPhone=${leadPhone} — storing with sessionId=0`);
     }
 
     // Insert with ON DUPLICATE KEY UPDATE for idempotency
@@ -1040,7 +1039,7 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
     await db
       .insert(openphoneCallRecordings)
       .values({
-        sessionId: session.id,
+        sessionId: session?.id ?? 0,
         openphoneCallId: callId,
         callerPhone: leadPhone,
         direction: direction === "outgoing" ? "outgoing" : "incoming",
@@ -1053,7 +1052,7 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
         set: { recordingUrl: recording.url, status: recording.status ?? "completed" },
       });
 
-    console.log(`[CallRecording] Stored recording for callId=${callId} sessionId=${session.id}`);
+    console.log(`[CallRecording] Stored recording for callId=${callId} sessionId=${session?.id ?? 0}`);
 
     // Fire Whisper transcription + debrief in the background (non-blocking).
     if (recording.url) {
