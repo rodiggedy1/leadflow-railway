@@ -1000,7 +1000,7 @@ export const appRouter = router({
 
         const now = Date.now();
         history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
-        if (history.length > 20) history = history.slice(-20);
+
 
         // Save to DB first, then send SMS
         await db

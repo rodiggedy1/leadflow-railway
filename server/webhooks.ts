@@ -495,10 +495,7 @@ export function registerWebhookRoutes(app: Express) {
       // Append the lead's inbound message to history first (always stored)
       history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
 
-      // Trim history to last 20 messages to stay within varchar(5000)
-      if (history.length > 20) {
-        history = history.slice(-20);
-      }
+
 
       // Log the inbound reply as an activity event
       logActivity({
@@ -584,7 +581,7 @@ export function registerWebhookRoutes(app: Express) {
         console.log(`[Webhook] Reactivation reply received (auto-reply DISABLED): stage=${session.stage}, from=${fromPhone}, text="${inboundText}"`);
         // NOTE: user message was already appended to history at line 256 above — do NOT push again here.
         // Persisting the already-updated history is all that's needed.
-        if (history.length > 20) history = history.slice(-20);
+
         await db
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history) })
@@ -611,7 +608,7 @@ export function registerWebhookRoutes(app: Express) {
           console.error(`[Webhook] Failed to send rating reply to ${fromPhone}:`, ratingSmsResult.error);
         }
         history.push({ role: "assistant", content: ratingResult.responseText, ts: Date.now() });
-        if (history.length > 20) history = history.slice(-20);
+
         await db
           .update(conversationSessions)
           .set({
@@ -626,7 +623,7 @@ export function registerWebhookRoutes(app: Express) {
         const reviewResult = await handleReviewReplyForJob(session.id, fromPhone, inboundText);
         console.log(`[Webhook] Review stage: ${session.stage} → ${reviewResult.newStage}. Reply: "${reviewResult.responseText}"`);
         history.push({ role: "assistant", content: reviewResult.responseText, ts: Date.now() });
-        if (history.length > 20) history = history.slice(-20);
+
         await db
           .update(conversationSessions)
           .set({
@@ -666,7 +663,7 @@ export function registerWebhookRoutes(app: Express) {
         }
         history.push({ role: "user", content: inboundText, ts: Date.now() });
         history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
-        if (history.length > 20) history = history.slice(-20);
+
         await db
           .update(conversationSessions)
           .set({ stage: newStage, messageHistory: JSON.stringify(history) })
@@ -694,7 +691,7 @@ export function registerWebhookRoutes(app: Express) {
         }
         history.push({ role: "user", content: inboundText, ts: Date.now() });
         history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
-        if (history.length > 20) history = history.slice(-20);
+
         await db
           .update(conversationSessions)
           .set({ stage: "INTERVIEW_LINK_SENT", messageHistory: JSON.stringify(history) })
@@ -747,8 +744,6 @@ export function registerWebhookRoutes(app: Express) {
       // Append the assistant's reply to history
       history.push({ role: "assistant", content: result.reply, ts: Date.now() });
 
-      // Trim history to last 20 messages to stay within varchar(5000)
-      if (history.length > 20) history = history.slice(-20);
 
       // Update the session in DB
       // Track lastAiMessageAt so the silence-follow-up cron can detect 5-min inactivity.
@@ -1485,7 +1480,7 @@ async function handleCsInboundMessage(msg: any) {
       return;
     }
     history.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
-    if (history.length > 200) history = history.slice(-200);
+
 
     // Also backfill leadName if it was previously null and we now resolved one
     const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date() };
@@ -1660,7 +1655,7 @@ async function handleCsOutboundMessage(msg: any) {
     } catch { /* ignore */ }
   }
   history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName, opMsgId: messageId });
-  if (history.length > 200) history = history.slice(-200);
+
 
   await db
     .update(conversationSessions)
@@ -1777,7 +1772,7 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
 
   // Sort by ts to maintain chronological order
   history.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
-  if (history.length > 200) history = history.slice(-200);
+
 
   await db
     .update(conversationSessions)
