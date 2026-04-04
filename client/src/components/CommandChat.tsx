@@ -26,7 +26,7 @@ import {
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
-  CalendarDays, Headphones, Radio, BookOpen } from "lucide-react";
+  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -2323,6 +2323,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           {fuNote && <p className="text-xs text-slate-400 mt-1.5 italic">{fuNote}</p>}
                           <p className="text-[10px] text-slate-400 mt-2">Assigned to {fuOwner}</p>
                         </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Call Started card ────────────────────────────────────────────────────────
+                if (msg.quickAction === "call_started") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const agentName = (meta.agentName as string) ?? msg.from;
+                  const direction = (meta.direction as string) ?? "incoming";
+                  const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 shadow-sm">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                        <PhoneCall className="h-3 w-3 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-medium text-emerald-800">{agentName} started a {dirLabel} call</span>
+                        <span className="text-[10px] text-emerald-400">{fmtMsgTime(msg.createdAt)}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Call Ended card ──────────────────────────────────────────────────────────
+                if (msg.quickAction === "call_ended") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const agentName = (meta.agentName as string) ?? msg.from;
+                  const durationLabel = (meta.durationLabel as string | null) ?? null;
+                  const direction = (meta.direction as string) ?? "incoming";
+                  const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 shadow-sm">
+                        <PhoneOff className="h-3 w-3 text-slate-400 shrink-0" />
+                        <span className="text-xs text-slate-600">
+                          {agentName} ended a {dirLabel} call{durationLabel ? <> &middot; <span className="font-medium">{durationLabel}</span></> : ""}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                       </div>
                     </div>
                   );

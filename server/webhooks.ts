@@ -87,6 +87,11 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
+      if (event?.type === "call.summary.completed") {
+        handleCallSummaryCompleted(event).catch(e => console.error("[CallStatus] summary error:", e));
+        return;
+      }
+
       // Only handle inbound SMS messages
       if (event?.type !== "message.received") {
         // Log unhandled event types so we can see what OpenPhone actually sends
@@ -1726,14 +1731,34 @@ async function handleCallAnswered(event: any): Promise<void> {
     console.log(`[CallStatus] call.answered: no agent found for openPhoneUserId=${opUserId}`);
     return;
   }
+  const callStartedAt = Date.now();
   await db
     .update(agents)
-    .set({ onCallSince: Date.now(), onCallCallId: call.id } as any)
+    .set({ onCallSince: callStartedAt, onCallCallId: call.id } as any)
     .where(eq(agents.id, agent.id));
   console.log(`[CallStatus] ${agent.name} is now on a call (callId=${call.id})`);
-  // Broadcast so the Command Chat header updates in real time
+  // Post a call_started card to the command channel
+  try {
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "📞 Call Status",
+      authorRole: "system",
+      body: `${agent.name} is on a call`,
+      quickAction: "call_started",
+      metadata: JSON.stringify({
+        agentName: agent.name,
+        callId: call.id,
+        startedAt: callStartedAt,
+        direction: call.direction ?? "incoming",
+      }),
+    });
+  } catch (e) {
+    console.error("[CallStatus] Failed to post call_started card:", e);
+  }
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("agent_status");
+  broadcastOpsUpdate("new_message");
 }
 
 async function handleCallCompleted(event: any): Promise<void> {
@@ -1741,13 +1766,71 @@ async function handleCallCompleted(event: any): Promise<void> {
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
-  // Clear on-call status for the agent who was on this call
-  const result = await db
+  // Find the agent before clearing so we can name them in the card
+  const [agent] = await db
+    .select({ id: agents.id, name: agents.name, onCallSince: agents.onCallSince })
+    .from(agents)
+    .where(eq(agents.onCallCallId, call.id))
+    .limit(1);
+  // Clear on-call status
+  await db
     .update(agents)
     .set({ onCallSince: null, onCallCallId: null } as any)
     .where(eq(agents.onCallCallId, call.id));
   console.log(`[CallStatus] call.completed for callId=${call.id} — cleared on-call status`);
-  // Broadcast so the Command Chat header updates in real time
+  // Post a call_ended card
+  if (agent) {
+    const durationMs = agent.onCallSince ? Date.now() - agent.onCallSince : null;
+    const durationSec = durationMs ? Math.round(durationMs / 1000) : (call.duration ?? null);
+    const durationLabel = durationSec
+      ? durationSec >= 60
+        ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
+        : `${durationSec}s`
+      : null;
+    try {
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: "📞 Call Status",
+        authorRole: "system",
+        body: `${agent.name} ended a call${durationLabel ? ` · ${durationLabel}` : ""}`,
+        quickAction: "call_ended",
+        metadata: JSON.stringify({
+          agentName: agent.name,
+          callId: call.id,
+          durationSec,
+          durationLabel,
+          direction: call.direction ?? "incoming",
+        }),
+      });
+    } catch (e) {
+      console.error("[CallStatus] Failed to post call_ended card:", e);
+    }
+  }
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("agent_status");
+  broadcastOpsUpdate("new_message");
+}
+
+async function handleCallSummaryCompleted(event: any): Promise<void> {
+  // Secondary clear signal — fires after call.completed
+  const obj = event?.data?.object;
+  const callId: string | undefined = obj?.callId ?? obj?.id;
+  if (!callId) return;
+  const db = await getDb();
+  if (!db) return;
+  const [agent] = await db
+    .select({ id: agents.id, name: agents.name })
+    .from(agents)
+    .where(eq(agents.onCallCallId, callId))
+    .limit(1);
+  if (agent) {
+    await db
+      .update(agents)
+      .set({ onCallSince: null, onCallCallId: null } as any)
+      .where(eq(agents.id, agent.id));
+    console.log(`[CallStatus] call.summary.completed cleared on-call for ${agent.name} (callId=${callId})`);
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("agent_status");
+  }
 }
