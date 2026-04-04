@@ -102,13 +102,22 @@ export function registerWebhookRoutes(app: Express) {
       }
 
       const msg = event?.data?.object;
-
       // Log the full payload for debugging
       console.log(`[Webhook] Event type: ${event?.type}, direction: ${msg?.direction}`);
       console.log(`[Webhook] Payload: from=${msg?.from} to=${JSON.stringify(msg?.to)} body=${msg?.body ?? msg?.text}`);
-
-      if (!msg || msg.direction !== "incoming") {
-        console.log(`[Webhook] Skipping: not an incoming message (direction=${msg?.direction})`);
+      // ── CS line intercept ──────────────────────────────────────────────────
+      // Messages to the CS line (202-888-5362, phoneNumberId=PN0wVLcpCq) are
+      // stored as cs-inbound sessions and skipped from the main lead AI engine.
+      // NOTE: This must run BEFORE the direction check so outbound agent replies
+      // from the OpenPhone app are mirrored into the CS chat (direction=outgoing).
+      const csNumberId = ENV.openPhoneCsNumberId;
+      if (csNumberId && msg?.phoneNumberId === csNumberId) {
+        if (msg.direction === "outgoing") {
+          // Agent replied directly from OpenPhone app — mirror into CS chat
+          await handleCsOutboundMessage(msg);
+        } else {
+          await handleCsInboundMessage(msg);
+        }
         return;
       }
       // Guard: only process messages addressed to THIS project's phone number.
@@ -120,17 +129,8 @@ export function registerWebhookRoutes(app: Express) {
       //   2. Env is set + payload has ID + they differ → block (wrong number)
       //   3. Env is set + payload has NO ID            → allow (older API versions omit it)
       //   4. Env is NOT set                            → allow all (misconfigured — log a warning)
-      // ── CS line intercept ──────────────────────────────────────────────────
-      // Messages to the CS line (202-888-5362, phoneNumberId=PN0wVLcpCq) are
-      // stored as cs-inbound sessions and skipped from the main lead AI engine.
-      const csNumberId = ENV.openPhoneCsNumberId;
-      if (csNumberId && msg.phoneNumberId === csNumberId) {
-        if (msg.direction === "outgoing") {
-          // Agent replied directly from OpenPhone app — mirror into CS chat
-          await handleCsOutboundMessage(msg);
-        } else {
-          await handleCsInboundMessage(msg);
-        }
+      if (!msg || msg.direction !== "incoming") {
+        console.log(`[Webhook] Skipping: not an incoming message (direction=${msg?.direction})`);
         return;
       }
       const configuredNumberId = ENV.openPhoneNumberId;

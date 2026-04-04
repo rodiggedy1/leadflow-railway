@@ -983,3 +983,5 @@
 - [x] Fix call card direction label: outbound calls showing as "inbound"
 - [x] Fix call card latency: cards appearing late
 - [x] Fix outbound calls not showing green badge in Command Chat header
+- [x] Fix CS SMS not showing in CS inbox: direction check was blocking outbound agent replies before CS intercept
+- [ ] Investigate false outbound call card at 11:24 AM (Rohan did not make a call)
