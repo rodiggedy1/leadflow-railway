@@ -553,6 +553,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     refetchInterval: 60_000, // SSE triggers immediate refetch; interval is fallback only
   });
 
+  // ── Recent call recordings — queried directly from DB, same as CsInbox ─────────────
+  const { data: recentCallRecordings = [] } = trpc.leads.getRecentCallRecordings.useQuery(
+    { limit: 20 },
+    { refetchInterval: 30_000 }
+  );
+
   // ── SSE real-time updates (CommandChat owns its own stream connection) ──────────────
   // CommandChat is rendered inside OpsChat which also calls useOpsStream.
   // Both hooks open separate SSE connections; the server handles multiple clients.

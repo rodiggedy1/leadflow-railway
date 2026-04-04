@@ -1591,6 +1591,21 @@ export const appRouter = router({
         }
       }),
     /**
+     * leads.getRecentCallRecordings — returns the most recent call recordings across all sessions.
+     * Used by CommandChat to show call debrief cards without depending on live webhooks.
+     */
+    getRecentCallRecordings: adminAgentProcedure
+      .input(z.object({ limit: z.number().int().positive().max(50).default(20) }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        return db
+          .select()
+          .from(openphoneCallRecordings)
+          .orderBy(desc(openphoneCallRecordings.callStartedAt))
+          .limit(input.limit);
+      }),
+    /**
      * leads.getSessionsWithRecordingss — returns a map of sessionId → { hasRecording, hasTranscript, callScore }
      * Used to show call/transcript indicator badges on lead list rows without a heavy JOIN.
      */
