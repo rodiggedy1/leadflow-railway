@@ -959,3 +959,4 @@
 - [x] Add "if they say yes" bridge card below opener in Live Call Assist
 - [x] Pre-fill agent name from Manus OAuth when agent portal session is not present
 - [x] Remove bridge line from system prompt (AI was repeating what agent already said from opener card)
+- [x] Audit and fix all duplicate question/line patterns across SMS flow and Live Call Assist — only issue was Live Call Assist bridge line (already fixed), SMS flow is clean
