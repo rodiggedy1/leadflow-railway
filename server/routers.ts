@@ -1955,6 +1955,7 @@ Analyze this conversation and return a JSON object with exactly these fields:
         leadName: z.string().optional(),
         serviceType: z.string().optional(),
         quotedPrice: z.string().optional(),
+        recurringPrice: z.string().optional(),
         lastCustomerLine: z.string().max(1000).optional(),
         context: z.string().max(500).optional(),
         isOutbound: z.boolean().optional(),
@@ -2237,7 +2238,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           input.knownFields ? `ALREADY KNOWN FROM FORM (do not re-ask these): ${input.knownFields}` : null,
           input.leadName    ? `Customer name: ${input.leadName}` : null,
           input.context     ? `FIELDS COLLECTED SO FAR:\n${input.context}` : null,
-          input.quotedPrice ? `Price to quote: $${input.quotedPrice}` : null,
+          input.quotedPrice ? `First clean price: $${input.quotedPrice}` : null,
+          input.recurringPrice ? `Recurring price (after first clean): $${input.recurringPrice}/clean` : null,
         ].filter(Boolean).join("\n");
         const userPrompt = [
           contextBlock ? `CONTEXT:\n${contextBlock}` : null,

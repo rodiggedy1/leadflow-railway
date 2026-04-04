@@ -124,6 +124,8 @@ export default function LiveCallAssist() {
   const basePrice = estimateBasePrice(bedrooms, bathrooms, serviceType);
   const extrasTotal = calculateExtrasTotal(selectedExtras);
   const quotedPrice = basePrice > 0 ? (basePrice + extrasTotal).toString() : "";
+  // Recurring price = bi-weekly rate (15% off base price, not including extras)
+  const recurringPrice = basePrice > 0 ? Math.round(basePrice * 0.85).toString() : "";
 
   const toggleExtra = (key: string) => {
     setSelectedExtras(prev =>
@@ -286,10 +288,11 @@ export default function LiveCallAssist() {
       leadName: leadName || undefined,
       serviceType: [bedrooms, bathrooms, serviceType].filter(Boolean).join(", ") || undefined,
       quotedPrice: quotedPrice || undefined,
-      lastCustomerLine: text,
-      context: context || undefined,
-      isOutbound: isOutbound || undefined,
-      knownFields: knownFields || undefined,
+        recurringPrice: recurringPrice || undefined,
+        lastCustomerLine: text,
+        context: context || undefined,
+        isOutbound: isOutbound || undefined,
+        knownFields: knownFields || undefined,
     });
   }, [customerInput, conversation, mutation, activeStage, leadName, address, bedrooms, bathrooms, serviceType, preferredDate, quotedPrice]);
 
@@ -485,6 +488,7 @@ export default function LiveCallAssist() {
                 leadName: leadName || undefined,
                 serviceType: [bedrooms, bathrooms, serviceType].filter(Boolean).join(", ") || undefined,
                 quotedPrice: quotedPrice || undefined,
+                recurringPrice: recurringPrice || undefined,
                 lastCustomerLine: prev.trim(),
                 context: context || undefined,
                 isOutbound: isOutbound || undefined,
