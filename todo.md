@@ -985,3 +985,9 @@
 - [x] Fix outbound calls not showing green badge in Command Chat header
 - [x] Fix CS SMS not showing in CS inbox: direction check was blocking outbound agent replies before CS intercept
 - [ ] Investigate false outbound call card at 11:24 AM (Rohan did not make a call)
+- [ ] CS Risk 1: Log error when OPENPHONE_CS_PHONE_NUMBER_ID is missing so silent drops are visible
+- [ ] CS Risk 2: Add retry with backoff to syncCsOutboundMessages on API failure
+- [ ] CS Risk 3: Increase history cap from 20 to 200 messages
+- [ ] CS Risk 4: Create CS session for proactive outbound messages (agent texts first from OpenPhone)
+- [ ] CS Risk 5: Switch inbound/outbound dedup to messageId-based (not content+time)
+- [ ] CS Risk 6: Add 30s polling fallback to CsInbox in case SSE misses a lead_update
