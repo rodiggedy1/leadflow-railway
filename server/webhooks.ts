@@ -75,7 +75,7 @@ export function registerWebhookRoutes(app: Express) {
       }
 
       // Track agent on-call status
-      if (event?.type === "call.ringing" || event?.type === "call.answered") {
+      if (event?.type === "call.ringing" || event?.type === "call.answered" || event?.type === "call.initiated") {
         console.log(`[CallStatus] ${event.type} raw payload:`, JSON.stringify(event?.data?.object ?? event, null, 2));
         handleCallAnswered(event).catch(e => console.error("[CallStatus] answered error:", e));
         return;
@@ -1709,7 +1709,7 @@ async function handleCallAnswered(event: any): Promise<void> {
   const call = event?.data?.object;
   if (!call?.id) return;
   // userId identifies the agent who answered (or initiated for outgoing)
-  const opUserId: string | undefined = call.userId ?? call.answeredBy;
+  const opUserId: string | undefined = call.userId ?? call.answeredBy ?? call.initiatedBy;
   if (!opUserId) {
     console.log(`[CallStatus] call.answered: no userId in payload, skipping`);
     return;
