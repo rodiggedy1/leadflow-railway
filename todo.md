@@ -980,7 +980,3 @@
 
 - [x] Auto-populate openPhoneUserId: fetch OpenPhone users via API, match to agents by name, write to DB
 - [x] Settings UI: show OpenPhone user match results, allow manual assignment for unmatched agents
-
-- [x] Command Chat call cards: post on-call system card when agent starts a call (call.ringing/call.initiated)
-- [x] Command Chat call cards: post call-completed system card when call ends (call.completed)
-- [x] call.summary.completed: use as secondary signal to clear on-call badge
