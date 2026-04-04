@@ -963,3 +963,5 @@
 - [x] Fix truncated confirmation line in Live Call Assist system prompt — removed 1-2 sentences MAX rule, added CRITICAL verbatim rule for script lines
 - [x] Add card collection and closing confirmation steps to Live Call Assist system prompt; fix personal note loop
 - [x] Fix personal touch step — AI must fill in actual detail from transcript, not print placeholder text
+- [x] Add empathy acknowledgment rule before each discovery question in Live Call Assist
+- [x] Add address confirmation rule after customer gives address in Live Call Assist
