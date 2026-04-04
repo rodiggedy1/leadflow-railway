@@ -1007,3 +1007,7 @@
 - [ ] Fix call card showing wrong agent name — shared number payload always has Rohan's userId, need to fetch real caller from OpenPhone API using callId
 - [x] For shared-number calls: show "An agent called X" instead of agent name, skip green badge on agent avatars
 - [x] Inbound shared-number calls: show "An agent received a call from X" instead of "An agent answered a call from X"
+- [ ] Show call duration in call_ended card UI (already in metadata, just needs rendering)
+- [ ] When call.summary.completed fires, append recording URL and AI summary to the existing call_ended card
+- [ ] Post a new call_debrief card in command channel after AI debrief is generated (recording player + AI summary)
+- [ ] Render call_debrief card in CommandChat with audio player and AI debrief bullets

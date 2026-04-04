@@ -2373,6 +2373,87 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
+                // ── Call Debrief card ────────────────────────────────────────────────────
+                if (msg.quickAction === "call_debrief") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const grade = (meta.grade as string | null) ?? null;
+                  const wentWell = (meta.wentWell as string | null) ?? null;
+                  const improve = (meta.improve as string | null) ?? null;
+                  const nextLine = (meta.nextLine as string | null) ?? null;
+                  const recordingUrl = (meta.recordingUrl as string | null) ?? null;
+                  const gradeColors: Record<string, string> = {
+                    A: "bg-green-100 text-green-700 border-green-300",
+                    B: "bg-blue-100 text-blue-700 border-blue-300",
+                    C: "bg-amber-100 text-amber-700 border-amber-300",
+                    D: "bg-orange-100 text-orange-700 border-orange-300",
+                    F: "bg-red-100 text-red-700 border-red-300",
+                  };
+                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
+                  return (
+                    <div key={msg.id} className="flex justify-center my-2 px-4">
+                      <div className="w-full max-w-sm rounded-[20px] border border-purple-200 bg-purple-50 shadow-sm p-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200">
+                              <Phone className="h-3 w-3 text-purple-600" />
+                            </div>
+                            <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {grade && (
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 text-xs font-bold ${gradeColor}`}>
+                                {grade}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-purple-400">{fmtMsgTime(msg.createdAt)}</span>
+                          </div>
+                        </div>
+                        {/* Audio player */}
+                        {recordingUrl && (
+                          <div className="mb-3">
+                            <audio
+                              controls
+                              src={recordingUrl}
+                              className="w-full h-8 rounded-xl"
+                              style={{ accentColor: "#7c3aed" }}
+                            />
+                          </div>
+                        )}
+                        <div className="border-t border-purple-200/70 mb-3" />
+                        {/* Went well */}
+                        {wentWell && (
+                          <div className="mb-2">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-green-500 text-xs">✔</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
+                            </div>
+                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{wentWell}</p>
+                          </div>
+                        )}
+                        <div className="border-t border-purple-200/50 mb-2" />
+                        {/* Improve */}
+                        {improve && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-amber-500 text-xs">▲</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
+                            </div>
+                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{improve}</p>
+                          </div>
+                        )}
+                        {/* Next line */}
+                        {nextLine && (
+                          <div className="rounded-2xl bg-white border border-purple-200 px-3 py-2">
+                            <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
+                            <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];

@@ -1256,6 +1256,38 @@ Be specific and actionable. Reference actual moments from the transcript. No flu
     .where(eq(openphoneCallRecordings.openphoneCallId, callId));
 
   console.log(`[CallDebrief] Debrief stored for callId=${callId}`);
+
+  // Fetch the recording URL so we can include it in the card
+  const [rec] = await db
+    .select({ recordingUrl: openphoneCallRecordings.recordingUrl })
+    .from(openphoneCallRecordings)
+    .where(eq(openphoneCallRecordings.openphoneCallId, callId))
+    .limit(1);
+
+  // Post a new call_debrief card to the command channel
+  try {
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "🎙️ Call Debrief",
+      authorRole: "system",
+      body: `Call debrief ready · Grade: ${debrief.grade}`,
+      quickAction: "call_debrief",
+      metadata: JSON.stringify({
+        callId,
+        recordingUrl: rec?.recordingUrl ?? null,
+        grade: debrief.grade,
+        wentWell: debrief.wentWell,
+        improve: debrief.improve,
+        nextLine: debrief.nextLine,
+      }),
+    });
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("new_message", { channel: "command" });
+    console.log(`[CallDebrief] Debrief card posted for callId=${callId}`);
+  } catch (e) {
+    console.error("[CallDebrief] Failed to post debrief card:", e);
+  }
 }
 
 /**
