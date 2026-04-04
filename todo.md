@@ -956,3 +956,5 @@
 - [x] Remove currentStage from AI response — AI no longer auto-advances stage pills (stage tracking was causing loops)
 - [x] Fix knownFields to populate from context panel for ALL calls
 - [x] Replace Live Call Assist system prompt with new outbound call script (exact flow + objection handling from user)
+- [x] Add "if they say yes" bridge card below opener in Live Call Assist
+- [x] Pre-fill agent name from Manus OAuth when agent portal session is not present

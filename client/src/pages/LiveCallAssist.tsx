@@ -943,37 +943,26 @@ export default function LiveCallAssist() {
             {/* Opener intro — always visible until first customer line is submitted */}
             {conversation.length === 0 && (
               <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-6">
-                {isOutbound && urlParams ? (
+                {isOutbound ? (
                   <>
                     <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-2">Outbound — Opening Line</p>
                     <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic mb-4">
-                      &ldquo;Hey {urlParams.name ? urlParams.name.split(" ")[0] : "[Name]"}, this is {agentName ? agentName.split(" ")[0] : "[Your Name]"} calling from Maids in Black.
-                      {urlParams.bedrooms || urlParams.bathrooms || urlParams.serviceType ? (
-                        <> You reached out about a
-                          {urlParams.bedrooms ? ` ${urlParams.bedrooms}-bedroom` : ""}
-                          {urlParams.bathrooms ? `, ${urlParams.bathrooms}-bathroom` : ""}
-                          {urlParams.serviceType ? ` ${urlParams.serviceType.toLowerCase()}` : " cleaning"}
-                        </>
-                      ) : " You reached out about a cleaning"}
-                      {" "}and I just wanted to make sure we get that taken care of for you. Do you have 60 seconds?&rdquo;
+                      &ldquo;Hi, is this {leadName ? leadName.split(" ")[0] : "[First Name]"}? Wonderful — this is {agentName ?? "[Your Name]"} with Maids in Black. You reached out to us a few minutes ago about getting a quote for your home, and I wanted to make sure you were taken care of right away. Did I catch you at an okay time?&rdquo;
                     </p>
                     <div className="border-t border-violet-200 pt-3 space-y-2">
-                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">If they say yes — bridge immediately</p>
-                      <p className="text-sm text-gray-700 italic">&ldquo;Perfect. So I’m looking at your request right now — {urlParams.bedrooms ? `${urlParams.bedrooms} bed` : ""}{urlParams.bathrooms ? `, ${urlParams.bathrooms} bath` : ""}. We have availability this week and I can lock in a time for you right now. What day works best?&rdquo;</p>
+                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">If they say yes — say this next</p>
+                      <p className="text-sm text-gray-700 italic">&ldquo;Perfect. I just want to say — thank you so much for considering us. A lot of people trust us with their homes and that means everything to our team. I just have a couple quick questions so I can build you something that actually fits your life, not just a generic number. That work for you?&rdquo;</p>
                     </div>
                     <div className="border-t border-violet-200 pt-3 space-y-2 mt-2">
-                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">If they say it’s a bad time</p>
-                      <p className="text-sm text-gray-700 italic">&ldquo;No problem at all — when’s a better time to reach you? I’ll call you back personally.&rdquo;</p>
+                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">If they say it's a bad time</p>
+                      <p className="text-sm text-gray-700 italic">&ldquo;No problem at all — when's a better time to reach you? I'll call you back personally.&rdquo;</p>
                     </div>
                   </>
                 ) : (
                   <>
                     <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Opening Line — say this first</p>
                     <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
-                      {isOutbound
-                        ? `"Hi, is this ${leadName ? leadName.split(" ")[0] : "[First Name]"}? Wonderful — this is ${agentName ?? "[Your Name]"} with Maids in Black. You reached out to us a few minutes ago about getting a quote for your home, and I wanted to make sure you were taken care of right away. Did I catch you at an okay time?"`
-                        : `"Hi, thank you for calling Maids in Black, this is ${agentName ?? "[Your Name]"}! How can I help you today?"`
-                      }
+                      &ldquo;Hi, thank you for calling Maids in Black, this is {agentName ?? "[Your Name]"}! How can I help you today?&rdquo;
                     </p>
                   </>
                 )}

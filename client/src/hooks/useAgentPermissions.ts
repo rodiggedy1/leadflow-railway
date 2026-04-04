@@ -9,6 +9,7 @@
  *   - loaded: true           → the query has resolved (use to avoid flash)
  */
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export function useAgentPermissions() {
   const { data, isLoading } = trpc.agents.me.useQuery(undefined, {
@@ -16,6 +17,9 @@ export function useAgentPermissions() {
     throwOnError: false,
     staleTime: 60_000,
   });
+
+  // Fall back to Manus OAuth user name when no agent session is active
+  const { user: oauthUser } = useAuth();
 
   const isAdmin = data?.isAdmin === true;
   // Admins are always unrestricted regardless of stored permissions
@@ -26,6 +30,6 @@ export function useAgentPermissions() {
     pagePermissions,
     loaded: !isLoading,
     agentId: data?.id ?? null,
-    agentName: data?.name ?? null,
+    agentName: data?.name ?? oauthUser?.name ?? null,
   };
 }
