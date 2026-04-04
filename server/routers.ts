@@ -2191,8 +2191,7 @@ HOW TO HANDLE ANYTHING OFF-SCRIPT:
 - Customer mentions a competitor → don't trash them, just highlight what makes Maids in Black different
 
 HOW TO WRITE THE SUGGESTION:
-1-2 sentences MAX. The agent reads this at a glance mid-call — it must be instantly readable and instantly sayable.
-
+CRITICAL: When the script gives you an exact line to say, deliver it WORD FOR WORD. Do NOT shorten, summarize, or cut any part of it. Script lines are written exactly as they must be said.
 STYLE RULES:
 - Sound like a real person talking, not a script being read
 - ZERO filler words: never start with "Absolutely!", "Great!", "Of course!", "Certainly!", "Sure!"
@@ -2227,7 +2226,7 @@ When they give you personal info (new puppy, just moved in, it's a disaster in h
           contextBlock ? `CONTEXT:\n${contextBlock}` : null,
           input.transcript ? `CONVERSATION (this is the ground truth — everything said here is already known):\n${input.transcript}` : null,
           input.lastCustomerLine ? `CUSTOMER JUST SAID: "${input.lastCustomerLine}"` : null,
-          `What does the agent say next? Return JSON with:\n- suggestion: the single next line for the agent to say (1-2 sentences max)\n- extracted: any NEW details you can confidently extract from the conversation so far (null if not mentioned). For addExtras: if the customer just agreed to an extra, return the matching key(s) from this list: clean_inside_cabinets, clean_inside_empty_fridge, clean_inside_full_fridge, clean_inside_oven, clean_interior_windows, clean_finished_basement, green_cleaning, move_in_move_out, two_hours_organizing, load_of_laundry, i_have_pets, wipe_walls, sweep_garage, balcony_sweep, home_concierge, same_day_booking, clean_inside_microwave, shed_pool_house, wash_dishes, pool_deck. Otherwise return null.`,
+          `What does the agent say next? Return JSON with:\n- suggestion: the exact next line for the agent to say — if the script provides a specific line for this moment, reproduce it verbatim in full, do NOT shorten or summarize it\n- extracted: any NEW details you can confidently extract from the conversation so far (null if not mentioned). For addExtras: if the customer just agreed to an extra, return the matching key(s) from this list: clean_inside_cabinets, clean_inside_empty_fridge, clean_inside_full_fridge, clean_inside_oven, clean_interior_windows, clean_finished_basement, green_cleaning, move_in_move_out, two_hours_organizing, load_of_laundry, i_have_pets, wipe_walls, sweep_garage, balcony_sweep, home_concierge, same_day_booking, clean_inside_microwave, shed_pool_house, wash_dishes, pool_deck. Otherwise return null.`,
         ].filter(Boolean).join("\n\n");
 
         try {
