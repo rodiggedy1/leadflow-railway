@@ -1795,10 +1795,12 @@ async function handleCallAnswered(event: any): Promise<void> {
     .set({ onCallSince: callStartedAt, onCallCallId: call.id } as any)
     .where(eq(agents.id, agent.id));
   console.log(`[CallStatus] ${agent.name} is now on a ${direction} call (callId=${call.id}, type=${event?.type})`);
-  // Only post the call_started card on call.answered — not on call.ringing or call.initiated,
-  // because on a shared number call.ringing fires for the account owner before anyone answers.
-  // Posting only on call.answered guarantees the card shows the correct agent.
-  if (event?.type !== "call.answered") {
+  // Post the call_started card:
+  //   - call.answered  → inbound call, correct agent confirmed
+  //   - call.initiated → outbound call (call.answered may never fire for outbound)
+  // Skip call.ringing — on shared numbers it fires for the account owner before anyone answers.
+  const shouldPostCard = event?.type === "call.answered" || (event?.type === "call.initiated" && isOutbound);
+  if (!shouldPostCard) {
     const { broadcastOpsUpdate } = await import("./sseBroadcast");
     broadcastOpsUpdate("agent_status");
     return;

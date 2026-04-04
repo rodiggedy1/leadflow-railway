@@ -994,3 +994,4 @@
 - [ ] Fix CS number calls mapping to wrong agent (owner) in on-call header badge instead of actual agent
 - [x] Fix on-call badge dedup guard: allow badge update when different agent answers shared-number call
 - [x] Fix call_started card: only post on call.answered (not call.ringing) so correct agent name shows
+- [x] Post call_started card on call.initiated when direction is outgoing
