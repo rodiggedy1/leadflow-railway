@@ -76,17 +76,25 @@ export function registerWebhookRoutes(app: Express) {
 
       // Track agent on-call status
       if (event?.type === "call.ringing" || event?.type === "call.answered") {
+        console.log(`[CallStatus] ${event.type} raw payload:`, JSON.stringify(event?.data?.object ?? event, null, 2));
         handleCallAnswered(event).catch(e => console.error("[CallStatus] answered error:", e));
         return;
       }
 
       if (event?.type === "call.completed") {
+        console.log(`[CallStatus] call.completed raw payload:`, JSON.stringify(event?.data?.object ?? event, null, 2));
         handleCallCompleted(event).catch(e => console.error("[CallStatus] completed error:", e));
         return;
       }
 
       // Only handle inbound SMS messages
-      if (event?.type !== "message.received") return;
+      if (event?.type !== "message.received") {
+        // Log unhandled event types so we can see what OpenPhone actually sends
+        if (event?.type?.startsWith('call.')) {
+          console.log(`[Webhook] Unhandled call event type: "${event?.type}"`, JSON.stringify(event?.data?.object ?? {}, null, 2));
+        }
+        return;
+      }
 
       const msg = event?.data?.object;
 
