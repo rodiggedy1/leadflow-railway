@@ -163,7 +163,7 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   address: text("address"),
   callPreference: varchar("callPreference", { length: 50 }), // "now" | "few_minutes"
   // Full message history as JSON array for ChatGPT context (stored as JSON string)
-  messageHistory: varchar("messageHistory", { length: 5000 }).default("[]").notNull(),
+  messageHistory: text("messageHistory").notNull(),
   // Link back to the original quote lead
   quoteLeadId: int("quoteLeadId"),
 
