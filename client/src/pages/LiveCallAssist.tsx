@@ -240,8 +240,8 @@ export default function LiveCallAssist() {
     // On the very first submission (conversation is empty), prepend the static opening line
     // so the AI knows the opener was already delivered and doesn't repeat it.
     const openingLineText = isOutbound
-      ? `Hey ${leadName ? leadName.split(" ")[0] : "[Name]"}! This is ${agentName ? agentName.split(" ")[0] : "[Agent]"} calling from Maids in Black — you filled out a quote request and I just wanted to make sure you got taken care of. Do you have two minutes?`
-      : `Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Agent]"}! You called at the perfect time — how can I help you today?`;
+      ? `Hi, is this ${leadName ? leadName.split(" ")[0] : "[First Name]"}? Wonderful — this is ${agentName ?? "[Your Name]"} with Maids in Black. You reached out to us a few minutes ago about getting a quote for your home, and I wanted to make sure you were taken care of right away. Did I catch you at an okay time?`
+      : `Hi, thank you for calling Maids in Black, this is ${agentName ?? "[Your Name]"}! How can I help you today?`;
     const prependOpener = conversation.length === 0
       ? [{ id: -2, speaker: "agent" as const, text: openingLineText }]
       : [];
@@ -451,8 +451,8 @@ export default function LiveCallAssist() {
             if (prev.trim()) {
               // Trigger submit via the same path as manual submit
               const liveOpeningLineText = isOutbound
-                ? `Hey ${leadName ? leadName.split(" ")[0] : "[Name]"}! This is ${agentName ? agentName.split(" ")[0] : "[Agent]"} calling from Maids in Black — you filled out a quote request and I just wanted to make sure you got taken care of. Do you have two minutes?`
-                : `Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Agent]"}! You called at the perfect time — how can I help you today?`;
+                ? `Hi, is this ${leadName ? leadName.split(" ")[0] : "[First Name]"}? Wonderful — this is ${agentName ?? "[Your Name]"} with Maids in Black. You reached out to us a few minutes ago about getting a quote for your home, and I wanted to make sure you were taken care of right away. Did I catch you at an okay time?`
+                : `Hi, thank you for calling Maids in Black, this is ${agentName ?? "[Your Name]"}! How can I help you today?`;
               const livePrependOpener = conversation.length === 0
                 ? [{ id: -2, speaker: "agent" as const, text: liveOpeningLineText }]
                 : [];
@@ -971,8 +971,8 @@ export default function LiveCallAssist() {
                     <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-3">Opening Line — say this first</p>
                     <p className="text-2xl font-semibold text-gray-900 leading-relaxed italic">
                       {isOutbound
-                        ? `"Hey ${leadName ? leadName.split(" ")[0] : "[Name]"}! This is ${agentName ? agentName.split(" ")[0] : "[Your Name]"} calling from Maids in Black — you filled out a quote request and I just wanted to make sure you got taken care of. Do you have two minutes?"`
-                        : `"Hi, thank you for calling Maids in Black, this is ${agentName ? agentName.split(" ")[0] : "[Your Name]"}! You called at the perfect time — how can I help you today?"`
+                        ? `"Hi, is this ${leadName ? leadName.split(" ")[0] : "[First Name]"}? Wonderful — this is ${agentName ?? "[Your Name]"} with Maids in Black. You reached out to us a few minutes ago about getting a quote for your home, and I wanted to make sure you were taken care of right away. Did I catch you at an okay time?"`
+                        : `"Hi, thank you for calling Maids in Black, this is ${agentName ?? "[Your Name]"}! How can I help you today?"`
                       }
                     </p>
                   </>
