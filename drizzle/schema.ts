@@ -384,6 +384,8 @@ export const agents = mysqlTable("agents", {
   awaySetAt: timestamp("awaySetAt"),
   /** OpenPhone user ID — maps call.answered/call.completed webhooks to this agent */
   openPhoneUserId: varchar("openPhoneUserId", { length: 128 }),
+  /** OpenPhone phone number ID for this agent's personal number (e.g. PNylSKu3Hz) — used to identify agent on shared-number calls */
+  openPhoneNumberId: varchar("openPhoneNumberId", { length: 128 }),
   /** Unix ms when the agent answered a call. Cleared on call.completed. Auto-expires after 2h. */
   onCallSince: bigint("onCallSince", { mode: "number" }),
   /** OpenPhone call ID of the active call — used to match call.completed events */

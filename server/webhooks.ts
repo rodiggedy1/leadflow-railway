@@ -1793,11 +1793,16 @@ async function handleCallAnswered(event: any): Promise<void> {
   const isOutbound = call.direction === "outgoing" || event?.type === "call.initiated";
   const direction = isOutbound ? "outgoing" : "incoming";
   const callStartedAt = Date.now();
-  await db
-    .update(agents)
-    .set({ onCallSince: callStartedAt, onCallCallId: call.id } as any)
-    .where(eq(agents.id, agent.id));
-  console.log(`[CallStatus] ${agent.name} is now on a ${direction} call (callId=${call.id}, type=${event?.type})`);
+  // On the shared CS number (PN0wVLcpCq) we cannot reliably identify who made the call —
+  // OpenPhone always reports the number owner's userId. Skip the on-call badge in that case.
+  const isSharedCsNumber = call.phoneNumberId === ENV.openPhoneCsNumberId;
+  if (!isSharedCsNumber) {
+    await db
+      .update(agents)
+      .set({ onCallSince: callStartedAt, onCallCallId: call.id } as any)
+      .where(eq(agents.id, agent.id));
+  }
+  console.log(`[CallStatus] ${isSharedCsNumber ? "shared CS number" : agent.name} is now on a ${direction} call (callId=${call.id}, type=${event?.type})`);
   // Post the call_started card:
   //   - call.answered  → inbound call, correct agent confirmed
   //   - call.initiated → outbound call (call.answered may never fire for outbound)
@@ -1842,9 +1847,10 @@ async function handleCallAnswered(event: any): Promise<void> {
       callerLabel = callerPhone;
     }
   }
+  const agentLabel = isSharedCsNumber ? "An agent" : agent.name;
   const cardBody = callerLabel
-    ? `${agent.name} ${isOutbound ? "called" : "answered a call from"} ${callerLabel}`
-    : `${agent.name} is on a ${direction} call`;
+    ? `${agentLabel} ${isOutbound ? "called" : "answered a call from"} ${callerLabel}`
+    : `${agentLabel} is on a ${direction} call`;
   // Post a call_started card to the command channel
   try {
     await db.insert(opsChatMessages).values({
@@ -1855,7 +1861,7 @@ async function handleCallAnswered(event: any): Promise<void> {
       body: cardBody,
       quickAction: "call_started",
       metadata: JSON.stringify({
-        agentName: agent.name,
+        agentName: agentLabel,
         callId: call.id,
         startedAt: callStartedAt,
         direction,
@@ -1897,16 +1903,18 @@ async function handleCallCompleted(event: any): Promise<void> {
         ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
         : `${durationSec}s`
       : null;
+    const isSharedCsNumber = call.phoneNumberId === ENV.openPhoneCsNumberId;
+    const agentLabel = isSharedCsNumber ? "An agent" : agent.name;
     try {
       await db.insert(opsChatMessages).values({
         cleanerJobId: null,
         channel: "command",
         authorName: "📞 Call Status",
         authorRole: "system",
-        body: `${agent.name} ended a call${durationLabel ? ` · ${durationLabel}` : ""}`,
+        body: `${agentLabel} ended a call${durationLabel ? ` · ${durationLabel}` : ""}`,
         quickAction: "call_ended",
         metadata: JSON.stringify({
-          agentName: agent.name,
+          agentName: agentLabel,
           callId: call.id,
           durationSec,
           durationLabel,

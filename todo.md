@@ -1004,3 +1004,5 @@
 - [x] Fix call card: outbound card not appearing (call.initiated not triggering card in UI)
 - [x] Fix call card: lag in appearance (new_message broadcast missing channel param, OpsChat onNewMessage only invalidates when channel is truthy)
 - [x] Fix call card: "a inbound" → "an inbound" grammar
+- [ ] Fix call card showing wrong agent name — shared number payload always has Rohan's userId, need to fetch real caller from OpenPhone API using callId
+- [x] For shared-number calls: show "An agent called X" instead of agent name, skip green badge on agent avatars
