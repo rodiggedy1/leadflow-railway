@@ -1805,6 +1805,24 @@ async function handleCallAnswered(event: any): Promise<void> {
     broadcastOpsUpdate("agent_status");
     return;
   }
+  // Look up caller name from quoteLeads (best-effort, inbound only)
+  let callerLabel: string | null = null;
+  const callerPhone: string | null = !isOutbound ? (call.from ?? null) : (call.to?.[0] ?? null);
+  if (callerPhone) {
+    try {
+      const [lead] = await db
+        .select({ name: quoteLeads.name })
+        .from(quoteLeads)
+        .where(eq(quoteLeads.phone, callerPhone))
+        .limit(1);
+      callerLabel = lead?.name ?? callerPhone;
+    } catch {
+      callerLabel = callerPhone;
+    }
+  }
+  const cardBody = callerLabel
+    ? `${agent.name} ${isOutbound ? "called" : "answered a call from"} ${callerLabel}`
+    : `${agent.name} is on a ${direction} call`;
   // Post a call_started card to the command channel
   try {
     await db.insert(opsChatMessages).values({
@@ -1812,13 +1830,15 @@ async function handleCallAnswered(event: any): Promise<void> {
       channel: "command",
       authorName: "📞 Call Status",
       authorRole: "system",
-      body: `${agent.name} is on a call`,
+      body: cardBody,
       quickAction: "call_started",
       metadata: JSON.stringify({
         agentName: agent.name,
         callId: call.id,
         startedAt: callStartedAt,
         direction,
+        callerLabel,
+        callerPhone,
       }),
     });
   } catch (e) {
