@@ -1056,8 +1056,7 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
     console.log(`[CallRecording] Stored recording for callId=${callId} sessionId=${session.id}`);
 
     // Fire Whisper transcription + debrief in the background (non-blocking).
-    // Runs regardless of whether OpenPhone sends a transcript webhook.
-    if (recording.url && durationSeconds >= 20) {
+    if (recording.url) {
       setTimeout(() => {
         transcribeAndDebriefRecording(callId, recording.url as string).catch((err) =>
           console.error(`[CallRecording] Background transcribe/debrief failed for callId=${callId}:`, err)
