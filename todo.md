@@ -977,3 +977,6 @@
 - [x] Agent on-call status: OpenPhone call.ringing / call.answered / call.completed webhook handlers
 - [x] Agent on-call status: getAgentStatusList returns onCallSince with 2-hour TTL safety + SSE broadcast via agent_status event
 - [x] Agent on-call status: on-call badge (green phone icon + ring) on agent photos in Command Chat header
+
+- [x] Auto-populate openPhoneUserId: fetch OpenPhone users via API, match to agents by name, write to DB
+- [x] Settings UI: show OpenPhone user match results, allow manual assignment for unmatched agents

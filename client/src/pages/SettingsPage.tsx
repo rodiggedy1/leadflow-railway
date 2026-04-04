@@ -35,6 +35,143 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
+import { PhoneCall as PhoneCallIcon } from "lucide-react";
+
+// ── OpenPhone Sync Card ───────────────────────────────────────────────────
+
+function OpenPhoneSyncCard() {
+  const syncMutation = trpc.opsChat.syncOpenPhoneUsers.useMutation();
+  const setIdMutation = trpc.opsChat.setAgentOpenPhoneUserId.useMutation();
+  const [result, setResult] = useState<{
+    matched: Array<{ agentId: number; agentName: string; opUserId: string; opName: string }>;
+    unmatched: Array<{ opUserId: string; opName: string; opEmail: string }>;
+    agentRows: Array<{ id: number; name: string }>;
+  } | null>(null);
+  const [manualSelections, setManualSelections] = useState<Record<string, number>>({});
+
+  const handleSync = async () => {
+    try {
+      const res = await syncMutation.mutateAsync();
+      setResult(res);
+      if (res.matched.length > 0) {
+        toast.success(`Matched ${res.matched.length} agent${res.matched.length !== 1 ? "s" : ""} automatically`);
+      }
+    } catch (e: any) {
+      toast.error(e.message ?? "Sync failed");
+    }
+  };
+
+  const handleManualAssign = async (opUserId: string, agentId: number) => {
+    try {
+      await setIdMutation.mutateAsync({ agentId, openPhoneUserId: opUserId });
+      toast.success("Assigned successfully");
+      // Remove from unmatched list
+      setResult(prev => prev ? {
+        ...prev,
+        unmatched: prev.unmatched.filter(u => u.opUserId !== opUserId),
+        matched: [...prev.matched, {
+          agentId,
+          agentName: prev.agentRows.find(a => a.id === agentId)?.name ?? "",
+          opUserId,
+          opName: prev.unmatched.find(u => u.opUserId === opUserId)?.opName ?? "",
+        }],
+      } : prev);
+    } catch (e: any) {
+      toast.error(e.message ?? "Assignment failed");
+    }
+  };
+
+  return (
+    <Card className="border border-gray-200 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <PhoneCallIcon className="w-4 h-4 text-[#E8735A]" />
+          OpenPhone Agent Mapping
+        </CardTitle>
+        <CardDescription className="text-xs text-gray-500">
+          Fetch your OpenPhone team members and link them to agents so the on-call badge works automatically.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Button
+          onClick={handleSync}
+          disabled={syncMutation.isPending}
+          variant="outline"
+          size="sm"
+          className="gap-2"
+        >
+          {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          {syncMutation.isPending ? "Syncing…" : "Sync from OpenPhone"}
+        </Button>
+
+        {result && (
+          <div className="space-y-4">
+            {/* Matched agents */}
+            {result.matched.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Matched ({result.matched.length})</p>
+                <div className="space-y-1">
+                  {result.matched.map(m => (
+                    <div key={m.opUserId} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                      <span className="font-medium text-gray-800">{m.agentName}</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="text-gray-500">{m.opName}</span>
+                      <span className="text-xs text-gray-400 font-mono ml-auto">{m.opUserId}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Unmatched OpenPhone users */}
+            {result.unmatched.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Unmatched — assign manually ({result.unmatched.length})</p>
+                <div className="space-y-2">
+                  {result.unmatched.map(u => (
+                    <div key={u.opUserId} className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="text-sm text-gray-700 w-32 shrink-0">{u.opName || u.opEmail}</span>
+                      <Select
+                        value={manualSelections[u.opUserId] ? String(manualSelections[u.opUserId]) : ""}
+                        onValueChange={val => setManualSelections(prev => ({ ...prev, [u.opUserId]: Number(val) }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs flex-1">
+                          <SelectValue placeholder="Select agent…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {result.agentRows.map(a => (
+                            <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs px-3"
+                        disabled={!manualSelections[u.opUserId] || setIdMutation.isPending}
+                        onClick={() => handleManualAssign(u.opUserId, manualSelections[u.opUserId])}
+                      >
+                        Assign
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {result.unmatched.length === 0 && result.matched.length > 0 && (
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> All OpenPhone users matched. On-call badges are active.
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -1580,6 +1717,9 @@ export default function SettingsPage() {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* OpenPhone Agent Mapping */}
+                <OpenPhoneSyncCard />
               </div>
             )}
           </>

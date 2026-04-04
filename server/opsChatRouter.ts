@@ -2494,12 +2494,96 @@ Now respond to the customer objection the agent provides. Give the agent the exa
         { role: "user", content: `Customer objection: "${input.objection}"` },
       ];
 
-      const result = await invokeLLM({ messages });
+       const result = await invokeLLM({ messages });
       const script = result.choices?.[0]?.message?.content ?? "Sorry, I couldn't generate a response. Please try again.";
       return { script };
     }),
-});
 
+  // ── OpenPhone User Sync ────────────────────────────────────────────────────
+  /**
+   * syncOpenPhoneUsers — fetch all users from the OpenPhone API, fuzzy-match
+   * them to agents by name, and write openPhoneUserId to the DB for matched rows.
+   * Returns a summary of matches and unmatched users for the admin to review.
+   */
+  syncOpenPhoneUsers: opsChatProcedure
+    .mutation(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const apiKey = process.env.OPENPHONE_API_KEY ?? "";
+      if (!apiKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "OPENPHONE_API_KEY not configured" });
+
+      // Fetch all OpenPhone users
+      const res = await fetch("https://api.openphone.com/v1/users", {
+        headers: { Authorization: apiKey },
+      });
+      if (!res.ok) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `OpenPhone API error: ${res.status}` });
+      }
+      const json = await res.json() as any;
+      const opUsers: Array<{ id: string; firstName: string; lastName: string; email: string }> =
+        (json?.data ?? []).filter((u: any) => u.id);
+
+      // Load all active agents
+      const agentRows = await db
+        .select({ id: agents.id, name: agents.name, openPhoneUserId: agents.openPhoneUserId })
+        .from(agents)
+        .where(eq(agents.isActive, 1));
+
+      // Normalize names for fuzzy matching
+      function normName(s: string) {
+        return s.toLowerCase().replace(/[^a-z ]/g, "").trim();
+      }
+
+      const matched: Array<{ agentId: number; agentName: string; opUserId: string; opName: string }> = [];
+      const unmatched: Array<{ opUserId: string; opName: string; opEmail: string }> = [];
+
+      for (const opUser of opUsers) {
+        const opFullName = normName(`${opUser.firstName ?? ""} ${opUser.lastName ?? ""}`);
+        const opFirstName = normName(opUser.firstName ?? "");
+
+        // Try exact full-name match first, then first-name prefix match
+        let best = agentRows.find(a => normName(a.name) === opFullName);
+        if (!best && opFirstName) {
+          best = agentRows.find(a => {
+            const agNorm = normName(a.name);
+            const agFirst = agNorm.split(" ")[0];
+            return agFirst === opFirstName || opFirstName === agFirst;
+          });
+        }
+
+        if (best) {
+          matched.push({ agentId: best.id, agentName: best.name, opUserId: opUser.id, opName: `${opUser.firstName ?? ""} ${opUser.lastName ?? ""}`.trim() });
+        } else {
+          unmatched.push({ opUserId: opUser.id, opName: `${opUser.firstName ?? ""} ${opUser.lastName ?? ""}`.trim(), opEmail: opUser.email ?? "" });
+        }
+      }
+
+      // Write matched openPhoneUserId values to DB
+      for (const m of matched) {
+        await db.update(agents)
+          .set({ openPhoneUserId: m.opUserId })
+          .where(eq(agents.id, m.agentId));
+      }
+
+      return { matched, unmatched, agentRows: agentRows.map(a => ({ id: a.id, name: a.name })) };
+    }),
+
+  /**
+   * setAgentOpenPhoneUserId — manually assign an OpenPhone userId to an agent.
+   * Used by the admin UI to resolve unmatched agents.
+   */
+  setAgentOpenPhoneUserId: opsChatProcedure
+    .input(z.object({ agentId: z.number(), openPhoneUserId: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.update(agents)
+        .set({ openPhoneUserId: input.openPhoneUserId })
+        .where(eq(agents.id, input.agentId));
+      return { ok: true };
+    }),
+});
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
