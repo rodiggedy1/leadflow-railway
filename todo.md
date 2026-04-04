@@ -955,3 +955,4 @@
 - [x] Rewrite Live Call Assist system prompt — sharp, human, high-converting, no bland generic questions
 - [x] Remove currentStage from AI response — AI no longer auto-advances stage pills (stage tracking was causing loops)
 - [x] Fix knownFields to populate from context panel for ALL calls
+- [x] Replace Live Call Assist system prompt with new outbound call script (exact flow + objection handling from user)
