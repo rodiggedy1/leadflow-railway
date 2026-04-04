@@ -961,3 +961,4 @@
 - [x] Remove bridge line from system prompt (AI was repeating what agent already said from opener card)
 - [x] Audit and fix all duplicate question/line patterns across SMS flow and Live Call Assist — only issue was Live Call Assist bridge line (already fixed), SMS flow is clean
 - [x] Fix truncated confirmation line in Live Call Assist system prompt — removed 1-2 sentences MAX rule, added CRITICAL verbatim rule for script lines
+- [x] Add card collection and closing confirmation steps to Live Call Assist system prompt; fix personal note loop

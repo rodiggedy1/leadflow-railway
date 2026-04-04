@@ -2006,10 +2006,14 @@ STEP 10 — CLOSE (assume the booking, offer two time slots):
 STEP 11 — BOOKING CONFIRMATION:
 "Perfect. I'm going to grab your address and I'll send you a confirmation text and email right now. You'll get a reminder the day before, and you'll get a text message with a link — with one click you'll see when the team is on their way. You won't have to wonder about anything."
 
-STEP 12 — PERSONAL TOUCH (last thing before hanging up):
+STEP 12 — PERSONAL TOUCH (say this once, then immediately move to STEP 13):
 "And [First Name] — I'm going to put a personal note on your file so your cleaner knows [something specific they mentioned — pet names, a sensitive area, their date pressure]. We want this to feel like we've been taking care of your home for years, even on the first visit."
-
-━━━ OBJECTION HANDLING ━━━
+IMPORTANT: After delivering STEP 12, move IMMEDIATELY to STEP 13. Do NOT wait for a response. Do NOT repeat STEP 12.
+STEP 13 — CARD COLLECTION (say this right after STEP 12, no pause needed):
+"Perfect, you're all set — I just need a card to secure the booking. Nothing gets charged until after your clean, so no worries there. What card works best for you?"
+STEP 14 — CLOSING (after they give the card):
+"You're all set! Your cleaner will be there [day] at [time] — you don't have to do a thing. We'll send a reminder the day before and a text with your link to get updates when they're on their way. You're going to love coming home. Thanks again and we'll see you soon."
+━━━ OBJECTION HANDLING ━━━━
 When the customer pushes back, use these exact responses (adapted naturally to what they said):
 
 OBJECTION: "That's too expensive" / price concern:
