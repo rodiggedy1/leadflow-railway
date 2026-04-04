@@ -1805,9 +1805,9 @@ async function handleCallAnswered(event: any): Promise<void> {
     broadcastOpsUpdate("agent_status");
     return;
   }
-  // Look up caller name from quoteLeads (best-effort, inbound only)
+  // Look up customer name from quoteLeads for both inbound and outbound
   let callerLabel: string | null = null;
-  const callerPhone: string | null = !isOutbound ? (call.from ?? null) : (call.to?.[0] ?? null);
+  const callerPhone: string | null = isOutbound ? (call.to?.[0] ?? null) : (call.from ?? null);
   if (callerPhone) {
     try {
       const [lead] = await db
