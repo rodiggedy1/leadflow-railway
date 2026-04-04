@@ -958,3 +958,4 @@
 - [x] Replace Live Call Assist system prompt with new outbound call script (exact flow + objection handling from user)
 - [x] Add "if they say yes" bridge card below opener in Live Call Assist
 - [x] Pre-fill agent name from Manus OAuth when agent portal session is not present
+- [x] Remove bridge line from system prompt (AI was repeating what agent already said from opener card)
