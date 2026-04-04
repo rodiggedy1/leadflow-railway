@@ -2791,33 +2791,32 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             // Skip if the last customer message arrived before the hard epoch cutoff
             // This ensures only genuinely new issues surface, never historical ones
             if (!lastCustomerTs || lastCustomerTs < PRIORITY_QUEUE_EPOCH) return null;
-            const recent = msgs.slice(-6).map((m) => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`).join("\n");
-            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: lastCustomerTs };
+            const isCleaner = s.leadSource === "cs-inbound-cleaner";
+            const senderLabel = isCleaner ? "Team member" : "Customer";
+            const recent = msgs.slice(-6).map((m) => `${m.role === "user" ? senderLabel : "Agent"}: ${m.content}`).join("\n");
+            const typeLabel = isCleaner ? "[TEAM — cleaner/staff]" : "[CUSTOMER]";
+            return { id: s.id, name: s.leadName || s.leadPhone || "Unknown", recent, msgCount: msgs.length, lastTs: lastCustomerTs, typeLabel };
           })
-          .filter(Boolean) as Array<{ id: number; name: string; recent: string; msgCount: number; lastTs: number }>;
+          .filter(Boolean) as Array<{ id: number; name: string; recent: string; msgCount: number; lastTs: number; typeLabel: string }>;
 
         if (summaries.length === 0) return [];
 
         // Ask AI to identify top 3 priority conversations
         const { invokeLLM } = await import("./_core/llm");
-        const prompt = `You are a CS manager reviewing ${summaries.length} customer service conversations for a cleaning company. Identify the top 3 that need IMMEDIATE human attention.
-
+        const prompt = `You are a CS manager reviewing ${summaries.length} conversations for a cleaning company. Identify the top 3 that need IMMEDIATE human attention.
+IMPORTANT: Some conversations are from TEAM members (cleaners/staff), not customers. They are labeled [TEAM — cleaner/staff]. Treat them accordingly — a team member saying they can't enter a home is an operational issue, not an angry customer.
 Priority criteria (in order):
 1. angry — customer is upset, frustrated, or threatening to leave
 2. cancel — customer wants to cancel or reschedule
 3. booking — customer is trying to book or has a strong purchase intent
-4. urgent — any other time-sensitive situation
-
+4. urgent — any other time-sensitive situation (including team operational issues like access problems, no-shows, or safety concerns)
 Conversations:
-${summaries.map((s, i) => `[${i + 1}] ID:${s.id} Name:${s.name}\n${s.recent}`).join("\n\n")}
-
+${summaries.map((s, i) => `[${i + 1}] ID:${s.id} Name:${s.name} ${(s as any).typeLabel}\n${s.recent}`).join("\n\n")}
 Return ONLY a JSON array of up to 3 objects. Each object must have:
 - id: number (the conversation ID)
 - tag: one of "angry" | "cancel" | "booking" | "urgent"
 - reason: string (max 8 words, plain text, no punctuation at end, e.g. "wants to cancel tomorrow's cleaning")
-
 If fewer than 3 conversations need attention, return fewer. Return [] if none are urgent.`;
-
         let priorityItems: Array<{ id: number; tag: string; reason: string }> = [];
         try {
           const res = await invokeLLM({

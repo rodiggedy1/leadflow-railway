@@ -966,3 +966,4 @@
 - [x] Add empathy acknowledgment rule before each discovery question in Live Call Assist
 - [x] Add address confirmation rule after customer gives address in Live Call Assist
 - [x] Wire pricing table prices (first clean + recurring) into Live Call Assist so AI uses real prices instead of [price] placeholders
+- [x] Fix AI priority queue: Teams conversations are cleaners/staff, not customers — AI now receives [TEAM — cleaner/staff] label and treats them as operational issues, not customer complaints
