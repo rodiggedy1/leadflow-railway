@@ -339,8 +339,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   // Map DB rows to Conversation shape
   const liveConversations: Conversation[] = useMemo(() => {
-    if (!csData) return conversations; // loading — show static demo data
-    if (csData.length === 0) return conversations; // no real sessions — show static demo data
+    if (!csData) return []; // loading — show nothing until real data arrives
+    if (csData.length === 0) return []; // no real sessions — show empty state
     return csData.map((row) => {
       let msgs: { role: string; content: string; ts?: number; senderName?: string; media?: string[] }[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
@@ -390,7 +390,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     });
   }, [csData, nameMap]);
 
-  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
+  const displayConversations = liveConversations;
 
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
@@ -452,6 +452,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       const nextConv = f[currentIdx + 1] ?? f[currentIdx - 1] ?? null;
       setSelectedId(nextConv?.id ?? null);
       utils.leads.listCsInbox.invalidate();
+      toast.success("Resolved", { description: "Conversation marked as resolved.", duration: 3000 });
     },
   });
 
@@ -1229,7 +1230,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <TooltipContent side="bottom">New SMS conversation</TooltipContent>
                     </Tooltip>
                     {/* Resolve */}
-                    {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
+                    {selected && selected.id > 0 && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
