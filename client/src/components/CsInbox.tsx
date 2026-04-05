@@ -295,6 +295,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
+  // AI Elevate suggestion state
+  const [elevateSuggestion, setElevateSuggestion] = useState<string | null>(null);
+  const [elevateChecked, setElevateChecked] = useState(false); // true once shown for current draft
+  const elevateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const utils = trpc.useUtils();
   // Track whether the user has manually picked a tab so we don't override their choice
@@ -395,6 +399,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
       setCompose("");
+      setElevateSuggestion(null);
+      setElevateChecked(false);
       // Lock the current conversation so list re-sort after invalidate doesn't jump away
       if (effectiveSelectedIdRef.current !== null) {
         setSelectedId(effectiveSelectedIdRef.current);
@@ -402,6 +408,59 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       utils.leads.listCsInbox.invalidate();
     },
   });
+
+  const elevateReply = trpc.leads.elevateReply.useMutation({
+    onSuccess: (data) => {
+      setElevateSuggestion(data.elevated);
+      setElevateChecked(true);
+    },
+  });
+
+  // Trigger elevate on debounce when agent types (non-Teams only)
+  function triggerElevateDebounced(draft: string, conv: typeof selected) {
+    if (!conv || conv.queue === "Teams") return;
+    if (elevateDebounceRef.current) clearTimeout(elevateDebounceRef.current);
+    if (draft.trim().length < 10) { setElevateSuggestion(null); setElevateChecked(false); return; }
+    elevateDebounceRef.current = setTimeout(() => {
+      elevateReply.mutate({
+        draft: draft.trim(),
+        clientName: conv.name,
+        messageHistory: JSON.stringify(conv.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
+      });
+    }, 1500);
+  }
+
+  function doSendCs() {
+    if (!selected || !compose.trim()) return;
+    sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+  }
+
+  function handleCsSend() {
+    if (!selected || !compose.trim()) return;
+    const isTeams = selected.queue === "Teams";
+    // Teams: send directly, no elevation
+    if (isTeams) { doSendCs(); return; }
+    // Already shown suggestion: send directly
+    if (elevateChecked) { doSendCs(); return; }
+    // Short message: send directly
+    if (compose.trim().length < 10) { doSendCs(); return; }
+    // Run elevation check first
+    elevateReply.mutate(
+      {
+        draft: compose.trim(),
+        clientName: selected.name,
+        messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
+      },
+      {
+        onSuccess: (data) => {
+          setElevateSuggestion(data.elevated);
+          setElevateChecked(true);
+          if (data.elevated.trim() === compose.trim()) doSendCs();
+        },
+        onError: () => doSendCs(),
+      }
+    );
+  }
 
   // ── AI priority queue (must be before filtered useMemo) ─────────────────────
   const { data: priorityItems = [], isLoading: priorityLoading } = trpc.leads.getCsPriorityQueue.useQuery(
@@ -1527,11 +1586,18 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       className="flex-1 rounded-xl bg-transparent border-0 px-1 py-1 text-slate-900 min-h-[80px] resize-none focus:outline-none text-sm leading-relaxed placeholder:text-slate-400"
                       placeholder={autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
                       value={compose}
-                      onChange={(e) => { setCompose(e.target.value); }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCompose(val);
+                        // Reset suggestion when draft changes
+                        if (elevateSuggestion) { setElevateSuggestion(null); setElevateChecked(false); }
+                        triggerElevateDebounced(val, selected);
+                      }}
                       onKeyDown={(e) => {
                         onTypingKeyPress();
                         if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
-                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                          e.preventDefault();
+                          handleCsSend();
                         }
                       }}
                       onBlur={onTypingBlur}
@@ -1569,17 +1635,46 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       </div>
                       <Button
                         className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
-                        disabled={!compose.trim() || sendMessage.isPending || !selected}
-                        onClick={() => {
-                          if (!selected || !compose.trim()) return;
-                          sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
-                        }}
+                        disabled={!compose.trim() || sendMessage.isPending || elevateReply.isPending || !selected}
+                        onClick={handleCsSend}
                       >
-                        <Send className="h-4 w-4" />
-                        {sendMessage.isPending ? "Sending..." : "Send"}
+                        {elevateReply.isPending ? (
+                          <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
+                        ) : sendMessage.isPending ? (
+                          <><Send className="h-4 w-4" /> Sending…</>
+                        ) : (
+                          <><Send className="h-4 w-4" /> Send</>
+                        )}
                       </Button>
                     </div>
                   </div>
+                  {/* AI Elevate suggestion card */}
+                  {elevateReply.isPending && !elevateSuggestion && (
+                    <div className="mt-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs flex items-center gap-2 text-violet-600">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                      <span className="font-medium">Elevating to world-class level…</span>
+                    </div>
+                  )}
+                  {elevateSuggestion && !elevateReply.isPending && selected?.queue !== "Teams" && (
+                    <div className="mt-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-semibold text-violet-700">
+                          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                          <span>World-class suggestion</span>
+                          <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
+                        </div>
+                        <button onClick={() => { setElevateSuggestion(null); setElevateChecked(false); }} className="text-violet-400 hover:text-violet-600 shrink-0"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <p className="text-slate-700 italic flex-1 leading-relaxed">“{elevateSuggestion}”</p>
+                        <button
+                          onClick={() => { setCompose(elevateSuggestion); setElevateSuggestion(null); setElevateChecked(true); }}
+                          className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
+                        >Use</button>
+                      </div>
+                      <p className="text-violet-400 text-[10px]">Or <button onClick={doSendCs} className="underline font-semibold">send your original</button></p>
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-col gap-2">
                     {/* Row 1: AI + Send quote + Make it right + Refer a friend + FAQ */}
                     <div className="flex items-center gap-2">
