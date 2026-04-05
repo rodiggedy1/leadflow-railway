@@ -298,9 +298,17 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
 
   const utils = trpc.useUtils();
+  // Track whether the user has manually picked a tab so we don't override their choice
+  const userPickedFilter = useRef(false);
+
   useOpsStream({
     onLeadUpdate: () => {
       utils.leads.listCsInbox.invalidate();
+      // Auto-switch to New tab when an inbound message arrives — but only if the
+      // user hasn't manually chosen a different tab in this session.
+      if (!userPickedFilter.current) {
+        setActiveFilter("New");
+      }
     },
   });
 
@@ -901,6 +909,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <button
                     key={tab.id}
                     onClick={() => {
+                      userPickedFilter.current = true;
                       setActiveFilter(tab.id);
                       if (tab.id === "Resolved") setShowResolved(true);
                     }}
@@ -1026,7 +1035,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[20px] border px-3.5 py-3.5 text-left transition-all duration-150 hover:shadow-md hover:-translate-y-[1px] ${
+                        className={`w-full rounded-[20px] border px-3.5 py-3.5 text-left transition-all duration-150 hover:shadow-md hover:-translate-y-[1px] group ${
                           selected.id === conversation.id
                             ? "border-slate-900 bg-white shadow-md ring-1 ring-slate-900/5"
                             : (conversation as any).hasUnanswered
@@ -1076,6 +1085,25 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             </div>
                           </div>
                         </div>
+                        {/* Inline resolve button — visible on hover for New/Active tabs */}
+                        {(activeFilter === "New" || activeFilter === "Active") && (
+                          <div
+                            className="mt-2.5 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                resolveSession.mutate({ sessionId: conversation.id });
+                              }}
+                              disabled={resolveSession.isPending}
+                              className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              Resolve
+                            </button>
+                          </div>
+                        )}
                       </button>
                     );
                   })}

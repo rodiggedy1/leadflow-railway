@@ -2713,12 +2713,12 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         return deduped;
       }),
     /**
-     * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.
-     * Used to show the red badge on the CS tab.
+     * getCsUnreadCount — returns count of CS sessions where the last message is from
+     * the customer (hasUnanswered). This drives the red badge on the CS tab.
      */
     getCsUnreadCount: opsChatProcedure
       .input(z.object({ lastSeenTs: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input: _input }) => {
         const db = await getDb();
         if (!db) return { count: 0 };
         const sourceFilter = or(
@@ -2727,14 +2727,17 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           eq(conversationSessions.leadSource, "cs_initiated")
         );
         const sessions = await db
-          .select({ id: conversationSessions.id, updatedAt: conversationSessions.updatedAt })
+          .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
           .from(conversationSessions)
           .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)))
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(200);
+        type HistoryEntry = { role: string; ts?: number };
         const count = sessions.filter((s) => {
-          const ts = s.updatedAt instanceof Date ? s.updatedAt.getTime() : new Date(s.updatedAt as string).getTime();
-          return ts > input.lastSeenTs;
+          let history: HistoryEntry[] = [];
+          try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
+          const lastEntry = history[history.length - 1];
+          return !!lastEntry && lastEntry.role === "user";
         }).length;
         return { count };
       }),
