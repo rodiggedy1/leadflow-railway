@@ -2406,10 +2406,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 if (msg.quickAction?.startsWith("away_status:")) {
                   const statusKey = msg.quickAction.split(":")[1];
                   const STATUS_MAP: Record<string, { label: string; sub: string; emoji: string; accent: string; bg: string; border: string; headerBg: string }> = {
-                    away_sec: { label: "Away for a sec",  sub: "Quick break",        emoji: "☕", accent: "#92400e", bg: "#fffbeb", border: "#fde68a", headerBg: "linear-gradient(90deg,#f59e0b,#fbbf24)" },
-                    lunch:    { label: "Lunch break",     sub: "Quick munch",        emoji: "🍔", accent: "#065f46", bg: "#ecfdf5", border: "#a7f3d0", headerBg: "linear-gradient(90deg,#10b981,#34d399)" },
-                    back15:   { label: "Back in 15",      sub: "Short defined break", emoji: "⏰", accent: "#3730a3", bg: "#eef2ff", border: "#c7d2fe", headerBg: "linear-gradient(90deg,#6366f1,#818cf8)" },
-                    eod:      { label: "Signing off",     sub: "End of day",         emoji: "🌙", accent: "#0c4a6e", bg: "#f0f9ff", border: "#bae6fd", headerBg: "linear-gradient(90deg,#0ea5e9,#38bdf8)" },
+                    priority: { label: "Priority", sub: "Urgent items needing action", emoji: "🔴", accent: "#9f1239", bg: "#fff1f2", border: "#fecdd3", headerBg: "linear-gradient(90deg,#e11d48,#fb7185)" },
+                    new:      { label: "New",      sub: "Fresh inbound conversations", emoji: "🔵", accent: "#1e3a8a", bg: "#eff6ff", border: "#bfdbfe", headerBg: "linear-gradient(90deg,#2563eb,#60a5fa)" },
+                    active:   { label: "Active",   sub: "Ongoing conversations",       emoji: "🟠", accent: "#92400e", bg: "#fffbeb", border: "#fde68a", headerBg: "linear-gradient(90deg,#d97706,#fbbf24)" },
+                    resolved: { label: "Resolved", sub: "Closed conversations",        emoji: "🟢", accent: "#14532d", bg: "#f0fdf4", border: "#bbf7d0", headerBg: "linear-gradient(90deg,#16a34a,#4ade80)" },
+                    teams:    { label: "Teams",    sub: "Team queue",                  emoji: "🟣", accent: "#4c1d95", bg: "#f5f3ff", border: "#ddd6fe", headerBg: "linear-gradient(90deg,#7c3aed,#a78bfa)" },
                   };
                   const s = STATUS_MAP[statusKey] ?? { label: msg.body, sub: "", emoji: "💬", accent: "#334155", bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155" };
                   return (
@@ -2979,10 +2980,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 <PopoverContent className="w-52 p-1.5" align="end">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Set status</p>
                   {([
-                    { key: "away_sec",  label: "Away for a sec",  sub: "Quick break",        emoji: "☕",  accent: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
-                    { key: "lunch",     label: "Lunch break",     sub: "Quick munch",        emoji: "🍔",  accent: "#10b981", bg: "#ecfdf5", border: "#a7f3d0" },
-                    { key: "back15",    label: "Back in 15",      sub: "Short defined break", emoji: "⏰",  accent: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
-                    { key: "eod",       label: "Signing off",     sub: "End of day",         emoji: "🌙",  accent: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd" },
+                    { key: "priority", label: "Priority", sub: "Urgent items needing action", emoji: "🔴", accent: "#e11d48", bg: "#fff1f2", border: "#fecdd3" },
+                    { key: "new",      label: "New",      sub: "Fresh inbound conversations", emoji: "🔵", accent: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
+                    { key: "active",   label: "Active",   sub: "Ongoing conversations",       emoji: "🟠", accent: "#d97706", bg: "#fffbeb", border: "#fde68a" },
+                    { key: "resolved", label: "Resolved", sub: "Closed conversations",        emoji: "🟢", accent: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+                    { key: "teams",    label: "Teams",    sub: "Team queue",                  emoji: "🟣", accent: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
                   ] as const).map(({ key, label, sub, emoji, accent, bg, border }) => (
                     <button
                       key={key}

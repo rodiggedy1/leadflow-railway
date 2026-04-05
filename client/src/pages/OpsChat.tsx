@@ -76,14 +76,15 @@ import {
 // Visible to the whole team; disappears automatically when all agents are back.
 
 const AWAY_COPY: Record<string, { emoji: string; phrase: string }> = {
-  away_sec: { emoji: "☕", phrase: "away for a sec" },
-  lunch:    { emoji: "🍔", phrase: "on lunch break" },
-  back15:   { emoji: "⏰", phrase: "back in 15" },
-  eod:      { emoji: "🌙", phrase: "signing off for the day" },
+  priority: { emoji: "🔴", phrase: "on Priority" },
+  new:      { emoji: "🔵", phrase: "on New" },
+  active:   { emoji: "🟠", phrase: "on Active" },
+  resolved: { emoji: "🟢", phrase: "on Resolved" },
+  teams:    { emoji: "🟣", phrase: "on Teams" },
 };
 
-// Statuses that auto-dismiss after 15 minutes
-const AUTO_DISMISS_STATUSES = new Set(["eod", "back15"]);
+// No auto-dismiss for the new statuses — agents clear manually
+const AUTO_DISMISS_STATUSES = new Set<string>([]);
 const AUTO_DISMISS_MS = 15 * 60 * 1000;
 
 function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null; awaySetAt?: number | null }> }) {
@@ -97,7 +98,7 @@ function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: stri
   const now = Date.now();
   const awayAgents = agents.filter(a => {
     if (!a.awayStatus) return false;
-    // Auto-dismiss eod and back15 after 15 minutes
+    // Auto-dismiss check (no statuses currently auto-dismiss)
     if (AUTO_DISMISS_STATUSES.has(a.awayStatus) && a.awaySetAt) {
       if (now - a.awaySetAt > AUTO_DISMISS_MS) return false;
     }
@@ -1882,10 +1883,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       : "offline";
                     // Status label: show the named away reason when explicitly set
                     const awayLabels: Record<string, string> = {
-                      away_sec: "Away for a sec ☕",
-                      lunch: "Lunch break 🍔",
-                      back15: "Back in 15 ⏰",
-                      eod: "Signing off 🌙",
+                      priority: "Priority 🔴",
+                      new:      "New 🔵",
+                      active:   "Active 🟠",
+                      resolved: "Resolved 🟢",
+                      teams:    "Teams 🟣",
                     };
                     const statusLabel = ag.awayStatus ? (awayLabels[ag.awayStatus] ?? "Away")
                       : seenMs === null || diffMin === null ? "Never logged in"
@@ -2573,7 +2575,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             onSwitchToCS={() => handleSetActiveTab("cs")}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
-              setAwayStatusMutation.mutate({ status: status as "away_sec" | "lunch" | "back15" | "eod" | null });
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              setAwayStatusMutation.mutate({ status: status as any });
             }}
             senderStatusMap={senderStatusMap}
             agentList={agentStatusData?.agents ?? []}

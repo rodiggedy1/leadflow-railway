@@ -4418,10 +4418,10 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
     /**
      * agents.setAwayStatus — set or clear the current agent's away status.
      * Pass null to mark as available (I'm Back).
-     * Valid values: "away_sec" | "lunch" | "back15" | "eod" | null
+     * Valid values: "priority" | "new" | "active" | "resolved" | "teams" | null
      */
     setAwayStatus: publicProcedure
-      .input(z.object({ status: z.enum(["away_sec", "lunch", "back15", "eod"]).nullable() }))
+      .input(z.object({ status: z.enum(["priority", "new", "active", "resolved", "teams"]).nullable() }))
       .mutation(async ({ ctx, input }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();
