@@ -339,8 +339,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   // Map DB rows to Conversation shape
   const liveConversations: Conversation[] = useMemo(() => {
-    if (!csData) return []; // loading — show nothing until real data arrives
-    if (csData.length === 0) return []; // no real sessions — show empty state
+    if (!csData) return conversations; // loading — show static demo data
+    if (csData.length === 0) return conversations; // no real sessions — show static demo data
     return csData.map((row) => {
       let msgs: { role: string; content: string; ts?: number; senderName?: string; media?: string[] }[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
@@ -390,7 +390,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     });
   }, [csData, nameMap]);
 
-  const displayConversations = liveConversations;
+  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
 
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
@@ -452,7 +452,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       const nextConv = f[currentIdx + 1] ?? f[currentIdx - 1] ?? null;
       setSelectedId(nextConv?.id ?? null);
       utils.leads.listCsInbox.invalidate();
-      toast.success("Resolved", { description: "Conversation marked as resolved.", duration: 3000 });
     },
   });
 
@@ -802,13 +801,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     }
   }, [effectiveSelectedId]);
 
-  // Auto-select first conversation when data loads and nothing is explicitly selected
-  useEffect(() => {
-    if (selectedId === null && filtered.length > 0) {
-      setSelectedId(filtered[0].id);
-    }
-  }, [filtered, selectedId]);
-
   // Auto-draft: only fires when the user explicitly clicks a conversation.
   // Background data refreshes (new inbound messages, re-sorts) never trigger this.
   function triggerAutoDraft(conv: typeof selected) {
@@ -1033,7 +1025,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   {filtered.map((conversation) => {
                     const q = conversation.queue ? queueTone(conversation.queue) : { tone: "bg-slate-100 text-slate-500 border-slate-200", label: null };
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
-                    const isUnread = (conversation as any).lastInboundTs > lastViewed && selected?.id !== (conversation as any).id;
+                    const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     return (
                       <div
                         key={conversation.id}
@@ -1124,17 +1116,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          {!selected ? (
-            <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] flex flex-col h-full py-0 gap-0">
-              <CardContent className="p-0 flex flex-col flex-1 min-h-0 items-center justify-center">
-                <div className="text-center text-slate-400 px-8">
-                  <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm font-medium">Select a conversation</p>
-                  <p className="text-xs mt-1">No conversations in this queue yet</p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
@@ -1248,7 +1229,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <TooltipContent side="bottom">New SMS conversation</TooltipContent>
                     </Tooltip>
                     {/* Resolve */}
-                    {selected && selected.id > 0 && (
+                    {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
@@ -1672,10 +1653,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               </div>
             </CardContent>
           </Card>
-          )}
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          {selected ? (
           <div className="overflow-y-auto space-y-5">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
@@ -2376,10 +2355,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               </>
             )}
           </div>
-          ) : <div />}
         </div>
       </div>
     </div>
+
     {/* New Conversation dialog */}
     {newConvOpen && (
       <div
