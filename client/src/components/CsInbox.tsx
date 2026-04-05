@@ -735,7 +735,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     return parts.join("; ");
   }, [clientProfile]);
 
-  // AI insight query — fires when a conversation is selected and has messages
+  // AI insight — fires when a conversation is selected and has messages.
+  // Uses useMutation (POST) instead of useQuery (GET) to avoid HTTP 414 URI-too-large
+  // errors when messageHistory is long.
   const insightMsgHistory = useMemo(() => {
     if (!selected?.messages?.length) return "[]";
     return JSON.stringify(
@@ -746,21 +748,34 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     );
   }, [selected?.id, selected?.messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: insightData, isFetching: insightLoading } = trpc.leads.getCsConvInsight.useQuery(
-    {
-      sessionId: selected?.id ?? 0,
-      messageHistory: insightMsgHistory,
-      clientName: selected?.name ?? undefined,
-      queue: selected?.queue ?? undefined,
-      clientProfile: clientProfileSummary,
-    },
-    {
-      enabled: !!(selected && selected.id > 0 && selected.messages.length > 0),
-      refetchOnWindowFocus: false,
-      // Re-fetch when the conversation changes or a new message arrives
-      staleTime: 60_000, // treat as fresh for 60s to avoid hammering LLM on every render
+  const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
+  const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
+  const insightMutation = trpc.leads.getCsConvInsight.useMutation({
+    onSuccess: (data) => setInsightData(data),
+  });
+  const insightLoading = insightMutation.isPending;
+
+  // Trigger insight fetch when conversation changes or new messages arrive
+  useEffect(() => {
+    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
+    // Clear stale insight immediately when switching conversations
+    if (insightFetchedForId !== selected.id) {
+      setInsightData(null);
     }
-  );
+    // Re-fetch if conversation changed or message count changed (new message arrived)
+    const key = `${selected.id}:${selected.messages.length}`;
+    if (insightFetchedForId === selected.id && insightMutation.variables &&
+        `${insightMutation.variables.sessionId}:${JSON.parse(insightMutation.variables.messageHistory ?? '[]').length}` === key) return;
+    setInsightFetchedForId(selected.id);
+    insightMutation.mutate({
+      sessionId: selected.id,
+      messageHistory: insightMsgHistory,
+      clientName: selected.name ?? undefined,
+      queue: selected.queue ?? undefined,
+      clientProfile: clientProfileSummary,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
 
   // Upsell opportunity detector — only fires for non-Teams, non-Deep-clean conversations
   const isTeamsConv = selected?.queue === "Teams";

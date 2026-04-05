@@ -3402,7 +3402,8 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
         queue: z.string().optional(),
         clientProfile: z.string().optional(), // brief text summary of booking history
       }))
-      .query(async ({ input }) => {
+      // NOTE: must be .mutation (POST) — messageHistory can be very long and exceeds nginx URI limits as a GET param
+      .mutation(async ({ input }) => {
         const isTeams = input.queue === "Teams";
         const messages: Array<{ role: string; content: string }> = (() => {
           try { return JSON.parse(input.messageHistory); } catch { return []; }
