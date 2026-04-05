@@ -1165,11 +1165,14 @@ export const opsChatRouter = router({
       .from(opsChatMessages)
       .where(and(eq(opsChatMessages.quickAction, "stale_eta"), gte(opsChatMessages.createdAt, new Date(todayStartMs))))
       .orderBy(opsChatMessages.createdAt);
+    const todayJobIds = new Set(jobs.map(j => j.id));
     const jobStatusMap = new Map(jobs.map(j => [j.id, j.jobStatus]));
     for (const msg of staleEtaMsgs) {
       let meta2: Record<string, unknown> = {};
       try { meta2 = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
       const jobId2 = (meta2.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+      // Skip if this job is not in today's jobs
+      if (!jobId2 || !todayJobIds.has(jobId2)) continue;
       const currentStatus = jobId2 ? jobStatusMap.get(jobId2) : undefined;
       // Skip if cleaner has since moved past on_the_way
       if (currentStatus && currentStatus !== "on_the_way" && currentStatus !== "running_late") continue;
