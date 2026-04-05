@@ -90,6 +90,7 @@ const AUTO_DISMISS_MS = 15 * 60 * 1000;
 function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null; awaySetAt?: number | null }> }) {
   // Re-render every 30 seconds so the timer check stays current
   const [, setTick] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 30_000);
     return () => clearInterval(id);
@@ -104,12 +105,12 @@ function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: stri
     }
     return true;
   });
-  if (awayAgents.length === 0) return null;
+  if (awayAgents.length === 0 || dismissed) return null;
 
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
+    <div className="flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
       <span className="text-amber-500 shrink-0">⚠️</span>
-      <p className="text-sm text-amber-800 leading-snug text-center">
+      <p className="text-sm text-amber-800 leading-snug text-center flex-1">
         {awayAgents.map((ag, i) => {
           const copy = AWAY_COPY[ag.awayStatus!] ?? { emoji: "🟡", phrase: "away" };
           return (
@@ -124,6 +125,13 @@ function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: stri
           );
         })}
       </p>
+      <button
+        onClick={() => setDismissed(true)}
+        className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors ml-2"
+        title="Dismiss"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   );
 }

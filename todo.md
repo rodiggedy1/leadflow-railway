@@ -1012,3 +1012,4 @@
 - [ ] Post a new call_debrief card in command channel after AI debrief is generated (recording player + AI summary)
 - [ ] Render call_debrief card in CommandChat with audio player and AI debrief bullets
 - [x] Fix priority queue click: clicking a priority item navigates to wrong conversation (e.g. Jennifer Casden → GoGreen)
+- [x] Add dismiss (×) button to away status banner so the entire bar can be closed
