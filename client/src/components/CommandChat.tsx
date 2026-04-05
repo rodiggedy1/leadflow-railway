@@ -1465,44 +1465,50 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Team Status</p>
               <div className="space-y-1.5">
                 {cleanerStatuses.map((cs) => {
+                  const etaTs = (cs as any).etaTimestamp as number | null;
+                  const isStaleEta = cs.status === "on_the_way" && etaTs && etaTs < Date.now();
                   const isUrgent = cs.status === "issue_at_property" || cs.status === "running_late";
-                  const arrivalLine = (cs as any).etaTimestamp && (cs as any).etaTimestamp > Date.now()
-                    ? `Arrives: ${new Date((cs as any).etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                  const isCompleted = cs.status === "completed";
+                  const arrivalLine = etaTs && etaTs > Date.now()
+                    ? `Arrives: ${new Date(etaTs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
                     : cs.etaLabel ? `ETA: ${cs.etaLabel}` : null;
                   const tooltipLines = [
                     `${cs.emoji} ${cs.cleanerName} — ${cs.label}`,
                     cs.customerName ? `Customer: ${cs.customerName}` : null,
                     cs.jobAddress ? `Address: ${cs.jobAddress}` : null,
                     arrivalLine,
+                    isStaleEta ? `⚠️ ETA passed — check in` : null,
                     cs.issueNote ? `Issue: ${cs.issueNote}` : null,
                   ].filter(Boolean) as string[];
+                  const cardBg = isUrgent
+                    ? "bg-red-50 border-red-100 hover:bg-red-100"
+                    : isStaleEta
+                    ? "bg-amber-50 border-amber-200 hover:bg-amber-100"
+                    : isCompleted
+                    ? "bg-emerald-50 border-emerald-100 hover:bg-emerald-100"
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100";
+                  const nameColor = isUrgent ? "text-red-700" : isStaleEta ? "text-amber-700" : isCompleted ? "text-emerald-700" : "text-slate-700";
+                  const subColor = isUrgent ? "text-red-500" : isStaleEta ? "text-amber-600" : isCompleted ? "text-emerald-600" : "text-slate-500";
                   return (
                     <Tooltip key={cs.id} delayDuration={300}>
                       <TooltipTrigger asChild>
                         <button
                           onClick={() => cs.cleanerJobId ? onJumpToJob(cs.cleanerJobId) : undefined}
-                          className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm ${
-                            isUrgent
-                              ? "bg-red-50 border-red-100 hover:bg-red-100"
-                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
-                          }`}
+                          className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm ${cardBg}`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className="text-sm leading-none shrink-0">{cs.emoji}</span>
-                              <span className={`text-xs font-semibold truncate ${
-                                isUrgent ? "text-red-700" : "text-slate-700"
-                              }`}>
+                              <span className={`text-xs font-semibold truncate ${nameColor}`}>
                                 <span className="font-bold">{cs.cleanerName}</span>
                                 <span className="font-normal"> — {cs.label}</span>
                               </span>
+                              {isStaleEta && <span className="text-[10px] text-amber-500 shrink-0">⚠️</span>}
                             </div>
                             <span className="text-[10px] text-slate-400 shrink-0">{fmt12(cs.ts)}</span>
                           </div>
                           {(cs.customerName || cs.etaLabel || cs.issueNote) && (
-                            <p className={`text-[11px] mt-0.5 truncate ${
-                              isUrgent ? "text-red-500" : "text-slate-500"
-                            }`}>
+                            <p className={`text-[11px] mt-0.5 truncate ${subColor}`}>
                               {cs.customerName && <span>{cs.customerName}</span>}
                               {cs.etaLabel && <span className="ml-1">· ETA {cs.etaLabel}</span>}
                               {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}

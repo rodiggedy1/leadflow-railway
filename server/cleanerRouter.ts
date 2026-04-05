@@ -646,6 +646,7 @@ export const cleanerRouter = router({
             });
             const { broadcastOpsUpdate } = await import("./sseBroadcast");
             broadcastOpsUpdate("new_message", { channel: "command" });
+            broadcastOpsUpdate("job_update", { jobId: input.cleanerJobId });
           } catch (err) {
             console.error("[updateJobStatus] Failed to post CommandChat card:", err);
           }
