@@ -1014,11 +1014,14 @@ export const opsChatRouter = router({
       } else if (status === "soon") {
         const jobMs = j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0;
         const minutesUntil = Math.round((jobMs - now) / 60_000);
+        const startTime = jobMs ? new Date(jobMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : null;
+        const timeLabel = minutesUntil > 0 ? `in ${minutesUntil} min` : startTime ? `at ${startTime}` : "soon";
+        const bodyParts = [j.serviceType ?? "Cleaning"].filter(Boolean);
         alerts.push({
           type: "soon",
           jobId: j.id,
-          title: `${j.customerName ?? j.jobAddress} starts in ${minutesUntil > 0 ? minutesUntil + " min" : "soon"}`,
-          body: j.serviceType ?? "Cleaning service",
+          title: `🗓 ${j.customerName ?? j.jobAddress} — starts ${timeLabel}`,
+          body: bodyParts.join(" · "),
           source: "Dispatch",
           ts: jobMs || now,
         });
@@ -1167,7 +1170,7 @@ export const opsChatRouter = router({
       alerts.unshift({
         type: "stale_eta" as any,
         jobId: cs.cleanerJobId ?? 0,
-        title: `${cs.cleanerName} — ETA passed`,
+        title: `🚗⚠️ ${cs.cleanerName} — ETA passed`,
         body: `${cs.customerName ? `For ${cs.customerName}` : "Still on the way"}${etaStr ? ` · ETA was ${etaStr}` : ""}`,
         source: cs.cleanerName,
         ts: cs.ts,
