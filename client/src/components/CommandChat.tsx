@@ -28,6 +28,7 @@ import {
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -1465,38 +1466,54 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <div className="space-y-1.5">
                 {cleanerStatuses.map((cs) => {
                   const isUrgent = cs.status === "issue_at_property" || cs.status === "running_late";
+                  const tooltipLines = [
+                    `${cs.emoji} ${cs.cleanerName} — ${cs.label}`,
+                    cs.customerName ? `Customer: ${cs.customerName}` : null,
+                    cs.jobAddress ? `Address: ${cs.jobAddress}` : null,
+                    cs.etaLabel ? `ETA: ${cs.etaLabel}` : null,
+                    cs.issueNote ? `Issue: ${cs.issueNote}` : null,
+                    `Time: ${fmt12(cs.ts)}`,
+                  ].filter(Boolean) as string[];
                   return (
-                    <button
-                      key={cs.id}
-                      onClick={() => cs.cleanerJobId ? onJumpToJob(cs.cleanerJobId) : undefined}
-                      className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm ${
-                        isUrgent
-                          ? "bg-red-50 border-red-100 hover:bg-red-100"
-                          : "bg-slate-50 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-sm leading-none shrink-0">{cs.emoji}</span>
-                          <span className={`text-xs font-semibold truncate ${
-                            isUrgent ? "text-red-700" : "text-slate-700"
-                          }`}>
-                            <span className="font-bold">{cs.cleanerName}</span>
-                            <span className="font-normal"> — {cs.label}</span>
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 shrink-0">{fmt12(cs.ts)}</span>
-                      </div>
-                      {(cs.customerName || cs.etaLabel || cs.issueNote) && (
-                        <p className={`text-[11px] mt-0.5 truncate ${
-                          isUrgent ? "text-red-500" : "text-slate-500"
-                        }`}>
-                          {cs.customerName && <span>{cs.customerName}</span>}
-                          {cs.etaLabel && <span className="ml-1">· ETA {cs.etaLabel}</span>}
-                          {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}
-                        </p>
-                      )}
-                    </button>
+                    <Tooltip key={cs.id} delayDuration={300}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => cs.cleanerJobId ? onJumpToJob(cs.cleanerJobId) : undefined}
+                          className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm ${
+                            isUrgent
+                              ? "bg-red-50 border-red-100 hover:bg-red-100"
+                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-sm leading-none shrink-0">{cs.emoji}</span>
+                              <span className={`text-xs font-semibold truncate ${
+                                isUrgent ? "text-red-700" : "text-slate-700"
+                              }`}>
+                                <span className="font-bold">{cs.cleanerName}</span>
+                                <span className="font-normal"> — {cs.label}</span>
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 shrink-0">{fmt12(cs.ts)}</span>
+                          </div>
+                          {(cs.customerName || cs.etaLabel || cs.issueNote) && (
+                            <p className={`text-[11px] mt-0.5 truncate ${
+                              isUrgent ? "text-red-500" : "text-slate-500"
+                            }`}>
+                              {cs.customerName && <span>{cs.customerName}</span>}
+                              {cs.etaLabel && <span className="ml-1">· ETA {cs.etaLabel}</span>}
+                              {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}
+                            </p>
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-[220px] space-y-0.5 text-xs">
+                        {tooltipLines.map((line, i) => (
+                          <p key={i} className={i === 0 ? "font-semibold" : "text-slate-300"}>{line}</p>
+                        ))}
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 })}
               </div>
