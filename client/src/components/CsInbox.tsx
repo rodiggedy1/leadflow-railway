@@ -280,9 +280,10 @@ function jobStatusStyle(s: JobStatus): string {
   }
 }
 
+type InboxFilter = "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type CsInboxProps = { onSwitchTab?: (tab: "today" | "channels" | "cs") => void };
 export default function CsInbox({ onSwitchTab }: CsInboxProps) {
-  const [activeQueue, setActiveQueue] = useState<Queue | "All">("All");
+  const [activeFilter, setActiveFilter] = useState<InboxFilter>("New");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
@@ -391,19 +392,39 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
   });
 
+  // ── AI priority queue (must be before filtered useMemo) ─────────────────────
+  const { data: priorityItems = [], isLoading: priorityLoading } = trpc.leads.getCsPriorityQueue.useQuery(
+    undefined,
+    { staleTime: 2 * 60 * 1000, refetchInterval: 3 * 60 * 1000 }
+  );
+  const dismissPriority = trpc.leads.dismissCsPriority.useMutation({
+    onSuccess: () => utils.leads.getCsPriorityQueue.invalidate(),
+  });
+
   const filteredRef = useRef<typeof filtered>([]);
   const effectiveSelectedIdRef = useRef<number | null>(null);
 
   const filtered = useMemo(() => {
     return displayConversations.filter((c) => {
-      const matchesQueue = activeQueue === "All" || c.queue === activeQueue;
       const q = query.trim().toLowerCase();
       const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.tags.join(" ")]
         .join(" ")
         .toLowerCase();
-      return matchesQueue && (!q || hay.includes(q));
+      let matchesFilter = true;
+      if (activeFilter === "Priority") {
+        matchesFilter = priorityItems.some((p) => p.id === c.id);
+      } else if (activeFilter === "New") {
+        matchesFilter = !!(c as any).hasUnanswered;
+      } else if (activeFilter === "Active") {
+        matchesFilter = !(c as any).hasUnanswered && c.queue !== "Teams";
+      } else if (activeFilter === "Resolved") {
+        matchesFilter = !!(c as any).csResolvedAt;
+      } else if (activeFilter === "Teams") {
+        matchesFilter = c.queue === "Teams";
+      }
+      return matchesFilter && (!q || hay.includes(q));
     });
-  }, [activeQueue, query, displayConversations]);
+  }, [activeFilter, query, displayConversations, priorityItems]);
 
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
@@ -813,14 +834,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   }, [showEmojiPicker]);
   const tone = selected?.queue ? queueTone(selected.queue) : { label: null, tone: "bg-slate-100 text-slate-500 border-slate-200", dot: "bg-slate-400" };
 
-  // ── AI priority queue ──────────────────────────────────────────────────────
-  const { data: priorityItems = [], isLoading: priorityLoading } = trpc.leads.getCsPriorityQueue.useQuery(
-    undefined,
-    { staleTime: 2 * 60 * 1000, refetchInterval: 3 * 60 * 1000 }
-  );
-  const dismissPriority = trpc.leads.dismissCsPriority.useMutation({
-    onSuccess: () => utils.leads.getCsPriorityQueue.invalidate(),
-  });
+  // ── AI priority queue (moved earlier — see declaration above filtered useMemo) ─
 
   function priorityTagStyle(tag: string) {
     switch (tag) {
@@ -876,35 +890,36 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
-                <Button
-                  variant={activeQueue === "All" ? "default" : "outline"}
-                  className="w-full rounded-2xl justify-start h-10"
-                  onClick={() => setActiveQueue("All")}
-                >
-                  All conversations
-                </Button>
-                {QUEUES.map((qLabel) => {
-                  const q = queueTone(qLabel);
-                  const liveCount = displayConversations.filter((c) => c.queue === qLabel).length;
-                  return (
+              <div className="space-y-1">
+                {([
+                  { id: "Priority" as InboxFilter, dot: "bg-rose-500", icon: <ShieldAlert className="h-4 w-4" />, label: "Priority", count: priorityItems.length },
+                  { id: "New" as InboxFilter, dot: "bg-blue-500", icon: <Mail className="h-4 w-4" />, label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
+                  { id: "Active" as InboxFilter, dot: "bg-amber-400", icon: <Clock3 className="h-4 w-4" />, label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
+                  { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", icon: <CheckCircle2 className="h-4 w-4" />, label: "Resolved", count: displayConversations.filter((c) => !!(c as any).csResolvedAt).length },
+                  { id: "Teams" as InboxFilter, dot: "bg-violet-500", icon: <Users className="h-4 w-4" />, label: "Teams", count: displayConversations.filter((c) => c.queue === "Teams").length },
+                ] as const).map((tab) => (
                   <button
-                    key={qLabel}
-                    onClick={() => setActiveQueue(qLabel)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${q.tone} ${
-                      activeQueue === qLabel ? "ring-2 ring-slate-900/10" : ""
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveFilter(tab.id);
+                      if (tab.id === "Resolved") setShowResolved(true);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
+                      activeFilter === tab.id
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-2.5 w-2.5 rounded-full ${q.dot}`} />
-                        <div className="font-medium">{qLabel}</div>
-                      </div>
-                      <div className="text-sm font-semibold">{liveCount}</div>
-                    </div>
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${tab.dot}`} />
+                    <span className="shrink-0 opacity-70">{tab.icon}</span>
+                    <span className="flex-1 text-sm font-medium">{tab.label}</span>
+                    {tab.count > 0 && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                        activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      }`}>{tab.count}</span>
+                    )}
                   </button>
-                );
-                })}
+                ))}
               </div>
 
               {/* Show resolved toggle + backfill names */}
@@ -951,13 +966,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             onClick={() => {
                               const found = displayConversations.find((c) => c.id === item.id);
                               if (found) {
-                                setActiveQueue("All");
+                                setActiveFilter("Priority");
                                 setSelectedId(found.id);
                                 userNavigatedToId.current = found.id;
                                 triggerAutoDraft(found);
                               } else {
                                 // Session exists in DB but not yet in filtered list — force select by id
-                                setActiveQueue("All");
+                                setActiveFilter("Priority");
                                 setSelectedId(item.id);
                               }
                             }}
