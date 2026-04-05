@@ -4415,38 +4415,6 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             awaySetAt: input.status ? new Date() : null,
           })
           .where(eq(agents.id, agentSession.agentId));
-
-        // Post status-change card to CommandChat
-        try {
-          const statusLabels: Record<string, { label: string; emoji: string }> = {
-            away_sec: { label: "Away for a sec",  emoji: "☕" },
-            lunch:    { label: "Lunch break",     emoji: "🍔" },
-            back15:   { label: "Back in 15",      emoji: "⏰" },
-            eod:      { label: "Signing off",     emoji: "🌙" },
-          };
-          const info = input.status ? statusLabels[input.status] : null;
-          const body = info
-            ? `${info.emoji} ${agentSession.agentName} is now ${info.label}`
-            : `✅ ${agentSession.agentName} is back online`;
-          await db.insert(opsChatMessages).values({
-            channel: "command",
-            authorName: agentSession.agentName,
-            authorRole: "agent",
-            body,
-            quickAction: "status_change",
-            metadata: JSON.stringify({
-              agentName: agentSession.agentName,
-              status: input.status,
-              label: info?.label ?? null,
-              emoji: info?.emoji ?? null,
-            }),
-          });
-          const { broadcastOpsUpdate } = await import("./sseBroadcast");
-          broadcastOpsUpdate("new_message", { channel: "command" });
-        } catch (err) {
-          console.error("[setAwayStatus] Failed to post status card:", err);
-        }
-
         return { ok: true };
       }),
 
