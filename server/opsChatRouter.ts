@@ -1081,6 +1081,11 @@ export const opsChatRouter = router({
         jobAddress: cleanerJobs.jobAddress,
         jobStatus: cleanerJobs.jobStatus,
         jobCleanerName: cleanerJobs.cleanerName,
+        jobStatusChangedAt: sql<number | null>`(
+          SELECT UNIX_TIMESTAMP(MAX(jsh.changedAt)) * 1000
+          FROM job_status_history jsh
+          WHERE jsh.cleanerJobId = ${cleanerJobs.id}
+        )`.as("jobStatusChangedAt"),
       })
       .from(opsChatMessages)
       .leftJoin(cleanerJobs, sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.cleanerJobId')) = ${cleanerJobs.id}`)
@@ -1146,7 +1151,7 @@ export const opsChatRouter = router({
           etaTimestamp: r.jobEtaTimestamp ?? null,
           issueNote,
           cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
-          ts: r.createdAt ? new Date(r.createdAt).getTime() : now,
+          ts: r.jobStatusChangedAt ?? (r.createdAt ? new Date(r.createdAt).getTime() : now),
         };
       });
 
