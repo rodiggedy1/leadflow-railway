@@ -1205,21 +1205,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const autoRaised = cmdData?.autoRaised ?? [];
   const manualIssues = cmdData?.manualIssues ?? [];
   const pendingReminderCount = cmdData?.pendingReminderCount ?? 0;
-  const cleanerStatuses = [...(cmdData?.cleanerStatuses ?? [])].sort((a, b) => {
-    const urgencyRank = (cs: typeof a): number => {
-      if (cs.status === "issue_at_property") return 0;
-      const isStale = cs.etaTimestamp && cs.etaTimestamp < Date.now() && cs.status === "on_the_way";
-      if (isStale) return 1;
-      if (cs.status === "running_late") return 2;
-      if (cs.status === "on_the_way" || cs.status === "in_progress" || cs.status === "arrived") return 3;
-      if (cs.status === "completed") return 5;
-      return 4;
-    };
-    const ra = urgencyRank(a), rb = urgencyRank(b);
-    if (ra !== rb) return ra - rb;
-    // Within same group: oldest first (reverse recency)
-    return a.ts - b.ts;
-  }).filter(cs => {
+  const cleanerStatuses = [...(cmdData?.cleanerStatuses ?? [])].sort((a, b) => a.ts - b.ts).filter(cs => {
     // Auto-dismiss completed cards older than 4 hours
     if (cs.status === "completed") {
       return Date.now() - cs.ts < 4 * 60 * 60 * 1000;

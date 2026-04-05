@@ -1158,25 +1158,34 @@ export const opsChatRouter = router({
         };
       });
 
-    // Inject stale ETA entries into alerts and remove from cleanerStatuses
-    const staleEtaStatuses = cleanerStatuses.filter(cs =>
-      cs.status === "on_the_way" && cs.etaTimestamp && cs.etaTimestamp < now
-    );
-    const staleCleanerJobIds = new Set(staleEtaStatuses.map(cs => cs.id));
-    for (const cs of staleEtaStatuses) {
-      const etaStr = cs.etaTimestamp
-        ? new Date(cs.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-        : null;
+    // Inject stale ETA alerts from posted stale_eta messages (today only)
+    const todayStartMs = new Date().setHours(0, 0, 0, 0);
+    const staleEtaMsgs = await db
+      .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, cleanerJobId: opsChatMessages.cleanerJobId, createdAt: opsChatMessages.createdAt })
+      .from(opsChatMessages)
+      .where(and(eq(opsChatMessages.quickAction, "stale_eta"), gte(opsChatMessages.createdAt, new Date(todayStartMs))))
+      .orderBy(opsChatMessages.createdAt);
+    const jobStatusMap = new Map(jobs.map(j => [j.id, j.jobStatus]));
+    for (const msg of staleEtaMsgs) {
+      let meta2: Record<string, unknown> = {};
+      try { meta2 = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+      const jobId2 = (meta2.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+      const currentStatus = jobId2 ? jobStatusMap.get(jobId2) : undefined;
+      // Skip if cleaner has since moved past on_the_way
+      if (currentStatus && currentStatus !== "on_the_way" && currentStatus !== "running_late") continue;
+      const cleanerName2 = (meta2.cleanerName as string) ?? "Team";
+      const customerName2 = (meta2.customerName as string | null) ?? null;
+      const etaStr2 = (meta2.etaStr as string | null) ?? null;
       alerts.unshift({
         type: "stale_eta" as any,
-        jobId: cs.cleanerJobId ?? 0,
-        title: `🚗⚠️ ${cs.cleanerName} — ETA passed`,
-        body: `${cs.customerName ? `For ${cs.customerName}` : "Still on the way"}${etaStr ? ` · ETA was ${etaStr}` : ""}`,
-        source: cs.cleanerName,
-        ts: cs.ts,
+        jobId: (meta2.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0,
+        title: `🚗⚠️ ${cleanerName2} — ETA passed`,
+        body: `${customerName2 ? `For ${customerName2}` : "Still on the way"}${etaStr2 ? ` · ETA was ${etaStr2}` : ""}`,
+        source: cleanerName2,
+        ts: new Date(msg.createdAt).getTime(),
       });
     }
-    const cleanerStatusesFinal = cleanerStatuses.filter(cs => !staleCleanerJobIds.has(cs.id));
+    const cleanerStatusesFinal = cleanerStatuses;
 
     return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses: cleanerStatusesFinal };
   }),
