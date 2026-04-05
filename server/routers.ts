@@ -3390,57 +3390,6 @@ Respond in this exact JSON format: {"action": "<action_key>", "draft": "<sms mes
       }),
 
     /**
-     * elevateReply — takes an agent's draft message and elevates it to
-     * Disney HEARD / Ritz-Carlton / Zappos WOW service level.
-     * Only used for non-Teams CS conversations.
-     */
-    elevateReply: opsChatProcedure
-      .input(z.object({
-        draft: z.string().min(1).max(2000),
-        clientName: z.string().optional(),
-        messageHistory: z.string().optional(), // JSON array of {role, content}
-      }))
-      .mutation(async ({ input }) => {
-        const { invokeLLM } = await import("./_core/llm");
-        const { MAIDS_IN_BLACK_KNOWLEDGE_BASE } = await import("./knowledgeBase");
-        const firstName = input.clientName?.split(" ")[0] ?? "the client";
-        const messages: Array<{ role: string; content: string }> = (() => {
-          try { return JSON.parse(input.messageHistory ?? "[]"); } catch { return []; }
-        })();
-        const recent = messages.slice(-6);
-        const conversationSnippet = recent
-          .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
-          .join("\n");
-
-        const systemPrompt = `You are a world-class customer service coach for Maids in Black, a premium residential cleaning service in Washington DC.
-Your job: take the agent's draft message and rewrite it to meet the highest service standards in the world — Disney HEARD, Ritz-Carlton Gold Standards, Zappos WOW, and Nordstrom YES.
-
-RULES:
-1. Return ONLY the rewritten message — no explanation, no preamble, no labels.
-2. Keep the same intent and facts as the draft — do not invent new information or prices.
-3. Use the client's actual first name (${firstName}) at least once.
-4. Warm, human, professional — never robotic or over-the-top.
-5. Keep it concise: under 4 sentences unless a bullet list is genuinely needed.
-6. Apply Disney HEARD: Hear → Empathize → Apologize (if needed) → Resolve → Diagnose.
-7. End with an open door or clear next step.
-8. NEVER use hollow filler: no "Awesome!", "Great news!", "Happy to help!", "You're in great hands!"
-9. NEVER invent prices — keep any [placeholder] from the draft as-is.
-
-=== MAIDS IN BLACK KNOWLEDGE BASE ===
-${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
-
-        const result = await invokeLLM({
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...(conversationSnippet ? [{ role: "user" as const, content: `Recent conversation:\n${conversationSnippet}` }] : []),
-            { role: "user", content: `Agent's draft: "${input.draft}"\n\nRewrite this to world-class service level. Return only the rewritten message.` },
-          ],
-        });
-        const elevated = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
-        return { elevated };
-      }),
-
-    /**
      * getCsConvInsight — generates a concise AI insight / action recommendation
      * for the currently selected CS conversation. Takes the last N messages plus
      * optional client profile context and returns a 1-3 sentence advisory.

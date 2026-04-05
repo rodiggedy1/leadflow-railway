@@ -2786,6 +2786,55 @@ Only flag real issues. Do not flag messages that are already clear and professio
         return { ok: true, issues: [], feedback: "", suggestion: "" };
       }
     }),
+
+  /**
+   * elevateReply — takes an agent's SMS draft and rewrites it to world-class
+   * service level (Disney HEARD / Ritz-Carlton / Zappos WOW) while keeping
+   * the same length and conversational SMS tone.
+   */
+  elevateReply: opsChatProcedure
+    .input(z.object({
+      draft: z.string().min(1).max(2000),
+      clientName: z.string().optional(),
+      messageHistory: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const { MAIDS_IN_BLACK_KNOWLEDGE_BASE } = await import("./knowledgeBase");
+      const firstName = input.clientName?.split(" ")[0] ?? "the client";
+      const messages: Array<{ role: string; content: string }> = (() => {
+        try { return JSON.parse(input.messageHistory ?? "[]"); } catch { return []; }
+      })();
+      const conversationSnippet = messages.slice(-6)
+        .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
+        .join("\n");
+      const systemPrompt = `You are a world-class customer service coach for Maids in Black, a premium residential cleaning service in Washington DC.
+Your job: take the agent's SMS draft and make it feel like it came from the best customer service rep in the world — someone trained by Disney, Zappos, and Ritz-Carlton — but who still sounds like a real, warm human texting you, not a hotel concierge writing an email.
+
+RULES:
+1. Return ONLY the rewritten message — no explanation, no preamble, no labels.
+2. Keep the SAME length and structure as the draft — do NOT make it longer or more formal.
+3. Keep the same intent and facts — do not invent new information or prices.
+4. Use the client's first name (${firstName}) naturally, once.
+5. Apply Disney HEARD at the FEELING level only: acknowledge, show genuine care, confirm the resolution, clear next step. Do NOT add extra sentences — weave it into the existing message.
+6. Sound like a great person texting, not a luxury hotel email. Conversational, direct, warm.
+7. End with a clear next step or open door — already in the draft, just make it land better.
+8. NEVER use hollow filler: no "Absolutely!", "Of course!", "Happy to help!", "You're in great hands!", "Wonderful!", "It's a pleasure".
+9. NEVER invent prices — keep any [placeholder] from the draft as-is.
+10. If the draft is already excellent, return it unchanged.
+
+=== MAIDS IN BLACK KNOWLEDGE BASE ===
+${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...(conversationSnippet ? [{ role: "user" as const, content: `Recent conversation:\n${conversationSnippet}` }] : []),
+          { role: "user", content: `Agent's draft: "${input.draft}"\n\nRewrite to world-class SMS level. Return only the rewritten message.` },
+        ],
+      });
+      const elevated = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
+      return { elevated };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

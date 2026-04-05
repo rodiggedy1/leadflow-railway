@@ -409,7 +409,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
   });
 
-  const elevateReply = trpc.leads.elevateReply.useMutation({
+  const elevateReply = trpc.opsChat.elevateReply.useMutation({
     onSuccess: (data) => {
       setElevateSuggestion(data.elevated);
       setElevateChecked(true);
