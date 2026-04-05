@@ -34,9 +34,10 @@ import {
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
+import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
 import { opsReminders, opsChatMessages, agents } from "../drizzle/schema";
-import { and, isNull, lte, lt, isNotNull } from "drizzle-orm";
+import { and, eq, isNull, lte, lt, isNotNull } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -432,6 +433,56 @@ export function startInternalCron(): void {
       console.error("[InternalCron] OnCallTTL failed:", msg);
     }
   });
+  // ── Stale ETA check: every 5 minutes ──────────────────────────────────────
+  // Posts a stale_eta alert card to CommandChat for on_the_way jobs where ETA has passed.
+  // Only fires once per job (checks if a stale_eta card already exists for that job).
+  cron.schedule("0 */5 * * * *", async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      const now = Date.now();
+      // Find on_the_way jobs with a passed ETA
+      const staleJobs = await db
+        .select({ id: cleanerJobs.id, cleanerName: cleanerJobs.cleanerName, customerName: cleanerJobs.customerName, etaTimestamp: cleanerJobs.etaTimestamp })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobStatus, "on_the_way"),
+          lte(cleanerJobs.etaTimestamp, now),
+          isNotNull(cleanerJobs.etaTimestamp)
+        ));
+      for (const job of staleJobs) {
+        if (!job.etaTimestamp) continue;
+        // Check if we already posted a stale_eta card for this job
+        const existing = await db
+          .select({ id: opsChatMessages.id })
+          .from(opsChatMessages)
+          .where(and(
+            eq(opsChatMessages.cleanerJobId, job.id),
+            eq(opsChatMessages.quickAction, "stale_eta")
+          ))
+          .limit(1);
+        if (existing.length > 0) continue;
+        // Post the alert card
+        const cleanerFirst = (job.cleanerName ?? "Team").split(" ")[0];
+        const etaStr = new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        await db.insert(opsChatMessages).values({
+          channel: "command",
+          from: "System",
+          authorRole: "system",
+          body: `⚠️ ${job.cleanerName ?? "Team"} ETA passed — still on the way${job.customerName ? ` for ${job.customerName}` : ""}`,
+          metadata: JSON.stringify({ cleanerJobId: job.id, cleanerName: job.cleanerName, customerName: job.customerName, etaStr }),
+          cleanerJobId: job.id,
+          quickAction: "stale_eta",
+        } as any);
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("new_message");
+        console.log(`[InternalCron] StaleETA — posted alert for job ${job.id} (${cleanerFirst}, ETA was ${etaStr})`);
+      }
+    } catch (err) {
+      console.error("[InternalCron] StaleETA check failed:", err);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");

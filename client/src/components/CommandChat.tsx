@@ -1217,8 +1217,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     };
     const ra = urgencyRank(a), rb = urgencyRank(b);
     if (ra !== rb) return ra - rb;
-    // Within same group: most recent first
-    return b.ts - a.ts;
+    // Within same group: oldest first (reverse recency)
+    return a.ts - b.ts;
+  }).filter(cs => {
+    // Auto-dismiss completed cards older than 4 hours
+    if (cs.status === "completed") {
+      return Date.now() - cs.ts < 4 * 60 * 60 * 1000;
+    }
+    return true;
   });
 
   const totalAlerts = snapshot.issue + snapshot.soon;
@@ -2632,6 +2638,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
                           </div>
                         )}
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Stale ETA alert card (amber) ──────────────────────────────────
+                if (msg.quickAction === "stale_eta") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const cleanerName = (meta.cleanerName as string) ?? msg.from ?? "Team";
+                  const customerName = (meta.customerName as string | null) ?? null;
+                  const etaStr = (meta.etaStr as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500">
+                          <TriangleAlert className="h-3 w-3 text-amber-100" />
+                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">ETA Passed</span>
+                          <span className="ml-auto text-[10px] text-amber-200">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-amber-50">
+                          <p className="text-sm font-semibold text-slate-900">{cleanerName} — still on the way</p>
+                          {customerName && <p className="text-xs text-slate-500 mt-0.5">For {customerName}</p>}
+                          {etaStr && <p className="text-xs text-amber-700 mt-0.5">ETA was {etaStr}</p>}
+                        </div>
                       </div>
                     </div>
                   );
