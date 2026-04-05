@@ -629,6 +629,7 @@ export const cleanerRouter = router({
             const body = `${sm.emoji} ${cleanerName} — ${sm.label}${customerPart}${addressPart}${etaPart}`;
             await db.insert(opsChatMessages).values({
               channel: "command",
+              cleanerJobId: input.cleanerJobId,
               authorName: cleanerName,
               authorRole: "cleaner",
               body,

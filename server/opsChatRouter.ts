@@ -1073,6 +1073,7 @@ export const opsChatRouter = router({
         body: opsChatMessages.body,
         metadata: opsChatMessages.metadata,
         createdAt: opsChatMessages.createdAt,
+        dbCleanerJobId: opsChatMessages.cleanerJobId,
         // Pull live fields directly from cleanerJobs
         jobEtaTimestamp: cleanerJobs.etaTimestamp,
         jobIssueNote: cleanerJobs.issueNote,
@@ -1093,7 +1094,10 @@ export const opsChatRouter = router({
       .filter(r => {
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
-        const key = `${(meta.cleanerName as string) ?? ""}-${(meta.cleanerJobId as number) ?? 0}`;
+        // Use DB cleanerJobId column (reliable) + cleanerName from metadata for dedup key
+        const jobId = r.dbCleanerJobId ?? (meta.cleanerJobId as number | null) ?? 0;
+        const cleanerName = (meta.cleanerName as string) ?? "";
+        const key = `${cleanerName}-${jobId}`;
         if (seenCleanerJob.has(key)) return false;
         seenCleanerJob.add(key);
         return true;
