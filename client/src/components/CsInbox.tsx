@@ -1026,7 +1026,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   {filtered.map((conversation) => {
                     const q = conversation.queue ? queueTone(conversation.queue) : { tone: "bg-slate-100 text-slate-500 border-slate-200", label: null };
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
-                    const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
+                    const isUnread = (conversation as any).lastInboundTs > lastViewed && selected?.id !== (conversation as any).id;
                     return (
                       <div
                         key={conversation.id}
@@ -1668,6 +1668,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           )}
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
+          {selected ? (
           <div className="overflow-y-auto space-y-5">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
@@ -2368,10 +2369,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               </>
             )}
           </div>
+          ) : <div />}
         </div>
       </div>
     </div>
-
     {/* New Conversation dialog */}
     {newConvOpen && (
       <div
