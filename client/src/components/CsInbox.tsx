@@ -59,6 +59,8 @@ import {
   Brain,
   BookOpen,
   ShieldAlert,
+  Lock,
+  StickyNote,
 } from "lucide-react";
 import {
   Tooltip,
@@ -80,7 +82,7 @@ import ObjectionsPanel from "@/components/ObjectionsPanel";
 import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
 
 type Queue = "Priority" | "New" | "Active" | "Resolved" | "Teams";
-type MsgSender = "client" | "agent" | "system" | "cleaner";
+type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
 
 type Conversation = {
   id: number;
@@ -245,6 +247,8 @@ function bubbleStyles(sender: MsgSender) {
       return "bg-blue-50 border-blue-200 text-blue-800";
     case "cleaner":
       return "bg-amber-50 border-amber-200 text-amber-800";
+    case "note":
+      return "bg-amber-50 border-amber-300 text-amber-900";
   }
 }
 
@@ -299,6 +303,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [elevateSuggestion, setElevateSuggestion] = useState<string | null>(null);
   const [elevateChecked, setElevateChecked] = useState(false); // true once shown for current draft
   const elevateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
+  const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
 
   const utils = trpc.useUtils();
   // Track whether the user has manually picked a tab so we don't override their choice
@@ -381,7 +387,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         lastInboundTs,
         hasUnanswered,
         messages: msgs.map((m) => ({
-          sender: m.role === "user" ? "client" : m.role === "assistant" ? "agent" : "system" as MsgSender,
+          sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
           text: m.content,
           time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
           ts: m.ts as number | undefined,
@@ -407,6 +413,15 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       }
       utils.leads.listCsInbox.invalidate();
     },
+  });
+
+  const addCsNote = trpc.leads.addCsNote.useMutation({
+    onSuccess: () => {
+      setCompose("");
+      utils.leads.listCsInbox.invalidate();
+      toast.success("Note saved");
+    },
+    onError: (err: { message?: string }) => toast.error(err.message || "Failed to save note"),
   });
 
   const elevateReply = trpc.opsChat.elevateReply.useMutation({
@@ -1460,6 +1475,33 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
                       // SMS bubble
                       const { message, idx } = item;
+
+                      // Internal note — amber sticky-note bubble, centered, never sent to customer
+                      if (message.sender === "note") {
+                        elements.push(
+                          <motion.div
+                            key={`${message.time}-${idx}-note`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                            className="flex justify-center"
+                          >
+                            <div className="max-w-[80%] rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <Lock className="h-3 w-3 text-amber-600 shrink-0" />
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Internal note</span>
+                                {message.senderName && (
+                                  <span className="text-[10px] text-amber-500 ml-1">· {message.senderName}</span>
+                                )}
+                                <span className="ml-auto text-[10px] text-amber-400">{message.time}</span>
+                              </div>
+                              <div className="text-sm text-amber-900 leading-relaxed">{message.text}</div>
+                            </div>
+                          </motion.div>
+                        );
+                        return elements;
+                      }
+
                       elements.push(
                         <motion.div
                           key={`${message.time}-${idx}`}
@@ -1528,7 +1570,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <TypingBubble typers={typers} />
                 </div>
               )}
-              <div className="shrink-0 border-t border-slate-100 px-5 py-4 md:px-6 bg-white/95 backdrop-blur-sm">
+              <div className={`shrink-0 border-t px-5 py-4 md:px-6 backdrop-blur-sm transition-colors duration-200 ${
+                  composeMode === "note"
+                    ? "border-amber-200 bg-amber-50/95"
+                    : "border-slate-100 bg-white/95"
+                }`}>
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
                   <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
@@ -1538,6 +1584,39 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
                   />
                 </div>
+                {/* Reply / Note mode toggle */}
+                <div className="flex items-center gap-1 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setComposeMode("reply")}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                      composeMode === "reply"
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-700"
+                    }`}
+                  >
+                    <Send className="h-3 w-3" />
+                    Reply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setComposeMode("note"); setElevateSuggestion(null); }}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                      composeMode === "note"
+                        ? "bg-amber-500 text-white border-amber-500"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-700"
+                    }`}
+                  >
+                    <Lock className="h-3 w-3" />
+                    Note
+                  </button>
+                  {composeMode === "note" && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5">
+                      <Lock className="h-2.5 w-2.5" />
+                      Internal only — not sent to customer
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {selected.quickActions.map((action) => (
                     <Button key={action} variant="outline" className="rounded-full h-10">
@@ -1545,14 +1624,25 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </Button>
                   ))}
                 </div>
-                <div className={`rounded-[20px] border p-3.5 transition-all duration-200 ${autoDraftLoading ? "border-violet-300 bg-violet-50/60 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/80"}`}>
-                  {autoDraftLoading && (
+                <div className={`rounded-[20px] border p-3.5 transition-all duration-200 ${
+                  composeMode === "note"
+                    ? "border-amber-300 bg-amber-50 shadow-sm"
+                    : autoDraftLoading ? "border-violet-300 bg-violet-50/60 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/80"
+                }`}>
+                  {composeMode === "note" && (
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                      <StickyNote className="h-3.5 w-3.5 text-amber-600" />
+                      <span className="text-xs font-semibold text-amber-700">Internal note</span>
+                      <span className="text-xs text-amber-500">— only visible to agents, never sent to the customer</span>
+                    </div>
+                  )}
+                  {composeMode === "reply" && autoDraftLoading && (
                     <div className="flex items-center gap-1.5 mb-2.5 text-xs font-medium text-violet-600">
                       <RefreshCw className="h-3 w-3 animate-spin" />
                       <span>AI is drafting a reply…</span>
                     </div>
                   )}
-                  {!autoDraftLoading && compose && (
+                  {composeMode === "reply" && !autoDraftLoading && compose && (
                     <div className="flex items-center gap-1.5 mb-2.5">
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
                         <Bot className="h-3 w-3" />
@@ -1562,8 +1652,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   )}
                   <div className="relative flex items-start gap-3">
-                    {/* Emoji picker popup */}
-                    {showEmojiPicker && (
+                    {/* Emoji picker popup — only in reply mode */}
+                    {showEmojiPicker && composeMode === "reply" && (
                       <div ref={emojiPickerRef} className="absolute bottom-full mb-2 left-0 z-50 shadow-xl rounded-2xl overflow-hidden">
                         <Picker
                           data={data}
@@ -1578,69 +1668,95 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       </div>
                     )}
                     <textarea
-                      className="flex-1 rounded-xl bg-transparent border-0 px-1 py-1 text-slate-900 min-h-[80px] resize-none focus:outline-none text-sm leading-relaxed placeholder:text-slate-400"
-                      placeholder={autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
+                      className={`flex-1 rounded-xl bg-transparent border-0 px-1 py-1 min-h-[80px] resize-none focus:outline-none text-sm leading-relaxed ${
+                        composeMode === "note"
+                          ? "text-amber-900 placeholder:text-amber-400"
+                          : "text-slate-900 placeholder:text-slate-400"
+                      }`}
+                      placeholder={composeMode === "note" ? "Add an internal note…" : autoDraftLoading ? "" : "Type a message or use AI suggestion..."}
                       value={compose}
                       onChange={(e) => {
                         const val = e.target.value;
                         setCompose(val);
-                        // Reset suggestion when draft changes
-                        if (elevateSuggestion) { setElevateSuggestion(null); setElevateChecked(false); }
-                        triggerElevateDebounced(val, selected);
-                      }}
-                      onKeyDown={(e) => {
-                        onTypingKeyPress();
-                        if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
-                          e.preventDefault();
-                          handleCsSend();
+                        if (composeMode === "reply") {
+                          // Reset suggestion when draft changes
+                          if (elevateSuggestion) { setElevateSuggestion(null); setElevateChecked(false); }
+                          triggerElevateDebounced(val, selected);
                         }
                       }}
-                      onBlur={onTypingBlur}
+                      onKeyDown={(e) => {
+                        if (composeMode === "reply") onTypingKeyPress();
+                        if (e.key === "Enter" && !e.shiftKey && compose.trim() && selected) {
+                          e.preventDefault();
+                          if (composeMode === "note") {
+                            addCsNote.mutate({ sessionId: selected.id, note: compose.trim() });
+                          } else {
+                            handleCsSend();
+                          }
+                        }
+                      }}
+                      onBlur={composeMode === "reply" ? onTypingBlur : undefined}
                     />
                     <div className="flex flex-col gap-2 shrink-0">
-                      <div className="flex flex-row gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="rounded-xl h-7 w-7 border-slate-200 text-slate-500 hover:text-slate-800"
-                        onClick={() => setShowEmojiPicker((v) => !v)}
-                        title="Add emoji"
-                        type="button"
-                      >
-                        <Smile className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className={`rounded-xl h-7 w-7 transition-colors ${
-                          worldClassOpen
-                            ? "bg-violet-700 text-white border-violet-700"
-                            : "bg-violet-600 text-white border-violet-600 hover:bg-violet-700"
-                        }`}
-                        onClick={() => {
-                          setWorldClassOpen((v) => !v);
-                          setFaqOpen(false);
-                          setObjectionsOpen(false);
-                        }}
-                        title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
-                        type="button"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
-                      </Button>
-                      </div>
-                      <Button
-                        className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
-                        disabled={!compose.trim() || sendMessage.isPending || elevateReply.isPending || !selected}
-                        onClick={handleCsSend}
-                      >
-                        {elevateReply.isPending ? (
-                          <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
-                        ) : sendMessage.isPending ? (
-                          <><Send className="h-4 w-4" /> Sending…</>
-                        ) : (
-                          <><Send className="h-4 w-4" /> Send</>
-                        )}
-                      </Button>
+                      {composeMode === "reply" && (
+                        <div className="flex flex-row gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="rounded-xl h-7 w-7 border-slate-200 text-slate-500 hover:text-slate-800"
+                          onClick={() => setShowEmojiPicker((v) => !v)}
+                          title="Add emoji"
+                          type="button"
+                        >
+                          <Smile className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className={`rounded-xl h-7 w-7 transition-colors ${
+                            worldClassOpen
+                              ? "bg-violet-700 text-white border-violet-700"
+                              : "bg-violet-600 text-white border-violet-600 hover:bg-violet-700"
+                          }`}
+                          onClick={() => {
+                            setWorldClassOpen((v) => !v);
+                            setFaqOpen(false);
+                            setObjectionsOpen(false);
+                          }}
+                          title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
+                          type="button"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
+                        </Button>
+                        </div>
+                      )}
+                      {composeMode === "note" ? (
+                        <Button
+                          className="rounded-xl h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
+                          disabled={!compose.trim() || addCsNote.isPending || !selected}
+                          onClick={() => addCsNote.mutate({ sessionId: selected.id, note: compose.trim() })}
+                        >
+                          {addCsNote.isPending ? (
+                            <><RefreshCw className="h-4 w-4 animate-spin" /> Saving…</>
+                          ) : (
+                            <><Lock className="h-4 w-4" /> Save note</>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
+                          disabled={!compose.trim() || sendMessage.isPending || elevateReply.isPending || !selected}
+                          onClick={handleCsSend}
+                        >
+                          {elevateReply.isPending ? (
+                            <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
+                          ) : sendMessage.isPending ? (
+                            <><Send className="h-4 w-4" /> Sending…</>
+                          ) : (
+                            <><Send className="h-4 w-4" /> Send</>
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {/* AI Elevate suggestion card */}

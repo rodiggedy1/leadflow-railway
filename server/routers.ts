@@ -3591,6 +3591,35 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
 
         return result;
       }),
+    /**
+     * addCsNote — saves an internal note to a CS conversation's messageHistory.
+     * Notes use role="note" so they are never sent to the customer via SMS.
+     * They appear in the thread as amber sticky-note bubbles visible only to agents.
+     */
+    addCsNote: opsChatProcedure
+      .input(z.object({
+        sessionId: z.number().int().positive(),
+        note: z.string().min(1).max(2000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const agentSession = await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const [session] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) throw new Error("Session not found");
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+        try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+        history.push({ role: "note", content: input.note, ts: Date.now(), senderName: agentSession.agentName });
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..

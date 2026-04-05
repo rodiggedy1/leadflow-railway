@@ -1013,3 +1013,5 @@
 - [ ] Render call_debrief card in CommandChat with audio player and AI debrief bullets
 - [x] Fix priority queue click: clicking a priority item navigates to wrong conversation (e.g. Jennifer Casden → GoGreen)
 - [x] Add dismiss (×) button to away status banner so the entire bar can be closed
+
+- [x] CS Inbox: Internal notes — Reply/Note toggle in compose box with strong visual differentiation (amber background, lock icon, "not sent to customer" label), stored as role="note" in messageHistory, displayed in thread as amber sticky-note bubbles
