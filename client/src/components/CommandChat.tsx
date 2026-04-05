@@ -1283,9 +1283,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [rightWidth, setRightWidth] = useState<number>(() => {
     try { const v = localStorage.getItem("cmd_rightWidth"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 280; } catch { return 280; }
   });
-  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem("cmd_leftCollapsed") === "true"; } catch { return false; }
-  });
+  const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem("cmd_rightCollapsed") === "true"; } catch { return false; }
@@ -1296,7 +1294,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Persist to localStorage whenever values change
   useEffect(() => { try { localStorage.setItem("cmd_leftWidth",  String(leftWidth));  } catch {} }, [leftWidth]);
   useEffect(() => { try { localStorage.setItem("cmd_rightWidth", String(rightWidth)); } catch {} }, [rightWidth]);
-  useEffect(() => { try { localStorage.setItem("cmd_leftCollapsed",  String(leftCollapsed));  } catch {} }, [leftCollapsed]);
+  // left panel is always open
   useEffect(() => { try { localStorage.setItem("cmd_rightCollapsed", String(rightCollapsed)); } catch {} }, [rightCollapsed]);
 
   // Drag handler factory
@@ -1397,14 +1395,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {totalAlerts} alert{totalAlerts !== 1 ? "s" : ""}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={() => setLeftCollapsed(true)}
-                title="Collapse panel"
-                className="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+
             </div>
           </div>
         </div>
