@@ -1206,9 +1206,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const manualIssues = cmdData?.manualIssues ?? [];
   const pendingReminderCount = cmdData?.pendingReminderCount ?? 0;
   const cleanerStatuses = [...(cmdData?.cleanerStatuses ?? [])].sort((a, b) => a.ts - b.ts).filter(cs => {
-    // Auto-dismiss completed cards older than 4 hours
+    // Keep completed cards until midnight EST
     if (cs.status === "completed") {
-      return Date.now() - cs.ts < 4 * 60 * 60 * 1000;
+      const now = new Date();
+      const midnightEst = new Date(now.toLocaleDateString("en-US", { timeZone: "America/New_York" }));
+      midnightEst.setDate(midnightEst.getDate() + 1);
+      return cs.ts < midnightEst.getTime();
     }
     return true;
   });
