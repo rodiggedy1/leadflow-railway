@@ -67,6 +67,16 @@ export async function sendSms({ to, content, mediaUrl, fromNumberId: fromNumberI
     if (!response.ok) {
       const errorBody = await response.text();
       console.error(`[OpenPhone] API error ${response.status}:`, errorBody);
+      // Notify owner once when OpenPhone runs out of prepaid credits
+      if (response.status === 402) {
+        try {
+          const { notifyOwner } = await import("./_core/notification");
+          await notifyOwner({
+            title: "⚠️ OpenPhone out of credits — SMS not sent",
+            content: `An outbound SMS failed because OpenPhone has insufficient prepaid credits.\n\nRecipient: ${to}\nError: ${errorBody}\n\nPlease top up your OpenPhone balance to resume SMS delivery.`,
+          });
+        } catch { /* notification failure must not block */ }
+      }
       return {
         success: false,
         error: `OpenPhone API returned ${response.status}: ${errorBody}`,
