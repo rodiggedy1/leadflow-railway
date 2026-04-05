@@ -1085,10 +1085,19 @@ export const opsChatRouter = router({
       .orderBy(desc(opsChatMessages.createdAt))
       .limit(30);
 
-    // Keep only today's entries
+    // Keep only today's entries, then deduplicate: one card per cleaner+job (most recent wins)
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const seenCleanerJob = new Set<string>();
     const cleanerStatuses = cleanerStatusesRaw
       .filter(r => r.createdAt && new Date(r.createdAt).getTime() >= todayStart.getTime())
+      .filter(r => {
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+        const key = `${(meta.cleanerName as string) ?? ""}-${(meta.cleanerJobId as number) ?? 0}`;
+        if (seenCleanerJob.has(key)) return false;
+        seenCleanerJob.add(key);
+        return true;
+      })
       .map(r => {
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }

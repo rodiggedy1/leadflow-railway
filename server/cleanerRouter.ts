@@ -606,18 +606,19 @@ export const cleanerRouter = router({
       }
 
       // ── Post cleaner status card to CommandChat ─────────────────────────────────────────────
-      const CLEANER_STATUS_CARD_STATUSES = new Set(["on_the_way", "arrived", "running_late", "issue_at_property", "completed"]);
-      if (CLEANER_STATUS_CARD_STATUSES.has(input.status)) {
+      const CLEANER_STATUS_CARD_STATUSES = new Set(["on_the_way", "arrived", "in_progress", "running_late", "issue_at_property", "completed"]);
+      if (CLEANER_STATUS_CARD_STATUSES.has(input.status) || CLEANER_STATUS_CARD_STATUSES.has(effectiveStatus)) {
         (async () => {
           try {
             const statusMeta: Record<string, { emoji: string; label: string }> = {
               on_the_way:       { emoji: "🚗", label: "On the way" },
               arrived:          { emoji: "🟢", label: "Arrived" },
+              in_progress:      { emoji: "🧹", label: "In progress" },
               running_late:     { emoji: "⏰", label: "Running late" },
               issue_at_property: { emoji: "🚨", label: "Issue at property" },
               completed:        { emoji: "✅", label: "Completed" },
             };
-            const sm = statusMeta[input.status];
+            const sm = statusMeta[effectiveStatus] ?? statusMeta[input.status];
             const cleanerName = ctx.cleaner.cleanerName;
             const customerPart = job.customerName ? ` — ${job.customerName}` : "";
             const addressPart = job.jobAddress ? ` (${job.jobAddress})` : "";
@@ -634,7 +635,7 @@ export const cleanerRouter = router({
               quickAction: "cleaner_status",
               metadata: JSON.stringify({
                 cleanerName,
-                status: input.status,
+                status: effectiveStatus,
                 label: sm.label,
                 emoji: sm.emoji,
                 cleanerJobId: input.cleanerJobId,
