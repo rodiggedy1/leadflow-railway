@@ -1027,14 +1027,17 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     return (
-                      <button
+                      <div
                         key={conversation.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
                           setSelectedId(conversation.id);
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[20px] border px-3.5 py-3.5 text-left transition-all duration-150 hover:shadow-md hover:-translate-y-[1px] group ${
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedId(conversation.id); userNavigatedToId.current = conversation.id; triggerAutoDraft(conversation); } }}
+                        className={`w-full rounded-[20px] border px-3.5 py-3.5 text-left transition-all duration-150 hover:shadow-md hover:-translate-y-[1px] group cursor-pointer ${
                           selected.id === conversation.id
                             ? "border-slate-900 bg-white shadow-md ring-1 ring-slate-900/5"
                             : (conversation as any).hasUnanswered
@@ -1103,7 +1106,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             </button>
                           </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
