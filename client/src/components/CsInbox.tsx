@@ -395,6 +395,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
       setCompose("");
+      // Lock the current conversation so list re-sort after invalidate doesn't jump away
+      if (effectiveSelectedIdRef.current !== null) {
+        setSelectedId(effectiveSelectedIdRef.current);
+      }
       utils.leads.listCsInbox.invalidate();
     },
   });
