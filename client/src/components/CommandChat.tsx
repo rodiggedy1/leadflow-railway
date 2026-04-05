@@ -2551,6 +2551,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
+                // ── Cleaner status card ───────────────────────────────────────────────
+                if (msg.quickAction === "cleaner_status") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const cleanerName = (meta.cleanerName as string) ?? msg.from;
+                  const emoji = (meta.emoji as string) ?? "🟡";
+                  const label = (meta.label as string) ?? "Status update";
+                  const customerName = (meta.customerName as string | null) ?? null;
+                  const jobAddress = (meta.jobAddress as string | null) ?? null;
+                  const etaLabel = (meta.etaLabel as string | null) ?? null;
+                  const issueNote = (meta.issueNote as string | null) ?? null;
+                  const status = (meta.status as string) ?? "";
+                  const isUrgent = status === "issue_at_property" || status === "running_late";
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1.5">
+                      <div className={`inline-flex flex-col items-center gap-0.5 px-4 py-2 rounded-2xl border shadow-sm max-w-xs ${
+                        isUrgent
+                          ? "border-red-200 bg-red-50"
+                          : "border-slate-200 bg-slate-50"
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm leading-none">{emoji}</span>
+                          <span className={`text-xs font-semibold ${
+                            isUrgent ? "text-red-700" : "text-slate-700"
+                          }`}>
+                            <span className="font-bold">{cleanerName}</span> — {label}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {(customerName || jobAddress || etaLabel || issueNote) && (
+                          <div className="text-[11px] text-slate-500 text-center">
+                            {customerName && <span>{customerName}</span>}
+                            {jobAddress && <span className="ml-1 text-slate-400">{jobAddress}</span>}
+                            {etaLabel && <span className="ml-1 font-medium text-slate-600">· ETA {etaLabel}</span>}
+                            {issueNote && status === "issue_at_property" && <span className="ml-1 text-red-600">· {issueNote}</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];

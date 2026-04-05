@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages } from "../drizzle/schema";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -601,6 +601,53 @@ export const cleanerRouter = router({
             }
           } catch (err) {
             console.error("[FinishingUp/WrappingUp] Auto-link error:", err);
+          }
+        })();
+      }
+
+      // ── Post cleaner status card to CommandChat ─────────────────────────────────────────────
+      const CLEANER_STATUS_CARD_STATUSES = new Set(["on_the_way", "arrived", "running_late", "issue_at_property", "completed"]);
+      if (CLEANER_STATUS_CARD_STATUSES.has(input.status)) {
+        (async () => {
+          try {
+            const statusMeta: Record<string, { emoji: string; label: string }> = {
+              on_the_way:       { emoji: "🚗", label: "On the way" },
+              arrived:          { emoji: "🟢", label: "Arrived" },
+              running_late:     { emoji: "⏰", label: "Running late" },
+              issue_at_property: { emoji: "🚨", label: "Issue at property" },
+              completed:        { emoji: "✅", label: "Completed" },
+            };
+            const sm = statusMeta[input.status];
+            const cleanerName = ctx.cleaner.cleanerName;
+            const customerPart = job.customerName ? ` — ${job.customerName}` : "";
+            const addressPart = job.jobAddress ? ` (${job.jobAddress})` : "";
+            let etaPart = "";
+            if ((input.status === "on_the_way" || input.status === "running_late") && input.etaLabel) {
+              etaPart = ` · ETA ${input.etaLabel}`;
+            }
+            const body = `${sm.emoji} ${cleanerName} — ${sm.label}${customerPart}${addressPart}${etaPart}`;
+            await db.insert(opsChatMessages).values({
+              channel: "command",
+              authorName: cleanerName,
+              authorRole: "cleaner",
+              body,
+              quickAction: "cleaner_status",
+              metadata: JSON.stringify({
+                cleanerName,
+                status: input.status,
+                label: sm.label,
+                emoji: sm.emoji,
+                cleanerJobId: input.cleanerJobId,
+                customerName: job.customerName ?? null,
+                jobAddress: job.jobAddress ?? null,
+                etaLabel: input.etaLabel ?? null,
+                issueNote: input.issueNote ?? null,
+              }),
+            });
+            const { broadcastOpsUpdate } = await import("./sseBroadcast");
+            broadcastOpsUpdate("new_message", { channel: "command" });
+          } catch (err) {
+            console.error("[updateJobStatus] Failed to post CommandChat card:", err);
           }
         })();
       }
