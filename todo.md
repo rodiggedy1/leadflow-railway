@@ -1015,3 +1015,4 @@
 - [x] Add dismiss (×) button to away status banner so the entire bar can be closed
 
 - [x] CS Inbox: Internal notes — Reply/Note toggle in compose box with strong visual differentiation (amber background, lock icon, "not sent to customer" label), stored as role="note" in messageHistory, displayed in thread as amber sticky-note bubbles
+- [x] CS Inbox: Fix — saving a note navigates away to another conversation instead of staying on the current one

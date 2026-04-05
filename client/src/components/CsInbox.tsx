@@ -418,6 +418,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const addCsNote = trpc.leads.addCsNote.useMutation({
     onSuccess: () => {
       setCompose("");
+      // Pin the current conversation so list re-sort after invalidate doesn't jump away
+      if (effectiveSelectedIdRef.current !== null) {
+        setSelectedId(effectiveSelectedIdRef.current);
+      }
       utils.leads.listCsInbox.invalidate();
       toast.success("Note saved");
     },
