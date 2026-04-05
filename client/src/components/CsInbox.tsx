@@ -802,6 +802,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     }
   }, [effectiveSelectedId]);
 
+  // Auto-select first conversation when data loads and nothing is explicitly selected
+  useEffect(() => {
+    if (selectedId === null && filtered.length > 0) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
   // Auto-draft: only fires when the user explicitly clicks a conversation.
   // Background data refreshes (new inbound messages, re-sorts) never trigger this.
   function triggerAutoDraft(conv: typeof selected) {
