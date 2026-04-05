@@ -1073,8 +1073,14 @@ export const opsChatRouter = router({
         body: opsChatMessages.body,
         metadata: opsChatMessages.metadata,
         createdAt: opsChatMessages.createdAt,
+        // Pull live fields directly from cleanerJobs
+        jobEtaTimestamp: cleanerJobs.etaTimestamp,
+        jobIssueNote: cleanerJobs.issueNote,
+        jobCustomerName: cleanerJobs.customerName,
+        jobAddress: cleanerJobs.jobAddress,
       })
       .from(opsChatMessages)
+      .leftJoin(cleanerJobs, sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.cleanerJobId')) = ${cleanerJobs.id}`)
       .where(eq(opsChatMessages.quickAction, "cleaner_status"))
       .orderBy(desc(opsChatMessages.createdAt))
       .limit(30);
@@ -1086,16 +1092,23 @@ export const opsChatRouter = router({
       .map(r => {
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+        // Build human-readable ETA label from live etaTimestamp
+        let etaLabel: string | null = null;
+        if (r.jobEtaTimestamp && r.jobEtaTimestamp > Date.now()) {
+          etaLabel = new Date(r.jobEtaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        } else if ((meta.etaLabel as string | null)) {
+          etaLabel = meta.etaLabel as string;
+        }
         return {
           id: r.id,
           cleanerName: (meta.cleanerName as string) ?? "Cleaner",
           status: (meta.status as string) ?? "",
           label: (meta.label as string) ?? "",
           emoji: (meta.emoji as string) ?? "🟡",
-          customerName: (meta.customerName as string | null) ?? null,
-          jobAddress: (meta.jobAddress as string | null) ?? null,
-          etaLabel: (meta.etaLabel as string | null) ?? null,
-          issueNote: (meta.issueNote as string | null) ?? null,
+          customerName: r.jobCustomerName ?? (meta.customerName as string | null) ?? null,
+          jobAddress: r.jobAddress ?? (meta.jobAddress as string | null) ?? null,
+          etaLabel,
+          issueNote: r.jobIssueNote ?? (meta.issueNote as string | null) ?? null,
           cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
           ts: r.createdAt ? new Date(r.createdAt).getTime() : now,
         };
