@@ -1210,10 +1210,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           {/* ── CENTER: Thread ── */}
           <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] flex flex-col h-full py-0 gap-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="border-b border-slate-200 px-5 py-5 md:px-6 bg-white">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-3 flex-wrap">
+              <div className="border-b border-slate-200 px-5 py-2.5 md:px-6 bg-white">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {editingName ? (
                         <form
                           className="flex items-center gap-2"
@@ -1238,7 +1238,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         </form>
                       ) : (
                         <div className="flex items-center gap-2 group">
-                          <h2 className="text-2xl font-bold tracking-tight text-slate-900">{selected.name}</h2>
+                          <h2 className="text-base font-semibold tracking-tight text-slate-900">{selected.name}</h2>
                           <button
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
@@ -1270,13 +1270,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-400">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0 text-xs text-slate-400">
                       {selected.phone && <span className="font-mono tracking-wide">{selected.phone}</span>}
                       {selected.service && <><span className="text-slate-300">·</span><span>{selected.service}</span></>}
                       {selected.amount && <><span className="text-slate-300">·</span><span>{selected.amount}</span></>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 shrink-0">
                     {/* Call via OpenPhone */}
                     {selected?.phone && (
                       <Tooltip>
@@ -1589,7 +1589,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   <TypingBubble typers={typers} />
                 </div>
               )}
-              <div className={`shrink-0 border-t px-5 py-4 md:px-6 backdrop-blur-sm transition-colors duration-200 ${
+              <div className={`shrink-0 border-t px-5 py-2.5 md:px-6 backdrop-blur-sm transition-colors duration-200 ${
                   composeMode === "note"
                     ? "border-amber-200 bg-amber-50/95"
                     : "border-slate-100 bg-white/95"
@@ -1603,42 +1603,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
                   />
                 </div>
-                {/* Reply / Note mode toggle */}
-                <div className="flex items-center gap-1 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => setComposeMode("reply")}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                      composeMode === "reply"
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-700"
-                    }`}
-                  >
-                    <Send className="h-3 w-3" />
-                    Reply
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setComposeMode("note"); setElevateSuggestion(null); }}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                      composeMode === "note"
-                        ? "bg-amber-500 text-white border-amber-500"
-                        : "bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-700"
-                    }`}
-                  >
-                    <Lock className="h-3 w-3" />
-                    Note
-                  </button>
-                  {composeMode === "note" && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5">
-                      <Lock className="h-2.5 w-2.5" />
-                      Internal only — not sent to customer
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2 mb-3">
+
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   {selected.quickActions.map((action) => (
-                    <Button key={action} variant="outline" className="rounded-full h-10">
+                    <Button key={action} variant="outline" className="rounded-full h-7 text-xs px-3">
                       {action}
                     </Button>
                   ))}
@@ -1717,38 +1685,68 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       onBlur={composeMode === "reply" ? onTypingBlur : undefined}
                     />
                     <div className="flex flex-col gap-2 shrink-0">
-                      {composeMode === "reply" && (
-                        <div className="flex flex-row gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="rounded-xl h-7 w-7 border-slate-200 text-slate-500 hover:text-slate-800"
-                          onClick={() => setShowEmojiPicker((v) => !v)}
-                          title="Add emoji"
-                          type="button"
-                        >
-                          <Smile className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className={`rounded-xl h-7 w-7 transition-colors ${
-                            worldClassOpen
-                              ? "bg-violet-700 text-white border-violet-700"
-                              : "bg-violet-600 text-white border-violet-600 hover:bg-violet-700"
-                          }`}
-                          onClick={() => {
-                            setWorldClassOpen((v) => !v);
-                            setFaqOpen(false);
-                            setObjectionsOpen(false);
-                          }}
-                          title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
-                          type="button"
-                        >
-                          <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
-                        </Button>
-                        </div>
-                      )}
+                      <div className="flex flex-row gap-1.5">
+                        {composeMode === "reply" && (
+                          <>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="rounded-xl h-7 w-7 border-slate-200 text-slate-500 hover:text-slate-800"
+                            onClick={() => setShowEmojiPicker((v) => !v)}
+                            title="Add emoji"
+                            type="button"
+                          >
+                            <Smile className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className={`rounded-xl h-7 w-7 transition-colors ${
+                              worldClassOpen
+                                ? "bg-violet-700 text-white border-violet-700"
+                                : "bg-violet-600 text-white border-violet-600 hover:bg-violet-700"
+                            }`}
+                            onClick={() => {
+                              setWorldClassOpen((v) => !v);
+                              setFaqOpen(false);
+                              setObjectionsOpen(false);
+                            }}
+                            title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
+                            type="button"
+                          >
+                            <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
+                          </Button>
+                          </>
+                        )}
+                        {/* Note toggle — embedded in toolbar */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              type="button"
+                              onClick={() => {
+                                if (composeMode === "note") {
+                                  setComposeMode("reply");
+                                } else {
+                                  setComposeMode("note");
+                                  setElevateSuggestion(null);
+                                }
+                              }}
+                              className={`rounded-xl h-7 w-7 transition-colors ${
+                                composeMode === "note"
+                                  ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+                                  : "border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-600"
+                              }`}
+                            >
+                              <Lock className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {composeMode === "note" ? "Switch to Reply mode" : "Switch to Note mode (internal only)"}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                       {composeMode === "note" ? (
                         <Button
                           className="rounded-xl h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
