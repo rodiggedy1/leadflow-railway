@@ -2747,7 +2747,7 @@ Only flag real issues. Do not flag messages that are already clear and professio
           ],
           response_format: { type: "json_object" },
         });
-        raw = result?.choices?.[0]?.message?.content ?? "{}";
+        raw = (result?.choices?.[0]?.message?.content as string | undefined) ?? "{}";
         const parsed = JSON.parse(raw);
         return {
           ok: parsed.ok === true,
