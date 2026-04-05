@@ -26,7 +26,7 @@ import {
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
-  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff } from "lucide-react";
+  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -758,6 +758,40 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Scroll-to-original ────────────────────────────────────────────────────────────────
   const cmdMsgRefMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const [highlightedCmdMsgId, setHighlightedCmdMsgId] = useState<number | null>(null);
+
+  // ── Inline header search ────────────────────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchMatchIds = useMemo(() => {
+    if (!searchQuery.trim()) return new Set<number>();
+    const q = searchQuery.toLowerCase();
+    return new Set(channelMsgs.filter(m => m.body.toLowerCase().includes(q)).map(m => m.id));
+  }, [searchQuery, channelMsgs]);
+  const searchMatchList = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return channelMsgs.filter(m => searchMatchIds.has(m.id));
+  }, [searchQuery, searchMatchIds, channelMsgs]);
+  const [searchResultIdx, setSearchResultIdx] = useState(0);
+  function openSearch() {
+    setSearchOpen(true);
+    setSearchQuery("");
+    setSearchResultIdx(0);
+    setTimeout(() => searchInputRef.current?.focus(), 50);
+  }
+  function closeSearch() {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResultIdx(0);
+  }
+  function navigateSearchResult(dir: 1 | -1) {
+    if (searchMatchList.length === 0) return;
+    const next = (searchResultIdx + dir + searchMatchList.length) % searchMatchList.length;
+    setSearchResultIdx(next);
+    const target = searchMatchList[next];
+    if (target) scrollToCmdMsg(target.id);
+  }
+
   function scrollToCmdMsg(id: number) {
     const el = cmdMsgRefMap.current.get(id);
     if (!el) return;
@@ -1439,11 +1473,51 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-white min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* Header — compact single-line bar */}
         <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <Megaphone className="h-4 w-4 text-slate-500 shrink-0" />
-            <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">MIB Command Chat</h2>
-            {/* Online agent presence row */}
-            {agentList && agentList.length > 0 && (() => {
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {searchOpen ? (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
+                <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setSearchResultIdx(0); }}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") closeSearch();
+                    if (e.key === "Enter") navigateSearchResult(e.shiftKey ? -1 : 1);
+                  }}
+                  placeholder="Search messages…"
+                  className="flex-1 min-w-0 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
+                />
+                {searchQuery && searchMatchList.length > 0 && (
+                  <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
+                    {searchResultIdx + 1}/{searchMatchList.length}
+                  </span>
+                )}
+                {searchQuery && searchMatchList.length === 0 && (
+                  <span className="text-[10px] text-slate-400 shrink-0">No results</span>
+                )}
+                {searchQuery && searchMatchList.length > 0 && (
+                  <>
+                    <button onClick={() => navigateSearchResult(-1)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500" title="Previous (Shift+Enter)">
+                      <ChevronLeft className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => navigateSearchResult(1)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500" title="Next (Enter)">
+                      <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </>
+                )}
+                <button onClick={closeSearch} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 shrink-0" title="Close (Esc)">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <Megaphone className="h-4 w-4 text-slate-500 shrink-0" />
+                <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">MIB Command Chat</h2>
+              </>
+            )}
+            {/* Online agent presence row — only when search is closed */}
+            {!searchOpen && agentList && agentList.length > 0 && (() => {
               const MAX_SHOW = 6;
               const visible = agentList.slice(0, MAX_SHOW);
               const overflow = agentList.length - MAX_SHOW;
@@ -1491,8 +1565,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               );
             })()}
-            {/* Live revenue ticker */}
-            {todayRevenue > 0 && (
+            {/* Live revenue ticker — only when search is closed */}
+            {!searchOpen && todayRevenue > 0 && (
               <span
                 title={`${todayBookingCount} booking${todayBookingCount !== 1 ? "s" : ""} confirmed today`}
                 className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 whitespace-nowrap animate-in fade-in duration-500"
@@ -1503,10 +1577,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {pendingReminderCount > 0 && (
+            {!searchOpen && pendingReminderCount > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5">
                 <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
               </span>
+            )}
+            {/* Search icon button */}
+            {!searchOpen && (
+              <button
+                onClick={openSearch}
+                title="Search messages"
+                className="h-7 w-7 flex items-center justify-center rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
+              >
+                <Search className="h-3.5 w-3.5 text-slate-500" />
+              </button>
             )}
             <button
               onClick={toggleMute}
