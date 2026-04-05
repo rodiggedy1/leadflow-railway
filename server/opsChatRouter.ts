@@ -1188,6 +1188,32 @@ export const opsChatRouter = router({
         ts: new Date(msg.createdAt).getTime(),
       });
     }
+    // Inject no-show alerts from posted noshow_alert messages (today only)
+    const noshowMsgs = await db
+      .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, cleanerJobId: opsChatMessages.cleanerJobId, createdAt: opsChatMessages.createdAt })
+      .from(opsChatMessages)
+      .where(and(eq(opsChatMessages.quickAction, "noshow_alert"), gte(opsChatMessages.createdAt, new Date(todayStartMs))))
+      .orderBy(opsChatMessages.createdAt);
+    for (const msg of noshowMsgs) {
+      let meta3: Record<string, unknown> = {};
+      try { meta3 = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+      const jobId3 = (meta3.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+      if (!jobId3 || !todayJobIds.has(jobId3)) continue;
+      const currentStatus3 = jobStatusMap.get(jobId3);
+      // Clear once cleaner has checked in
+      if (currentStatus3 && ["on_the_way", "arrived", "in_progress", "completed"].includes(currentStatus3)) continue;
+      const cleanerName3 = (meta3.cleanerName as string) ?? "Team";
+      const customerName3 = (meta3.customerName as string | null) ?? null;
+      const timeStr3 = (meta3.timeStr as string | null) ?? null;
+      alerts.unshift({
+        type: "noshow_alert" as any,
+        jobId: jobId3,
+        title: `🚨 ${cleanerName3} — no check-in`,
+        body: `${customerName3 ? `For ${customerName3}` : "No status update"}${timeStr3 ? ` · Scheduled ${timeStr3}` : ""}`,
+        source: cleanerName3,
+        ts: new Date(msg.createdAt).getTime(),
+      });
+    }
     const cleanerStatusesFinal = cleanerStatuses;
 
     return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses: cleanerStatusesFinal };

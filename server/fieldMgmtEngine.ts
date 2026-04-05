@@ -26,6 +26,7 @@ import {
   fieldMgmtLog,
   fieldMgmtCalls,
   jobStatusHistory,
+  opsChatMessages,
 } from "../drizzle/schema";
 import { sendSms, sleep } from "./openphone";
 import { logActivity } from "./activityLogger";
@@ -1043,7 +1044,23 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] No-show alert sent to CS team for job ${job.id} (${job.cleanerName})`);
-
+      // Post alert card to CommandChat escalations section
+      try {
+        await db.insert(opsChatMessages).values({
+          channel: "command",
+          from: "System",
+          authorName: "System",
+          authorRole: "system",
+          body: `🚨 ${job.cleanerName ?? "Team"} — no check-in${job.customerName ? ` for ${job.customerName}` : ""} (scheduled ${timeStr})`,
+          metadata: JSON.stringify({ cleanerJobId: job.id, cleanerName: job.cleanerName, customerName: job.customerName, timeStr }),
+          cleanerJobId: job.id,
+          quickAction: "noshow_alert",
+        } as any);
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("new_message");
+      } catch (e) {
+        console.error(`[FieldMgmt] Failed to post noshow card for job ${job.id}:`, e);
+      }
       // Also log as activity
       logActivity({
         eventType: "nightly_sync",
