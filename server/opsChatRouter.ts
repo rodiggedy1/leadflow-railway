@@ -1092,17 +1092,19 @@ export const opsChatRouter = router({
       .map(r => {
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
-        // Build human-readable ETA label from live etaTimestamp
+        const status = (meta.status as string) ?? "";
+        const rawIssueNote = r.jobIssueNote ?? (meta.issueNote as string | null) ?? null;
+        // issueNote is overloaded: for on_the_way/running_late it stores the ETA string.
+        // Build etaLabel from: live etaTimestamp → meta.etaLabel → rawIssueNote (ETA string)
         let etaLabel: string | null = null;
         if (r.jobEtaTimestamp && r.jobEtaTimestamp > Date.now()) {
           etaLabel = new Date(r.jobEtaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
         } else if ((meta.etaLabel as string | null)) {
           etaLabel = meta.etaLabel as string;
+        } else if ((status === "on_the_way" || status === "running_late") && rawIssueNote) {
+          etaLabel = rawIssueNote;
         }
-        const status = (meta.status as string) ?? "";
-        // issueNote is overloaded: for on_the_way/running_late it stores the ETA string (e.g. "30 minutes").
-        // Only surface it as an issue for issue_at_property.
-        const rawIssueNote = r.jobIssueNote ?? (meta.issueNote as string | null) ?? null;
+        // Only surface issueNote as an issue for issue_at_property
         const issueNote = status === "issue_at_property" ? rawIssueNote : null;
         return {
           id: r.id,
