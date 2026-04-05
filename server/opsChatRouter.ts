@@ -1155,7 +1155,27 @@ export const opsChatRouter = router({
         };
       });
 
-    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses };
+    // Inject stale ETA entries into alerts and remove from cleanerStatuses
+    const staleEtaStatuses = cleanerStatuses.filter(cs =>
+      cs.status === "on_the_way" && cs.etaTimestamp && cs.etaTimestamp < now
+    );
+    const staleCleanerJobIds = new Set(staleEtaStatuses.map(cs => cs.id));
+    for (const cs of staleEtaStatuses) {
+      const etaStr = cs.etaTimestamp
+        ? new Date(cs.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+        : null;
+      alerts.unshift({
+        type: "stale_eta" as any,
+        jobId: cs.cleanerJobId ?? 0,
+        title: `${cs.cleanerName} — ETA passed`,
+        body: `${cs.customerName ? `For ${cs.customerName}` : "Still on the way"}${etaStr ? ` · ETA was ${etaStr}` : ""}`,
+        source: cs.cleanerName,
+        ts: cs.ts,
+      });
+    }
+    const cleanerStatusesFinal = cleanerStatuses.filter(cs => !staleCleanerJobIds.has(cs.id));
+
+    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses: cleanerStatusesFinal };
   }),
 
   /**

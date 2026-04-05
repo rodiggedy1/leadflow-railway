@@ -468,6 +468,7 @@ export function startInternalCron(): void {
         await db.insert(opsChatMessages).values({
           channel: "command",
           from: "System",
+          authorName: "System",
           authorRole: "system",
           body: `⚠️ ${job.cleanerName ?? "Team"} ETA passed — still on the way${job.customerName ? ` for ${job.customerName}` : ""}`,
           metadata: JSON.stringify({ cleanerJobId: job.id, cleanerName: job.cleanerName, customerName: job.customerName, etaStr }),
