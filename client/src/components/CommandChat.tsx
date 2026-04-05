@@ -1204,6 +1204,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const autoRaised = cmdData?.autoRaised ?? [];
   const manualIssues = cmdData?.manualIssues ?? [];
   const pendingReminderCount = cmdData?.pendingReminderCount ?? 0;
+  const cleanerStatuses = cmdData?.cleanerStatuses ?? [];
 
   const totalAlerts = snapshot.issue + snapshot.soon;
 
@@ -1456,6 +1457,51 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             )}
           </div>
+
+          {/* Cleaner Status Updates */}
+          {cleanerStatuses.length > 0 && (
+            <div className="mt-4">
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Team Status</p>
+              <div className="space-y-1.5">
+                {cleanerStatuses.map((cs) => {
+                  const isUrgent = cs.status === "issue_at_property" || cs.status === "running_late";
+                  return (
+                    <button
+                      key={cs.id}
+                      onClick={() => cs.cleanerJobId ? onJumpToJob(cs.cleanerJobId) : undefined}
+                      className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm ${
+                        isUrgent
+                          ? "bg-red-50 border-red-100 hover:bg-red-100"
+                          : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm leading-none shrink-0">{cs.emoji}</span>
+                          <span className={`text-xs font-semibold truncate ${
+                            isUrgent ? "text-red-700" : "text-slate-700"
+                          }`}>
+                            <span className="font-bold">{cs.cleanerName}</span>
+                            <span className="font-normal"> — {cs.label}</span>
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0">{fmt12(cs.ts)}</span>
+                      </div>
+                      {(cs.customerName || cs.etaLabel || cs.issueNote) && (
+                        <p className={`text-[11px] mt-0.5 truncate ${
+                          isUrgent ? "text-red-500" : "text-slate-500"
+                        }`}>
+                          {cs.customerName && <span>{cs.customerName}</span>}
+                          {cs.etaLabel && <span className="ml-1">· ETA {cs.etaLabel}</span>}
+                          {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {/* ── Left drag handle + collapse-expand toggle ── */}
@@ -2551,47 +2597,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
-                // ── Cleaner status card ───────────────────────────────────────────────
-                if (msg.quickAction === "cleaner_status") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const cleanerName = (meta.cleanerName as string) ?? msg.from;
-                  const emoji = (meta.emoji as string) ?? "🟡";
-                  const label = (meta.label as string) ?? "Status update";
-                  const customerName = (meta.customerName as string | null) ?? null;
-                  const jobAddress = (meta.jobAddress as string | null) ?? null;
-                  const etaLabel = (meta.etaLabel as string | null) ?? null;
-                  const issueNote = (meta.issueNote as string | null) ?? null;
-                  const status = (meta.status as string) ?? "";
-                  const isUrgent = status === "issue_at_property" || status === "running_late";
-                  return (
-                    <div key={msg.id} className="flex justify-center my-1.5">
-                      <div className={`inline-flex flex-col items-center gap-0.5 px-4 py-2 rounded-2xl border shadow-sm max-w-xs ${
-                        isUrgent
-                          ? "border-red-200 bg-red-50"
-                          : "border-slate-200 bg-slate-50"
-                      }`}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm leading-none">{emoji}</span>
-                          <span className={`text-xs font-semibold ${
-                            isUrgent ? "text-red-700" : "text-slate-700"
-                          }`}>
-                            <span className="font-bold">{cleanerName}</span> — {label}
-                          </span>
-                          <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {(customerName || jobAddress || etaLabel || issueNote) && (
-                          <div className="text-[11px] text-slate-500 text-center">
-                            {customerName && <span>{customerName}</span>}
-                            {jobAddress && <span className="ml-1 text-slate-400">{jobAddress}</span>}
-                            {etaLabel && <span className="ml-1 font-medium text-slate-600">· ETA {etaLabel}</span>}
-                            {issueNote && status === "issue_at_property" && <span className="ml-1 text-red-600">· {issueNote}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
+                // ── Skip cleaner_status cards — rendered in sidebar instead
+                if (msg.quickAction === "cleaner_status") return null;
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];

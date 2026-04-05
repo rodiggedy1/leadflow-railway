@@ -1066,7 +1066,42 @@ export const opsChatRouter = router({
       };
     });
 
-    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length };
+    // Cleaner status updates from today
+    const cleanerStatusesRaw = await db
+      .select({
+        id: opsChatMessages.id,
+        body: opsChatMessages.body,
+        metadata: opsChatMessages.metadata,
+        createdAt: opsChatMessages.createdAt,
+      })
+      .from(opsChatMessages)
+      .where(eq(opsChatMessages.quickAction, "cleaner_status"))
+      .orderBy(desc(opsChatMessages.createdAt))
+      .limit(30);
+
+    // Keep only today's entries
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const cleanerStatuses = cleanerStatusesRaw
+      .filter(r => r.createdAt && new Date(r.createdAt).getTime() >= todayStart.getTime())
+      .map(r => {
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+        return {
+          id: r.id,
+          cleanerName: (meta.cleanerName as string) ?? "Cleaner",
+          status: (meta.status as string) ?? "",
+          label: (meta.label as string) ?? "",
+          emoji: (meta.emoji as string) ?? "🟡",
+          customerName: (meta.customerName as string | null) ?? null,
+          jobAddress: (meta.jobAddress as string | null) ?? null,
+          etaLabel: (meta.etaLabel as string | null) ?? null,
+          issueNote: (meta.issueNote as string | null) ?? null,
+          cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
+          ts: r.createdAt ? new Date(r.createdAt).getTime() : now,
+        };
+      });
+
+    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses };
   }),
 
   /**
