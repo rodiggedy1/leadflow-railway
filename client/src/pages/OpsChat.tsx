@@ -90,7 +90,9 @@ const AUTO_DISMISS_MS = 15 * 60 * 1000;
 function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null; awaySetAt?: number | null }> }) {
   // Re-render every 30 seconds so the timer check stays current
   const [, setTick] = useState(0);
-  const [dismissed, setDismissed] = useState(false);
+  // Track which agent names were visible when the user last dismissed the banner.
+  // If a new agent goes away (name not in the set), the banner re-appears.
+  const [dismissedNames, setDismissedNames] = useState<Set<string>>(new Set());
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 30_000);
     return () => clearInterval(id);
@@ -105,7 +107,11 @@ function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: stri
     }
     return true;
   });
-  if (awayAgents.length === 0 || dismissed) return null;
+
+  // Banner is hidden only when every currently-away agent was already in the dismissed set.
+  // If any agent is new (not in dismissedNames), the banner re-appears.
+  const hasNewAgent = awayAgents.some(a => !dismissedNames.has(a.name));
+  if (awayAgents.length === 0 || !hasNewAgent) return null;
 
   return (
     <div className="flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
@@ -126,7 +132,7 @@ function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: stri
         })}
       </p>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={() => setDismissedNames(new Set(awayAgents.map(a => a.name)))}
         className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors ml-2"
         title="Dismiss"
       >
