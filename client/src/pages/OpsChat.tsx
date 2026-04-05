@@ -768,12 +768,10 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
 // Shows a red dot/count on the CS tab when there are new CS sessions since the tab was last viewed.
 
 function CsUnreadBadge({ hidden }: { hidden: boolean }) {
-  // lastSeenTs is unused by the new server logic (counts hasUnanswered regardless of time)
-  // but kept in the input shape for backwards compatibility.
-  const [lastSeenTs] = useState(() => 0);
+  const [lastSeenTs] = useState(() => Date.now() - 5 * 60 * 1000); // last 5 minutes on mount
   const { data } = trpc.leads.getCsUnreadCount.useQuery(
     { lastSeenTs },
-    { refetchInterval: 20_000 } // always poll — badge must update even when tab is active
+    { refetchInterval: 30_000, enabled: !hidden }
   );
   const count = data?.count ?? 0;
   if (hidden || count === 0) return null;
