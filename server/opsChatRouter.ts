@@ -1016,13 +1016,13 @@ export const opsChatRouter = router({
         const minutesUntil = Math.round((jobMs - now) / 60_000);
         const startTime = jobMs ? new Date(jobMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : null;
         const timeLabel = minutesUntil > 0 ? `in ${minutesUntil} min` : startTime ? `at ${startTime}` : "soon";
-        const bodyParts = [j.serviceType ?? "Cleaning"].filter(Boolean);
+        const bodyParts = [j.serviceType ?? "Cleaning", j.teamName ?? null].filter(Boolean);
         alerts.push({
           type: "soon",
           jobId: j.id,
           title: `🗓 ${j.customerName ?? j.jobAddress} — starts ${timeLabel}`,
           body: bodyParts.join(" · "),
-          source: "Dispatch",
+          source: j.teamName ?? "Dispatch",
           ts: jobMs || now,
         });
       }
