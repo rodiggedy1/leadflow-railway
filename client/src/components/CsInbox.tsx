@@ -79,7 +79,7 @@ import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
 
-type Queue = "Needs attention" | "Follow up" | "Hot leads" | "Active jobs" | "Post-job" | "Teams";
+type Queue = "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner";
 
 type Conversation = {
@@ -103,21 +103,20 @@ type Conversation = {
 };
 
 const queueStyles: Record<Queue, { tone: string; dot: string }> = {
-  "Needs attention": { tone: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" },
-  "Follow up":       { tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-  "Hot leads":       { tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  "Active jobs":     { tone: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  "Post-job":        { tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
-  "Teams":           { tone: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
+  "Priority": { tone: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500" },
+  "New":      { tone: "bg-blue-50 text-blue-700 border-blue-200",    dot: "bg-blue-500" },
+  "Active":   { tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
+  "Resolved": { tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  "Teams":    { tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
 };
-const QUEUES: Queue[] = ["Needs attention", "Follow up", "Hot leads", "Active jobs", "Post-job", "Teams"];
+const QUEUES: Queue[] = ["Priority", "New", "Active", "Resolved", "Teams"];
 
 const conversations: Conversation[] = [
   {
     id: 1,
     name: "Jillian McMahon",
     initials: "JM",
-    queue: "Needs attention",
+    queue: "Priority",
     service: "3 bedroom clean",
     location: "Alexandria, VA 22301",
     amount: "$179.10",
@@ -142,7 +141,7 @@ const conversations: Conversation[] = [
     id: 2,
     name: "Monica Reed",
     initials: "MR",
-    queue: "Hot leads",
+    queue: "New",
     service: "Move-out cleaning",
     location: "Washington, DC 20011",
     amount: "$320.00",
@@ -166,7 +165,7 @@ const conversations: Conversation[] = [
     id: 3,
     name: "Daniel Price",
     initials: "DP",
-    queue: "Follow up",
+    queue: "New",
     service: "Recurring clean",
     location: "Arlington, VA 22201",
     amount: "$210.00",
@@ -190,7 +189,7 @@ const conversations: Conversation[] = [
     id: 4,
     name: "Priya Shah",
     initials: "PS",
-    queue: "Post-job",
+    queue: "Resolved",
     service: "Standard clean",
     location: "Bethesda, MD 20814",
     amount: "$165.00",
@@ -214,7 +213,7 @@ const conversations: Conversation[] = [
     id: 5,
     name: "Ethan Long",
     initials: "EL",
-    queue: "Active jobs",
+    queue: "Active",
     service: "Deep clean",
     location: "Fairfax, VA 22030",
     amount: "$260.00",
@@ -250,7 +249,7 @@ function bubbleStyles(sender: MsgSender) {
 }
 
 function queueTone(queue: Queue) {
-  return { label: queue, ...( queueStyles[queue] ?? queueStyles["Needs attention"]) };
+  return { label: queue, ...( queueStyles[queue] ?? queueStyles["Priority"]) };
 }
 
 // ── Status badge helpers for Teams panel ──────────────────────────────────────
@@ -766,7 +765,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       careAbout = `Loyal customer (${totalBookings} bookings) — values trust and familiarity`;
     } else if (totalBookings >= 3) {
       careAbout = `Repeat customer (${totalBookings} bookings) — building a relationship`;
-    } else if (selected.queue === 'Hot leads') {
+    } else if (selected.queue === 'New') {
       careAbout = 'High-intent new inquiry — values quick, clear responses';
     } else if (avgPrice && avgPrice >= 200) {
       careAbout = `Premium spender (avg $${avgPrice}/visit) — values quality over price`;
@@ -2044,10 +2043,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               selected.stats.complaints > 0
                                 ? `${selected.stats.complaints} prior complaint`
                                 : "No complaint history",
-                              selected.queue === "Hot leads"
-                                ? "High-intent inquiry"
-                                : selected.queue === "Post-job"
-                                ? "Good review moment"
+                              selected.queue === "New"
+                                ? "High-intent lead"
+                                : selected.queue === "Resolved" ? "Good review moment"
                                 : "Needs active handling",
                             ].map((flag) => (
                               <div
