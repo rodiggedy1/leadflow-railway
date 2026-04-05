@@ -2707,6 +2707,59 @@ Now respond to the customer objection the agent provides. Give the agent the exa
         .where(eq(agents.id, input.agentId));
       return { ok: true };
     }),
+
+  /**
+   * AI pre-send message quality check.
+   * Flags: pronouns (use name instead), assumptions (verify first), unclear sentences.
+   * Returns { ok: true } if message is fine, or { ok: false, issues: [...], suggestion: string }
+   */
+  checkMessageQuality: opsChatProcedure
+    .input(z.object({ message: z.string().min(1).max(2000) }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const systemPrompt = `You are a communication quality checker for an internal ops team chat at a cleaning company. Your job is to review messages before they are sent and flag issues that reduce clarity and professionalism.
+
+Check for these three issues:
+1. PRONOUN: The message uses a pronoun (he, she, her, him, they, them, his, hers, their) to refer to a person instead of using their name. Names should always be used for clarity.
+2. ASSUMPTION: The message contains uncertain language like "I think", "I feel", "I believe", "probably", "maybe", "I'm not sure but", "I assume", "I guess". Ops messages should be factual — if you don't know, find out first.
+3. UNCLEAR: The message is incomplete, missing context, uses abbreviations without explanation, or would not be understood by someone without prior context. Every message should be a complete, self-contained sentence.
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "ok": true
+}
+OR if there are issues:
+{
+  "ok": false,
+  "issues": ["PRONOUN", "ASSUMPTION", "UNCLEAR"],
+  "feedback": "Short explanation of what's wrong (1-2 sentences max)",
+  "suggestion": "A rewritten version of the message that fixes all issues, using [Name] as placeholder where the actual name is unknown"
+}
+
+Only flag real issues. Do not flag messages that are already clear and professional. Do not be overly strict.`;
+
+      let raw = "";
+      try {
+        const result = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: input.message },
+          ],
+          response_format: { type: "json_object" },
+        });
+        raw = result?.choices?.[0]?.message?.content ?? "{}";
+        const parsed = JSON.parse(raw);
+        return {
+          ok: parsed.ok === true,
+          issues: (parsed.issues as string[] | undefined) ?? [],
+          feedback: (parsed.feedback as string | undefined) ?? "",
+          suggestion: (parsed.suggestion as string | undefined) ?? "",
+        };
+      } catch {
+        // If AI fails, allow the message through
+        return { ok: true, issues: [], feedback: "", suggestion: "" };
+      }
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

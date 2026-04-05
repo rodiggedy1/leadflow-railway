@@ -529,6 +529,10 @@ let _commandChatScrollTop = 0;
 
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
+  // Message quality check
+  const [qualityWarning, setQualityWarning] = useState<{ feedback: string; suggestion: string; issues: string[] } | null>(null);
+  const [qualityChecked, setQualityChecked] = useState(false);
+  const checkQualityMutation = trpc.opsChat.checkMessageQuality.useMutation();
   // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -1218,6 +1222,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   const totalAlerts = snapshot.issue + snapshot.soon;
 
+  function doSend() {
+    const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
+    const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
+    const body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
+    onSendMessage(body, mediaUrl, replyTo ?? undefined);
+    setComposer("");
+    setReplyTo(null);
+    setQualityWarning(null);
+    setQualityChecked(false);
+    setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      });
+    });
+  }
+
   function handleSend() {
     const hasText = composer.trim().length > 0;
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
@@ -1227,18 +1248,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       toast.error("Please wait for photos to finish uploading");
       return;
     }
-    const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
-    const body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
-    onSendMessage(body, mediaUrl, replyTo ?? undefined);
-    setComposer("");
-    setReplyTo(null);
-    setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
-    // Always scroll to bottom after sending
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      });
-    });
+    // If already checked and warning acknowledged (or no text), send directly
+    if (qualityChecked || !hasText) { doSend(); return; }
+    // Run quality check first
+    checkQualityMutation.mutate(
+      { message: composer.trim() },
+      {
+        onSuccess: (result) => {
+          if (result.ok) {
+            doSend();
+          } else {
+            setQualityWarning({ feedback: result.feedback, suggestion: result.suggestion, issues: result.issues });
+            setQualityChecked(true);
+          }
+        },
+        onError: () => {
+          // AI check failed — send anyway
+          doSend();
+        },
+      }
+    );
   }
 
   // ── Panel resize & collapse ──────────────────────────────────────────────
@@ -3105,6 +3134,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onChange={(e) => {
                 const val = e.target.value;
                 setComposer(val);
+                // Clear quality warning when user edits
+                if (qualityWarning) { setQualityWarning(null); setQualityChecked(false); }
                 // @mention detection: find '@' before cursor
                 const pos = e.target.selectionStart ?? val.length;
                 const before = val.slice(0, pos);
@@ -3157,6 +3188,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               }}
               onBlur={onCmdBlur}
             />
+            {/* Quality check warning banner */}
+            {checkQualityMutation.isPending && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                Checking message quality…
+              </div>
+            )}
+            {qualityWarning && !checkQualityMutation.isPending && (
+              <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-800">
+                    <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                    {qualityWarning.issues.includes("PRONOUN") && <span className="bg-amber-200 text-amber-900 rounded px-1">Use name</span>}
+                    {qualityWarning.issues.includes("ASSUMPTION") && <span className="bg-orange-200 text-orange-900 rounded px-1">Verify first</span>}
+                    {qualityWarning.issues.includes("UNCLEAR") && <span className="bg-red-100 text-red-800 rounded px-1">Unclear</span>}
+                  </div>
+                  <button onClick={() => { setQualityWarning(null); setQualityChecked(false); }} className="text-amber-400 hover:text-amber-600 shrink-0"><X className="h-3.5 w-3.5" /></button>
+                </div>
+                <p className="text-amber-700">{qualityWarning.feedback}</p>
+                {qualityWarning.suggestion && (
+                  <div className="flex items-start gap-2">
+                    <p className="text-slate-700 italic flex-1">"{qualityWarning.suggestion}"</p>
+                    <button
+                      onClick={() => { setComposer(qualityWarning.suggestion); setQualityWarning(null); setQualityChecked(false); }}
+                      className="shrink-0 text-[10px] font-semibold text-amber-700 border border-amber-300 rounded px-1.5 py-0.5 hover:bg-amber-100"
+                    >Use</button>
+                  </div>
+                )}
+                <p className="text-amber-500 text-[10px]">Fix above or <button onClick={doSend} className="underline font-semibold">send anyway</button></p>
+              </div>
+            )}
             <div className="flex items-center justify-between mt-2">
               <div className="flex items-center gap-1 relative">
                 {/* Photo */}
