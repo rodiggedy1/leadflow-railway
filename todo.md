@@ -1011,3 +1011,4 @@
 - [ ] When call.summary.completed fires, append recording URL and AI summary to the existing call_ended card
 - [ ] Post a new call_debrief card in command channel after AI debrief is generated (recording player + AI summary)
 - [ ] Render call_debrief card in CommandChat with audio player and AI debrief bullets
+- [x] Fix priority queue click: clicking a priority item navigates to wrong conversation (e.g. Jennifer Casden → GoGreen)

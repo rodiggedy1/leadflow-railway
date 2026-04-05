@@ -1035,17 +1035,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <button
                             className="flex-1 text-left"
                             onClick={() => {
+                              setActiveFilter("Priority");
+                              setSelectedId(item.id);
+                              userNavigatedToId.current = item.id;
+                              // Trigger auto-draft if session is already in memory
                               const found = displayConversations.find((c) => c.id === item.id);
-                              if (found) {
-                                setActiveFilter("Priority");
-                                setSelectedId(found.id);
-                                userNavigatedToId.current = found.id;
-                                triggerAutoDraft(found);
-                              } else {
-                                // Session exists in DB but not yet in filtered list — force select by id
-                                setActiveFilter("Priority");
-                                setSelectedId(item.id);
-                              }
+                              if (found) triggerAutoDraft(found);
                             }}
                           >
                             <div className="flex items-center gap-2">
