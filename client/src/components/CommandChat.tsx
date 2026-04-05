@@ -2551,6 +2551,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   );
                 }
+                // ── Status change card ────────────────────────────────────────────────
+                if (msg.quickAction === "status_change") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const agentName = (meta.agentName as string) ?? msg.from;
+                  const emoji = (meta.emoji as string | null) ?? null;
+                  const label = (meta.label as string | null) ?? null;
+                  const isOnline = !meta.status;
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 shadow-sm">
+                        <span className="text-sm leading-none">{isOnline ? "✅" : (emoji ?? "💤")}</span>
+                        <span className="text-xs text-slate-600">
+                          <span className="font-medium">{agentName}</span>
+                          {isOnline ? " is back online" : ` is now ${label ?? "away"}`}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
