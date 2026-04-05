@@ -3019,6 +3019,25 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
         return { total: sessions.length, fixed };
       }),
     /**
+     * backfillCleanerJobId — one-shot: set cleanerJobId DB column on existing cleaner_status
+     * cards that were inserted before the column was populated on insert.
+     */
+    backfillCleanerJobId: opsChatProcedure
+      .mutation(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const [result] = await (db as any).$client.execute(`
+          UPDATE ops_chat_messages
+          SET cleanerJobId = CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) AS UNSIGNED)
+          WHERE quickAction = 'cleaner_status'
+            AND cleanerJobId IS NULL
+            AND JSON_EXTRACT(metadata, '$.cleanerJobId') IS NOT NULL
+            AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) != 'null'
+            AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) != '0'
+        `);
+        return { rowsUpdated: result.affectedRows ?? 0 };
+      }),
+    /**
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
      * Used by the Teams right panel in CsInbox.
      */

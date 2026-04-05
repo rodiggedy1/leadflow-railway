@@ -1079,6 +1079,8 @@ export const opsChatRouter = router({
         jobIssueNote: cleanerJobs.issueNote,
         jobCustomerName: cleanerJobs.customerName,
         jobAddress: cleanerJobs.jobAddress,
+        jobStatus: cleanerJobs.jobStatus,
+        jobCleanerName: cleanerJobs.cleanerName,
       })
       .from(opsChatMessages)
       .leftJoin(cleanerJobs, sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.cleanerJobId')) = ${cleanerJobs.id}`)
@@ -1105,8 +1107,21 @@ export const opsChatRouter = router({
       .map(r => {
         let meta: Record<string, unknown> = {};
         try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
-        const status = (meta.status as string) ?? "";
+        // Use live jobStatus from cleanerJobs as authoritative — falls back to metadata
+        const status = r.jobStatus ?? (meta.status as string) ?? "";
         const rawIssueNote = r.jobIssueNote ?? (meta.issueNote as string | null) ?? null;
+        // Derive label/emoji from live status
+        const STATUS_META: Record<string, { emoji: string; label: string }> = {
+          on_the_way:        { emoji: "🚗", label: "On the way" },
+          arrived:           { emoji: "🟢", label: "Arrived" },
+          in_progress:       { emoji: "🧹", label: "In progress" },
+          running_late:      { emoji: "⏰", label: "Running late" },
+          issue_at_property: { emoji: "🚨", label: "Issue at property" },
+          completed:         { emoji: "✅", label: "Completed" },
+          finishing_up:      { emoji: "🏁", label: "Finishing up" },
+          wrapping_up:       { emoji: "📦", label: "Wrapping up" },
+        };
+        const sm = STATUS_META[status];
         // issueNote is overloaded: for on_the_way/running_late it stores the ETA string.
         // Build etaLabel from: live etaTimestamp → meta.etaLabel → rawIssueNote (ETA string)
         let etaLabel: string | null = null;
@@ -1123,8 +1138,8 @@ export const opsChatRouter = router({
           id: r.id,
           cleanerName: (meta.cleanerName as string) ?? "Cleaner",
           status,
-          label: (meta.label as string) ?? "",
-          emoji: (meta.emoji as string) ?? "🟡",
+          label: sm?.label ?? (meta.label as string) ?? "",
+          emoji: sm?.emoji ?? (meta.emoji as string) ?? "🟡",
           customerName: r.jobCustomerName ?? (meta.customerName as string | null) ?? null,
           jobAddress: r.jobAddress ?? (meta.jobAddress as string | null) ?? null,
           etaLabel,

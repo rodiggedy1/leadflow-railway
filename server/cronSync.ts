@@ -15,7 +15,7 @@ import type { Express, Request, Response } from "express";
 import { getCompletedBookingsForDate } from "./launch27";
 import { getDb } from "./db";
 import { completedJobs, completedJobBatches, syncRuns } from "../drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
@@ -422,5 +422,50 @@ export function registerCronRoutes(app: Express): void {
   // ── TEMPORARILY DISABLED — rating SMS paused to prevent sends to sample/test accounts ──
   app.post("/api/cron/rating-sms-send", (_req: Request, res: Response) => {
     res.status(503).json({ ok: false, error: "Rating SMS cron is temporarily disabled." });
+  });
+
+  // ── Debug: dump cleaner_status cards ───────────────────────────────────────────────
+  app.get("/api/cron/debug-cleaner-status", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret || req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
+      const rows = await db.execute(sql.raw(`
+        SELECT id, cleanerJobId, quickAction,
+               JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerName')) as cleanerName,
+               JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.status')) as status,
+               JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) as metaJobId,
+               createdAt
+        FROM ops_chat_messages
+        WHERE quickAction = 'cleaner_status'
+        ORDER BY createdAt DESC
+        LIMIT 20
+      `));
+      res.json(rows);
+    } catch (err) { res.status(500).json({ error: String(err) }); }
+  });
+  // ── One-shot: backfill cleanerJobId on existing cleaner_status cards ────────────────
+  app.post("/api/cron/backfill-cleaner-job-id", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
+    if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
+      const result = await db.execute(sql.raw(`
+        UPDATE ops_chat_messages
+        SET cleanerJobId = CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) AS UNSIGNED)
+        WHERE quickAction = 'cleaner_status'
+          AND cleanerJobId IS NULL
+          AND JSON_EXTRACT(metadata, '$.cleanerJobId') IS NOT NULL
+          AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) != 'null'
+          AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cleanerJobId')) != '0'
+      `));
+      const rowsUpdated = (result as any)?.rowsAffected ?? (result as any)?.[0]?.affectedRows ?? 0;
+      res.json({ ok: true, rowsUpdated });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
   });
 }
