@@ -1099,16 +1099,22 @@ export const opsChatRouter = router({
         } else if ((meta.etaLabel as string | null)) {
           etaLabel = meta.etaLabel as string;
         }
+        const status = (meta.status as string) ?? "";
+        // issueNote is overloaded: for on_the_way/running_late it stores the ETA string (e.g. "30 minutes").
+        // Only surface it as an issue for issue_at_property.
+        const rawIssueNote = r.jobIssueNote ?? (meta.issueNote as string | null) ?? null;
+        const issueNote = status === "issue_at_property" ? rawIssueNote : null;
         return {
           id: r.id,
           cleanerName: (meta.cleanerName as string) ?? "Cleaner",
-          status: (meta.status as string) ?? "",
+          status,
           label: (meta.label as string) ?? "",
           emoji: (meta.emoji as string) ?? "🟡",
           customerName: r.jobCustomerName ?? (meta.customerName as string | null) ?? null,
           jobAddress: r.jobAddress ?? (meta.jobAddress as string | null) ?? null,
           etaLabel,
-          issueNote: r.jobIssueNote ?? (meta.issueNote as string | null) ?? null,
+          etaTimestamp: r.jobEtaTimestamp ?? null,
+          issueNote,
           cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
           ts: r.createdAt ? new Date(r.createdAt).getTime() : now,
         };

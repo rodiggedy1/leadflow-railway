@@ -1466,13 +1466,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <div className="space-y-1.5">
                 {cleanerStatuses.map((cs) => {
                   const isUrgent = cs.status === "issue_at_property" || cs.status === "running_late";
+                  const arrivalLine = (cs as any).etaTimestamp && (cs as any).etaTimestamp > Date.now()
+                    ? `Arrives: ${new Date((cs as any).etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                    : cs.etaLabel ? `ETA: ${cs.etaLabel}` : null;
                   const tooltipLines = [
                     `${cs.emoji} ${cs.cleanerName} — ${cs.label}`,
                     cs.customerName ? `Customer: ${cs.customerName}` : null,
                     cs.jobAddress ? `Address: ${cs.jobAddress}` : null,
-                    cs.etaLabel ? `ETA: ${cs.etaLabel}` : null,
+                    arrivalLine,
                     cs.issueNote ? `Issue: ${cs.issueNote}` : null,
-                    `Time: ${fmt12(cs.ts)}`,
                   ].filter(Boolean) as string[];
                   return (
                     <Tooltip key={cs.id} delayDuration={300}>
