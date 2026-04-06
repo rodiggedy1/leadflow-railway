@@ -1712,7 +1712,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <TooltipContent side="bottom">New SMS conversation</TooltipContent>
                     </Tooltip>
                     {/* Resolve */}
-                    {selected && selected.id > 0 && !conversations.find((c) => c.id === selected.id) && (
+                    {selected && selected.id > 0 && !(selected as any).csResolvedAt && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
