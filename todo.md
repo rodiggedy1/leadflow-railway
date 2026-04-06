@@ -1029,3 +1029,4 @@
 - [x] CS Inbox: Fix prompt length restriction — removed 4-sentence cap, added "match the moment" guidance and Be SPECIFIC / Be CONNECTING instructions
 - [x] CS Inbox: Add Regenerate button to auto-draft compose label for one-click fresh draft
 - [x] CS Inbox: Rewrite csReply prompt to stop producing short hollow acknowledgments — removed sentence-count cap, added BAD EXAMPLES section with exact bad output to avoid, rewrote length guidance as "write until it feels complete"
+- [x] CS Inbox: BUG — clicking a conversation in the list does not navigate to it (error toast shown, chat panel stays blank/wrong) — root cause: inline Resolve button triggered on touch tap after hover; fixed with pointer:fine media query (desktop mouse only)

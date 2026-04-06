@@ -1217,10 +1217,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             </div>
                           </div>
                         </div>
-                        {/* Inline resolve button — visible on hover for New/Active tabs */}
+                        {/* Inline resolve button — visible on hover for New/Active tabs (pointer:fine = desktop mouse only, prevents accidental touch taps) */}
                         {(activeFilter === "New" || activeFilter === "Active") && (
                           <div
-                            className="mt-2.5 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="mt-2.5 hidden [@media(pointer:fine)]:flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
