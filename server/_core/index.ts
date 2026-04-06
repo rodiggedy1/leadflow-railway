@@ -14,6 +14,7 @@ import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { registerSseTestRoutes } from "../sseTest";
 import { registerOpsStreamRoute } from "../opsStream";
+import { registerCsElevateStreamRoute } from "../csElevateStream";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -93,6 +94,8 @@ async function startServer() {
   registerSseTestRoutes(app);
   // Production SSE stream for OpsChat real-time updates
   registerOpsStreamRoute(app);
+  // Streaming SSE endpoint for CS Inbox world-class elevate rewrite
+  registerCsElevateStreamRoute(app);
   // Nightly cron endpoint for Launch27 auto-sync
   registerCronRoutes(app);
   // Follow-up cron endpoints (5-min silence nudge + scheduled circle-back)

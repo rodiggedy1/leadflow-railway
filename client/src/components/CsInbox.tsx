@@ -299,6 +299,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
   const elevateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // AbortController for the in-flight streaming elevate request — cancel on conversation switch
+  const elevateAbortRef = useRef<AbortController | null>(null);
   const userPickedFilter = useRef(false);
   const filteredRef = useRef<Conversation[]>([]);
   const effectiveSelectedIdRef = useRef<number | null>(null);
@@ -315,6 +317,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [elevateSuggestion, setElevateSuggestion] = useState<string | null>(null);
   // null = not yet approved; set to the exact text the agent explicitly chose to send
   const [elevateApprovedText, setElevateApprovedText] = useState<string | null>(null);
+  // true while streaming tokens are arriving (shows typing indicator in the card)
+  const [elevateStreaming, setElevateStreaming] = useState(false);
   // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
   const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
 
@@ -359,8 +363,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   // Map DB rows to Conversation shape
   const liveConversations: Conversation[] = useMemo(() => {
-    if (!csData) return conversations; // loading — show static demo data
-    if (csData.length === 0) return conversations; // no real sessions — show static demo data
+    if (!csData) return []; // loading — show nothing until real data arrives
+    if (csData.length === 0) return []; // no real sessions — show empty state
     return csData.map((row) => {
       let msgs: { role: string; content: string; ts?: number; senderName?: string; media?: string[] }[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
@@ -438,19 +442,110 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     onError: (err: { message?: string }) => toast.error(err.message || "Failed to save note"),
   });
 
+  // Keep the tRPC mutation for the on-send gate path (needs full result synchronously)
   const elevateReply = trpc.opsChat.elevateReply.useMutation({
     onSuccess: (data) => {
       setElevateSuggestion(data.elevated);
+      setElevateStreaming(false);
     },
+    onError: () => setElevateStreaming(false),
   });
+
+  /**
+   * streamElevate — streams the world-class rewrite token-by-token via SSE.
+   * Used for the debounced typing path so the suggestion appears live like ChatGPT.
+   * Falls back to the tRPC mutation if the stream endpoint fails.
+   */
+  async function streamElevate(params: {
+    draft: string;
+    clientName?: string;
+    messageHistory?: string;
+    jobContext?: string;
+  }) {
+    // Cancel any previous in-flight stream
+    if (elevateAbortRef.current) {
+      elevateAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    elevateAbortRef.current = controller;
+
+    setElevateSuggestion("");
+    setElevateStreaming(true);
+
+    try {
+      const res = await fetch("/api/cs-elevate-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(params),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === "[DONE]") {
+            setElevateStreaming(false);
+            elevateAbortRef.current = null;
+            continue;
+          }
+          let parsed: { token?: string; error?: string };
+          try { parsed = JSON.parse(dataStr); } catch { continue; }
+          if (parsed.error) {
+            throw new Error(parsed.error);
+          }
+          if (parsed.token) {
+            accumulated += parsed.token;
+            setElevateSuggestion(accumulated);
+          }
+        }
+      }
+      setElevateStreaming(false);
+      elevateAbortRef.current = null;
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        // Intentional cancel — do not show error or fall back
+        return;
+      }
+      // Fall back to tRPC mutation
+      console.warn("[elevate stream] falling back to tRPC:", err);
+      setElevateSuggestion(null);
+      setElevateStreaming(false);
+      elevateReply.mutate(params);
+    }
+  }
 
   // Trigger elevate on debounce when agent types (non-Teams only)
   function triggerElevateDebounced(draft: string, conv: typeof selected) {
     if (!conv || conv.queue === "Teams") return;
     if (elevateDebounceRef.current) clearTimeout(elevateDebounceRef.current);
-    if (draft.trim().length < 10) { setElevateSuggestion(null); setElevateApprovedText(null); return; }
+    if (draft.trim().length < 10) {
+      // Cancel any in-flight stream and clear state
+      if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
+      setElevateSuggestion(null);
+      setElevateApprovedText(null);
+      setElevateStreaming(false);
+      return;
+    }
     elevateDebounceRef.current = setTimeout(() => {
-      elevateReply.mutate({
+      streamElevate({
         draft: draft.trim(),
         clientName: conv.name,
         messageHistory: JSON.stringify(conv.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
@@ -473,7 +568,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (elevateApprovedText !== null && compose.trim() === elevateApprovedText) { doSendCs(); return; }
     // Short message: send directly
     if (compose.trim().length < 10) { doSendCs(); return; }
-    // Run elevation check first
+    // Run elevation check first — use tRPC mutation (synchronous result needed for gate)
+    setElevateStreaming(true);
     elevateReply.mutate(
       {
         draft: compose.trim(),
@@ -484,9 +580,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       {
         onSuccess: (data) => {
           setElevateSuggestion(data.elevated);
+          setElevateStreaming(false);
           // Gate is now shown — agent must choose Use or Send Original
         },
-        onError: () => doSendCs(),
+        onError: () => { setElevateStreaming(false); doSendCs(); },
       }
     );
   }
@@ -625,9 +722,15 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   // Clear stale compose text, AI suggestion, and elevation state when switching conversations
   useEffect(() => {
+    // Cancel any in-flight streaming elevate request immediately
+    if (elevateAbortRef.current) {
+      elevateAbortRef.current.abort();
+      elevateAbortRef.current = null;
+    }
     setCompose("");
     setElevateSuggestion(null);
     setElevateApprovedText(null);
+    setElevateStreaming(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -977,6 +1080,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       jobContext: jobContext ?? "",
     });
   }
+
+  // Auto-draft when conversation becomes selected (including auto-select on load)
+  useEffect(() => {
+    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
+    triggerAutoDraft(selected);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSelectedId]);
 
   // Auto-scroll to bottom when conversation changes or new messages arrive
   useEffect(() => {
@@ -1848,6 +1958,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
                           ) : sendMessage.isPending ? (
                             <><Send className="h-4 w-4" /> Sending…</>
+                          ) : elevateStreaming ? (
+                            <><Send className="h-4 w-4" /> Send</>  
                           ) : (
                             <><Send className="h-4 w-4" /> Send</>
                           )}
@@ -1856,30 +1968,51 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     </div>
                   </div>
                   {/* AI Elevate suggestion card */}
+                  {/* Loading state: tRPC on-send path (no streaming yet) */}
                   {elevateReply.isPending && !elevateSuggestion && (
                     <div className="mt-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs flex items-center gap-2 text-violet-600">
                       <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
                       <span className="font-medium">Elevating to world-class level…</span>
                     </div>
                   )}
-                  {elevateSuggestion && !elevateReply.isPending && selected?.queue !== "Teams" && (
+                  {/* Streaming card: shows tokens as they arrive, with a blinking cursor */}
+                  {(elevateSuggestion !== null && elevateSuggestion !== "") && selected?.queue !== "Teams" && (
                     <div className="mt-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 font-semibold text-violet-700">
-                          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                          <Sparkles className={`h-3.5 w-3.5 shrink-0 ${elevateStreaming ? "animate-pulse" : ""}`} />
                           <span>World-class suggestion</span>
-                          <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
+                          {elevateStreaming ? (
+                            <span className="text-[10px] font-normal text-violet-400 animate-pulse">writing…</span>
+                          ) : (
+                            <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
+                          )}
                         </div>
-                        <button onClick={() => { setElevateSuggestion(null); setElevateApprovedText(null); }} className="text-violet-400 hover:text-violet-600 shrink-0"><X className="h-3.5 w-3.5" /></button>
+                        <button
+                          onClick={() => {
+                            if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
+                            setElevateSuggestion(null);
+                            setElevateApprovedText(null);
+                            setElevateStreaming(false);
+                          }}
+                          className="text-violet-400 hover:text-violet-600 shrink-0"
+                        ><X className="h-3.5 w-3.5" /></button>
                       </div>
                       <div className="flex items-start gap-2">
-                        <p className="text-slate-700 italic flex-1 leading-relaxed">“{elevateSuggestion}”</p>
-                        <button
-                          onClick={() => { const t = elevateSuggestion!; setCompose(t); setElevateSuggestion(null); setElevateApprovedText(t.trim()); }}
-                          className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
-                        >Use</button>
+                        <p className="text-slate-700 italic flex-1 leading-relaxed">
+                          "{elevateSuggestion}"
+                          {elevateStreaming && <span className="inline-block w-0.5 h-3.5 bg-violet-500 ml-0.5 animate-pulse align-middle" />}
+                        </p>
+                        {!elevateStreaming && (
+                          <button
+                            onClick={() => { const t = elevateSuggestion!; setCompose(t); setElevateSuggestion(null); setElevateApprovedText(t.trim()); }}
+                            className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
+                          >Use</button>
+                        )}
                       </div>
-                      <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
+                      {!elevateStreaming && (
+                        <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
+                      )}
                     </div>
                   )}
                   <div className="mt-3 flex flex-col gap-2">

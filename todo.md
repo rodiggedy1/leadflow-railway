@@ -1041,3 +1041,6 @@
 - [x] CS Inbox: BUG — AI suggestion from previous conversation persists when switching; FIXED: added useEffect([selectedId]) that clears elevateSuggestion and elevateChecked on every conversation switch
 - [x] CS Inbox: BUG — compose box draft text persists when switching conversations; FIXED: added setCompose("") to the selectedId useEffect alongside elevateSuggestion/elevateChecked clears
 - [x] CS Inbox: BUG — Send button bypassed the world-class AI rewrite gate; PERMANENTLY FIXED: replaced elevateChecked:boolean with elevateApprovedText:string|null — gate only bypasses when compose.trim() exactly matches the text the agent explicitly approved (Use or Send Original). All other bypass paths closed.
+- [ ] CS Inbox: Stream the world-class elevate suggestion so tokens appear word-by-word instead of a 3-second spinner
+- [ ] CS Inbox: BUG — fake "Jillian McMahon" placeholder flashes for ~1 second on every visit to CS chat
+- [ ] CS Inbox: BUG — first auto-selected conversation on load does not trigger the world-class AI draft
