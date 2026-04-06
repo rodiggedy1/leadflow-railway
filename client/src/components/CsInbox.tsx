@@ -1448,7 +1448,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     const sc = statusCfg[statusKey];
 
                     // ── Priority badge (top-left of avatar) ──
-                    // VIP = 4+ completed jobs, Today = has a job scheduled today, $ = Teams queue
+                    // VIP = 3+ jobs, Today = has a job scheduled today, Team = Teams queue
                     type PriorityKey = "vip" | "today" | "revenue" | "normal";
                     const jobCount = conversation.jobCount ?? 0;
                     const hasTodayJob = conversation.hasTodayJob ?? false;
@@ -1460,7 +1460,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
                       vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
                       today:   { label: "Booked", className: "bg-amber-500 text-white" },
-                      revenue: { label: "$",     className: "bg-emerald-600 text-white" },
+                      revenue: { label: "Team",  className: "bg-violet-600 text-white" },
                       normal:  { label: "",      className: "" },
                     };
                     const pc = priorityCfg[priorityKey];
@@ -1562,7 +1562,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 </div>
                                 {pc.label && (
                                   <div className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pc.className}`}>
-                                    {pc.label === "$" ? "High value" : pc.label}
+                                    {pc.label}
                                   </div>
                                 )}
                               </div>
