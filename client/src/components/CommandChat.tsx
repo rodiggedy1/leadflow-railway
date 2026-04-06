@@ -204,6 +204,16 @@ function HotLeadCard({
   const price       = (meta.price       as number | string) ?? "";
   const size        = (meta.size        as string)         ?? ""; // city for thumbtack-sms, home size for others
   const utmSource   = (meta.utmSource   as string | null)  ?? null;
+  const manualSource = (meta.source     as string | null)  ?? null;
+  const SOURCE_LABELS: Record<string, string> = {
+    yelp: "Yelp", google: "Google", thumbtack: "Thumbtack",
+    bark: "Bark", phone: "Phone", other: "Manual",
+  };
+  const sourceDisplay = manualSource
+    ? (SOURCE_LABELS[manualSource] ?? manualSource)
+    : utmSource && utmSource !== "thumbtack-sms"
+      ? (SOURCE_LABELS[utmSource] ?? utmSource)
+      : null;
   const sessionId   = (meta.sessionId   as number | null)  ?? null;
   const arrivedAt   = (meta.arrivedAt   as number)         ?? msg.createdAt.getTime();
   const claimedBy   = (meta.claimedBy   as string | null)  ?? null;
@@ -355,6 +365,7 @@ function HotLeadCard({
         </div>
         {leadPhone   && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
         {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
+        {sourceDisplay && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{sourceDisplay}</p>}
         {isThumbSms && size && <p className="text-[10px] text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
         {thumbtackUrl && (
           <a
