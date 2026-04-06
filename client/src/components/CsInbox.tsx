@@ -494,7 +494,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const effectiveSelectedIdRef = useRef<number | null>(null);
 
   const filtered = useMemo(() => {
+    // Always include the conversation the user is currently viewing, even if it no
+    // longer matches the active filter (e.g. after sending a reply it loses
+    // hasUnanswered and would otherwise be evicted from the "New" tab).
+    const pinnedId = selectedId ?? userNavigatedToId.current;
     return displayConversations.filter((c) => {
+      // Pinned conversation is always visible — never evict it mid-session
+      if (pinnedId !== null && c.id === pinnedId) return true;
       const q = query.trim().toLowerCase();
       const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.tags.join(" ")]
         .join(" ")
@@ -513,7 +519,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       }
       return matchesFilter && (!q || hay.includes(q));
     });
-  }, [activeFilter, query, displayConversations, priorityItems]);
+  }, [activeFilter, query, displayConversations, priorityItems, selectedId]);
 
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
