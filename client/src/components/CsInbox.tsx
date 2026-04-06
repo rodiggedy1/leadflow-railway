@@ -296,19 +296,28 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [faqOpen, setFaqOpen] = useState(false);
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
+  // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
+  const elevateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userPickedFilter = useRef(false);
+  const filteredRef = useRef<Conversation[]>([]);
+  const effectiveSelectedIdRef = useRef<number | null>(null);
+  const autoDraftedForId = useRef<number | null>(null);
+  // Tracks the last conversation the user explicitly navigated to.
+  // Only updated on user click — never by background data refreshes.
+  const userNavigatedToId = useRef<number | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
   // AI Elevate suggestion state
   const [elevateSuggestion, setElevateSuggestion] = useState<string | null>(null);
   const [elevateChecked, setElevateChecked] = useState(false); // true once shown for current draft
-  const elevateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
   const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
 
   const utils = trpc.useUtils();
-  // Track whether the user has manually picked a tab so we don't override their choice
-  const userPickedFilter = useRef(false);
 
   useOpsStream({
     onLeadUpdate: () => {
@@ -490,9 +499,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     onSuccess: () => utils.leads.getCsPriorityQueue.invalidate(),
   });
 
-  const filteredRef = useRef<typeof filtered>([]);
-  const effectiveSelectedIdRef = useRef<number | null>(null);
-
   const filtered = useMemo(() => {
     // Always include the conversation the user is currently viewing, even if it no
     // longer matches the active filter (e.g. after sending a reply it loses
@@ -564,12 +570,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   });
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
-  const autoDraftedForId = useRef<number | null>(null);
-  // Tracks the last conversation the user explicitly navigated to.
-  // Only updated on user click — never by background data refreshes.
-  const userNavigatedToId = useRef<number | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const csAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
       const replyText = typeof data.reply === "string" ? data.reply : "";

@@ -1032,3 +1032,5 @@
 - [x] CS Inbox: BUG — clicking a conversation in the list does not navigate to it (error toast shown, chat panel stays blank/wrong) — root cause: inline Resolve button triggered on touch tap after hover; fixed with pointer:fine media query (desktop mouse only)
 - [x] CS Inbox: BUG (recurring) — sending a message jumps to a different conversation; FIXED: filtered useMemo now always pins the currently selected conversation so it is never evicted from the list after send (even when hasUnanswered flips to false)
 - [x] CS Inbox: BUG — ReferenceError: Cannot access 'userNavigatedToId' before initialization; FIXED: removed ref from useMemo (temporal dead zone), using selectedId state directly as pinnedId
+- [x] CS Inbox: Move all useRef declarations to top of component (before useMemo/useEffect) to prevent temporal dead zone issues
+- [x] CS Inbox: Add vitest for filter pin invariant — 6 tests covering send-stays-on-conversation, tab filter eviction, search, Teams, Resolved (server/csInbox.filter.test.ts)
