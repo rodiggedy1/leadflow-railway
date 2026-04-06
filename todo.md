@@ -1019,3 +1019,4 @@
 - [x] Fix: tRPC query on /admin/command-center returns HTML error page instead of JSON (TRPCClientError: Unexpected token '<') — getCsConvInsight converted from .query (GET) to .mutation (POST) to avoid HTTP 414 URI-too-large
 - [x] CS Inbox: Reduce wasted vertical space — shrink header, move Note toggle into compose bar, maximize thread height
 - [x] CS Inbox: Rewrite World-Class Reply AI prompt to match warm/direct/conversational tone from provided Zappos SMS examples
+- [x] CS Inbox: Add 30 new SMS tone examples (31-60) to csReply system prompt
