@@ -1594,8 +1594,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                   {sc.label}
                                 </div>
                                 {pc.label && conversation.queue !== "Teams" && (
-                                  <div className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pc.className}`}>
-                                    {pc.label}
+                                  <div className={`inline-flex items-center justify-center h-6 w-6 rounded-full text-sm ${pc.className}`}>
+                                    {priorityKey === "today" ? "💰" : pc.label}
                                   </div>
                                 )}
                                 {conversation.queue === "Teams" && (
