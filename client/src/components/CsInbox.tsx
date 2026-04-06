@@ -1404,7 +1404,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
                     // ── Priority badge ──
                     type PriorityKey = "vip" | "urgent" | "revenue" | "normal";
-                    const priorityKey: PriorityKey = conversation.queue === "VIP" ? "vip" : hasUnanswered ? "urgent" : conversation.queue === "Teams" ? "revenue" : "normal";
+                    const priorityKey: PriorityKey = hasUnanswered ? "urgent" : conversation.queue === "Teams" ? "revenue" : "normal";
                     const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
                       vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
                       urgent:  { label: "Today", className: "bg-amber-500 text-white" },
