@@ -61,6 +61,7 @@ import {
   ShieldAlert,
   Lock,
   StickyNote,
+  SprayCan,
 } from "lucide-react";
 import {
   Tooltip,
@@ -1560,9 +1561,14 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                   <sc.Icon className="h-3.5 w-3.5" />
                                   {sc.label}
                                 </div>
-                                {pc.label && (
+                                {pc.label && conversation.queue !== "Teams" && (
                                   <div className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pc.className}`}>
                                     {pc.label}
+                                  </div>
+                                )}
+                                {conversation.queue === "Teams" && (
+                                  <div className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-600">
+                                    <SprayCan className="h-3.5 w-3.5" />
                                   </div>
                                 )}
                               </div>
