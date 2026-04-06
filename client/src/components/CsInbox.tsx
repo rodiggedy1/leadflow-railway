@@ -674,7 +674,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   });
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
+  // AbortController for the in-flight streaming auto-draft — cancel on conversation switch
+  const autoDraftAbortRef = useRef<AbortController | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Keep the tRPC mutation as fallback for the ai_suggest quick-reply button
   const csAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
       const replyText = typeof data.reply === "string" ? data.reply : "";
@@ -684,6 +688,79 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
     onError: () => { setLoadingAction(null); setAutoDraftLoading(false); },
   });
+
+  /**
+   * streamAutoDraft — streams the AI reply token-by-token into the compose box.
+   * Used for the auto-draft on conversation click. Falls back to tRPC on error.
+   */
+  async function streamAutoDraft(params: {
+    conversationContext: string;
+    customerName: string;
+    jobContext: string;
+  }) {
+    // Cancel any previous in-flight stream
+    if (autoDraftAbortRef.current) {
+      autoDraftAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    autoDraftAbortRef.current = controller;
+
+    setCompose("");
+    setAutoDraftLoading(true);
+
+    try {
+      const res = await fetch("/api/cs-reply-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(params),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === "[DONE]") {
+            setAutoDraftLoading(false);
+            autoDraftAbortRef.current = null;
+            continue;
+          }
+          let parsed: { token?: string; error?: string };
+          try { parsed = JSON.parse(dataStr); } catch { continue; }
+          if (parsed.error) throw new Error(parsed.error);
+          if (parsed.token) {
+            accumulated += parsed.token;
+            setCompose(accumulated);
+          }
+        }
+      }
+      setAutoDraftLoading(false);
+      autoDraftAbortRef.current = null;
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return; // intentional cancel
+      // Fall back to tRPC mutation
+      console.warn("[auto-draft stream] falling back to tRPC:", err);
+      setCompose("");
+      setAutoDraftLoading(false);
+      csAutoDraft.mutate(params);
+      setAutoDraftLoading(true); // tRPC will set it false in onSuccess/onError
+    }
+  }
   const csQuickReply = trpc.leads.csQuickReply.useMutation({
     onSuccess: (data) => {
       if (data.draft) setCompose(data.draft);
@@ -727,10 +804,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       elevateAbortRef.current.abort();
       elevateAbortRef.current = null;
     }
+    // Cancel any in-flight auto-draft stream immediately
+    if (autoDraftAbortRef.current) {
+      autoDraftAbortRef.current.abort();
+      autoDraftAbortRef.current = null;
+    }
     setCompose("");
     setElevateSuggestion(null);
     setElevateApprovedText(null);
     setElevateStreaming(false);
+    setAutoDraftLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1068,13 +1151,17 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (!conv) return;
     if (autoDraftedForId.current === conv.id) return; // already drafted for this conversation
     autoDraftedForId.current = conv.id;
-    setCompose(""); // clear previous draft
-    setAutoDraftLoading(true);
+    // Cancel any in-flight stream from the previous conversation
+    if (autoDraftAbortRef.current) {
+      autoDraftAbortRef.current.abort();
+      autoDraftAbortRef.current = null;
+    }
     const recentMsgs = conv.messages.slice(-5);
     const conversationContext = recentMsgs
       .map((m) => `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`)
       .join("\n");
-    csAutoDraft.mutate({
+    // Stream the reply token-by-token into the compose box
+    streamAutoDraft({
       conversationContext,
       customerName: conv.name ?? "",
       jobContext: jobContext ?? "",
