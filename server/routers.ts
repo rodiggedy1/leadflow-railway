@@ -2712,25 +2712,27 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           return true;
         });
 
-        // Batch-augment with jobCount (VIP = 4+) and hasTodayJob (Today badge)
+        // Batch-augment with jobCount (VIP = 3+) and hasTodayJob (Today badge)
         const phones = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
         const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
 
-        // Build jobCount map: phone10 → count from completedJobs
+        // Build jobCount map: phone10 → count from cleanerJobs (covers all jobs)
         const jobCountMap = new Map<string, number>();
         const todayJobMap = new Map<string, boolean>();
 
         if (phones.length > 0) {
-          // completedJobs uses E.164 (+1XXXXXXXXXX)
-          const e164Phones = phones.map((p) => `+1${digits10(p)}`);
-          const jobCountRows = await db
-            .select({ phone: completedJobs.phone, cnt: sql<number>`COUNT(*)` })
-            .from(completedJobs)
-            .where(inArray(completedJobs.phone, e164Phones))
-            .groupBy(completedJobs.phone);
-          for (const row of jobCountRows) {
-            const d10 = digits10(row.phone);
-            jobCountMap.set(d10, Number(row.cnt));
+          // cleanerJobs stores customerPhone in various formats — normalize to 10-digit
+          const d10Phones = phones.map((p) => digits10(p)).filter(Boolean);
+          if (d10Phones.length > 0) {
+            const jobCountRows = await db
+              .select({ customerPhone: cleanerJobs.customerPhone, cnt: sql<number>`COUNT(*)` })
+              .from(cleanerJobs)
+              .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.raw(d10Phones.map((p) => `'${p}'`).join(','))})`)
+              .groupBy(cleanerJobs.customerPhone);
+            for (const row of jobCountRows) {
+              const d10 = digits10(row.customerPhone ?? "");
+              if (d10) jobCountMap.set(d10, (jobCountMap.get(d10) ?? 0) + Number(row.cnt));
+            }
           }
 
           // cleanerJobs uses (xxx) xxx-xxxx format — check for today's date

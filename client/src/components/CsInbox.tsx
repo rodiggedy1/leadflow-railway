@@ -1443,7 +1443,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     const jobCount = conversation.jobCount ?? 0;
                     const hasTodayJob = conversation.hasTodayJob ?? false;
                     const priorityKey: PriorityKey =
-                      jobCount >= 4 ? "vip" :
+                      jobCount >= 3 ? "vip" :
                       hasTodayJob ? "today" :
                       conversation.queue === "Teams" ? "revenue" :
                       "normal";
