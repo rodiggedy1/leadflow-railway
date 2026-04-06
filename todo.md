@@ -1022,3 +1022,4 @@
 - [x] CS Inbox: Add 30 new SMS tone examples (31-60) to csReply system prompt
 - [x] CS Inbox: Pass last few conversation messages as context to both auto-draft AI and World-Class Reply panel
 - [x] CS Inbox: Fix — clicking a filter tab (New/Active/Teams/etc.) did not reset selectedId, causing wrong conversation to show; fixed by resetting selectedId on tab switch
+- [x] CS Inbox: Replace csQuickReply auto-draft with csReply (world-class prompt); keep elevateReply on send

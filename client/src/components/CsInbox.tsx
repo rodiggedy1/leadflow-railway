@@ -564,13 +564,20 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const userNavigatedToId = useRef<number | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const csQuickReply = trpc.leads.csQuickReply.useMutation({
+  const csAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
-      if (data.draft) setCompose(data.draft);
+      if (data.reply) setCompose(data.reply);
       setLoadingAction(null);
       setAutoDraftLoading(false);
     },
     onError: () => { setLoadingAction(null); setAutoDraftLoading(false); },
+  });
+  const csQuickReply = trpc.leads.csQuickReply.useMutation({
+    onSuccess: (data) => {
+      if (data.draft) setCompose(data.draft);
+      setLoadingAction(null);
+    },
+    onError: () => setLoadingAction(null),
   });
   const syncOutbound = trpc.opsChat.syncCsOutboundMessages.useMutation({
     onSuccess: () => {
@@ -906,16 +913,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     autoDraftedForId.current = conv.id;
     setCompose(""); // clear previous draft
     setAutoDraftLoading(true);
-    csQuickReply.mutate({
-      action: "ai_suggest",
-      clientName: conv.name ?? undefined,
-      queue: conv.queue ?? undefined,
-      messageHistory: JSON.stringify(
-        conv.messages.map((m) => ({
-          role: m.sender === "client" ? "user" : "assistant",
-          content: m.text,
-        }))
-      ),
+    const recentMsgs = conv.messages.slice(-5);
+    const conversationContext = recentMsgs
+      .map((m) => `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`)
+      .join("\n");
+    csAutoDraft.mutate({
+      conversationContext,
     });
   }
 
@@ -1636,8 +1639,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   {composeMode === "reply" && !autoDraftLoading && compose && (
                     <div className="flex items-center gap-1.5 mb-2.5">
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
-                        <Bot className="h-3 w-3" />
-                        AI draft
+                        <Sparkles className="h-3 w-3" />
+                        World-class draft
                       </span>
                       <span className="text-xs text-slate-400">Review before sending</span>
                     </div>

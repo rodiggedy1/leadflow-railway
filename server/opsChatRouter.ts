@@ -2484,7 +2484,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
    */
   csReply: opsChatProcedure
     .input(z.object({
-      scenario: z.string().min(1).max(2000),
+      scenario: z.string().max(2000).optional().default(""),
       history: z.array(z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string(),
@@ -2542,7 +2542,7 @@ Write the exact SMS the agent should send for the scenario described.`;
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
         ...input.history.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user", content: `${input.conversationContext ? `Recent conversation with this customer:\n${input.conversationContext}\n\n` : ""}Customer service scenario: ${input.scenario}` },
+        { role: "user", content: `${input.conversationContext ? `Recent conversation with this customer:\n${input.conversationContext}\n\n` : ""}${input.scenario ? `Customer service scenario: ${input.scenario}` : "Based on the conversation above, write the best reply to send to the customer now."}` },
       ];
 
       const result = await invokeLLM({ messages });
