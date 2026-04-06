@@ -2849,6 +2849,76 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       const elevated = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
       return { elevated };
     }),
+
+  /**
+   * getCsConvInsight — generates a concise AI insight / action recommendation
+   * for the currently selected CS conversation. Takes the last N messages plus
+   * optional client profile context and returns a 1-3 sentence advisory.
+   * NOTE: must be .mutation (POST) — messageHistory can be very long and exceeds nginx URI limits as a GET param
+   */
+  getCsConvInsight: opsChatProcedure
+    .input(z.object({
+      sessionId: z.number(),
+      messageHistory: z.string(),
+      clientName: z.string().optional(),
+      queue: z.string().optional(),
+      clientProfile: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const isTeams = input.queue === "Teams";
+      const messages: Array<{ role: string; content: string }> = (() => {
+        try { return JSON.parse(input.messageHistory); } catch { return []; }
+      })();
+      if (messages.length === 0) return { insight: "" };
+      const recent = messages.slice(-12);
+      const snippet = recent
+        .map((m) => `${m.role === "user" ? (isTeams ? "Cleaner" : "Client") : "Agent"}: ${m.content}`)
+        .join("\n");
+      const firstName = input.clientName?.split(" ")[0] ?? "the client";
+      const profileCtx = input.clientProfile ? `\n\nCLIENT HISTORY:\n${input.clientProfile}` : "";
+      const systemPrompt = isTeams
+        ? `You are an operations manager for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this SMS conversation with a cleaner and give a 1-2 sentence operational insight: what is happening and what is the single most important action to take right now. Be direct and specific. No fluff. No bullet points.`
+        : `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA. Analyze this SMS conversation with a client named ${firstName} and give a 1-3 sentence insight: what is the client's situation or mood, what is the single most important action the agent should take right now, and any risk or opportunity to flag. Be specific and actionable. No fluff. No bullet points.${profileCtx}`;
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `CONVERSATION:\n${snippet}\n\nProvide your insight now.` },
+        ],
+      });
+      const insight = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
+      return { insight };
+    }),
+
+  /**
+   * addCsNote — saves an internal note to a CS conversation's messageHistory.
+   * Notes use role="note" so they are never sent to the customer via SMS.
+   * They appear in the thread as amber sticky-note bubbles visible only to agents.
+   */
+  addCsNote: opsChatProcedure
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      note: z.string().min(1).max(2000),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const [session] = await db
+        .select()
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+      if (!session) throw new Error("Session not found");
+      let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+      try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+      const agentName = ctx.user?.name ?? "Agent";
+      history.push({ role: "note", content: input.note, ts: Date.now(), senderName: agentName });
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify(history) })
+        .where(eq(conversationSessions.id, input.sessionId));
+      return { success: true };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

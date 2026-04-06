@@ -415,7 +415,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     },
   });
 
-  const addCsNote = trpc.leads.addCsNote.useMutation({
+  const addCsNote = trpc.opsChat.addCsNote.useMutation({
     onSuccess: () => {
       setCompose("");
       // Pin the current conversation so list re-sort after invalidate doesn't jump away
@@ -758,7 +758,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
   const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
-  const insightMutation = trpc.leads.getCsConvInsight.useMutation({
+  const insightMutation = trpc.opsChat.getCsConvInsight.useMutation({
     onSuccess: (data) => setInsightData(data),
   });
   const insightLoading = insightMutation.isPending;
