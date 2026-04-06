@@ -313,7 +313,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
   // AI Elevate suggestion state
   const [elevateSuggestion, setElevateSuggestion] = useState<string | null>(null);
-  const [elevateChecked, setElevateChecked] = useState(false); // true once shown for current draft
+  // null = not yet approved; set to the exact text the agent explicitly chose to send
+  const [elevateApprovedText, setElevateApprovedText] = useState<string | null>(null);
   // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
   const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
 
@@ -415,7 +416,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     onSuccess: () => {
       setCompose("");
       setElevateSuggestion(null);
-      setElevateChecked(false);
+      setElevateApprovedText(null);
       // Lock the current conversation so list re-sort after invalidate doesn't jump away
       if (effectiveSelectedIdRef.current !== null) {
         setSelectedId(effectiveSelectedIdRef.current);
@@ -440,7 +441,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const elevateReply = trpc.opsChat.elevateReply.useMutation({
     onSuccess: (data) => {
       setElevateSuggestion(data.elevated);
-      setElevateChecked(true);
     },
   });
 
@@ -448,7 +448,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   function triggerElevateDebounced(draft: string, conv: typeof selected) {
     if (!conv || conv.queue === "Teams") return;
     if (elevateDebounceRef.current) clearTimeout(elevateDebounceRef.current);
-    if (draft.trim().length < 10) { setElevateSuggestion(null); setElevateChecked(false); return; }
+    if (draft.trim().length < 10) { setElevateSuggestion(null); setElevateApprovedText(null); return; }
     elevateDebounceRef.current = setTimeout(() => {
       elevateReply.mutate({
         draft: draft.trim(),
@@ -469,8 +469,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     const isTeams = selected.queue === "Teams";
     // Teams: send directly, no elevation
     if (isTeams) { doSendCs(); return; }
-    // Already shown suggestion: send directly
-    if (elevateChecked) { doSendCs(); return; }
+    // Agent explicitly approved this exact text — send directly
+    if (elevateApprovedText !== null && compose.trim() === elevateApprovedText) { doSendCs(); return; }
     // Short message: send directly
     if (compose.trim().length < 10) { doSendCs(); return; }
     // Run elevation check first
@@ -484,8 +484,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       {
         onSuccess: (data) => {
           setElevateSuggestion(data.elevated);
-          setElevateChecked(true);
-          if (data.elevated.trim() === compose.trim()) doSendCs();
+          // Gate is now shown — agent must choose Use or Send Original
         },
         onError: () => doSendCs(),
       }
@@ -628,7 +627,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   useEffect(() => {
     setCompose("");
     setElevateSuggestion(null);
-    setElevateChecked(false);
+    setElevateApprovedText(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1745,8 +1744,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         const val = e.target.value;
                         setCompose(val);
                         if (composeMode === "reply") {
-                          // Reset suggestion when draft changes
-                          if (elevateSuggestion) { setElevateSuggestion(null); setElevateChecked(false); }
+                          // Reset elevation state whenever the draft changes so the gate always fires on the next send
+                          setElevateSuggestion(null);
+                          setElevateApprovedText(null);
                           triggerElevateDebounced(val, selected);
                         }
                       }}
@@ -1870,16 +1870,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <span>World-class suggestion</span>
                           <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
                         </div>
-                        <button onClick={() => { setElevateSuggestion(null); setElevateChecked(false); }} className="text-violet-400 hover:text-violet-600 shrink-0"><X className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => { setElevateSuggestion(null); setElevateApprovedText(null); }} className="text-violet-400 hover:text-violet-600 shrink-0"><X className="h-3.5 w-3.5" /></button>
                       </div>
                       <div className="flex items-start gap-2">
                         <p className="text-slate-700 italic flex-1 leading-relaxed">“{elevateSuggestion}”</p>
                         <button
-                          onClick={() => { setCompose(elevateSuggestion); setElevateSuggestion(null); setElevateChecked(true); }}
+                          onClick={() => { const t = elevateSuggestion!; setCompose(t); setElevateSuggestion(null); setElevateApprovedText(t.trim()); }}
                           className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
                         >Use</button>
                       </div>
-                      <p className="text-violet-400 text-[10px]">Or <button onClick={doSendCs} className="underline font-semibold">send your original</button></p>
+                      <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
                     </div>
                   )}
                   <div className="mt-3 flex flex-col gap-2">

@@ -1040,3 +1040,4 @@
 - [x] CS Inbox: BUG — search not reliably finding conversations by name; FIXED: when query is active, search now scans ALL conversations across all tabs (tab filter is bypassed); also added phone number to the search haystack
 - [x] CS Inbox: BUG — AI suggestion from previous conversation persists when switching; FIXED: added useEffect([selectedId]) that clears elevateSuggestion and elevateChecked on every conversation switch
 - [x] CS Inbox: BUG — compose box draft text persists when switching conversations; FIXED: added setCompose("") to the selectedId useEffect alongside elevateSuggestion/elevateChecked clears
+- [x] CS Inbox: BUG — Send button bypassed the world-class AI rewrite gate; PERMANENTLY FIXED: replaced elevateChecked:boolean with elevateApprovedText:string|null — gate only bypasses when compose.trim() exactly matches the text the agent explicitly approved (Use or Send Original). All other bypass paths closed.
