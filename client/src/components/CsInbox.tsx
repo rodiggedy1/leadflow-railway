@@ -666,13 +666,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   const resolveSession = trpc.leads.resolveSession.useMutation({
     onSuccess: (_data, variables) => {
-      // Play celebration for 900ms, then switch tabs
+      // Play celebration for 900ms, then let the card disappear from current view
       setResolvingId(variables.sessionId);
       window.setTimeout(() => {
         setResolvingId(null);
-        setShowResolved(true);
-        setActiveFilter("Resolved" as InboxFilter);
-        userPickedFilter.current = true;
         setSelectedId(null);
         utils.leads.listCsInbox.invalidate();
         utils.opsChat.getCsResolvedCount.invalidate();
