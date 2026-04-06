@@ -624,8 +624,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
-  // Clear stale AI suggestion and compose state when switching conversations
+  // Clear stale compose text, AI suggestion, and elevation state when switching conversations
   useEffect(() => {
+    setCompose("");
     setElevateSuggestion(null);
     setElevateChecked(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

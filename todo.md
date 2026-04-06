@@ -1039,3 +1039,4 @@
 - [x] Wire jobContext into the elevate-on-send pass — added jobContext field to elevateReply input schema, injected into system prompt with job details section, wired from both triggerElevateDebounced and handleCsSend calls in CsInbox
 - [x] CS Inbox: BUG — search not reliably finding conversations by name; FIXED: when query is active, search now scans ALL conversations across all tabs (tab filter is bypassed); also added phone number to the search haystack
 - [x] CS Inbox: BUG — AI suggestion from previous conversation persists when switching; FIXED: added useEffect([selectedId]) that clears elevateSuggestion and elevateChecked on every conversation switch
+- [x] CS Inbox: BUG — compose box draft text persists when switching conversations; FIXED: added setCompose("") to the selectedId useEffect alongside elevateSuggestion/elevateChecked clears
