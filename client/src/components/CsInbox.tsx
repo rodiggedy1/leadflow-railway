@@ -804,16 +804,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       elevateAbortRef.current.abort();
       elevateAbortRef.current = null;
     }
-    // Cancel any in-flight auto-draft stream immediately
-    if (autoDraftAbortRef.current) {
-      autoDraftAbortRef.current.abort();
-      autoDraftAbortRef.current = null;
-    }
+    // NOTE: do NOT abort autoDraftAbortRef here — triggerAutoDraft handles that
+    // before creating the new controller, so we never abort the new stream.
     setCompose("");
     setElevateSuggestion(null);
     setElevateApprovedText(null);
     setElevateStreaming(false);
-    setAutoDraftLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
