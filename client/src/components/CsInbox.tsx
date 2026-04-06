@@ -1974,7 +1974,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <span>AI is drafting a reply…</span>
                     </div>
                   )}
-                  {composeMode === "reply" && !autoDraftLoading && compose && (
+                  {composeMode === "reply" && !autoDraftLoading && compose && !elevateSuggestion && (
                     <div className="flex items-center gap-1.5 mb-2.5">
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
                         <Sparkles className="h-3 w-3" />
@@ -2121,7 +2121,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       ) : (
                         <Button
                           className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
-                          disabled={!compose.trim() || sendMessage.isPending || elevateReply.isPending || !selected}
+                          disabled={!compose.trim() || sendMessage.isPending || !selected}
                           onClick={handleCsSend}
                         >
                           {elevateReply.isPending ? (
