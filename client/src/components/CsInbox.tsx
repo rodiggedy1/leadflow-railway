@@ -566,7 +566,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const csAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
-      if (data.reply) setCompose(data.reply);
+      const replyText = typeof data.reply === "string" ? data.reply : "";
+      if (replyText) setCompose(replyText);
       setLoadingAction(null);
       setAutoDraftLoading(false);
     },
