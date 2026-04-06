@@ -576,7 +576,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (autoDraftLoading) { doSendCs(); return; }
     // Short message: send directly
     if (compose.trim().length < 10) { doSendCs(); return; }
-    // Run elevation check first — use tRPC mutation (synchronous result needed for gate)
+    // Cancel any pending debounce + in-flight stream so they can't wipe the suggestion card
+    if (elevateDebounceRef.current) { clearTimeout(elevateDebounceRef.current); elevateDebounceRef.current = null; }
+    if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
+    // Card already visible (debounce pre-loaded it) — agent must choose Use or Send Original
+    if (elevateSuggestion !== null && elevateSuggestion !== "") return;
+    // Run elevation check — show the gate card with the world-class rewrite
     setElevateStreaming(true);
     elevateReply.mutate(
       {
