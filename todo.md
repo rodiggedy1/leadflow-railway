@@ -1021,3 +1021,4 @@
 - [x] CS Inbox: Rewrite World-Class Reply AI prompt to match warm/direct/conversational tone from provided Zappos SMS examples
 - [x] CS Inbox: Add 30 new SMS tone examples (31-60) to csReply system prompt
 - [x] CS Inbox: Pass last few conversation messages as context to both auto-draft AI and World-Class Reply panel
+- [x] CS Inbox: Fix — clicking a filter tab (New/Active/Teams/etc.) did not reset selectedId, causing wrong conversation to show; fixed by resetting selectedId on tab switch

@@ -1006,6 +1006,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     key={tab.id}
                     onClick={() => {
                       userPickedFilter.current = true;
+                      setSelectedId(null); // reset so new tab's first conversation is auto-selected
                       setActiveFilter(tab.id);
                       if (tab.id === "Resolved") setShowResolved(true);
                     }}
