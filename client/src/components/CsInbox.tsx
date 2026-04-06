@@ -1412,7 +1412,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     const gradient = gradientPalette[hashIdx];
 
                     // ── Status pill — smarter logic ──
-                    type StatusKey = "priority" | "booked" | "waiting" | "live" | "followup" | "resolved";
+                    type StatusKey = "priority" | "booked" | "waiting" | "live" | "replied" | "followup" | "resolved";
                     const csPriorityTag = (conversation as any).csPriorityTag;
                     const csQueue = (conversation as any).csQueue;
                     const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
@@ -1424,12 +1424,14 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       isBooked ? "booked" :
                       waitingTooLong ? "waiting" :
                       hasUnanswered ? "live" :
+                      activeFilter === "Active" ? "replied" :
                       "followup";
                     const statusCfg: Record<StatusKey, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
                       priority:  { label: "Needs attention", pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
                       booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
                       waiting:   { label: "Waiting",         pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: Clock3 },
                       live:      { label: "Live",            pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
+                      replied:   { label: "Replied",         pill: "bg-blue-50 text-blue-700 border-blue-200",            dot: "bg-blue-500",    Icon: CheckCircle2 },
                       followup:  { label: "Follow up",       pill: "bg-slate-50 text-slate-500 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
                       resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };

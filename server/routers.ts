@@ -2693,7 +2693,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
           const lastEntry = history[history.length - 1];
           const lastMsgTs = lastEntry?.ts ?? s.updatedAt.getTime();
-          const hasUnanswered = !!lastEntry && lastEntry.role === "user";
+          // Skip note/system roles — only user/assistant count for unanswered detection
+          const lastRealEntry = [...history].reverse().find((e) => e.role === "user" || e.role === "assistant");
+          const hasUnanswered = !!lastRealEntry && lastRealEntry.role === "user";
           return { ...s, lastMsgTs, hasUnanswered };
         });
 

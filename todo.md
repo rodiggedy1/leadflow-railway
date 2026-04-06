@@ -1050,3 +1050,4 @@
 - [x] CS Inbox: Rename priority status pill from "Priority" to "Needs attention"
 - [x] CS Inbox: Rename same-day job avatar badge from "Today" to "Booked"
 - [x] CS Inbox: VIP avatar badge (4+ jobs) label confirmed as "VIP" (already correct)
+- [x] CS Inbox: BUG — status pills show "Follow up" for all New and Active conversations; fix hasUnanswered to skip note/system roles, add "replied" status for Active tab, fix "waiting"/"live" for New tab
