@@ -295,6 +295,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
   const [showResolved, setShowResolved] = useState(false);
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
   // Follow-up modal state (CS chat — add only, no queue)
   const [addFollowUpOpen, setAddFollowUpOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
@@ -664,14 +665,18 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   effectiveSelectedIdRef.current = effectiveSelectedId;
 
   const resolveSession = trpc.leads.resolveSession.useMutation({
-    onSuccess: () => {
-      // Switch to Resolved tab so the refetch includes resolved items
-      setShowResolved(true);
-      setActiveFilter("Resolved" as InboxFilter);
-      userPickedFilter.current = true;
-      setSelectedId(null);
-      utils.leads.listCsInbox.invalidate();
-      utils.opsChat.getCsResolvedCount.invalidate();
+    onSuccess: (_data, variables) => {
+      // Play celebration for 900ms, then switch tabs
+      setResolvingId(variables.sessionId);
+      window.setTimeout(() => {
+        setResolvingId(null);
+        setShowResolved(true);
+        setActiveFilter("Resolved" as InboxFilter);
+        userPickedFilter.current = true;
+        setSelectedId(null);
+        utils.leads.listCsInbox.invalidate();
+        utils.opsChat.getCsResolvedCount.invalidate();
+      }, 900);
     },
   });
 
@@ -1498,9 +1503,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       : isResolved
                       ? "Resolved"
                       : "Waiting on follow-up";
+                    const isResolvingThis = resolvingId === conversation.id;
                     return (
-                      <motion.button
+                      <motion.div
                         key={conversation.id}
+                        layout
+                        animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.45 }}
+                        className="group relative overflow-hidden rounded-[24px]"
+                      >
+                      <motion.button
                         whileHover={{ y: -1 }}
                         onClick={() => {
                           setSelectedId(conversation.id);
@@ -1586,6 +1598,66 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           </div>
                         </div>
                       </motion.button>
+                      {/* Subtle resolve button — only on unresolved cards */}
+                      {!isResolved && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resolveSession.mutate({ sessionId: conversation.id });
+                          }}
+                          className="absolute right-3 top-3 rounded-lg bg-white/80 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-500 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                        >
+                          Resolve
+                        </button>
+                      )}
+                      {/* Celebration overlay */}
+                      <AnimatePresence>
+                        {isResolvingThis && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[24px]"
+                          >
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18 }}
+                              className="absolute inset-0 bg-violet-400/10"
+                            />
+                            {[...Array(18)].map((_, i) => {
+                              const x = ((i % 6) - 2.5) * 28;
+                              const y = Math.floor(i / 6) * 10;
+                              return (
+                                <motion.div
+                                  key={i}
+                                  initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }}
+                                  animate={{ x, y: -40 - y, opacity: [0, 1, 0], scale: [0.4, 1, 0.8], rotate: 140 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.8, delay: i * 0.015 }}
+                                  className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-violet-500"
+                                >
+                                  <Sparkles className="h-4 w-4" />
+                                </motion.div>
+                              );
+                            })}
+                            <motion.div
+                              initial={{ scale: 0.6, opacity: 0, y: 6 }}
+                              animate={{ scale: [0.6, 1.08, 1], opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ duration: 0.45 }}
+                              className="absolute inset-0 flex items-center justify-center"
+                            >
+                              <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">
+                                Resolved ✨
+                              </div>
+                            </motion.div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      </motion.div>
                     );
                   })}
                 </div>
