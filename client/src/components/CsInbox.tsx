@@ -420,6 +420,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         jobCount: (row as any).jobCount ?? 0,
         hasTodayJob: (row as any).hasTodayJob ?? false,
         lastMsgTs: (row as any).lastMsgTs,
+        csResolvedAt: (row as any).csResolvedAt ?? null,
       };
     });
   }, [csData, nameMap]);
