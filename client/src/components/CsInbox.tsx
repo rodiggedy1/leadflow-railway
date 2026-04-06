@@ -343,7 +343,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     // Polling fallback: catches any messages missed during SSE reconnect windows
     refetchInterval: 30_000,
   });
-  const { data: resolvedCountData } = trpc.leads.getCsResolvedCount.useQuery(undefined, {
+  const { data: resolvedCountData } = trpc.opsChat.getCsResolvedCount.useQuery(undefined, {
     refetchOnWindowFocus: false,
     refetchInterval: 30_000,
   });
@@ -667,7 +667,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       userPickedFilter.current = true;
       setSelectedId(null);
       utils.leads.listCsInbox.invalidate();
-      utils.leads.getCsResolvedCount.invalidate();
+      utils.opsChat.getCsResolvedCount.invalidate();
     },
   });
 

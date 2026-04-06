@@ -34,7 +34,7 @@ import {
   users,
   quoteLeads,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, isNull, like, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, isNotNull, like, lte, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -2951,6 +2951,24 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
         .set({ messageHistory: JSON.stringify(history) })
         .where(eq(conversationSessions.id, input.sessionId));
       return { success: true };
+    }),
+  /**
+   * getCsResolvedCount — count of resolved CS sessions for the Resolved tab badge.
+   */
+  getCsResolvedCount: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return { count: 0 };
+      const sourceFilter = or(
+        eq(conversationSessions.leadSource, "cs-inbound"),
+        eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+        eq(conversationSessions.leadSource, "cs_initiated")
+      );
+      const rows = await db
+        .select({ cnt: sql<number>`COUNT(*)` })
+        .from(conversationSessions)
+        .where(and(sourceFilter, isNotNull(conversationSessions.csResolvedAt)));
+      return { count: Number(rows[0]?.cnt ?? 0) };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
