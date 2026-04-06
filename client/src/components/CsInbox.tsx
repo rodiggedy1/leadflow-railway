@@ -497,7 +497,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     // Always include the conversation the user is currently viewing, even if it no
     // longer matches the active filter (e.g. after sending a reply it loses
     // hasUnanswered and would otherwise be evicted from the "New" tab).
-    const pinnedId = selectedId ?? userNavigatedToId.current;
+    const pinnedId = selectedId;
     return displayConversations.filter((c) => {
       // Pinned conversation is always visible — never evict it mid-session
       if (pinnedId !== null && c.id === pinnedId) return true;
