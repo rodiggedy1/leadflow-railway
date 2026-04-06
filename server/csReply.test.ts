@@ -31,10 +31,12 @@ describe("csReply", () => {
     expect(result.reply.length).toBeGreaterThan(10);
   });
 
-  it("validates scenario is required (min 1 char)", async () => {
+  it("scenario is optional — empty string is accepted (defaults to empty)", async () => {
+    // The schema changed: scenario is now optional().default("") so empty string is valid.
+    // The procedure handles empty scenario gracefully (uses history/jobContext instead).
     const schema = opsChatRouter._def.procedures.csReply._def.inputs[0];
     const result = schema.safeParse({ scenario: "", history: [] });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("validates scenario max length (2000 chars)", async () => {

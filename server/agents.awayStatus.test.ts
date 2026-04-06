@@ -27,8 +27,10 @@ function createAnonContext(): TrpcContext {
 describe("agents.setAwayStatus", () => {
   it("throws when no agent session cookie is present", async () => {
     const caller = appRouter.createCaller(createAnonContext());
+    // Use a valid enum value so Zod validation passes and the auth check runs.
+    // The valid values are: "priority" | "new" | "active" | "resolved" | "teams"
     await expect(
-      caller.agents.setAwayStatus({ status: "lunch" })
+      caller.agents.setAwayStatus({ status: "priority" })
     ).rejects.toThrow(/Agent not authenticated/i);
   });
 

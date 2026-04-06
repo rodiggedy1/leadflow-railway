@@ -2825,6 +2825,7 @@ Only flag real issues. Do not flag messages that are already clear and professio
       draft: z.string().min(1).max(2000),
       clientName: z.string().optional(),
       messageHistory: z.string().optional(),
+      jobContext: z.string().optional(), // upcoming/today job details (service type, date, team, address)
     }))
     .mutation(async ({ input }) => {
       const { invokeLLM } = await import("./_core/llm");
@@ -2836,8 +2837,11 @@ Only flag real issues. Do not flag messages that are already clear and professio
       const conversationSnippet = messages.slice(-6)
         .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
         .join("\n");
+      const jobContextSection = input.jobContext
+        ? `\n=== CLIENT'S UPCOMING JOB ===\n${input.jobContext}\nUse these details naturally in the rewrite when relevant — reference the specific service, date, or team name to show you know exactly who this client is and what's coming up for them. Never invent details not listed here.\n`
+        : "";
       const systemPrompt = `You are a world-class customer service coach for Maids in Black, a premium residential cleaning service in Washington DC.
-Your job: take the agent's SMS draft and rewrite it using the Zappos WOW service philosophy — proactive ownership, genuine warmth, and a concrete next step that makes the client feel like the only person in the world.
+Your job: take the agent's SMS draft and rewrite it using the Zappos WOW service philosophy — proactive ownership, genuine warmth, and a concrete next step that makes the client feel like the only person in the world.${jobContextSection}
 
 The Zappos model in practice:
 - Don't just confirm — OWN it. "We'll get you scheduled" → "I'm on it — let me find you the perfect slot."

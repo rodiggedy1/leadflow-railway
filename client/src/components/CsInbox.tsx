@@ -454,6 +454,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         draft: draft.trim(),
         clientName: conv.name,
         messageHistory: JSON.stringify(conv.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
+        jobContext: jobContext ?? undefined,
       });
     }, 1500);
   }
@@ -478,6 +479,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         draft: compose.trim(),
         clientName: selected.name,
         messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
+        jobContext: jobContext ?? undefined,
       },
       {
         onSuccess: (data) => {

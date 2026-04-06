@@ -71,7 +71,10 @@ describe("opsChat.updateIssueNote", () => {
     const result = await caller.opsChat.updateIssueNote({ flagId: 42, note: "Cleaner is locked out" });
 
     expect(result).toEqual({ success: true });
-    expect(mockUpdate).toHaveBeenCalledOnce();
+    // The opsChatProcedure middleware fires a fire-and-forget db.update(agents) heartbeat
+    // on every request, so mockUpdate is called twice: once by the middleware (agents table)
+    // and once by the procedure itself (the business table). Both are expected.
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
   });
 
   it("throws INTERNAL_SERVER_ERROR when DB is unavailable", async () => {
@@ -144,7 +147,10 @@ describe("opsChat.dismissReminder", () => {
     const result = await caller.opsChat.dismissReminder({ reminderId: 7 });
 
     expect(result).toEqual({ success: true });
-    expect(mockUpdate).toHaveBeenCalledOnce();
+    // The opsChatProcedure middleware fires a fire-and-forget db.update(agents) heartbeat
+    // on every request, so mockUpdate is called twice: once by the middleware (agents table)
+    // and once by the procedure itself (opsReminders table). Both are expected.
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
   });
 
   it("throws INTERNAL_SERVER_ERROR when DB is unavailable", async () => {
@@ -175,7 +181,10 @@ describe("opsChat.snoozeReminder", () => {
     const result = await caller.opsChat.snoozeReminder({ reminderId: 3, minutes: 15 });
 
     expect(result).toEqual({ success: true });
-    expect(mockUpdate).toHaveBeenCalledOnce();
+    // The opsChatProcedure middleware fires a fire-and-forget db.update(agents) heartbeat
+    // on every request, so mockUpdate is called twice: once by the middleware (agents table)
+    // and once by the procedure itself (opsReminders table). Both are expected.
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
   });
 
   it("rejects minutes > 60", async () => {

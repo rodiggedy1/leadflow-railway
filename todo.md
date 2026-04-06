@@ -1034,3 +1034,6 @@
 - [x] CS Inbox: BUG — ReferenceError: Cannot access 'userNavigatedToId' before initialization; FIXED: removed ref from useMemo (temporal dead zone), using selectedId state directly as pinnedId
 - [x] CS Inbox: Move all useRef declarations to top of component (before useMemo/useEffect) to prevent temporal dead zone issues
 - [x] CS Inbox: Add vitest for filter pin invariant — 6 tests covering send-stays-on-conversation, tab filter eviction, search, Teams, Resolved (server/csInbox.filter.test.ts)
+- [x] Fix 5 failing tests in opsChatNewFeatures.test.ts (dismissReminder/snoozeReminder mockUpdate called twice) — root cause: opsChatProcedure middleware fires a heartbeat db.update(agents) call; tests updated to expect 2 calls
+- [x] Add test for Resolve button touch guard CSS class [@media(pointer:fine)]:flex — 5 assertions in server/csInbox.resolveGuard.test.ts
+- [x] Wire jobContext into the elevate-on-send pass — added jobContext field to elevateReply input schema, injected into system prompt with job details section, wired from both triggerElevateDebounced and handleCsSend calls in CsInbox
