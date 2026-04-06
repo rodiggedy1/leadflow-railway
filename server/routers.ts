@@ -2710,7 +2710,51 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           return true;
         });
 
-        return deduped;
+        // Batch-augment with jobCount (VIP = 4+) and hasTodayJob (Today badge)
+        const phones = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
+        const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+
+        // Build jobCount map: phone10 → count from completedJobs
+        const jobCountMap = new Map<string, number>();
+        const todayJobMap = new Map<string, boolean>();
+
+        if (phones.length > 0) {
+          // completedJobs uses E.164 (+1XXXXXXXXXX)
+          const e164Phones = phones.map((p) => `+1${digits10(p)}`);
+          const jobCountRows = await db
+            .select({ phone: completedJobs.phone, cnt: sql<number>`COUNT(*)` })
+            .from(completedJobs)
+            .where(inArray(completedJobs.phone, e164Phones))
+            .groupBy(completedJobs.phone);
+          for (const row of jobCountRows) {
+            const d10 = digits10(row.phone);
+            jobCountMap.set(d10, Number(row.cnt));
+          }
+
+          // cleanerJobs uses (xxx) xxx-xxxx format — check for today's date
+          const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+          const todayET = nowET.toISOString().slice(0, 10);
+          const todayJobRows = await db
+            .select({ customerPhone: cleanerJobs.customerPhone })
+            .from(cleanerJobs)
+            .where(
+              sql`${cleanerJobs.jobDate} = ${todayET} AND REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.raw(phones.map((p) => `'${digits10(p)}'`).join(','))})`
+            )
+            .limit(phones.length);
+          for (const row of todayJobRows) {
+            const d10 = digits10(row.customerPhone ?? "");
+            if (d10) todayJobMap.set(d10, true);
+          }
+        }
+
+        return deduped.map((s) => {
+          const d10 = digits10(s.leadPhone?.trim() ?? "");
+          return {
+            ...s,
+            jobCount: jobCountMap.get(d10) ?? 0,
+            hasTodayJob: todayJobMap.get(d10) ?? false,
+          };
+        });
       }),
     /**
      * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.

@@ -102,6 +102,9 @@ type Conversation = {
   aiInsight: string;
   messages: { sender: MsgSender; text: string; time: string; ts?: number; senderName?: string; media?: string[] }[];
   quickActions: string[];
+  jobCount?: number;
+  hasTodayJob?: boolean;
+  lastMsgTs?: number;
 };
 
 const queueStyles: Record<Queue, { tone: string; dot: string }> = {
@@ -410,6 +413,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         })),
         quickActions: [],
         rawName: row.leadName ?? "",
+        jobCount: (row as any).jobCount ?? 0,
+        hasTodayJob: (row as any).hasTodayJob ?? false,
+        lastMsgTs: (row as any).lastMsgTs,
       };
     });
   }, [csData, nameMap]);
@@ -1390,24 +1396,43 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
                     const gradient = gradientPalette[hashIdx];
 
-                    // ── Status pill ──
-                    type StatusKey = "active" | "attention" | "booked" | "waiting" | "resolved";
-                    const statusKey: StatusKey = isResolved ? "resolved" : hasUnanswered ? "active" : isUnread ? "attention" : "waiting";
+                    // ── Status pill — smarter logic ──
+                    type StatusKey = "priority" | "booked" | "waiting" | "live" | "followup" | "resolved";
+                    const csPriorityTag = (conversation as any).csPriorityTag;
+                    const csQueue = (conversation as any).csQueue;
+                    const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
+                    const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000; // >10 min
+                    const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
+                    const statusKey: StatusKey =
+                      isResolved ? "resolved" :
+                      csPriorityTag ? "priority" :
+                      isBooked ? "booked" :
+                      waitingTooLong ? "waiting" :
+                      hasUnanswered ? "live" :
+                      "followup";
                     const statusCfg: Record<StatusKey, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
-                      active:    { label: "Live",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
-                      attention: { label: "Needs attention", pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: AlertTriangle },
+                      priority:  { label: "Priority",       pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
                       booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
-                      waiting:   { label: "Waiting",         pill: "bg-slate-50 text-slate-600 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
+                      waiting:   { label: "Waiting",         pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: Clock3 },
+                      live:      { label: "Live",            pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
+                      followup:  { label: "Follow up",       pill: "bg-slate-50 text-slate-500 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
                       resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
                     const sc = statusCfg[statusKey];
 
-                    // ── Priority badge ──
-                    type PriorityKey = "vip" | "urgent" | "revenue" | "normal";
-                    const priorityKey: PriorityKey = hasUnanswered ? "urgent" : conversation.queue === "Teams" ? "revenue" : "normal";
+                    // ── Priority badge (top-left of avatar) ──
+                    // VIP = 4+ completed jobs, Today = has a job scheduled today, $ = Teams queue
+                    type PriorityKey = "vip" | "today" | "revenue" | "normal";
+                    const jobCount = conversation.jobCount ?? 0;
+                    const hasTodayJob = conversation.hasTodayJob ?? false;
+                    const priorityKey: PriorityKey =
+                      jobCount >= 4 ? "vip" :
+                      hasTodayJob ? "today" :
+                      conversation.queue === "Teams" ? "revenue" :
+                      "normal";
                     const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
                       vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
-                      urgent:  { label: "Today", className: "bg-amber-500 text-white" },
+                      today:   { label: "Today", className: "bg-amber-500 text-white" },
                       revenue: { label: "$",     className: "bg-emerald-600 text-white" },
                       normal:  { label: "",      className: "" },
                     };
@@ -1507,7 +1532,27 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-2.5 md:px-6 bg-white">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap min-w-0">
+                    {/* Avatar in header */}
+                    {selected && (() => {
+                      const gradientPalette = [
+                        "from-violet-500 to-fuchsia-500",
+                        "from-rose-500 to-orange-400",
+                        "from-emerald-500 to-teal-500",
+                        "from-sky-500 to-cyan-500",
+                        "from-amber-500 to-yellow-400",
+                        "from-pink-500 to-rose-400",
+                        "from-indigo-500 to-blue-500",
+                        "from-teal-500 to-green-500",
+                      ];
+                      const ini = selected.initials || "?";
+                      const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
+                      return (
+                        <div className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
+                          {ini}
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center gap-2 flex-wrap">
                       {editingName ? (
                         <form
@@ -2479,8 +2524,29 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       {/* Name + phone + address */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        <div className="mt-3 text-2xl font-semibold">
-                          {clientProfile?.name ?? selected.name}
+                        <div className="mt-3 flex items-center gap-3">
+                          {(() => {
+                            const gradientPalette = [
+                              "from-violet-500 to-fuchsia-500",
+                              "from-rose-500 to-orange-400",
+                              "from-emerald-500 to-teal-500",
+                              "from-sky-500 to-cyan-500",
+                              "from-amber-500 to-yellow-400",
+                              "from-pink-500 to-rose-400",
+                              "from-indigo-500 to-blue-500",
+                              "from-teal-500 to-green-500",
+                            ];
+                            const ini = selected.initials || "?";
+                            const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
+                            return (
+                              <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
+                                {ini}
+                              </div>
+                            );
+                          })()}
+                          <div className="text-2xl font-semibold">
+                            {clientProfile?.name ?? selected.name}
+                          </div>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
                           <span className="inline-flex items-center gap-1">
