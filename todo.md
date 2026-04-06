@@ -1047,3 +1047,6 @@
 - [x] CS Inbox: BUG — elevate gate fires when clicking Send while auto-draft stream is still in progress; FIXED: added autoDraftLoading bypass in handleCsSend so streaming AI text sends directly
 - [x] CS Inbox: BUG — tRPC fallback (csAutoDraft) did not set elevateApprovedText, causing gate to fire on AI-generated text from fallback path; FIXED: csAutoDraft.onSuccess now sets elevateApprovedText
 - [x] CS Inbox: BUG — elevate suggestion card not appearing when agent types own words and clicks Send; ROOT CAUSE: pending debounce timer fired streamElevate after elevateReply.mutate() set the card, immediately wiping it by setting elevateSuggestion(""); FIXED: handleCsSend now cancels the debounce timer and any in-flight stream before calling elevateReply.mutate(), and also skips the mutate if the card is already visible
+- [x] CS Inbox: Rename priority status pill from "Priority" to "Needs attention"
+- [x] CS Inbox: Rename same-day job avatar badge from "Today" to "Booked"
+- [x] CS Inbox: VIP avatar badge (4+ jobs) label confirmed as "VIP" (already correct)

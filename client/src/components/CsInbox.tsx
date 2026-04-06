@@ -1426,7 +1426,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       hasUnanswered ? "live" :
                       "followup";
                     const statusCfg: Record<StatusKey, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
-                      priority:  { label: "Priority",       pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
+                      priority:  { label: "Needs attention", pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
                       booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
                       waiting:   { label: "Waiting",         pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: Clock3 },
                       live:      { label: "Live",            pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
@@ -1447,7 +1447,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       "normal";
                     const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
                       vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
-                      today:   { label: "Today", className: "bg-amber-500 text-white" },
+                      today:   { label: "Booked", className: "bg-amber-500 text-white" },
                       revenue: { label: "$",     className: "bg-emerald-600 text-white" },
                       normal:  { label: "",      className: "" },
                     };
