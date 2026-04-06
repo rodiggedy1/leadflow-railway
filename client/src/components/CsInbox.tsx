@@ -1573,7 +1573,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     );
                   })}
                 </div>
-                </div>
               </div>
               </div>
             </CardContent>
