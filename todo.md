@@ -1037,3 +1037,5 @@
 - [x] Fix 5 failing tests in opsChatNewFeatures.test.ts (dismissReminder/snoozeReminder mockUpdate called twice) — root cause: opsChatProcedure middleware fires a heartbeat db.update(agents) call; tests updated to expect 2 calls
 - [x] Add test for Resolve button touch guard CSS class [@media(pointer:fine)]:flex — 5 assertions in server/csInbox.resolveGuard.test.ts
 - [x] Wire jobContext into the elevate-on-send pass — added jobContext field to elevateReply input schema, injected into system prompt with job details section, wired from both triggerElevateDebounced and handleCsSend calls in CsInbox
+- [x] CS Inbox: BUG — search not reliably finding conversations by name; FIXED: when query is active, search now scans ALL conversations across all tabs (tab filter is bypassed); also added phone number to the search haystack
+- [x] CS Inbox: BUG — AI suggestion from previous conversation persists when switching; FIXED: added useEffect([selectedId]) that clears elevateSuggestion and elevateChecked on every conversation switch

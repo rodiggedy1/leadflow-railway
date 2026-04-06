@@ -502,17 +502,23 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   });
 
   const filtered = useMemo(() => {
-    // Always include the conversation the user is currently viewing, even if it no
-    // longer matches the active filter (e.g. after sending a reply it loses
-    // hasUnanswered and would otherwise be evicted from the "New" tab).
+    const q = query.trim().toLowerCase();
+    // When a search query is active, search across ALL conversations regardless of
+    // the active tab filter. Tab filters are for browsing; search is for finding.
+    if (q) {
+      return displayConversations.filter((c) => {
+        const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.phone ?? "", c.tags.join(" ")]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    // No search query: apply tab filter and pin the currently selected conversation
+    // so it is never evicted mid-session (e.g. after sending a reply).
     const pinnedId = selectedId;
     return displayConversations.filter((c) => {
       // Pinned conversation is always visible — never evict it mid-session
       if (pinnedId !== null && c.id === pinnedId) return true;
-      const q = query.trim().toLowerCase();
-      const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.tags.join(" ")]
-        .join(" ")
-        .toLowerCase();
       let matchesFilter = true;
       if (activeFilter === "Priority") {
         matchesFilter = priorityItems.some((p) => p.id === c.id);
@@ -525,7 +531,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       } else if (activeFilter === "Teams") {
         matchesFilter = c.queue === "Teams";
       }
-      return matchesFilter && (!q || hay.includes(q));
+      return matchesFilter;
     });
   }, [activeFilter, query, displayConversations, priorityItems, selectedId]);
 
@@ -617,6 +623,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
+
+  // Clear stale AI suggestion and compose state when switching conversations
+  useEffect(() => {
+    setElevateSuggestion(null);
+    setElevateChecked(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   // Auto-sync OpenPhone outbound messages when a conversation is selected
   useEffect(() => {
