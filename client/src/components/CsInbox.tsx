@@ -1214,12 +1214,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
         <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── LEFT: Queue sidebar ── */}
-          <Card className="rounded-[28px] border-[#1e1e2e] shadow-[0_16px_50px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-[#0f0f13]">
+          <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
               {/* Tab switcher — Ops / Chat / CS */}
               {onSwitchTab && (
-                <div className="flex rounded-2xl border border-white/10 bg-white/5 p-1">
+                <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
                   {([
                     { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
                     { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
@@ -1230,7 +1230,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       onClick={() => onSwitchTab(tab.id)}
                       className={cn(
                         "flex-1 relative flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
-                        tab.id === "cs" ? "bg-[#7c3aed] text-white shadow-sm" : "text-white/40 hover:text-white/70"
+                        tab.id === "cs" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
                       )}
                     >
                       {tab.icon}
@@ -1241,8 +1241,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               )}
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/30">Inbox</div>
-                  <div className="mt-1.5 text-3xl font-semibold text-white">Today</div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Inbox</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Today</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">
+                  {filtered.length} active
                 </div>
               </div>
 
@@ -1264,8 +1267,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                       activeFilter === tab.id
-                        ? "bg-[#7c3aed] text-white shadow-lg shadow-violet-900/40"
-                        : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                     }`}
                   >
                     <span className={`h-2 w-2 rounded-full shrink-0 ${tab.dot}`} />
@@ -1273,7 +1276,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     <span className="flex-1 text-sm font-medium">{tab.label}</span>
                     {tab.count > 0 && (
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        activeFilter === tab.id ? "bg-white/20 text-white" : "bg-white/10 text-white/60"
+                        activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
                       }`}>{tab.count}</span>
                     )}
                   </button>
@@ -1284,7 +1287,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setShowResolved((v) => !v)}
-                  className="flex items-center gap-2 text-xs text-white/30 hover:text-white/60 transition-colors px-1 py-1"
+                  className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   {showResolved ? "Hide resolved" : "Show resolved"}
@@ -1292,7 +1295,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 <button
                   onClick={() => backfillCsNames.mutate()}
                   disabled={backfillCsNames.isPending}
-                  className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors px-1 py-1 disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 disabled:opacity-50"
                   title="Fix missing names from database"
                 >
                   <RefreshCw className={`h-3 w-3 ${backfillCsNames.isPending ? 'animate-spin' : ''}`} />
@@ -1300,23 +1303,23 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </button>
               </div>
 
-              <div className="rounded-[24px] border border-white/8 bg-white/5 p-4">
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-white/70">
+                  <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
                     <Bot className="h-4 w-4" /> AI priority queue
                   </div>
-                  {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-white/30" />}
+                  {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />}
                 </div>
                 <div className="mt-3 space-y-2">
                   {priorityItems.length === 0 && !priorityLoading && (
-                    <div className="text-xs text-white/30 text-center py-2">No urgent items right now</div>
+                    <div className="text-xs text-slate-400 text-center py-2">No urgent items right now</div>
                   )}
                   {priorityItems.map((item, idx) => {
                     const style = priorityTagStyle(item.tag);
                     return (
                       <div
                         key={item.id}
-                        className="w-full rounded-2xl border border-white/8 bg-white/5 px-3 py-3 text-left"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <button
@@ -1334,15 +1337,15 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
                                 <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${style.dot}`} />
                               </span>
-                              <span className="text-sm font-semibold text-white/90">{idx + 1}. {item.name}</span>
+                              <span className="text-sm font-semibold text-slate-800">{idx + 1}. {item.name}</span>
                               <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
                             </div>
-                            <div className="mt-1 text-xs text-white/50 pl-4">{item.reason}</div>
-                            <div className="mt-1 text-[10px] text-white/30 pl-4">{timeSince(item.taggedAt)}</div>
+                            <div className="mt-1 text-xs text-slate-500 pl-4">{item.reason}</div>
+                            <div className="mt-1 text-[10px] text-slate-400 pl-4">{timeSince(item.taggedAt)}</div>
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
-                            className="shrink-0 mt-0.5 text-white/20 hover:text-white/50 transition-colors"
+                            className="shrink-0 mt-0.5 text-slate-300 hover:text-slate-500 transition-colors"
                             title="Dismiss"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -1356,75 +1359,141 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
               <div>
                 <div className="relative">
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search conversations..."
-                    className="pl-9 h-11 rounded-2xl bg-white/5 border-white/10 text-white placeholder:text-white/25 focus-visible:ring-violet-500/50 focus-visible:border-violet-500/50"
+                    placeholder="Search customer, phone, note…"
+                    className="pl-9 h-11 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300"
                   />
                 </div>
-                <div className="mt-3 space-y-1.5">
+                <div className="mt-3 space-y-2.5">
                   {filtered.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     const isSelected = selected.id === conversation.id;
                     const hasUnanswered = !!(conversation as any).hasUnanswered;
+                    const isResolved = !!(conversation as any).csResolvedAt;
+
+                    // ── Color-hash gradient from initials ──
+                    const gradientPalette = [
+                      "from-violet-500 to-fuchsia-500",
+                      "from-rose-500 to-orange-400",
+                      "from-emerald-500 to-teal-500",
+                      "from-sky-500 to-cyan-500",
+                      "from-amber-500 to-yellow-400",
+                      "from-pink-500 to-rose-400",
+                      "from-indigo-500 to-blue-500",
+                      "from-teal-500 to-green-500",
+                    ];
+                    const initials = conversation.initials || "?";
+                    const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
+                    const gradient = gradientPalette[hashIdx];
+
+                    // ── Status pill ──
+                    type StatusKey = "active" | "attention" | "booked" | "waiting" | "resolved";
+                    const statusKey: StatusKey = isResolved ? "resolved" : hasUnanswered ? "active" : isUnread ? "attention" : "waiting";
+                    const statusCfg: Record<StatusKey, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
+                      active:    { label: "Live",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
+                      attention: { label: "Needs attention", pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: AlertTriangle },
+                      booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
+                      waiting:   { label: "Waiting",         pill: "bg-slate-50 text-slate-600 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
+                      resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
+                    };
+                    const sc = statusCfg[statusKey];
+
+                    // ── Priority badge ──
+                    type PriorityKey = "vip" | "urgent" | "revenue" | "normal";
+                    const priorityKey: PriorityKey = conversation.queue === "VIP" ? "vip" : hasUnanswered ? "urgent" : conversation.queue === "Teams" ? "revenue" : "normal";
+                    const priorityCfg: Record<PriorityKey, { label: string; className: string }> = {
+                      vip:     { label: "VIP",   className: "bg-violet-600 text-white" },
+                      urgent:  { label: "Today", className: "bg-amber-500 text-white" },
+                      revenue: { label: "$",     className: "bg-emerald-600 text-white" },
+                      normal:  { label: "",      className: "" },
+                    };
+                    const pc = priorityCfg[priorityKey];
+
+                    // ── Activity strip (derived from message count, seeded by id) ──
+                    const msgCount = conversation.messages?.length ?? 0;
+                    const activityValues = Array.from({ length: 6 }, (_, i) =>
+                      Math.max(3, ((conversation.id * 7 + i * 13 + msgCount * 3) % 16) + 3)
+                    );
+
+                    // ── Unread count ──
+                    const unreadCount = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
+
                     return (
-                      <div
+                      <motion.button
                         key={conversation.id}
-                        role="button"
-                        tabIndex={0}
+                        whileHover={{ y: -1 }}
                         onClick={() => {
                           setSelectedId(conversation.id);
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedId(conversation.id); userNavigatedToId.current = conversation.id; triggerAutoDraft(conversation); } }}
-                        className={`w-full rounded-[18px] px-3.5 py-3 text-left transition-all duration-150 group cursor-pointer ${
+                        className={`w-full rounded-[24px] border p-4 text-left transition-all ${
                           isSelected
-                            ? "bg-[#7c3aed] shadow-lg shadow-violet-900/40"
-                            : hasUnanswered
-                              ? "bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/15"
-                              : isUnread
-                                ? "bg-white/8 border border-white/12 hover:bg-white/12"
-                                : "bg-white/4 border border-white/6 hover:bg-white/8"
+                            ? "border-slate-900 bg-slate-50 shadow-[0_14px_40px_rgba(15,23,42,0.08)]"
+                            : "border-slate-200 bg-white hover:border-slate-300"
                         }`}
                       >
-                        <div className="flex items-start gap-3">
+                        <div className="flex gap-4">
+                          {/* Avatar */}
                           <div className="relative shrink-0">
-                            <Avatar className="h-9 w-9 border border-white/10">
-                              <AvatarFallback className={`text-xs font-semibold ${
-                                isSelected ? "bg-white/20 text-white" : "bg-white/10 text-white/70"
-                              }`}>
-                                {conversation.initials}
-                              </AvatarFallback>
-                            </Avatar>
-                            {isUnread && !isSelected && (
-                              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-teal-400 border-2 border-[#0f0f13]" />
+                            <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-lg font-bold text-white shadow-lg`}>
+                              {initials}
+                              <span className={`absolute -bottom-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-white ${sc.dot}`} />
+                            </div>
+                            {pc.label ? (
+                              <div className={`absolute -left-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold shadow-md ${pc.className}`}>
+                                {pc.label}
+                              </div>
+                            ) : null}
+                            {isSelected && (
+                              <motion.div
+                                layoutId="selectedGlow"
+                                className="absolute inset-0 rounded-2xl ring-2 ring-slate-900/10"
+                              />
                             )}
                           </div>
+
+                          {/* Content */}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className={`truncate text-sm font-semibold ${
-                                  isSelected ? "text-white" : isUnread ? "text-white/90" : "text-white/70"
-                                }`}>{conversation.name}</div>
-                                <div className={`text-[11px] truncate mt-0.5 ${
-                                  isSelected ? "text-white/60" : "text-white/35"
-                                }`}>{conversation.service}</div>
+                                <div className="truncate text-[15px] font-semibold text-slate-900">{conversation.name}</div>
+                                <div className="mt-0.5 truncate text-sm text-slate-500">{conversation.phone || conversation.service}</div>
                               </div>
-                              <div className={`text-[11px] whitespace-nowrap shrink-0 ${
-                                isSelected ? "text-white/60" : isUnread ? "text-teal-400" : "text-white/30"
-                              }`}>{conversation.wait}</div>
+                              <div className="shrink-0 text-xs font-medium text-slate-400">{conversation.wait}</div>
                             </div>
-                            <div className={`mt-1 text-[11px] line-clamp-1 ${
-                              isSelected ? "text-white/70" : isUnread ? "text-white/60" : "text-white/35"
-                            }`}>{conversation.lastMessage}</div>
+
+                            <div className="mt-2 flex items-center gap-2">
+                              <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${sc.pill}`}>
+                                <sc.Icon className="h-3.5 w-3.5" />
+                                {sc.label}
+                              </div>
+                              {unreadCount > 0 && (
+                                <div className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">{unreadCount}</div>
+                              )}
+                            </div>
+
+                            <div className="mt-2 line-clamp-1 text-sm text-slate-600">{conversation.lastMessage}</div>
+
+                            {/* Activity strip */}
+                            <div className="mt-3 flex items-end gap-1.5">
+                              {activityValues.map((value, i) => (
+                                <motion.div
+                                  key={i}
+                                  initial={{ height: 6 }}
+                                  animate={{ height: value + 4 }}
+                                  transition={{ delay: i * 0.03, duration: 0.35 }}
+                                  className={`w-1.5 rounded-full ${isSelected ? "bg-slate-900" : "bg-slate-300"}`}
+                                />
+                              ))}
+                            </div>
                           </div>
                         </div>
-
-                      </div>
+                      </motion.button>
                     );
                   })}
                 </div>
