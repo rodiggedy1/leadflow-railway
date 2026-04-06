@@ -2981,10 +2981,14 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       let bullets: string[] = [];
       try {
         const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
-        const parsed = JSON.parse(raw);
-        const arr = Array.isArray(parsed) ? parsed : (parsed.bullets ?? parsed.items ?? parsed.memory ?? []);
-        bullets = arr.filter((b: unknown) => typeof b === "string" && (b as string).trim().length > 0).slice(0, 5);
-      } catch { bullets = []; }
+        console.log("[getCsConvMemory] LLM raw:", raw.slice(0, 300));
+        // Strip markdown code fences if present
+        const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+        const parsed = JSON.parse(cleaned);
+        const arr = Array.isArray(parsed) ? parsed : (parsed.bullets ?? parsed.items ?? parsed.memory ?? parsed.memories ?? Object.values(parsed)[0] ?? []);
+        bullets = (Array.isArray(arr) ? arr : []).filter((b: unknown) => typeof b === "string" && (b as string).trim().length > 0).slice(0, 5);
+        console.log("[getCsConvMemory] bullets:", bullets);
+      } catch (e) { console.log("[getCsConvMemory] parse error:", e); bullets = []; }
 
       if (bullets.length > 0) {
         await db.update(conversationSessions)
