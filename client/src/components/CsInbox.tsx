@@ -286,10 +286,10 @@ function jobStatusStyle(s: JobStatus): string {
   }
 }
 
-type InboxFilter = "Priority" | "New" | "Active" | "Resolved" | "Teams";
+type InboxFilter = "All" | "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type CsInboxProps = { onSwitchTab?: (tab: "today" | "channels" | "cs") => void };
 export default function CsInbox({ onSwitchTab }: CsInboxProps) {
-  const [activeFilter, setActiveFilter] = useState<InboxFilter>("New");
+  const [activeFilter, setActiveFilter] = useState<InboxFilter>("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
@@ -333,7 +333,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       // Auto-switch to New tab when an inbound message arrives — but only if the
       // user hasn't manually chosen a different tab in this session.
       if (!userPickedFilter.current) {
-        setActiveFilter("New");
+        setActiveFilter("All");
       }
     },
   });
@@ -634,7 +634,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       // Pinned conversation is always visible — never evict it mid-session
       if (pinnedId !== null && c.id === pinnedId) return true;
       let matchesFilter = true;
-      if (activeFilter === "Priority") {
+      if (activeFilter === "All") {
+        matchesFilter = !(c as any).csResolvedAt;
+      } else if (activeFilter === "Priority") {
         matchesFilter = priorityItems.some((p) => p.id === c.id);
       } else if (activeFilter === "New") {
         matchesFilter = !!(c as any).hasUnanswered;
@@ -1278,6 +1280,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
               <div className="space-y-0.5">
                 {([
+                  { id: "All" as InboxFilter, dot: "bg-slate-400", icon: <MessageSquare className="h-4 w-4" />, label: "All", count: displayConversations.filter((c) => !(c as any).csResolvedAt).length },
                   { id: "Priority" as InboxFilter, dot: "bg-rose-500", icon: <ShieldAlert className="h-4 w-4" />, label: "Priority", count: priorityItems.length },
                   { id: "New" as InboxFilter, dot: "bg-blue-500", icon: <Mail className="h-4 w-4" />, label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
                   { id: "Active" as InboxFilter, dot: "bg-amber-400", icon: <Clock3 className="h-4 w-4" />, label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
@@ -1291,6 +1294,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       setSelectedId(null);
                       setActiveFilter(tab.id);
                       if (tab.id === "Resolved") setShowResolved(true);
+                      if (tab.id !== "Resolved") setShowResolved(false);
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                       activeFilter === tab.id

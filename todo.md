@@ -1055,3 +1055,5 @@
 - [x] CS Inbox: VIP badge — use cleaner_jobs for job count, lower threshold to 3
 - [x] CS Inbox: BUG — resolving a conversation doesn't update resolved count or show in resolved queue
 - [x] CS Inbox: BUG — resolving a conversation doesn't update resolved count or show in resolved queue
+- [ ] CS Inbox: BUG — New tab not showing conversations that should be there (e.g. Ricky Wilkins)
+- [x] CS Inbox: Add "All" tab as default showing all unresolved conversations
