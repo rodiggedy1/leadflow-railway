@@ -920,6 +920,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       .join("\n");
     csAutoDraft.mutate({
       conversationContext,
+      customerName: conv.name ?? "",
     });
   }
 
@@ -1609,6 +1610,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     conversationContext={selected.messages.slice(-5).map(m =>
                       `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`
                     ).join("\n")}
+                    customerName={selected.name ?? ""}
                   />
                 </div>
 

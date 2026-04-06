@@ -21,9 +21,10 @@ interface Props {
   onClose: () => void;
   onInsert?: (text: string) => void;
   conversationContext?: string; // last few messages from the inbox conversation
+  customerName?: string; // customer's full name
 }
 
-export default function WorldClassReplyPanel({ open, onClose, onInsert, conversationContext }: Props) {
+export default function WorldClassReplyPanel({ open, onClose, onInsert, conversationContext, customerName }: Props) {
   const [scenarioInput, setScenarioInput] = useState("");
   const [history, setHistory] = useState<Message[]>([]);
   const [copied, setCopied] = useState(false);
@@ -60,7 +61,7 @@ export default function WorldClassReplyPanel({ open, onClose, onInsert, conversa
     if (!scenario || mutation.isPending) return;
     const isFollowUp = hasConversation && !text;
     setHistory([...(isFollowUp ? history : []), { role: "user", content: scenario }]);
-    mutation.mutate({ scenario, history: isFollowUp ? history : [], conversationContext: conversationContext ?? "" });
+    mutation.mutate({ scenario, history: isFollowUp ? history : [], conversationContext: conversationContext ?? "", customerName: customerName ?? "" });
     setScenarioInput("");
   };
 

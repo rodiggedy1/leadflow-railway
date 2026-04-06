@@ -2490,6 +2490,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
         content: z.string(),
       })).optional().default([]),
       conversationContext: z.string().optional().default(""), // last few messages from the inbox
+      customerName: z.string().optional().default(""), // customer's full name
     }))
     .mutation(async ({ input }) => {
       const { invokeLLM } = await import("./_core/llm");
@@ -2542,7 +2543,7 @@ Write the exact SMS the agent should send for the scenario described.`;
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
         ...input.history.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user", content: `${input.conversationContext ? `Recent conversation with this customer:\n${input.conversationContext}\n\n` : ""}${input.scenario ? `Customer service scenario: ${input.scenario}` : "Based on the conversation above, write the best reply to send to the customer now."}` },
+        { role: "user", content: `${input.customerName ? `Customer's first name: ${input.customerName.trim().split(/\s+/)[0]}\n` : ""}${input.conversationContext ? `Recent conversation with this customer:\n${input.conversationContext}\n\n` : ""}${input.scenario ? `Customer service scenario: ${input.scenario}` : "Based on the conversation above, write the best reply to send to the customer now."}` },
       ];
 
       const result = await invokeLLM({ messages });

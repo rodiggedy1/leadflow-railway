@@ -1023,3 +1023,5 @@
 - [x] CS Inbox: Pass last few conversation messages as context to both auto-draft AI and World-Class Reply panel
 - [x] CS Inbox: Fix — clicking a filter tab (New/Active/Teams/etc.) did not reset selectedId, causing wrong conversation to show; fixed by resetting selectedId on tab switch
 - [x] CS Inbox: Replace csQuickReply auto-draft with csReply (world-class prompt); keep elevateReply on send
+- [x] CS Inbox: Pass customer first name into csReply prompt so AI addresses them by name
+- [x] CS Inbox: Audit and improve csReply world-class prompt quality — prompt reviewed, examples confirmed good, customerName now explicitly passed
