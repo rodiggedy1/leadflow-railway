@@ -1216,7 +1216,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           {/* ── LEFT: Queue sidebar ── */}
           <Card className="rounded-[28px] border-[#1e1e2e] shadow-[0_16px_50px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-[#0f0f13]">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
               {/* Tab switcher — Ops / Chat / CS */}
               {onSwitchTab && (
                 <div className="flex rounded-2xl border border-white/10 bg-white/5 p-1">
@@ -1423,29 +1423,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             }`}>{conversation.lastMessage}</div>
                           </div>
                         </div>
-                        {/* Inline resolve button */}
-                        {(activeFilter === "New" || activeFilter === "Active") && (
-                          <div
-                            className="mt-2 hidden [@media(pointer:fine)]:flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                resolveSession.mutate({ sessionId: conversation.id });
-                              }}
-                              disabled={resolveSession.isPending}
-                              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
-                                isSelected
-                                  ? "bg-white/20 text-white hover:bg-white/30"
-                                  : "bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/25"
-                              }`}
-                            >
-                              <CheckCircle2 className="h-3 w-3" />
-                              Resolve
-                            </button>
-                          </div>
-                        )}
+
                       </div>
                     );
                   })}
