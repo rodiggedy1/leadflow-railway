@@ -616,6 +616,183 @@ export async function handleRatingReply(
 
 // ─── tRPC Router ──────────────────────────────────────────────────────────────
 
+/**
+ * Standalone sync function — called by the hourly TodaySync cron.
+ * Syncs cleanerJobs from Launch27 for the given date.
+ */
+export async function runSyncTodayJobs(dateStr: string): Promise<{
+  date: string;
+  bookingsFetched: number;
+  jobsCreated: number;
+  jobsUpdated: number;
+  teamReassignRemoved: number;
+  staleMarked: number;
+  mismatches: string[];
+  errors: string[];
+}> {
+  const { getCompletedBookingsForDate } = await import("./launch27");
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await getCompletedBookingsForDate(dateStr, { includeAll: true });
+  const bookings = result.bookings;
+  let created = 0;
+  let updated = 0;
+  const errors: string[] = [];
+  for (const booking of bookings) {
+    try {
+      const teams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
+      for (const team of teams) {
+        let [profile] = await db
+          .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.name, team.title))
+          .limit(1);
+        if (!profile) {
+          const [ins] = await db.insert(cleanerProfiles).values({
+            name: team.title,
+            payPercent: team.share > 0 ? String(team.share) : null,
+            isActive: 1,
+          });
+          profile = { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null };
+        } else if (team.share > 0 && (!profile.payPercent || profile.payPercent === "0")) {
+          await db.update(cleanerProfiles).set({ payPercent: String(team.share) }).where(eq(cleanerProfiles.id, profile.id));
+          profile.payPercent = String(team.share);
+        }
+        const revenue = booking.totalRevenue;
+        const payPct = parseFloat(profile.payPercent ?? String(team.share) ?? "0");
+        const basePay = payPct > 0 ? ((revenue * payPct) / 100).toFixed(2) : null;
+        const serviceNames = booking.serviceNames.join(", ") || "";
+        const [existing] = await db
+          .select({ id: cleanerJobs.id, bookingStatus: cleanerJobs.bookingStatus })
+          .from(cleanerJobs)
+          .where(and(eq(cleanerJobs.bookingId, booking.id), eq(cleanerJobs.cleanerProfileId, profile.id)))
+          .limit(1);
+        const parsedChecklist =
+          booking.customerNotes || booking.staffNotes
+            ? await parseChecklistFromNotes(booking.customerNotes || null, booking.staffNotes || null)
+            : null;
+        const jobData = {
+          bookingId: booking.id,
+          cleanerProfileId: profile.id,
+          cleanerName: team.title,
+          teamName: team.title,
+          teamId: team.id || null,
+          jobDate: dateStr,
+          serviceDateTime: booking.serviceDate,
+          customerName: booking.fullName,
+          customerPhone: booking.phone || null,
+          jobAddress: booking.address || null,
+          serviceType: serviceNames || null,
+          bedrooms: booking.bedrooms ?? null,
+          bathrooms: booking.bathrooms ?? null,
+          bookingStatus: booking.bookingStatus,
+          customerNotes: booking.customerNotes || null,
+          staffNotes: booking.staffNotes || null,
+          jobRevenue: String(revenue),
+          payPercent: payPct > 0 ? String(payPct) : null,
+          basePay,
+          checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
+        };
+        if (existing) {
+          const previousStatus = existing.bookingStatus;
+          const isTerminalStatus = previousStatus === "completed" || previousStatus === "cancelled" || previousStatus === "rescheduled";
+          const syncData = isTerminalStatus ? (({ bookingStatus, ...rest }) => rest)(jobData) : jobData;
+          await db.update(cleanerJobs).set(syncData).where(eq(cleanerJobs.id, existing.id));
+          updated++;
+          if (
+            booking.bookingStatus === "assigned" &&
+            previousStatus !== "assigned" &&
+            previousStatus !== "completed" &&
+            previousStatus !== "rescheduled" &&
+            previousStatus !== "cancelled"
+          ) {
+            const { maybeTriggerLateAssignmentSms } = await import("./fieldMgmtEngine");
+            maybeTriggerLateAssignmentSms(existing.id, previousStatus).catch((err) =>
+              console.error(`[Sync] Late-assignment SMS error for job ${existing.id}:`, err)
+            );
+          }
+        } else {
+          const [ins] = await db.insert(cleanerJobs).values({
+            ...jobData,
+            completedJobId: 0,
+            photoSubmitted: 0,
+            flagged: 0,
+            trackerToken: generateTrackerToken(),
+          });
+          const newJobId = (ins as any).insertId as number;
+          created++;
+          if (booking.bookingStatus === "assigned") {
+            const { maybeTriggerLateAssignmentSms } = await import("./fieldMgmtEngine");
+            maybeTriggerLateAssignmentSms(newJobId, null).catch((err) =>
+              console.error(`[Sync] New assignment SMS error for job ${newJobId}:`, err)
+            );
+          }
+        }
+      }
+    } catch (err) {
+      errors.push(`Booking ${booking.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  // ── Team-reassignment cleanup ──
+  let teamReassignRemoved = 0;
+  for (const booking of bookings) {
+    try {
+      const currentTeams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
+      const currentProfileIds: number[] = [];
+      for (const team of currentTeams) {
+        const [profile] = await db.select({ id: cleanerProfiles.id }).from(cleanerProfiles).where(eq(cleanerProfiles.name, team.title)).limit(1);
+        if (profile) currentProfileIds.push(profile.id);
+      }
+      if (currentProfileIds.length > 0) {
+        const staleTeamRows = await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(and(eq(cleanerJobs.bookingId, booking.id), eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.cleanerProfileId, currentProfileIds)));
+        for (const row of staleTeamRows) {
+          await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+          teamReassignRemoved++;
+        }
+      }
+    } catch (err) {
+      errors.push(`Team-reassign cleanup booking ${booking.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  // ── Stale cleanup ──
+  let staleMarked = 0;
+  try {
+    const freshBookingIds = bookings.map((b) => b.id);
+    if (freshBookingIds.length > 0) {
+      const staleRows = await db
+        .select({ id: cleanerJobs.id })
+        .from(cleanerJobs)
+        .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")));
+      for (const row of staleRows) {
+        await db.update(cleanerJobs).set({ bookingStatus: "rescheduled" }).where(eq(cleanerJobs.id, row.id));
+        staleMarked++;
+      }
+    }
+  } catch (staleErr) {
+    errors.push(`Stale cleanup error: ${staleErr instanceof Error ? staleErr.message : String(staleErr)}`);
+  }
+  // ── Mismatch detection: bookings in L27 but not in DB ──
+  const mismatches: string[] = [];
+  try {
+    const dbRows = await db.select({ bookingId: cleanerJobs.bookingId }).from(cleanerJobs).where(eq(cleanerJobs.jobDate, dateStr));
+    const dbBookingIds = new Set(dbRows.map((r) => r.bookingId));
+    for (const booking of bookings) {
+      if (!dbBookingIds.has(booking.id) && errors.some((e) => e.startsWith(`Booking ${booking.id}`))) {
+        // Already captured as an error
+      } else if (!dbBookingIds.has(booking.id)) {
+        mismatches.push(`L27 booking ${booking.id} (${booking.fullName}) not in DB after sync`);
+      }
+    }
+  } catch (mmErr) {
+    errors.push(`Mismatch check error: ${mmErr instanceof Error ? mmErr.message : String(mmErr)}`);
+  }
+  return { date: dateStr, bookingsFetched: bookings.length, jobsCreated: created, jobsUpdated: updated, teamReassignRemoved, staleMarked, mismatches, errors };
+}
+
+
 export const qualityRouter = router({
   // ── Cleaner Profile Management ──────────────────────────────────────────────
 

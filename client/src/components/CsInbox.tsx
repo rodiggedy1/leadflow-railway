@@ -1303,14 +1303,25 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </div>
               </div>
 
-              <div className="space-y-0.5">
+              {/* Search bar — above the filter grid */}
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search customer, phone, note…"
+                  className="pl-9 h-11 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300"
+                />
+              </div>
+              {/* Filter grid — 3 rows × 2 columns */}
+              <div className="grid grid-cols-2 gap-2">
                 {([
-                  { id: "All" as InboxFilter, dot: "bg-slate-400", icon: <MessageSquare className="h-4 w-4" />, label: "All", count: displayConversations.filter((c) => !(c as any).csResolvedAt).length },
-                  { id: "Priority" as InboxFilter, dot: "bg-rose-500", icon: <ShieldAlert className="h-4 w-4" />, label: "Priority", count: priorityItems.length },
-                  { id: "New" as InboxFilter, dot: "bg-blue-500", icon: <Mail className="h-4 w-4" />, label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
-                  { id: "Active" as InboxFilter, dot: "bg-amber-400", icon: <Clock3 className="h-4 w-4" />, label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
-                  { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", icon: <CheckCircle2 className="h-4 w-4" />, label: "Resolved", count: resolvedCountData?.count ?? 0 },
-                  { id: "Teams" as InboxFilter, dot: "bg-violet-500", icon: <Users className="h-4 w-4" />, label: "Teams", count: displayConversations.filter((c) => c.queue === "Teams").length },
+                  { id: "All" as InboxFilter, dot: "bg-slate-400", label: "All", count: displayConversations.filter((c) => !(c as any).csResolvedAt).length },
+                  { id: "Priority" as InboxFilter, dot: "bg-rose-500", label: "Priority", count: priorityItems.length },
+                  { id: "New" as InboxFilter, dot: "bg-blue-500", label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
+                  { id: "Active" as InboxFilter, dot: "bg-amber-400", label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
+                  { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", label: "Resolved", count: resolvedCountData?.count ?? 0 },
+                  { id: "Teams" as InboxFilter, dot: "bg-violet-500", label: "Teams", count: displayConversations.filter((c) => c.queue === "Teams").length },
                 ] as const).map((tab) => (
                   <button
                     key={tab.id}
@@ -1321,20 +1332,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       if (tab.id === "Resolved") setShowResolved(true);
                       if (tab.id !== "Resolved") setShowResolved(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
+                    className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all ${
                       activeFilter === tab.id
                         ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                        : "bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                     }`}
                   >
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${tab.dot}`} />
-                    <span className="shrink-0 opacity-70">{tab.icon}</span>
-                    <span className="flex-1 text-sm font-medium">{tab.label}</span>
-                    {tab.count > 0 && (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
-                      }`}>{tab.count}</span>
-                    )}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${tab.dot}`} />
+                      <span className="text-sm font-medium truncate">{tab.label}</span>
+                    </div>
+                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+                      activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
+                    }`}>{tab.count}</span>
                   </button>
                 ))}
               </div>
@@ -1414,15 +1424,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               </div>
 
               <div>
-                <div className="relative">
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search customer, phone, note…"
-                    className="pl-9 h-11 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300"
-                  />
-                </div>
                 <div className="mt-3 space-y-2.5">
                   {filtered.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;

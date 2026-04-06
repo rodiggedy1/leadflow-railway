@@ -18,6 +18,7 @@
 
 import cron from "node-cron";
 import { runNightlySync } from "./cronSync";
+import { runSyncTodayJobs } from "./qualityRouter";
 import { runSilenceFollowUp, runScheduledFollowUp, runFollowUpDueAlerts } from "./followUpCron";
 import { runFollowUpReminders } from "./followUpsRouter";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
@@ -226,6 +227,24 @@ export function startInternalCron(): void {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[InternalCron] TodaySync failed:", msg);
       await recordHeartbeat("today-sync", `error: ${msg}`, false);
+    }
+    // Sync cleanerJobs (Day Board) — picks up new bookings and status changes mid-day
+    try {
+      const qResult = await runSyncTodayJobs(todayDate);
+      const qSummary = `date: ${qResult.date}, created: ${qResult.jobsCreated}, updated: ${qResult.jobsUpdated}, mismatches: ${qResult.mismatches.length}`;
+      console.log(`[InternalCron] TodaySync (cleanerJobs) — ${qSummary}`);
+      if (qResult.mismatches.length > 0) {
+        console.warn(`[InternalCron] Sync mismatches detected: ${qResult.mismatches.join(" | ")}`);
+      }
+      if (qResult.errors.length > 0) {
+        console.warn(`[InternalCron] Sync errors: ${qResult.errors.join(" | ")}`);
+      }
+      const mismatchNote = qResult.mismatches.length > 0 ? ` | MISMATCHES: ${qResult.mismatches.join("; ")}` : "";
+      await recordHeartbeat("today-sync-jobs", (qSummary + mismatchNote).slice(0, 500), qResult.jobsCreated > 0 || qResult.jobsUpdated > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] TodaySync (cleanerJobs) failed:", msg);
+      await recordHeartbeat("today-sync-jobs", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
 
