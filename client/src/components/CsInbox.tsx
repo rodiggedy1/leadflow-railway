@@ -1464,6 +1464,29 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     // ── Unread count ──
                     const unreadCount = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
 
+                    // ── Avatar ring color keyed to status ──
+                    const ringColorMap: Record<StatusKey, string> = {
+                      priority: "ring-rose-300 shadow-rose-100",
+                      booked:   "ring-green-400 shadow-green-100",
+                      waiting:  "ring-slate-300 shadow-slate-100",
+                      live:     "ring-emerald-400 shadow-emerald-100",
+                      replied:  "ring-blue-300 shadow-blue-100",
+                      followup: "ring-slate-300 shadow-slate-100",
+                      resolved: "ring-slate-200 shadow-slate-100",
+                    };
+                    const ringColor = ringColorMap[statusKey];
+                    // ── Note line: context hint ──
+                    const noteText = isBooked
+                      ? "Booked today · high value lead"
+                      : csPriorityTag
+                      ? "Needs quick reply"
+                      : waitingTooLong
+                      ? `Waiting ${Math.floor(waitMs / 60_000)}m · no reply yet`
+                      : hasUnanswered
+                      ? "New message · awaiting reply"
+                      : isResolved
+                      ? "Resolved"
+                      : "Waiting on follow-up";
                     return (
                       <motion.button
                         key={conversation.id}
@@ -1473,16 +1496,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[24px] border p-4 text-left transition-all ${
+                        className={`w-full rounded-[24px] border px-4 py-3 text-left transition-all ${
                           isSelected
-                            ? "border-slate-900 bg-slate-50 shadow-[0_14px_40px_rgba(15,23,42,0.08)]"
+                            ? "border-slate-900 bg-slate-50 shadow-[0_10px_30px_rgba(15,23,42,0.08)]"
                             : "border-slate-200 bg-white hover:border-slate-300"
                         }`}
                       >
-                        <div className="flex gap-4">
-                          {/* Avatar */}
-                          <div className="relative shrink-0">
-                            <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-lg font-bold text-white shadow-lg`}>
+                        <div className="flex gap-3">
+                          {/* Avatar with ring */}
+                          <div className="relative shrink-0 pt-0.5">
+                            <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-lg font-bold text-white ring-4 ${ringColor} shadow-lg`}>
                               {initials}
                               <span className={`absolute -bottom-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-white ${sc.dot}`} />
                             </div>
@@ -1503,41 +1526,53 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="truncate text-[15px] font-semibold text-slate-900">{conversation.name}</div>
-                                <div className="mt-0.5 truncate text-sm text-slate-500">{conversation.phone || conversation.service}</div>
+                                <div className="flex items-center gap-2">
+                                  <div className={`truncate text-[15px] font-semibold ${isSelected ? "text-slate-900" : "text-slate-800"}`}>{conversation.name}</div>
+                                  {unreadCount > 0 && (
+                                    <div className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">{unreadCount}</div>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                                  <span>{conversation.phone || conversation.service}</span>
+                                  <span>·</span>
+                                  <span>{conversation.wait}</span>
+                                </div>
                               </div>
-                              <div className="shrink-0 text-xs font-medium text-slate-400">{conversation.wait}</div>
+                              <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${sc.dot}`} />
                             </div>
 
-                            <div className="mt-2 flex items-center gap-2">
-                              <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${sc.pill}`}>
-                                <sc.Icon className="h-3.5 w-3.5" />
-                                {sc.label}
+                            <div className="mt-2 line-clamp-1 text-sm font-medium text-slate-700">{conversation.lastMessage}</div>
+                            <div className="mt-1 line-clamp-1 text-sm text-slate-500">{noteText}</div>
+
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${sc.pill}`}>
+                                  <sc.Icon className="h-3.5 w-3.5" />
+                                  {sc.label}
+                                </div>
+                                {pc.label && (
+                                  <div className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pc.className}`}>
+                                    {pc.label === "$" ? "High value" : pc.label}
+                                  </div>
+                                )}
                               </div>
-                              {unreadCount > 0 && (
-                                <div className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">{unreadCount}</div>
-                              )}
-                            </div>
-
-                            <div className="mt-2 line-clamp-1 text-sm text-slate-600">{conversation.lastMessage}</div>
-
-                            {/* Activity strip */}
-                            <div className="mt-3 flex items-end gap-1.5">
-                              {activityValues.map((value, i) => (
-                                <motion.div
-                                  key={i}
-                                  initial={{ height: 6 }}
-                                  animate={{ height: value + 4 }}
-                                  transition={{ delay: i * 0.03, duration: 0.35 }}
-                                  className={`w-1.5 rounded-full ${isSelected ? "bg-slate-900" : "bg-slate-300"}`}
-                                />
-                              ))}
+                              {/* Activity strip */}
+                              <div className="flex items-end gap-1.5">
+                                {activityValues.map((value, i) => (
+                                  <div
+                                    key={i}
+                                    style={{ height: value + 4 }}
+                                    className={`w-1.5 rounded-full ${isSelected ? "bg-slate-900" : "bg-slate-300"}`}
+                                  />
+                                ))}
+                              </div>
                             </div>
                           </div>
                         </div>
                       </motion.button>
                     );
                   })}
+                </div>
                 </div>
               </div>
               </div>
