@@ -1146,6 +1146,28 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     return { lastBooking, complaintHistory, careAbout };
   }, [selected, clientProfile]);
 
+  // ── Conversation Memory — AI-generated bullets, cached by message count ──
+  const [memoryBullets, setMemoryBullets] = useState<string[]>([]);
+  const [memoryFetchedKey, setMemoryFetchedKey] = useState<string>("");
+  const memoryMutation = trpc.opsChat.getCsConvMemory.useMutation({
+    onSuccess: (data) => setMemoryBullets(data.bullets ?? []),
+  });
+  const memoryLoading = memoryMutation.isPending;
+  useEffect(() => {
+    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
+    const key = `${selected.id}:${selected.messages.length}`;
+    if (memoryFetchedKey === key) return;
+    setMemoryFetchedKey(key);
+    if (memoryFetchedKey.split(":")[0] !== String(selected.id)) setMemoryBullets([]);
+    memoryMutation.mutate({
+      sessionId: selected.id,
+      messageHistory: insightMsgHistory,
+      clientProfile: clientProfileSummary,
+      queue: selected.queue ?? undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
+  // ── Conversation Memory — AI-generated bullets, cached by message count ──
   // ── Post-call AI Debrief — fetched from DB after call.transcript.completed webhook ──
   const { data: callDebrief, isLoading: debriefLoading } = trpc.leads.getLatestCallDebrief.useQuery(
     { sessionId: selected?.id ?? 0 },
@@ -2059,6 +2081,35 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </motion.div>
               </div>
 
+              {/* ── Conversation Memory panel ──────────────────────────────── */}
+              {(memoryLoading || memoryBullets.length > 0) && (
+                <div className="mx-5 mb-4 mt-2 rounded-2xl border border-violet-100 bg-white/80 backdrop-blur-sm px-4 py-3.5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                    <span className="text-xs font-semibold text-slate-700 tracking-wide">Conversation Memory</span>
+                    {memoryLoading && <div className="ml-auto h-2 w-2 rounded-full bg-violet-400 animate-pulse" />}
+                  </div>
+                  {memoryLoading && memoryBullets.length === 0 ? (
+                    <div className="space-y-2">
+                      {[1,2,3].map(i => (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="h-3 w-3 rounded-full bg-violet-100 animate-pulse shrink-0" />
+                          <div className={`h-2.5 rounded bg-violet-100/80 animate-pulse ${i === 1 ? 'w-36' : i === 2 ? 'w-28' : 'w-32'}`} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {memoryBullets.map((bullet, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <Sparkles className="h-3 w-3 text-violet-400 mt-0.5 shrink-0" />
+                          <span className="text-xs text-slate-600 leading-4">{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {/* Typing indicator — shows when another agent is composing a reply */}
               {typers.length > 0 && (
                 <div className="px-5 pb-1">

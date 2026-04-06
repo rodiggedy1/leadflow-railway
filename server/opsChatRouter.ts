@@ -2922,6 +2922,78 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       const insight = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
       return { insight };
     }),
+  /**
+   * getCsConvMemory — generates 3-5 AI memory bullet points for a CS conversation.
+   * Draws from both conversation history and customer profile context.
+   * Results are cached in the DB by message count; returns cached value if still fresh.
+   */
+  getCsConvMemory: opsChatProcedure
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      messageHistory: z.string(),
+      clientProfile: z.string().optional(),
+      queue: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const db = await getDb();
+      if (!db) return { bullets: [] as string[] };
+
+      const messages: Array<{ role: string; content: string }> = (() => {
+        try { return JSON.parse(input.messageHistory); } catch { return []; }
+      })();
+      const msgLen = messages.length;
+
+      if (msgLen === 0) return { bullets: [] as string[] };
+
+      // Check DB cache — return if message count hasn't changed
+      const [row] = await db
+        .select({ csMemoryCache: conversationSessions.csMemoryCache, csMemoryCachedMsgLen: conversationSessions.csMemoryCachedMsgLen })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+
+      if (row?.csMemoryCache && row.csMemoryCachedMsgLen === msgLen) {
+        try {
+          const cached = JSON.parse(row.csMemoryCache) as string[];
+          if (Array.isArray(cached) && cached.length > 0) return { bullets: cached };
+        } catch { /* fall through to regenerate */ }
+      }
+
+      const isTeams = input.queue === "Teams";
+      const snippet = messages.slice(-20)
+        .map((m) => `${m.role === "user" ? (isTeams ? "Cleaner" : "Customer") : "Agent"}: ${m.content}`)
+        .join("\n");
+
+      const profileCtx = input.clientProfile ? `\n\nCUSTOMER PROFILE:\n${input.clientProfile}` : "";
+
+      const systemPrompt = isTeams
+        ? `You are an operations manager for Maids in Black. Analyze this SMS conversation with a cleaner. Return a JSON object with a "bullets" array of 3-5 short memory items (each under 8 words): key facts, issues, commitments, patterns. Return ONLY valid JSON like {"bullets":["item1","item2"]}.`
+        : `You are a senior customer service advisor for Maids in Black. Analyze this SMS conversation and customer profile. Return a JSON object with a "bullets" array of 3-5 short memory items (each under 8 words) an agent needs to know: booking history, service preferences, issues raised, sentiment, upsell signals, commitments. Examples: "Bi-weekly customer", "Adds extras often", "No cancellations", "Upsell opportunity", "Arrival window changed". Return ONLY valid JSON like {"bullets":["item1","item2"]}.${profileCtx}`;
+
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `CONVERSATION:\n${snippet}\n\nReturn the JSON now.` },
+        ],
+      });
+
+      let bullets: string[] = [];
+      try {
+        const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
+        const parsed = JSON.parse(raw);
+        const arr = Array.isArray(parsed) ? parsed : (parsed.bullets ?? parsed.items ?? parsed.memory ?? []);
+        bullets = arr.filter((b: unknown) => typeof b === "string" && (b as string).trim().length > 0).slice(0, 5);
+      } catch { bullets = []; }
+
+      if (bullets.length > 0) {
+        await db.update(conversationSessions)
+          .set({ csMemoryCache: JSON.stringify(bullets), csMemoryCachedMsgLen: msgLen })
+          .where(eq(conversationSessions.id, input.sessionId));
+      }
+
+      return { bullets };
+    }),
 
   /**
    * addCsNote — saves an internal note to a CS conversation's messageHistory.

@@ -311,10 +311,16 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   csPriorityTaggedAt: bigint("csPriorityTaggedAt", { mode: "number" }),
   /** Unix ms timestamp when an agent dismissed this from the priority queue */
   csPriorityDismissedAt: bigint("csPriorityDismissedAt", { mode: "number" }),
+  /**
+   * Cached JSON array of conversation memory bullet strings (AI-generated).
+   * Invalidated when message count changes (csMemoryCachedMsgLen !== current count).
+   */
+  csMemoryCache: text("csMemoryCache"),
+  /** Message count at time csMemoryCache was generated — used for staleness check */
+  csMemoryCachedMsgLen: int("csMemoryCachedMsgLen"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
-
 export type ConversationSession = typeof conversationSessions.$inferSelect;
 export type InsertConversationSession = typeof conversationSessions.$inferInsert;
 
