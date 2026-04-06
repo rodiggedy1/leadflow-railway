@@ -343,6 +343,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     // Polling fallback: catches any messages missed during SSE reconnect windows
     refetchInterval: 30_000,
   });
+  const { data: resolvedCountData } = trpc.leads.getCsResolvedCount.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+    refetchInterval: 30_000,
+  });
 
   // Agent photo map for avatars in message bubbles
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
@@ -657,12 +661,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
   const resolveSession = trpc.leads.resolveSession.useMutation({
     onSuccess: () => {
-      const f = filteredRef.current;
-      const curId = effectiveSelectedIdRef.current;
-      const currentIdx = f.findIndex((c) => c.id === curId);
-      const nextConv = f[currentIdx + 1] ?? f[currentIdx - 1] ?? null;
-      setSelectedId(nextConv?.id ?? null);
+      // Switch to Resolved tab so the refetch includes resolved items
+      setShowResolved(true);
+      setActiveFilter("Resolved" as InboxFilter);
+      userPickedFilter.current = true;
+      setSelectedId(null);
       utils.leads.listCsInbox.invalidate();
+      utils.leads.getCsResolvedCount.invalidate();
     },
   });
 
@@ -1275,7 +1280,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   { id: "Priority" as InboxFilter, dot: "bg-rose-500", icon: <ShieldAlert className="h-4 w-4" />, label: "Priority", count: priorityItems.length },
                   { id: "New" as InboxFilter, dot: "bg-blue-500", icon: <Mail className="h-4 w-4" />, label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
                   { id: "Active" as InboxFilter, dot: "bg-amber-400", icon: <Clock3 className="h-4 w-4" />, label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
-                  { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", icon: <CheckCircle2 className="h-4 w-4" />, label: "Resolved", count: displayConversations.filter((c) => !!(c as any).csResolvedAt).length },
+                  { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", icon: <CheckCircle2 className="h-4 w-4" />, label: "Resolved", count: resolvedCountData?.count ?? 0 },
                   { id: "Teams" as InboxFilter, dot: "bg-violet-500", icon: <Users className="h-4 w-4" />, label: "Teams", count: displayConversations.filter((c) => c.queue === "Teams").length },
                 ] as const).map((tab) => (
                   <button

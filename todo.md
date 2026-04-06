@@ -1053,3 +1053,4 @@
 - [x] CS Inbox: BUG — status pills show "Follow up" for all New and Active conversations; fix hasUnanswered to skip note/system roles, add "replied" status for Active tab, fix "waiting"/"live" for New tab
 - [x] CS Inbox: Replace conversation card UI with new design (ring avatar, status pill bottom-left, priority badge top-left, activity strip, note line)
 - [x] CS Inbox: VIP badge — use cleaner_jobs for job count, lower threshold to 3
+- [x] CS Inbox: BUG — resolving a conversation doesn't update resolved count or show in resolved queue

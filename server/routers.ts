@@ -2787,6 +2787,24 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         return { count };
       }),
     /**
+     * getCsResolvedCount — returns count of resolved CS sessions.
+     */
+    getCsResolvedCount: opsChatProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) return { count: 0 };
+        const sourceFilter = or(
+          eq(conversationSessions.leadSource, "cs-inbound"),
+          eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+          eq(conversationSessions.leadSource, "cs_initiated")
+        );
+        const rows = await db
+          .select({ cnt: sql<number>`COUNT(*)` })
+          .from(conversationSessions)
+          .where(and(sourceFilter, isNotNull(conversationSessions.csResolvedAt)));
+        return { count: Number(rows[0]?.cnt ?? 0) };
+      }),
+    /**
      * resolveSession — marks a CS inbox session as resolved (archived).
      * Sets csResolvedAt to the current timestamp.
      */
