@@ -4463,7 +4463,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
      * Valid values: "priority" | "new" | "active" | "resolved" | "teams" | null
      */
     setAwayStatus: publicProcedure
-      .input(z.object({ status: z.enum(["priority", "new", "active", "resolved", "teams"]).nullable() }))
+      .input(z.object({ status: z.enum(["away_sec", "lunch", "back15", "eod"]).nullable() }))
       .mutation(async ({ ctx, input }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();

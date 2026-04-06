@@ -76,15 +76,14 @@ import {
 // Visible to the whole team; disappears automatically when all agents are back.
 
 const AWAY_COPY: Record<string, { emoji: string; phrase: string }> = {
-  priority: { emoji: "🔴", phrase: "on Priority" },
-  new:      { emoji: "🔵", phrase: "on New" },
-  active:   { emoji: "🟠", phrase: "on Active" },
-  resolved: { emoji: "🟢", phrase: "on Resolved" },
-  teams:    { emoji: "🟣", phrase: "on Teams" },
+  away_sec: { emoji: "☕", phrase: "away for a sec" },
+  lunch:    { emoji: "🍔", phrase: "on lunch break" },
+  back15:   { emoji: "⏰", phrase: "back in 15" },
+  eod:      { emoji: "🌙", phrase: "signing off" },
 };
 
-// No auto-dismiss for the new statuses — agents clear manually
-const AUTO_DISMISS_STATUSES = new Set<string>([]);
+// Auto-dismiss after 15 min for short breaks
+const AUTO_DISMISS_STATUSES = new Set<string>(["away_sec", "back15"]);
 const AUTO_DISMISS_MS = 15 * 60 * 1000;
 
 function AwayBanner({ agents }: { agents: Array<{ name: string; awayStatus: string | null; awaySetAt?: number | null }> }) {
@@ -1897,11 +1896,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       : "offline";
                     // Status label: show the named away reason when explicitly set
                     const awayLabels: Record<string, string> = {
-                      priority: "Priority 🔴",
-                      new:      "New 🔵",
-                      active:   "Active 🟠",
-                      resolved: "Resolved 🟢",
-                      teams:    "Teams 🟣",
+                      away_sec: "Away for a sec ☕",
+                      lunch:    "Lunch break 🍔",
+                      back15:   "Back in 15 ⏰",
+                      eod:      "Signing off 🌙",
                     };
                     const statusLabel = ag.awayStatus ? (awayLabels[ag.awayStatus] ?? "Away")
                       : seenMs === null || diffMin === null ? "Never logged in"
