@@ -743,6 +743,37 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     return parts.join("; ");
   }, [clientProfile]);
 
+  // Build a job context string for the AI — upcoming or today's job details
+  const jobContext = useMemo(() => {
+    if (!clientProfile) return "";
+    const tj = clientProfile.todayJob;
+    if (tj) {
+      const parts: string[] = [];
+      if (tj.serviceType) parts.push(`Service: ${tj.serviceType}`);
+      if (tj.serviceDateTime) {
+        try {
+          const d = new Date(tj.serviceDateTime);
+          parts.push(`Date/Time: ${d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`);
+        } catch { /* ignore */ }
+      }
+      const teamOrCleaner = (tj as any).teamName || (tj as any).cleanerName;
+      if (teamOrCleaner) parts.push(`Cleaner/Team: ${teamOrCleaner}`);
+      if (tj.jobAddress) parts.push(`Address: ${tj.jobAddress}`);
+      if (tj.jobStatus) parts.push(`Status: ${tj.jobStatus}`);
+      return parts.join("\n");
+    }
+    // Fall back to most recent upcoming job from recentJobs
+    const upcoming = clientProfile.recentJobs?.find(j => j.status !== "completed" && j.date);
+    if (upcoming) {
+      const parts: string[] = [];
+      if (upcoming.serviceType) parts.push(`Service: ${upcoming.serviceType}`);
+      if (upcoming.date) parts.push(`Date: ${upcoming.date}`);
+      if (upcoming.status) parts.push(`Status: ${upcoming.status}`);
+      return parts.join("\n");
+    }
+    return "";
+  }, [clientProfile]);
+
   // AI insight — fires when a conversation is selected and has messages.
   // Uses useMutation (POST) instead of useQuery (GET) to avoid HTTP 414 URI-too-large
   // errors when messageHistory is long.
@@ -921,6 +952,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     csAutoDraft.mutate({
       conversationContext,
       customerName: conv.name ?? "",
+      jobContext: jobContext ?? "",
     });
   }
 
@@ -1611,6 +1643,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`
                     ).join("\n")}
                     customerName={selected.name ?? ""}
+                    jobContext={jobContext}
                   />
                 </div>
 
@@ -1646,6 +1679,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                         World-class draft
                       </span>
                       <span className="text-xs text-slate-400">Review before sending</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selected) return;
+                          autoDraftedForId.current = null; // allow re-draft
+                          triggerAutoDraft(selected);
+                        }}
+                        className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 hover:text-violet-600 transition-colors"
+                        title="Regenerate draft"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Regenerate
+                      </button>
                     </div>
                   )}
                   <div className="relative flex items-start gap-3">

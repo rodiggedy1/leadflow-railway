@@ -1025,3 +1025,6 @@
 - [x] CS Inbox: Replace csQuickReply auto-draft with csReply (world-class prompt); keep elevateReply on send
 - [x] CS Inbox: Pass customer first name into csReply prompt so AI addresses them by name
 - [x] CS Inbox: Audit and improve csReply world-class prompt quality — prompt reviewed, examples confirmed good, customerName now explicitly passed
+- [x] CS Inbox: Pass upcoming job details (date, service type, cleaner/team name) to csReply AI via jobContext field
+- [x] CS Inbox: Fix prompt length restriction — removed 4-sentence cap, added "match the moment" guidance and Be SPECIFIC / Be CONNECTING instructions
+- [x] CS Inbox: Add Regenerate button to auto-draft compose label for one-click fresh draft

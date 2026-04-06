@@ -2491,6 +2491,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       })).optional().default([]),
       conversationContext: z.string().optional().default(""), // last few messages from the inbox
       customerName: z.string().optional().default(""), // customer's full name
+      jobContext: z.string().optional().default(""), // upcoming/today job details (date, service type, cleaner/team name)
     }))
     .mutation(async ({ input }) => {
       const { invokeLLM } = await import("./_core/llm");
@@ -2500,6 +2501,12 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
 === TONE ===
 Warm, direct, and genuinely human. Think: a real person texting, not a corporate script. Short sentences. Conversational. Like you actually care — because you do.
+
+Be SPECIFIC. Use the customer's actual name, their actual booking date, their actual cleaner's name, their actual service type. Generic messages feel hollow. Specific messages feel like you actually know them — because you do.
+
+Be CONNECTING. Don't just answer the question and bail. Acknowledge the person, not just the problem. A little warmth goes a long way. If they're excited, match it. If they're frustrated, sit with them for a moment before solving.
+
+Length: Match the moment. A simple confirmation can be 2 sentences. A complaint resolution or a meaningful check-in should be 3–5 sentences — enough to feel complete, not rushed. Never truncate a message just to keep it short. Never pad a message just to make it longer. Write what the moment actually needs.
 
 Examples of the right tone:
 - "No worries at all, [Name]! Life happens 😊. We've moved your clean to [New Day] at [New Time]. Your home will be ready whenever you are. ✨"
@@ -2527,8 +2534,8 @@ Examples of the right tone:
 
 === WRITING RULES ===
 1. Write the EXACT message — not a template, not advice.
-2. Keep it under 4 sentences unless the situation genuinely needs more.
-3. Use the customer's first name once if known.
+2. Use the customer's first name naturally (once, near the start).
+3. If job details are provided (date, service type, cleaner name), weave them in naturally — don't just list them.
 4. Always include a clear next step or resolution — never leave them hanging.
 5. Never be defensive. Never make excuses. Own the experience.
 6. Sound like a real person, not a brand. No corporate buzzwords, no "we strive to...", no "rest assured".
@@ -2540,10 +2547,21 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}
 
 Write the exact SMS the agent should send for the scenario described.`;
 
+      const firstName = input.customerName ? input.customerName.trim().split(/\s+/)[0] : "";
+      const userParts: string[] = [];
+      if (firstName) userParts.push(`Customer's first name: ${firstName}`);
+      if (input.jobContext) userParts.push(`Upcoming job details:\n${input.jobContext}`);
+      if (input.conversationContext) userParts.push(`Recent conversation with this customer:\n${input.conversationContext}`);
+      if (input.scenario) {
+        userParts.push(`Customer service scenario: ${input.scenario}`);
+      } else {
+        userParts.push("Based on the conversation above, write the best reply to send to the customer now.");
+      }
+
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
         ...input.history.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user", content: `${input.customerName ? `Customer's first name: ${input.customerName.trim().split(/\s+/)[0]}\n` : ""}${input.conversationContext ? `Recent conversation with this customer:\n${input.conversationContext}\n\n` : ""}${input.scenario ? `Customer service scenario: ${input.scenario}` : "Based on the conversation above, write the best reply to send to the customer now."}` },
+        { role: "user", content: userParts.join("\n\n") },
       ];
 
       const result = await invokeLLM({ messages });
