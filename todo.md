@@ -1044,3 +1044,5 @@
 - [ ] CS Inbox: Stream the world-class elevate suggestion so tokens appear word-by-word instead of a 3-second spinner
 - [ ] CS Inbox: BUG — fake "Jillian McMahon" placeholder flashes for ~1 second on every visit to CS chat
 - [ ] CS Inbox: BUG — first auto-selected conversation on load does not trigger the world-class AI draft
+- [x] CS Inbox: BUG — elevate gate fires when clicking Send while auto-draft stream is still in progress; FIXED: added autoDraftLoading bypass in handleCsSend so streaming AI text sends directly
+- [x] CS Inbox: BUG — tRPC fallback (csAutoDraft) did not set elevateApprovedText, causing gate to fire on AI-generated text from fallback path; FIXED: csAutoDraft.onSuccess now sets elevateApprovedText
