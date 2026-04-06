@@ -1170,12 +1170,40 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     });
   }
 
-  // Auto-draft when conversation becomes selected (including auto-select on load)
+  // Auto-draft when conversation becomes selected (including auto-select on load).
+  // We intentionally wait for clientProfile to resolve so jobContext is populated.
+  // Strategy: fire immediately on conversation switch (clears stale draft), then
+  // re-fire once clientProfile arrives if it wasn't ready on the first fire.
+  const autoDraftedWithProfileRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
-    triggerAutoDraft(selected);
+    // Reset the "drafted with profile" marker when switching conversations
+    autoDraftedWithProfileRef.current = null;
+    // If clientProfile is already loaded, draft immediately with full context
+    if (clientProfile !== undefined) {
+      triggerAutoDraft(selected);
+      autoDraftedWithProfileRef.current = selected.id;
+    } else {
+      // clientProfile not yet loaded — draft now without job context,
+      // the profile useEffect below will re-draft once it arrives
+      triggerAutoDraft(selected);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveSelectedId]);
+
+  // Re-draft when clientProfile arrives for the selected conversation,
+  // but only if we haven't already drafted with full profile data.
+  useEffect(() => {
+    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
+    if (!clientProfile) return;
+    if (autoDraftedWithProfileRef.current === selected.id) return; // already drafted with profile
+    // Reset the guard so triggerAutoDraft will fire again with jobContext populated
+    autoDraftedForId.current = null;
+    autoDraftedWithProfileRef.current = selected.id;
+    triggerAutoDraft(selected);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientProfile]);
 
   // Auto-scroll to bottom when conversation changes or new messages arrive
   useEffect(() => {
