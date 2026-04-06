@@ -1214,12 +1214,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
         <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── LEFT: Queue sidebar ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0">
+          <Card className="rounded-[28px] border-[#1e1e2e] shadow-[0_16px_50px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-[#0f0f13]">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto">
+              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
               {/* Tab switcher — Ops / Chat / CS */}
               {onSwitchTab && (
-                <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
+                <div className="flex rounded-2xl border border-white/10 bg-white/5 p-1">
                   {([
                     { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
                     { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
@@ -1230,7 +1230,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       onClick={() => onSwitchTab(tab.id)}
                       className={cn(
                         "flex-1 relative flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
-                        tab.id === "cs" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                        tab.id === "cs" ? "bg-[#7c3aed] text-white shadow-sm" : "text-white/40 hover:text-white/70"
                       )}
                     >
                       {tab.icon}
@@ -1241,12 +1241,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               )}
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Inbox</div>
-                  <div className="mt-1.5 text-3xl font-semibold">Today</div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-white/30">Inbox</div>
+                  <div className="mt-1.5 text-3xl font-semibold text-white">Today</div>
                 </div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {([
                   { id: "Priority" as InboxFilter, dot: "bg-rose-500", icon: <ShieldAlert className="h-4 w-4" />, label: "Priority", count: priorityItems.length },
                   { id: "New" as InboxFilter, dot: "bg-blue-500", icon: <Mail className="h-4 w-4" />, label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
@@ -1258,22 +1258,22 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     key={tab.id}
                     onClick={() => {
                       userPickedFilter.current = true;
-                      setSelectedId(null); // reset so new tab's first conversation is auto-selected
+                      setSelectedId(null);
                       setActiveFilter(tab.id);
                       if (tab.id === "Resolved") setShowResolved(true);
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                       activeFilter === tab.id
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100"
+                        ? "bg-[#7c3aed] text-white shadow-lg shadow-violet-900/40"
+                        : "text-white/50 hover:text-white/80 hover:bg-white/5"
                     }`}
                   >
                     <span className={`h-2 w-2 rounded-full shrink-0 ${tab.dot}`} />
                     <span className="shrink-0 opacity-70">{tab.icon}</span>
                     <span className="flex-1 text-sm font-medium">{tab.label}</span>
                     {tab.count > 0 && (
-                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
-                        activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        activeFilter === tab.id ? "bg-white/20 text-white" : "bg-white/10 text-white/60"
                       }`}>{tab.count}</span>
                     )}
                   </button>
@@ -1284,7 +1284,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setShowResolved((v) => !v)}
-                  className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
+                  className="flex items-center gap-2 text-xs text-white/30 hover:text-white/60 transition-colors px-1 py-1"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   {showResolved ? "Hide resolved" : "Show resolved"}
@@ -1292,7 +1292,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 <button
                   onClick={() => backfillCsNames.mutate()}
                   disabled={backfillCsNames.isPending}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors px-1 py-1 disabled:opacity-50"
                   title="Fix missing names from database"
                 >
                   <RefreshCw className={`h-3 w-3 ${backfillCsNames.isPending ? 'animate-spin' : ''}`} />
@@ -1300,23 +1300,23 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </button>
               </div>
 
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+              <div className="rounded-[24px] border border-white/8 bg-white/5 p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="flex items-center gap-2 text-sm font-medium text-white/70">
                     <Bot className="h-4 w-4" /> AI priority queue
                   </div>
-                  {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />}
+                  {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-white/30" />}
                 </div>
                 <div className="mt-3 space-y-2">
                   {priorityItems.length === 0 && !priorityLoading && (
-                    <div className="text-xs text-slate-400 text-center py-2">No urgent items right now</div>
+                    <div className="text-xs text-white/30 text-center py-2">No urgent items right now</div>
                   )}
                   {priorityItems.map((item, idx) => {
                     const style = priorityTagStyle(item.tag);
                     return (
                       <div
                         key={item.id}
-                        className={`w-full rounded-2xl border ${style.border} ${style.bg} px-3 py-3 text-left shadow-sm`}
+                        className="w-full rounded-2xl border border-white/8 bg-white/5 px-3 py-3 text-left"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <button
@@ -1325,26 +1325,24 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               setActiveFilter("Priority");
                               setSelectedId(item.id);
                               userNavigatedToId.current = item.id;
-                              // Trigger auto-draft if session is already in memory
                               const found = displayConversations.find((c) => c.id === item.id);
                               if (found) triggerAutoDraft(found);
                             }}
                           >
                             <div className="flex items-center gap-2">
-                              {/* Pulse dot */}
                               <span className="relative flex h-2.5 w-2.5 shrink-0">
                                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
                                 <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${style.dot}`} />
                               </span>
-                              <span className="text-sm font-semibold">{idx + 1}. {item.name}</span>
+                              <span className="text-sm font-semibold text-white/90">{idx + 1}. {item.name}</span>
                               <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
                             </div>
-                            <div className="mt-1 text-xs text-slate-600 pl-4">{item.reason}</div>
-                            <div className="mt-1 text-[10px] text-slate-400 pl-4">{timeSince(item.taggedAt)}</div>
+                            <div className="mt-1 text-xs text-white/50 pl-4">{item.reason}</div>
+                            <div className="mt-1 text-[10px] text-white/30 pl-4">{timeSince(item.taggedAt)}</div>
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
-                            className="shrink-0 mt-0.5 text-slate-300 hover:text-slate-500 transition-colors"
+                            className="shrink-0 mt-0.5 text-white/20 hover:text-white/50 transition-colors"
                             title="Dismiss"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -1358,19 +1356,20 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
 
               <div>
                 <div className="relative">
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search conversations..."
-                    className="pl-9 h-11 rounded-2xl border-slate-200"
+                    className="pl-9 h-11 rounded-2xl bg-white/5 border-white/10 text-white placeholder:text-white/25 focus-visible:ring-violet-500/50 focus-visible:border-violet-500/50"
                   />
                 </div>
-                <div className="mt-4 space-y-2.5">
+                <div className="mt-3 space-y-1.5">
                   {filtered.map((conversation) => {
-                    const q = conversation.queue ? queueTone(conversation.queue) : { tone: "bg-slate-100 text-slate-500 border-slate-200", label: null };
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
+                    const isSelected = selected.id === conversation.id;
+                    const hasUnanswered = !!(conversation as any).hasUnanswered;
                     return (
                       <div
                         key={conversation.id}
@@ -1382,60 +1381,52 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           triggerAutoDraft(conversation);
                         }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedId(conversation.id); userNavigatedToId.current = conversation.id; triggerAutoDraft(conversation); } }}
-                        className={`w-full rounded-[20px] border px-3.5 py-3.5 text-left transition-all duration-150 hover:shadow-md hover:-translate-y-[1px] group cursor-pointer ${
-                          selected.id === conversation.id
-                            ? "border-slate-900 bg-white shadow-md ring-1 ring-slate-900/5"
-                            : (conversation as any).hasUnanswered
-                              ? "border-orange-300 bg-orange-50 shadow-sm shadow-orange-100"
+                        className={`w-full rounded-[18px] px-3.5 py-3 text-left transition-all duration-150 group cursor-pointer ${
+                          isSelected
+                            ? "bg-[#7c3aed] shadow-lg shadow-violet-900/40"
+                            : hasUnanswered
+                              ? "bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/15"
                               : isUnread
-                                ? "border-slate-300 bg-white shadow-sm"
-                                : "border-slate-200 bg-white shadow-sm"
+                                ? "bg-white/8 border border-white/12 hover:bg-white/12"
+                                : "bg-white/4 border border-white/6 hover:bg-white/8"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className="relative shrink-0">
-                            <Avatar className={`h-10 w-10 border ${isUnread ? 'border-teal-300' : 'border-slate-200'}`}>
-                              <AvatarFallback className="bg-slate-100 text-slate-700">
+                            <Avatar className="h-9 w-9 border border-white/10">
+                              <AvatarFallback className={`text-xs font-semibold ${
+                                isSelected ? "bg-white/20 text-white" : "bg-white/10 text-white/70"
+                              }`}>
                                 {conversation.initials}
                               </AvatarFallback>
                             </Avatar>
-                            {isUnread && (
-                              <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-teal-500 border-2 border-white" />
+                            {isUnread && !isSelected && (
+                              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-teal-400 border-2 border-[#0f0f13]" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className={`truncate text-sm ${isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}>{conversation.name}</div>
-                                <div className="text-xs text-slate-400 truncate mt-0.5">{conversation.service}</div>
+                                <div className={`truncate text-sm font-semibold ${
+                                  isSelected ? "text-white" : isUnread ? "text-white/90" : "text-white/70"
+                                }`}>{conversation.name}</div>
+                                <div className={`text-[11px] truncate mt-0.5 ${
+                                  isSelected ? "text-white/60" : "text-white/35"
+                                }`}>{conversation.service}</div>
                               </div>
-                              <div className={`text-[11px] whitespace-nowrap ${isUnread ? 'text-teal-600 font-semibold' : 'text-slate-400'}`}>{conversation.wait}</div>
+                              <div className={`text-[11px] whitespace-nowrap shrink-0 ${
+                                isSelected ? "text-white/60" : isUnread ? "text-teal-400" : "text-white/30"
+                              }`}>{conversation.wait}</div>
                             </div>
-                            <div className={`mt-1.5 text-xs line-clamp-1 ${isUnread ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>{conversation.lastMessage}</div>
-                            <div className="mt-2 flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {conversation.queue && (
-                                  <Badge className={`rounded-full border ${q.tone} hover:bg-transparent`}>
-                                    {conversation.queue}
-                                  </Badge>
-                                )}
-                                {(() => {
-                                  const t = deriveTone(conversation.messages);
-                                  return (
-                                    <Badge className={`rounded-full border text-[10px] px-1.5 py-0 ${t.className} hover:bg-transparent`}>
-                                      {t.label}
-                                    </Badge>
-                                  );
-                                })()}
-                              </div>
-                              <div className="text-xs text-slate-500 truncate">{conversation.status}</div>
-                            </div>
+                            <div className={`mt-1 text-[11px] line-clamp-1 ${
+                              isSelected ? "text-white/70" : isUnread ? "text-white/60" : "text-white/35"
+                            }`}>{conversation.lastMessage}</div>
                           </div>
                         </div>
-                        {/* Inline resolve button — visible on hover for New/Active tabs (pointer:fine = desktop mouse only, prevents accidental touch taps) */}
+                        {/* Inline resolve button */}
                         {(activeFilter === "New" || activeFilter === "Active") && (
                           <div
-                            className="mt-2.5 hidden [@media(pointer:fine)]:flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="mt-2 hidden [@media(pointer:fine)]:flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
@@ -1444,7 +1435,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 resolveSession.mutate({ sessionId: conversation.id });
                               }}
                               disabled={resolveSession.isPending}
-                              className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
+                              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
+                                isSelected
+                                  ? "bg-white/20 text-white hover:bg-white/30"
+                                  : "bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/25"
+                              }`}
                             >
                               <CheckCircle2 className="h-3 w-3" />
                               Resolve
