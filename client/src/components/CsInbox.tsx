@@ -1601,6 +1601,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     open={worldClassOpen}
                     onClose={() => setWorldClassOpen(false)}
                     onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
+                    conversationContext={selected.messages.slice(-5).map(m =>
+                      `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`
+                    ).join("\n")}
                   />
                 </div>
 

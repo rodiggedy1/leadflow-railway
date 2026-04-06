@@ -3593,7 +3593,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         return result;
       }),
     /**
-     * addCsNote — saves an internal note to a CS conversation's messageHistory.
+     * addCsNote — saves an internal note to a CS conversation's messageHistory. (internal)
      * Notes use role="note" so they are never sent to the customer via SMS.
      * They appear in the thread as amber sticky-note bubbles visible only to agents.
      */

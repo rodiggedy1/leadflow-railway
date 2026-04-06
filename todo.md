@@ -1020,3 +1020,4 @@
 - [x] CS Inbox: Reduce wasted vertical space — shrink header, move Note toggle into compose bar, maximize thread height
 - [x] CS Inbox: Rewrite World-Class Reply AI prompt to match warm/direct/conversational tone from provided Zappos SMS examples
 - [x] CS Inbox: Add 30 new SMS tone examples (31-60) to csReply system prompt
+- [x] CS Inbox: Pass last few conversation messages as context to both auto-draft AI and World-Class Reply panel
