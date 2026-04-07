@@ -2119,6 +2119,52 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       return elements;
                     });
                   })()}
+                  {/* ── Next Best Action Engine ── */}
+                  {nbaActions && !isTeamsConv && (
+                    <div className="mb-3 border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5">
+                        <Brain className="h-3.5 w-3.5 text-violet-500" />
+                        <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
+                      </div>
+                      <div className="grid grid-cols-4 divide-x divide-slate-200">
+                        {nbaActions.actions.map((action) => {
+                          const isRec = action.id === nbaActions.recommendedId;
+                          const colorMap: Record<string, { bg: string; border: string; badge: string; icon: string }> = {
+                            emerald: { bg: "bg-emerald-50", border: "border-emerald-400", badge: "bg-emerald-600 text-white", icon: "text-emerald-600" },
+                            violet:  { bg: "bg-violet-50",  border: "border-violet-400",  badge: "bg-violet-600 text-white",  icon: "text-violet-600" },
+                            amber:   { bg: "bg-amber-50",   border: "border-amber-400",   badge: "bg-amber-500 text-white",   icon: "text-amber-600" },
+                            blue:    { bg: "bg-blue-50",    border: "border-blue-400",    badge: "bg-blue-600 text-white",    icon: "text-blue-600" },
+                          };
+                          const c = colorMap[action.color];
+                          const iconMap: Record<string, React.ReactNode> = {
+                            confirm:   <CheckCircle2 className={`h-4 w-4 ${c.icon}`} />,
+                            recurring: <RefreshCw className={`h-4 w-4 ${c.icon}`} />,
+                            save:      <ShieldAlert className={`h-4 w-4 ${c.icon}`} />,
+                            call:      <Phone className={`h-4 w-4 ${c.icon}`} />,
+                          };
+                          return (
+                            <button
+                              key={action.id}
+                              onClick={() => setCompose(action.prefill)}
+                              className={`relative flex flex-col gap-1 p-2.5 text-left transition-colors hover:bg-slate-100 ${
+                                isRec ? `${c.bg} border-t-2 ${c.border}` : "bg-white border-t-2 border-transparent"
+                              }`}
+                            >
+                              {isRec && (
+                                <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>Rec</span>
+                              )}
+                              <div className="flex items-center gap-1.5">
+                                {iconMap[action.id]}
+                              </div>
+                              <p className="text-[11px] font-semibold text-slate-800 leading-tight pr-6">{action.label}</p>
+                              <p className="text-[10px] text-slate-500 leading-tight">{action.desc}</p>
+                              <p className={`text-[9px] font-medium mt-0.5 ${c.icon}`}>{action.footer}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {/* ── Conversation Memory — inline system annotation ── */}
                   {(memoryLoading || memoryBullets.length > 0) && (
                     <div className="pt-1 pb-3">
@@ -2411,52 +2457,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       {!elevateStreaming && (
                         <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
                       )}
-                    </div>
-                  )}
-                  {/* ── Next Best Action Engine ── */}
-                  {nbaActions && !isTeamsConv && (
-                    <div className="mt-3 border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5">
-                        <Brain className="h-3.5 w-3.5 text-violet-500" />
-                        <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
-                      </div>
-                      <div className="grid grid-cols-4 divide-x divide-slate-200">
-                        {nbaActions.actions.map((action) => {
-                          const isRec = action.id === nbaActions.recommendedId;
-                          const colorMap: Record<string, { bg: string; border: string; badge: string; icon: string }> = {
-                            emerald: { bg: "bg-emerald-50", border: "border-emerald-400", badge: "bg-emerald-600 text-white", icon: "text-emerald-600" },
-                            violet:  { bg: "bg-violet-50",  border: "border-violet-400",  badge: "bg-violet-600 text-white",  icon: "text-violet-600" },
-                            amber:   { bg: "bg-amber-50",   border: "border-amber-400",   badge: "bg-amber-500 text-white",   icon: "text-amber-600" },
-                            blue:    { bg: "bg-blue-50",    border: "border-blue-400",    badge: "bg-blue-600 text-white",    icon: "text-blue-600" },
-                          };
-                          const c = colorMap[action.color];
-                          const iconMap: Record<string, React.ReactNode> = {
-                            confirm:   <CheckCircle2 className={`h-4 w-4 ${c.icon}`} />,
-                            recurring: <RefreshCw className={`h-4 w-4 ${c.icon}`} />,
-                            save:      <ShieldAlert className={`h-4 w-4 ${c.icon}`} />,
-                            call:      <Phone className={`h-4 w-4 ${c.icon}`} />,
-                          };
-                          return (
-                            <button
-                              key={action.id}
-                              onClick={() => setCompose(action.prefill)}
-                              className={`relative flex flex-col gap-1 p-2.5 text-left transition-colors hover:bg-slate-100 ${
-                                isRec ? `${c.bg} border-t-2 ${c.border}` : "bg-white border-t-2 border-transparent"
-                              }`}
-                            >
-                              {isRec && (
-                                <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>Rec</span>
-                              )}
-                              <div className="flex items-center gap-1.5">
-                                {iconMap[action.id]}
-                              </div>
-                              <p className="text-[11px] font-semibold text-slate-800 leading-tight pr-6">{action.label}</p>
-                              <p className="text-[10px] text-slate-500 leading-tight">{action.desc}</p>
-                              <p className={`text-[9px] font-medium mt-0.5 ${c.icon}`}>{action.footer}</p>
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
                   )}
                   <div className="mt-2 flex items-center gap-2">
