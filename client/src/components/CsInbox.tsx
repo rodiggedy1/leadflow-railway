@@ -303,6 +303,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   // Follow-up modal state (CS chat — add only, no queue)
   const [addFollowUpOpen, setAddFollowUpOpen] = useState(false);
+  const [sendDropOpen, setSendDropOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
@@ -2475,7 +2476,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             )}
                           </Button>
                           {/* Dropdown for additional send actions */}
-                          <DropdownMenu>
+                          <DropdownMenu open={sendDropOpen} onOpenChange={setSendDropOpen}>
                             <DropdownMenuTrigger asChild>
                               <Button
                                 className="rounded-l-none rounded-r-xl h-10 px-2 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
@@ -2492,7 +2493,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             >
                               <DropdownMenuItem
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                                onSelect={(e) => { e.preventDefault(); requestAnimationFrame(() => handleCsSend()); }}
+                                onSelect={(e) => { e.preventDefault(); setSendDropOpen(false); requestAnimationFrame(() => handleCsSend()); }}
                               >
                                 <Send className="h-4 w-4 text-slate-500 shrink-0" />
                                 <div>
@@ -2505,6 +2506,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-violet-50"
                                 onSelect={(e) => {
                                   e.preventDefault();
+                                  setSendDropOpen(false);
                                   requestAnimationFrame(() => {
                                     handleCsSend(() => setAddFollowUpOpen(true));
                                   });
@@ -2520,6 +2522,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50"
                                 onSelect={(e) => {
                                   e.preventDefault();
+                                  setSendDropOpen(false);
                                   requestAnimationFrame(() => {
                                     handleCsSend(() => { if (selected) resolveSession.mutate({ sessionId: selected.id }); });
                                   });
