@@ -656,40 +656,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
 
-  // ── Next Best Action Engine ──────────────────────────────────────────────────
-  const nbaActions = useMemo(() => {
-    if (!selected || selected.queue === "Teams") return null;
-    const msgs = selected.messages ?? [];
-    if (msgs.length < 1) return null;
-    const clientMsgs = msgs.filter((m) => m.sender === "client").map((m) => m.text.toLowerCase());
-    const lastClientMsg = clientMsgs[clientMsgs.length - 1] ?? "";
-    const allClientText = clientMsgs.join(" ");
-    const confirmKeywords = ["yes","agreed","confirmed","sounds good","let's do it","lets do it","book it","perfect","great","deal","okay","ok","sure","absolutely","definitely","i'm in","im in","lock it","let's go","lets go"];
-    const recurringKeywords = ["every week","weekly","bi-weekly","biweekly","every other week","monthly","regular","recurring","ongoing","again","come back","schedule"];
-    const saveKeywords = ["frustrated","cancel","cancelled","canceling","disappointed","unhappy","not happy","too expensive","ridiculous","unacceptable","worst","terrible","awful","horrible","refund","complaint","angry","upset","never again","waste"];
-    const callKeywords = ["today","asap","right now","same day","urgent","immediately","call me","phone","right away","as soon as","quick","fast"];
-    const score = (keywords: string[], text: string) =>
-      keywords.reduce((acc, kw) => acc + (text.includes(kw) ? 1 : 0), 0);
-    const confirmScore = score(confirmKeywords, lastClientMsg) * 3 + score(confirmKeywords, allClientText);
-    const saveScore = score(saveKeywords, allClientText) * 2;
-    const callScore = score(callKeywords, lastClientMsg) * 2 + score(callKeywords, allClientText);
-    const recurringScore = score(recurringKeywords, allClientText) + (msgs.length >= 4 && saveScore === 0 ? 1 : 0);
-    const actions = [
-      { id: "confirm" as const, label: "Confirm & Lock", desc: "Customer accepted — ready to book.", footer: "High booking intent", score: confirmScore, color: "emerald", prefill: "Great! Let me lock that in for you right now. I'll send you a confirmation shortly — you're all set! 🎉" },
-      { id: "recurring" as const, label: "Push to Recurring", desc: "Positive signals — strong recurring fit.", footer: "High LTV upside", score: recurringScore, color: "violet", prefill: "Since you've been happy with our service, have you considered setting up a recurring schedule? We offer weekly, bi-weekly, and monthly plans — and recurring clients get priority scheduling plus a small discount. Interested?" },
-      { id: "save" as const, label: "Save / De-escalate", desc: "Negative sentiment — reassurance matters.", footer: "Churn risk", score: saveScore, color: "amber", prefill: "I completely understand your frustration, and I'm sorry this didn't meet your expectations. I'd love to make this right — can I arrange a complimentary re-clean or find another solution that works for you?" },
-      { id: "call" as const, label: "Call Now", desc: "High-intent — phone is the fastest path.", footer: "Fast close", score: callScore, color: "blue", prefill: "I'd love to give you a quick call to sort this out in 2 minutes — what's the best number to reach you?" },
-    ];
-    const maxScore = Math.max(...actions.map((a) => a.score));
-    const tieOrder = ["confirm", "save", "call", "recurring"];
-    const recommended = actions.reduce((best, a) => {
-      if (a.score > best.score) return a;
-      if (a.score === best.score && tieOrder.indexOf(a.id) < tieOrder.indexOf(best.id)) return a;
-      return best;
-    });
-    return { actions, recommendedId: maxScore > 0 ? recommended.id : "confirm" };
-  }, [selected?.id, selected?.messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Typing presence — broadcast when this agent is composing, show others typing
   const csChannelKey = effectiveSelectedId ? `cs:${effectiveSelectedId}` : "";
   const { typers, onKeyPress: onTypingKeyPress, onBlur: onTypingBlur } = useTypingIndicator(csChannelKey);
@@ -995,6 +961,42 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     { enabled: !!clientPhone, refetchOnWindowFocus: false, refetchInterval: 120_000 }
   );
 
+  // ── Next Best Action Engine ──────────────────────────────────────────────────
+  const nbaActions = useMemo(() => {
+    if (!selected || selected.queue === "Teams") return null;
+    const msgs = selected.messages ?? [];
+    if (msgs.length < 1) return null;
+    const clientMsgs = msgs.filter((m) => m.sender === "client").map((m) => m.text.toLowerCase());
+    const lastClientMsg = clientMsgs[clientMsgs.length - 1] ?? "";
+    const allClientText = clientMsgs.join(" ");
+    const confirmKeywords = ["yes","agreed","confirmed","sounds good","let's do it","lets do it","book it","perfect","great","deal","okay","ok","sure","absolutely","definitely","i'm in","im in","lock it","let's go","lets go"];
+    const recurringKeywords = ["every week","weekly","bi-weekly","biweekly","every other week","monthly","regular","recurring","ongoing","again","come back","schedule"];
+    const saveKeywords = ["frustrated","cancel","cancelled","canceling","disappointed","unhappy","not happy","too expensive","ridiculous","unacceptable","worst","terrible","awful","horrible","refund","complaint","angry","upset","never again","waste"];
+    const callKeywords = ["today","asap","right now","same day","urgent","immediately","call me","phone","right away","as soon as","quick","fast"];
+    const score = (keywords: string[], text: string) =>
+      keywords.reduce((acc, kw) => acc + (text.includes(kw) ? 1 : 0), 0);
+    const confirmScore = score(confirmKeywords, lastClientMsg) * 3 + score(confirmKeywords, allClientText);
+    const saveScore = score(saveKeywords, allClientText) * 2;
+    const callScore = score(callKeywords, lastClientMsg) * 2 + score(callKeywords, allClientText);
+    const freq = clientProfile?.frequency ?? "";
+    const isAlreadyRecurring = !!freq && !/one.time|one time|1.time|single/i.test(freq);
+    const recurringScore = isAlreadyRecurring ? 0 : score(recurringKeywords, allClientText) + (msgs.length >= 4 && saveScore === 0 ? 1 : 0);
+    const actions = [
+      { id: "confirm" as const, label: "Confirm & Lock", desc: "Customer accepted — ready to book.", footer: "High booking intent", score: confirmScore, color: "emerald", prefill: "Great! Let me lock that in for you right now. I'll send you a confirmation shortly — you're all set! 🎉" },
+      { id: "recurring" as const, label: "Push to Recurring", desc: "Positive signals — strong recurring fit.", footer: "High LTV upside", score: recurringScore, color: "violet", prefill: "Since you've been happy with our service, have you considered setting up a recurring schedule? We offer weekly, bi-weekly, and monthly plans — and recurring clients get priority scheduling plus a small discount. Interested?" },
+      { id: "save" as const, label: "Save / De-escalate", desc: "Negative sentiment — reassurance matters.", footer: "Churn risk", score: saveScore, color: "amber", prefill: "I completely understand your frustration, and I'm sorry this didn't meet your expectations. I'd love to make this right — can I arrange a complimentary re-clean or find another solution that works for you?" },
+      { id: "call" as const, label: "Call Now", desc: "High-intent — phone is the fastest path.", footer: "Fast close", score: callScore, color: "blue", prefill: "I'd love to give you a quick call to sort this out in 2 minutes — what's the best number to reach you?" },
+    ];
+    const maxScore = Math.max(...actions.map((a) => a.score));
+    const tieOrder = ["confirm", "save", "call", "recurring"];
+    const recommended = actions.reduce((best, a) => {
+      if (a.score > best.score) return a;
+      if (a.score === best.score && tieOrder.indexOf(a.id) < tieOrder.indexOf(best.id)) return a;
+      return best;
+    });
+    return { actions, recommendedId: maxScore > 0 ? recommended.id : "confirm" };
+  }, [selected?.id, selected?.messages?.length, clientProfile?.frequency]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Build a brief client profile summary for the AI insight prompt
   const clientProfileSummary = useMemo(() => {
     if (!clientProfile) return undefined;
@@ -1053,7 +1055,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
         content: m.text,
       }))
     );
-  }, [selected?.id, selected?.messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.messages?.length, clientProfile?.frequency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
   const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
