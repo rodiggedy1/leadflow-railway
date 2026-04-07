@@ -3049,15 +3049,16 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
   /**
    * csNbaAnalysis — LLM-powered Next Best Action analysis.
-   * Reads the full conversation and returns the recommended action + a short reason.
-   * Returns one of: confirm | recurring | save | call, plus a 1-sentence reason.
+   * Reads the full conversation + client context and returns ONE specific, contextual action
+   * the agent should take right now — not forced into fixed buckets.
+   * Returns: label (short action name), instruction (exactly what to do), ctaType (for icon/color), reason (why).
    */
   csNbaAnalysis: opsChatProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
       messageHistory: z.string(),
       clientName: z.string().optional(),
-      clientProfile: z.string().optional(), // frequency, bookings, etc.
+      clientProfile: z.string().optional(),
       isAlreadyRecurring: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -3065,27 +3066,42 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       const messages: Array<{ role: string; content: string }> = (() => {
         try { return JSON.parse(input.messageHistory); } catch { return []; }
       })();
-      if (messages.length === 0) return { action: "confirm" as const, reason: "" };
-      const recent = messages.slice(-16);
+      if (messages.length === 0) return { label: "Review conversation", instruction: "Read the full conversation before responding.", ctaType: "info", reason: "" };
+      const recent = messages.slice(-20);
       const snippet = recent
         .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
         .join("\n");
       const firstName = input.clientName?.split(" ")[0] ?? "the client";
-      const profileCtx = input.clientProfile ? `\n\nCLIENT HISTORY: ${input.clientProfile}` : "";
-      const recurringRule = input.isAlreadyRecurring
-        ? "\n\nIMPORTANT: This client is ALREADY on a recurring plan. Do NOT recommend 'recurring'."
-        : "";
-      const systemPrompt = `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA.
-Analyze this SMS conversation with a client named ${firstName} and decide the single best next action for the agent to take RIGHT NOW.${profileCtx}${recurringRule}
+      const profileCtx = input.clientProfile ? `\n\nCLIENT CONTEXT:\n${input.clientProfile}` : "";
+      const recurringNote = input.isAlreadyRecurring ? "\nNote: This client is already on a recurring plan." : "";
 
-You must choose exactly one of these four actions:
-- confirm: Client has shown buying intent or agreement — agent should confirm and lock the booking.
-- recurring: Client is a one-time customer who would benefit from a recurring plan upsell.
-- save: Client is frustrated, upset, or at risk of churning — agent should de-escalate and reassure.
-- call: Situation is urgent, complex, or high-stakes — a phone call would resolve it faster.
+      const systemPrompt = `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA. You are advising an agent who is reading an SMS conversation with a client named ${firstName}.${profileCtx}${recurringNote}
 
-Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
-{"action": "confirm", "reason": "Client said 'sounds good' and asked for a date — ready to book."}`;
+Your job: Read the conversation carefully and identify the SINGLE most important action the agent should take RIGHT NOW. Be specific — tell them exactly what to do, not just a category.
+
+Examples of good instructions:
+- "Log into the CRM and reschedule ${firstName}'s booking to next Thursday — she confirmed that date works."
+- "Close the booking — ${firstName} agreed to the 3BR deep clean on Friday at 10am. Lock it in and send confirmation."
+- "Offer the bi-weekly plan — ${firstName} has booked 4 one-time cleans this year. Mention the 15% recurring discount."
+- "Call ${firstName} now — she's locked out and the team is waiting outside. This can't be resolved over text."
+- "Issue a $30 credit and apologize — ${firstName} says the bathroom was missed. Log it in the CRM under her account."
+- "Send the quote — ${firstName} asked for pricing on a 2BR move-out clean. Give her a number and ask to book."
+- "Ask for a review — ${firstName} just said the clean was amazing. Strike while the iron is hot."
+- "Upsell the inside-oven add-on — ${firstName} mentioned her oven is a mess and her booking is tomorrow."
+- "Confirm the team is on the way — ${firstName} is asking for an ETA. Check the schedule and reply with a time."
+
+Choose a ctaType that best fits the action:
+- "book": closing or confirming a booking
+- "crm": action requires logging into the CRM (reschedule, cancel, credit, notes)
+- "call": agent should call the client
+- "upsell": upselling a plan, add-on, or frequency upgrade
+- "reply": agent should send a specific SMS reply
+- "review": asking for a review or referral
+- "info": general advisory or wait-and-see
+
+Respond ONLY with valid JSON, no markdown:
+{"label": "Close Booking", "instruction": "Lock in the 3BR deep clean for Friday 10am — client confirmed.", "ctaType": "book", "reason": "Client said 'that works, let's do it' after you quoted Friday."}`;
+
       const result = await invokeLLM({
         messages: [
           { role: "system", content: systemPrompt },
@@ -3095,12 +3111,17 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
       });
       const raw = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
       try {
-        const parsed = JSON.parse(raw) as { action: string; reason: string };
-        const validActions = ["confirm", "recurring", "save", "call"] as const;
-        const action = validActions.includes(parsed.action as any) ? parsed.action as typeof validActions[number] : "confirm";
-        return { action, reason: parsed.reason ?? "" };
+        const parsed = JSON.parse(raw) as { label: string; instruction: string; ctaType: string; reason: string };
+        const validCtaTypes = ["book", "crm", "call", "upsell", "reply", "review", "info"] as const;
+        const ctaType = validCtaTypes.includes(parsed.ctaType as any) ? parsed.ctaType as typeof validCtaTypes[number] : "info";
+        return {
+          label: parsed.label ?? "Next Action",
+          instruction: parsed.instruction ?? "",
+          ctaType,
+          reason: parsed.reason ?? "",
+        };
       } catch {
-        return { action: "confirm" as const, reason: "" };
+        return { label: "Review conversation", instruction: "Read the full context before responding.", ctaType: "info" as const, reason: "" };
       }
     }),
 });

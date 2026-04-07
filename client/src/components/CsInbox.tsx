@@ -1095,7 +1095,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
 
   // ── LLM-powered NBA analysis ──────────────────────────────────────────────
-  const [nbaLlmResult, setNbaLlmResult] = useState<{ action: string; reason: string } | null>(null);
+  const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string } | null>(null);
   const [nbaLlmFetchedKey, setNbaLlmFetchedKey] = useState<string | null>(null);
   const [nbaLlmLoading, setNbaLlmLoading] = useState(false);
   const nbaLlmMutation = trpc.opsChat.csNbaAnalysis.useMutation({
@@ -2161,71 +2161,49 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     });
                   })()}
                   {/* ── Next Best Action Engine ── */}
-                  {nbaActions && !isTeamsConv && (
-                    <div className="mb-3 border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5">
-                        <Brain className="h-3.5 w-3.5 text-violet-500" />
-                        <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
-                        {nbaLlmLoading && <span className="ml-auto text-[9px] text-violet-400 animate-pulse">Analyzing…</span>}
-                      </div>
-                      {/* LLM reason bar — shown when LLM has returned a result */}
-                      {nbaLlmResult?.reason && (
-                        <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-100 flex items-start gap-1.5">
-                          <Sparkles className="h-3 w-3 text-violet-400 shrink-0 mt-0.5" />
-                          <p className="text-[10px] text-violet-700 leading-snug">{nbaLlmResult.reason}</p>
+                  {/* ── Next Best Action — single contextual card ── */}
+                  {!isTeamsConv && (nbaLlmResult || nbaLlmLoading) && (() => {
+                    const ctaColorMap: Record<string, { bg: string; border: string; icon: string; badge: string; iconEl: React.ReactNode }> = {
+                      book:   { bg: "bg-emerald-50", border: "border-emerald-300", icon: "text-emerald-600", badge: "bg-emerald-600 text-white", iconEl: <CheckCircle2 className="h-4 w-4 text-emerald-600" /> },
+                      crm:    { bg: "bg-blue-50",    border: "border-blue-300",    icon: "text-blue-600",    badge: "bg-blue-600 text-white",    iconEl: <ExternalLink className="h-4 w-4 text-blue-600" /> },
+                      call:   { bg: "bg-sky-50",     border: "border-sky-300",     icon: "text-sky-600",     badge: "bg-sky-600 text-white",     iconEl: <Phone className="h-4 w-4 text-sky-600" /> },
+                      upsell: { bg: "bg-violet-50",  border: "border-violet-300",  icon: "text-violet-600",  badge: "bg-violet-600 text-white",  iconEl: <TrendingUp className="h-4 w-4 text-violet-600" /> },
+                      reply:  { bg: "bg-indigo-50",  border: "border-indigo-300",  icon: "text-indigo-600",  badge: "bg-indigo-600 text-white",  iconEl: <MessageSquare className="h-4 w-4 text-indigo-600" /> },
+                      review: { bg: "bg-amber-50",   border: "border-amber-300",   icon: "text-amber-600",   badge: "bg-amber-500 text-white",   iconEl: <Star className="h-4 w-4 text-amber-500" /> },
+                      info:   { bg: "bg-slate-50",   border: "border-slate-300",   icon: "text-slate-500",   badge: "bg-slate-500 text-white",   iconEl: <Brain className="h-4 w-4 text-slate-400" /> },
+                    };
+                    const cta = ctaColorMap[nbaLlmResult?.ctaType ?? "info"] ?? ctaColorMap.info;
+                    return (
+                      <div className={`mb-3 rounded-xl border ${cta.border} ${cta.bg} overflow-hidden`}>
+                        <div className="px-3 py-2 flex items-center gap-1.5 border-b border-black/5">
+                          <Brain className="h-3.5 w-3.5 text-violet-500" />
+                          <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
+                          {nbaLlmLoading && !nbaLlmResult && (
+                            <span className="ml-auto text-[9px] text-violet-400 animate-pulse">Analyzing…</span>
+                          )}
                         </div>
-                      )}
-                      <div className="grid grid-cols-4 divide-x divide-slate-200">
-                        {nbaActions.actions.map((action) => {
-                          // Use LLM recommendation when available, fall back to keyword scoring
-                          const effectiveRecommendedId = nbaLlmResult?.action ?? nbaActions.recommendedId;
-                          const isRec = action.id === effectiveRecommendedId;
-                          const colorMap: Record<string, { bg: string; border: string; badge: string; icon: string }> = {
-                            emerald: { bg: "bg-emerald-50", border: "border-emerald-400", badge: "bg-emerald-600 text-white", icon: "text-emerald-600" },
-                            violet:  { bg: "bg-violet-50",  border: "border-violet-400",  badge: "bg-violet-600 text-white",  icon: "text-violet-600" },
-                            amber:   { bg: "bg-amber-50",   border: "border-amber-400",   badge: "bg-amber-500 text-white",   icon: "text-amber-600" },
-                            blue:    { bg: "bg-blue-50",    border: "border-blue-400",    badge: "bg-blue-600 text-white",    icon: "text-blue-600" },
-                          };
-                          const c = colorMap[action.color];
-                          const iconMap: Record<string, React.ReactNode> = {
-                            confirm:   <CheckCircle2 className={`h-4 w-4 ${c.icon}`} />,
-                            recurring: <RefreshCw className={`h-4 w-4 ${c.icon}`} />,
-                            save:      <ShieldAlert className={`h-4 w-4 ${c.icon}`} />,
-                            call:      <Phone className={`h-4 w-4 ${c.icon}`} />,
-                          };
-                          return (
-                            <button
-                              key={action.id}
-                              onClick={() => setCompose(action.prefill)}
-                              className={`relative flex flex-col gap-1 p-2.5 text-left transition-colors hover:bg-slate-100 ${
-                                isRec
-                                  ? `${c.bg} ring-2 ring-inset ring-violet-500`
-                                  : action.id === "recurring" && nbaActions.isOneTimeUpsell
-                                  ? "bg-violet-50/40 ring-1 ring-inset ring-violet-300"
-                                  : "bg-white"
-                              }`}
-                            >
-                              {isRec && (
-                                <span className={`inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full mb-0.5 ${c.badge}`}>Recommended</span>
-                              )}
-                              {!isRec && action.id === "recurring" && nbaActions.isOneTimeUpsell && (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full mb-0.5 bg-violet-100 text-violet-700">
-                                  <TrendingUp className="h-2.5 w-2.5" />
-                                  Upsell
-                                </span>
-                              )}
-                              <div className="flex items-center gap-1.5">
-                                {iconMap[action.id]}
+                        {nbaLlmResult ? (
+                          <div className="px-3 py-2.5 flex items-start gap-3">
+                            <div className="shrink-0 mt-0.5">{cta.iconEl}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cta.badge}`}>{nbaLlmResult.label}</span>
                               </div>
-                              <p className="text-[11px] font-semibold text-slate-800 leading-tight pr-6">{action.label}</p>
-                              <p className="text-[10px] text-slate-500 leading-tight">{action.desc}</p>
-                              <p className={`text-[9px] font-medium mt-0.5 ${c.icon}`}>{action.footer}</p>
-                            </button>
-                          );
-                        })}
+                              <p className="text-[12px] font-medium text-slate-800 leading-snug">{nbaLlmResult.instruction}</p>
+                              {nbaLlmResult.reason && (
+                                <p className="text-[10px] text-slate-400 mt-1 leading-snug italic">{nbaLlmResult.reason}</p>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-3 flex items-center gap-2">
+                            <div className="h-3 w-24 bg-slate-200 rounded animate-pulse" />
+                            <div className="h-3 w-40 bg-slate-200 rounded animate-pulse" />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   {/* ── Conversation Memory — inline system annotation ── */}
                   {(memoryLoading || memoryBullets.length > 0) && (
                     <div className="pt-1 pb-3">
