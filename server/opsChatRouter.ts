@@ -3060,6 +3060,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       clientName: z.string().optional(),
       clientProfile: z.string().optional(),
       isAlreadyRecurring: z.boolean().optional(),
+      todayJobContext: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const { invokeLLM } = await import("./_core/llm");
@@ -3074,8 +3075,9 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       const firstName = input.clientName?.split(" ")[0] ?? "the client";
       const profileCtx = input.clientProfile ? `\n\nCLIENT CONTEXT:\n${input.clientProfile}` : "";
       const recurringNote = input.isAlreadyRecurring ? "\nNote: This client is already on a recurring plan." : "";
+      const todayJobCtx = input.todayJobContext ? `\n\nTODAY'S JOB (real-time status):\n${input.todayJobContext}\nUse this to give hyper-specific instructions — e.g. if status is 'On the way', tell the agent to confirm the ETA; if 'Completed', consider asking for a review or upselling next booking.` : "";
 
-      const systemPrompt = `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA. You are advising an agent who is reading an SMS conversation with a client named ${firstName}.${profileCtx}${recurringNote}
+      const systemPrompt = `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA. You are advising an agent who is reading an SMS conversation with a client named ${firstName}.${profileCtx}${recurringNote}${todayJobCtx}
 
 Your job: Read the conversation carefully and identify the SINGLE most important action the agent should take RIGHT NOW. Prioritize actions that make the business more money (upsells, recurring conversions, referrals) whenever the situation naturally allows it — but never at the expense of a service issue that needs to be resolved first.
 

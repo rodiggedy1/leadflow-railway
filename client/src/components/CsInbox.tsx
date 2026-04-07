@@ -1150,6 +1150,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       clientName: selected.name ?? undefined,
       clientProfile: clientProfileSummary,
       isAlreadyRecurring,
+      todayJobContext: jobContext || undefined,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
