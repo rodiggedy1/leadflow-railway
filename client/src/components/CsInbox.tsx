@@ -979,7 +979,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     const saveScore = score(saveKeywords, allClientText) * 2;
     const callScore = score(callKeywords, lastClientMsg) * 2 + score(callKeywords, allClientText);
     const freq = clientProfile?.frequency ?? "";
-    const isAlreadyRecurring = !!freq && !/one.time|one time|1.time|single/i.test(freq);
+    // Treat as one-time only if frequency explicitly says so; everything else (weekly, bi-weekly, tri-weekly, monthly, etc.) is recurring
+    const isOneTimeFreq = /one.time|one time|1.time|single/i.test(freq);
+    const isAlreadyRecurring = !!freq && !isOneTimeFreq;
     const isOneTimeUpsell = !isAlreadyRecurring && (!!clientProfile && (clientProfile.totalBookings ?? 0) >= 1);
     // One-time customers who have booked before get a baseline recurring score boost
     const recurringBaseBoost = isOneTimeUpsell ? 2 : 0;
