@@ -1094,6 +1094,37 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
 
+  // ── LLM-powered NBA analysis ──────────────────────────────────────────────
+  const [nbaLlmResult, setNbaLlmResult] = useState<{ action: string; reason: string } | null>(null);
+  const [nbaLlmFetchedKey, setNbaLlmFetchedKey] = useState<string | null>(null);
+  const [nbaLlmLoading, setNbaLlmLoading] = useState(false);
+  const nbaLlmMutation = trpc.opsChat.csNbaAnalysis.useMutation({
+    onSuccess: (data) => { setNbaLlmResult(data); setNbaLlmLoading(false); },
+    onError: () => setNbaLlmLoading(false),
+  });
+
+  useEffect(() => {
+    if (!selected || selected.queue === "Teams" || selected.messages.length === 0) return;
+    const lastMsg = selected.messages[selected.messages.length - 1];
+    if (lastMsg?.sender !== "client") return; // only run when client sent last msg
+    const key = `${selected.id}:${selected.messages.length}`;
+    if (nbaLlmFetchedKey === key) return;
+    setNbaLlmFetchedKey(key);
+    setNbaLlmResult(null);
+    setNbaLlmLoading(true);
+    const freq = clientProfile?.frequency ?? "";
+    const isOneTimeFreq = /one.time|one time|1.time|single/i.test(freq);
+    const isAlreadyRecurring = !!freq && !isOneTimeFreq;
+    nbaLlmMutation.mutate({
+      sessionId: selected.id,
+      messageHistory: insightMsgHistory,
+      clientName: selected.name ?? undefined,
+      clientProfile: clientProfileSummary,
+      isAlreadyRecurring,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
+
   // Upsell opportunity detector — only fires for non-Teams, non-Deep-clean conversations
   const isTeamsConv = selected?.queue === "Teams";
   const [upsellResult, setUpsellResult] = useState<{ upsell: { signal: string; pitch: string; upsellType: string } | null } | null>(null);
@@ -2135,10 +2166,20 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5">
                         <Brain className="h-3.5 w-3.5 text-violet-500" />
                         <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
+                        {nbaLlmLoading && <span className="ml-auto text-[9px] text-violet-400 animate-pulse">Analyzing…</span>}
                       </div>
+                      {/* LLM reason bar — shown when LLM has returned a result */}
+                      {nbaLlmResult?.reason && (
+                        <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-100 flex items-start gap-1.5">
+                          <Sparkles className="h-3 w-3 text-violet-400 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-violet-700 leading-snug">{nbaLlmResult.reason}</p>
+                        </div>
+                      )}
                       <div className="grid grid-cols-4 divide-x divide-slate-200">
                         {nbaActions.actions.map((action) => {
-                          const isRec = action.id === nbaActions.recommendedId;
+                          // Use LLM recommendation when available, fall back to keyword scoring
+                          const effectiveRecommendedId = nbaLlmResult?.action ?? nbaActions.recommendedId;
+                          const isRec = action.id === effectiveRecommendedId;
                           const colorMap: Record<string, { bg: string; border: string; badge: string; icon: string }> = {
                             emerald: { bg: "bg-emerald-50", border: "border-emerald-400", badge: "bg-emerald-600 text-white", icon: "text-emerald-600" },
                             violet:  { bg: "bg-violet-50",  border: "border-violet-400",  badge: "bg-violet-600 text-white",  icon: "text-violet-600" },

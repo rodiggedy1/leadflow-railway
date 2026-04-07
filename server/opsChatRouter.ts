@@ -3046,6 +3046,63 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
         .where(and(sourceFilter, isNotNull(conversationSessions.csResolvedAt)));
       return { count: Number(rows[0]?.cnt ?? 0) };
     }),
+
+  /**
+   * csNbaAnalysis — LLM-powered Next Best Action analysis.
+   * Reads the full conversation and returns the recommended action + a short reason.
+   * Returns one of: confirm | recurring | save | call, plus a 1-sentence reason.
+   */
+  csNbaAnalysis: opsChatProcedure
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      messageHistory: z.string(),
+      clientName: z.string().optional(),
+      clientProfile: z.string().optional(), // frequency, bookings, etc.
+      isAlreadyRecurring: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const messages: Array<{ role: string; content: string }> = (() => {
+        try { return JSON.parse(input.messageHistory); } catch { return []; }
+      })();
+      if (messages.length === 0) return { action: "confirm" as const, reason: "" };
+      const recent = messages.slice(-16);
+      const snippet = recent
+        .map((m) => `${m.role === "user" ? "Client" : "Agent"}: ${m.content}`)
+        .join("\n");
+      const firstName = input.clientName?.split(" ")[0] ?? "the client";
+      const profileCtx = input.clientProfile ? `\n\nCLIENT HISTORY: ${input.clientProfile}` : "";
+      const recurringRule = input.isAlreadyRecurring
+        ? "\n\nIMPORTANT: This client is ALREADY on a recurring plan. Do NOT recommend 'recurring'."
+        : "";
+      const systemPrompt = `You are a senior customer service advisor for Maids in Black, a premium home cleaning company in DC/MD/VA.
+Analyze this SMS conversation with a client named ${firstName} and decide the single best next action for the agent to take RIGHT NOW.${profileCtx}${recurringRule}
+
+You must choose exactly one of these four actions:
+- confirm: Client has shown buying intent or agreement — agent should confirm and lock the booking.
+- recurring: Client is a one-time customer who would benefit from a recurring plan upsell.
+- save: Client is frustrated, upset, or at risk of churning — agent should de-escalate and reassure.
+- call: Situation is urgent, complex, or high-stakes — a phone call would resolve it faster.
+
+Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
+{"action": "confirm", "reason": "Client said 'sounds good' and asked for a date — ready to book."}`;
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `CONVERSATION:\n${snippet}\n\nRespond with JSON now.` },
+        ],
+        response_format: { type: "json_object" } as any,
+      });
+      const raw = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
+      try {
+        const parsed = JSON.parse(raw) as { action: string; reason: string };
+        const validActions = ["confirm", "recurring", "save", "call"] as const;
+        const action = validActions.includes(parsed.action as any) ? parsed.action as typeof validActions[number] : "confirm";
+        return { action, reason: parsed.reason ?? "" };
+      } catch {
+        return { action: "confirm" as const, reason: "" };
+      }
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
