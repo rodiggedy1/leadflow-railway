@@ -2161,46 +2161,48 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       return elements;
                     });
                   })()}
-                  {/* ── Next Best Action Engine ── */}
                   {/* ── Next Best Action — single contextual card ── */}
                   {!isTeamsConv && (nbaLlmResult || nbaLlmLoading) && (() => {
-                    const ctaColorMap: Record<string, { bg: string; border: string; icon: string; badge: string; iconEl: React.ReactNode }> = {
-                      book:   { bg: "bg-emerald-50", border: "border-emerald-300", icon: "text-emerald-600", badge: "bg-emerald-600 text-white", iconEl: <CheckCircle2 className="h-4 w-4 text-emerald-600" /> },
-                      crm:    { bg: "bg-blue-50",    border: "border-blue-300",    icon: "text-blue-600",    badge: "bg-blue-600 text-white",    iconEl: <ExternalLink className="h-4 w-4 text-blue-600" /> },
-                      call:   { bg: "bg-sky-50",     border: "border-sky-300",     icon: "text-sky-600",     badge: "bg-sky-600 text-white",     iconEl: <Phone className="h-4 w-4 text-sky-600" /> },
-                      upsell: { bg: "bg-violet-50",  border: "border-violet-300",  icon: "text-violet-600",  badge: "bg-violet-600 text-white",  iconEl: <TrendingUp className="h-4 w-4 text-violet-600" /> },
-                      reply:  { bg: "bg-indigo-50",  border: "border-indigo-300",  icon: "text-indigo-600",  badge: "bg-indigo-600 text-white",  iconEl: <MessageSquare className="h-4 w-4 text-indigo-600" /> },
-                      review: { bg: "bg-amber-50",   border: "border-amber-300",   icon: "text-amber-600",   badge: "bg-amber-500 text-white",   iconEl: <Star className="h-4 w-4 text-amber-500" /> },
-                      referral: { bg: "bg-pink-50",  border: "border-pink-300",  icon: "text-pink-600",  badge: "bg-pink-600 text-white",  iconEl: <Gift className="h-4 w-4 text-pink-500" /> },
-                      info:   { bg: "bg-slate-50",   border: "border-slate-300",   icon: "text-slate-500",   badge: "bg-slate-500 text-white",   iconEl: <Brain className="h-4 w-4 text-slate-400" /> },
+                    const ctaColorMap: Record<string, { bg: string; headerBg: string; border: string; icon: string; badge: string; iconBg: string; iconEl: React.ReactNode }> = {
+                      book:     { bg: "bg-emerald-50",  headerBg: "bg-emerald-600",  border: "border-emerald-500",  icon: "text-emerald-700",  badge: "bg-white/20 text-white",  iconBg: "bg-emerald-100",  iconEl: <CheckCircle2 className="h-5 w-5 text-emerald-700" /> },
+                      crm:      { bg: "bg-blue-50",     headerBg: "bg-blue-600",     border: "border-blue-500",     icon: "text-blue-700",     badge: "bg-white/20 text-white",  iconBg: "bg-blue-100",     iconEl: <ExternalLink className="h-5 w-5 text-blue-700" /> },
+                      call:     { bg: "bg-sky-50",      headerBg: "bg-sky-600",      border: "border-sky-500",      icon: "text-sky-700",      badge: "bg-white/20 text-white",  iconBg: "bg-sky-100",      iconEl: <Phone className="h-5 w-5 text-sky-700" /> },
+                      upsell:   { bg: "bg-violet-50",   headerBg: "bg-violet-600",   border: "border-violet-500",   icon: "text-violet-700",   badge: "bg-white/20 text-white",  iconBg: "bg-violet-100",   iconEl: <TrendingUp className="h-5 w-5 text-violet-700" /> },
+                      reply:    { bg: "bg-indigo-50",   headerBg: "bg-indigo-600",   border: "border-indigo-500",   icon: "text-indigo-700",   badge: "bg-white/20 text-white",  iconBg: "bg-indigo-100",   iconEl: <MessageSquare className="h-5 w-5 text-indigo-700" /> },
+                      review:   { bg: "bg-amber-50",    headerBg: "bg-amber-500",    border: "border-amber-400",    icon: "text-amber-700",    badge: "bg-white/20 text-white",  iconBg: "bg-amber-100",    iconEl: <Star className="h-5 w-5 text-amber-600" /> },
+                      referral: { bg: "bg-pink-50",     headerBg: "bg-pink-600",     border: "border-pink-500",     icon: "text-pink-700",     badge: "bg-white/20 text-white",  iconBg: "bg-pink-100",     iconEl: <Gift className="h-5 w-5 text-pink-600" /> },
+                      info:     { bg: "bg-slate-100",   headerBg: "bg-slate-600",    border: "border-slate-400",    icon: "text-slate-600",    badge: "bg-white/20 text-white",  iconBg: "bg-slate-200",    iconEl: <Brain className="h-5 w-5 text-slate-500" /> },
                     };
                     const cta = ctaColorMap[nbaLlmResult?.ctaType ?? "info"] ?? ctaColorMap.info;
                     return (
-                      <div className={`mb-3 rounded-xl border ${cta.border} ${cta.bg} overflow-hidden`}>
-                        <div className="px-3 py-2 flex items-center gap-1.5 border-b border-black/5">
-                          <Brain className="h-3.5 w-3.5 text-violet-500" />
-                          <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
+                      <div className={`mb-4 rounded-xl border-2 ${cta.border} overflow-hidden shadow-sm`}>
+                        {/* Solid colored header bar */}
+                        <div className={`px-3 py-2 ${cta.headerBg} flex items-center gap-2`}>
+                          <Brain className="h-3.5 w-3.5 text-white/80" />
+                          <span className="text-[10px] font-bold tracking-widest text-white uppercase">Next Best Action</span>
                           {nbaLlmLoading && !nbaLlmResult && (
-                            <span className="ml-auto text-[9px] text-violet-400 animate-pulse">Analyzing…</span>
+                            <span className="ml-auto text-[9px] text-white/70 animate-pulse">Analyzing…</span>
                           )}
                         </div>
+                        {/* Content area */}
                         {nbaLlmResult ? (
-                          <div className="px-3 py-2.5 flex items-start gap-3">
-                            <div className="shrink-0 mt-0.5">{cta.iconEl}</div>
+                          <div className={`px-4 py-3 ${cta.bg} flex items-start gap-3`}>
+                            <div className={`shrink-0 mt-0.5 p-2 rounded-lg ${cta.iconBg}`}>{cta.iconEl}</div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cta.badge}`}>{nbaLlmResult.label}</span>
-                              </div>
-                              <p className="text-[12px] font-medium text-slate-800 leading-snug">{nbaLlmResult.instruction}</p>
+                              <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full mb-1.5 ${cta.headerBg} text-white`}>{nbaLlmResult.label}</span>
+                              <p className="text-[13px] font-semibold text-slate-900 leading-snug">{nbaLlmResult.instruction}</p>
                               {nbaLlmResult.reason && (
-                                <p className="text-[10px] text-slate-400 mt-1 leading-snug italic">{nbaLlmResult.reason}</p>
+                                <p className="text-[11px] text-slate-500 mt-1.5 leading-snug italic">{nbaLlmResult.reason}</p>
                               )}
                             </div>
                           </div>
                         ) : (
-                          <div className="px-3 py-3 flex items-center gap-2">
-                            <div className="h-3 w-24 bg-slate-200 rounded animate-pulse" />
-                            <div className="h-3 w-40 bg-slate-200 rounded animate-pulse" />
+                          <div className={`px-4 py-4 ${cta.bg} flex items-center gap-3`}>
+                            <div className="h-8 w-8 bg-slate-200 rounded-lg animate-pulse shrink-0" />
+                            <div className="flex-1 space-y-2">
+                              <div className="h-3 w-28 bg-slate-200 rounded animate-pulse" />
+                              <div className="h-3.5 w-56 bg-slate-200 rounded animate-pulse" />
+                            </div>
                           </div>
                         )}
                       </div>
