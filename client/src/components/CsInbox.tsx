@@ -1427,7 +1427,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 <div className="mt-3 space-y-2.5">
                   {filtered.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
-                    const isUnread = (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
+                    const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     const isSelected = selected.id === conversation.id;
                     const hasUnanswered = !!(conversation as any).hasUnanswered;
                     const isResolved = !!(conversation as any).csResolvedAt;
