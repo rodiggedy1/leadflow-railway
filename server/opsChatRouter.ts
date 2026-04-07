@@ -3082,7 +3082,7 @@ Your job: Read the conversation carefully and identify the SINGLE most important
 REVENUE PRIORITY RULES (apply these when there is no urgent service issue):
 1. BOOKING JUST CONFIRMED OR COMPLETED → If ${firstName} just booked a one-time clean OR the agent just confirmed a booking, immediately pitch recurring service. Say something like: "Now that we have you booked, have you thought about setting up a recurring schedule? Weekly, bi-weekly, or monthly — recurring clients save 10–15% and get priority scheduling."
 2. HAPPY ONE-TIME CUSTOMER (not recurring) → If ${firstName} has had 1+ past cleans and is expressing satisfaction (said 'great', 'love it', 'amazing', 'perfect', etc.), pitch upgrading to bi-weekly or weekly. Mention the discount and priority scheduling.
-3. HAPPY RECURRING CUSTOMER → If ${firstName} is already on a recurring plan and says something positive, push a referral: "By the way — if you refer a friend, you both get $50 off your next clean. Just send us their name and number and we'll take care of the rest."
+3. HAPPY RECURRING CUSTOMER → If ${firstName} is already on a recurring plan and says something positive, push a referral. The exact offer: both ${firstName} AND the friend each receive a $50 credit applied to their next clean — but the credit only activates after the referred friend completes their first clean. Use this script: "By the way — we have a referral program where you and a friend each get $50 off. Once they complete their first clean, the $50 credit automatically applies to your next service. Just send us their name and number and we'll reach out to them directly!"
 4. RECURRING CUSTOMER ON LOW FREQUENCY (monthly) → If ${firstName} is monthly and happy, suggest upgrading to bi-weekly: "Since you love the service, have you considered switching to bi-weekly? You'd get a 10% discount and your home would stay cleaner between visits."
 
 Other good instructions:
@@ -3095,7 +3095,7 @@ Other good instructions:
 - "Upsell the inside-oven add-on — ${firstName} mentioned her oven is a mess and her booking is tomorrow."
 - "Confirm the team is on the way — ${firstName} is asking for an ETA. Check the schedule and reply with a time."
 - "Pitch recurring service — ${firstName} just confirmed her booking. Follow up with: 'Have you thought about setting up a recurring schedule? Recurring clients save 10–15% and get priority slots.'"
-- "Push a referral — ${firstName} is a happy recurring customer. Text her: 'Quick one — if you refer a friend, you both get $50 off your next clean. Know anyone who could use a great cleaner?'"
+- "Push a referral — ${firstName} is a happy recurring customer. Text her: 'Quick one — we have a referral program: refer a friend and once they complete their first clean, you both get a $50 credit toward your next service. Know anyone who could use a great cleaner? Just send me their name and number!'"
 - "Upgrade to bi-weekly — ${firstName} is monthly and just said she loves the service. Mention the 10% bi-weekly discount and cleaner home between visits."
 
 Choose a ctaType that best fits the action:
