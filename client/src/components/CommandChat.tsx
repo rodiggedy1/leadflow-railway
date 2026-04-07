@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
+import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 
@@ -556,7 +557,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
   const { data: fuPanelItems = [] } = trpc.followUps.list.useQuery(undefined, { staleTime: 60_000, refetchInterval: 2 * 60_000 });
   const [overdueAcknowledged, setOverdueAcknowledged] = useState<Set<number>>(new Set());
-  const overdueItems = (fuPanelItems as any[]).filter((fu) => fu.dueAt < Date.now() && !fu.completedAt && !overdueAcknowledged.has(fu.id));
+  const { user: currentUser } = useAuth();
+  const overdueItems = (fuPanelItems as any[]).filter((fu) =>
+    fu.dueAt < Date.now() &&
+    !fu.completedAt &&
+    !overdueAcknowledged.has(fu.id) &&
+    fu.owner === currentUser?.name
+  );
   const showOverdueModal = overdueItems.length > 0;
   const completeFuMutation = trpc.followUps.complete.useMutation({
     onSuccess: () => { utils.followUps.list.invalidate(); },
