@@ -1107,11 +1107,21 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
 
   // ── LLM-powered NBA analysis ──────────────────────────────────────────────
-  const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null } | null>(null);
+  type NbaResult = { label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null };
+  const nbaCache = useRef<Map<string, NbaResult>>(new Map());
+  const [nbaLlmResult, setNbaLlmResult] = useState<NbaResult | null>(null);
   const [nbaLlmFetchedKey, setNbaLlmFetchedKey] = useState<string | null>(null);
   const [nbaLlmLoading, setNbaLlmLoading] = useState(false);
   const nbaLlmMutation = trpc.opsChat.csNbaAnalysis.useMutation({
-    onSuccess: (data) => { setNbaLlmResult(data); setNbaLlmLoading(false); },
+    onSuccess: (data) => {
+      setNbaLlmResult(data);
+      setNbaLlmLoading(false);
+      // Store in cache so switching back doesn't re-fire
+      if (selected) {
+        const key = `${selected.id}:${selected.messages.length}`;
+        nbaCache.current.set(key, data);
+      }
+    },
     onError: () => setNbaLlmLoading(false),
   });
 
@@ -1122,6 +1132,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     const key = `${selected.id}:${selected.messages.length}`;
     if (nbaLlmFetchedKey === key) return;
     setNbaLlmFetchedKey(key);
+    // Check cache first
+    const cached = nbaCache.current.get(key);
+    if (cached) {
+      setNbaLlmResult(cached);
+      setNbaLlmLoading(false);
+      return;
+    }
     setNbaLlmResult(null);
     setNbaLlmLoading(true);
     const freq = clientProfile?.frequency ?? "";
