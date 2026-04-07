@@ -849,6 +849,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     setElevateSuggestion(null);
     setElevateApprovedText(null);
     setElevateStreaming(false);
+    setNbaLlmResult(null);
+    setNbaLlmFetchedKey(null);
+    setNbaLlmLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
