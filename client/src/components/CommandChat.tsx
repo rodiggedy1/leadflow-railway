@@ -555,6 +555,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
   const { data: fuPanelItems = [] } = trpc.followUps.list.useQuery(undefined, { staleTime: 60_000, refetchInterval: 2 * 60_000 });
+  const [overdueAcknowledged, setOverdueAcknowledged] = useState<Set<number>>(new Set());
+  const overdueItems = (fuPanelItems as any[]).filter((fu) => fu.dueAt < Date.now() && !fu.completedAt && !overdueAcknowledged.has(fu.id));
+  const showOverdueModal = overdueItems.length > 0;
+  const completeFuMutation = trpc.followUps.complete.useMutation({
+    onSuccess: () => { utils.followUps.list.invalidate(); },
+  });
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
@@ -3930,6 +3936,65 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         onClose={() => { setFollowUpsOpen(false); setFollowUpsInitialId(null); }}
         initialItemId={followUpsInitialId}
       />
+
+      {/* ─── Overdue Follow-up Forced-Acknowledgment Modal ─── */}
+      {showOverdueModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          {/* Backdrop — no click-to-dismiss */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 w-full max-w-md mx-4 bg-white rounded-3xl shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-red-600 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+                  <AlertTriangle className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-bold text-lg leading-tight">Overdue Follow-Up{overdueItems.length > 1 ? 's' : ''}</p>
+                  <p className="text-red-100 text-sm">{overdueItems.length} item{overdueItems.length > 1 ? 's' : ''} require{overdueItems.length === 1 ? 's' : ''} your attention</p>
+                </div>
+              </div>
+            </div>
+            {/* Items */}
+            <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              {overdueItems.map((fu: any) => {
+                const d = new Date(fu.dueAt);
+                const dueStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                return (
+                  <div key={fu.id} className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="font-semibold text-slate-900 text-sm leading-tight">{fu.name}</span>
+                      <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">{dueStr}</span>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-3 leading-relaxed">{fu.nextStep}</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          completeFuMutation.mutate({ id: fu.id });
+                          setOverdueAcknowledged((prev) => new Set(prev).add(fu.id));
+                        }}
+                        className="flex-1 rounded-xl bg-slate-900 text-white text-xs font-semibold py-2 hover:bg-slate-700 transition"
+                      >
+                        Mark Done
+                      </button>
+                      <button
+                        onClick={() => {
+                          setOverdueAcknowledged((prev) => new Set(prev).add(fu.id));
+                          setFollowUpsInitialId(fu.id);
+                          setFollowUpsOpen(true);
+                        }}
+                        className="flex-1 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-semibold py-2 hover:border-slate-300 transition"
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
