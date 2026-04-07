@@ -62,6 +62,7 @@ import {
   Lock,
   StickyNote,
   SprayCan,
+  Gift,
 } from "lucide-react";
 import {
   Tooltip,
@@ -2170,6 +2171,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       upsell: { bg: "bg-violet-50",  border: "border-violet-300",  icon: "text-violet-600",  badge: "bg-violet-600 text-white",  iconEl: <TrendingUp className="h-4 w-4 text-violet-600" /> },
                       reply:  { bg: "bg-indigo-50",  border: "border-indigo-300",  icon: "text-indigo-600",  badge: "bg-indigo-600 text-white",  iconEl: <MessageSquare className="h-4 w-4 text-indigo-600" /> },
                       review: { bg: "bg-amber-50",   border: "border-amber-300",   icon: "text-amber-600",   badge: "bg-amber-500 text-white",   iconEl: <Star className="h-4 w-4 text-amber-500" /> },
+                      referral: { bg: "bg-pink-50",  border: "border-pink-300",  icon: "text-pink-600",  badge: "bg-pink-600 text-white",  iconEl: <Gift className="h-4 w-4 text-pink-500" /> },
                       info:   { bg: "bg-slate-50",   border: "border-slate-300",   icon: "text-slate-500",   badge: "bg-slate-500 text-white",   iconEl: <Brain className="h-4 w-4 text-slate-400" /> },
                     };
                     const cta = ctaColorMap[nbaLlmResult?.ctaType ?? "info"] ?? ctaColorMap.info;
