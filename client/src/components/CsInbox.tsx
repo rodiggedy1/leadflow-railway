@@ -1543,6 +1543,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           isSelected
                             ? "border-slate-900 bg-slate-50 shadow-[0_10px_30px_rgba(15,23,42,0.08)]"
                             : "border-slate-200 bg-white hover:border-slate-300"
+                        } ${
+                          !isSelected && isUnread
+                            ? "border-l-[3px] border-l-blue-500"
+                            : !isSelected && hasUnanswered
+                            ? "border-l-[3px] border-l-amber-400"
+                            : ""
                         }`}
                       >
                         <div className="flex gap-3">
