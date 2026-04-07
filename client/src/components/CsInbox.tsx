@@ -327,6 +327,82 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
   const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
 
+  // ── Next Best Action Engine ──────────────────────────────────────────────────
+  // Runs client-side on every render when selected conversation changes.
+  // Returns all 4 actions with scores; highest score = recommended.
+  const nbaActions = useMemo(() => {
+    if (!selected || selected.queue === "Teams") return null;
+    const msgs = selected.messages ?? [];
+    if (msgs.length < 1) return null;
+    const clientMsgs = msgs.filter((m) => m.sender === "client").map((m) => m.text.toLowerCase());
+    const lastClientMsg = clientMsgs[clientMsgs.length - 1] ?? "";
+    const allClientText = clientMsgs.join(" ");
+
+    // Score each action
+    const confirmKeywords = ["yes","agreed","confirmed","sounds good","let's do it","lets do it","book it","perfect","great","deal","okay","ok","sure","absolutely","definitely","i'm in","im in","lock it","let's go","lets go"];
+    const recurringKeywords = ["every week","weekly","bi-weekly","biweekly","every other week","monthly","regular","recurring","ongoing","again","come back","schedule"];
+    const saveKeywords = ["frustrated","cancel","cancelled","canceling","disappointed","unhappy","not happy","too expensive","ridiculous","unacceptable","worst","terrible","awful","horrible","refund","complaint","angry","upset","never again","waste"];
+    const callKeywords = ["today","asap","right now","same day","urgent","immediately","call me","phone","right away","as soon as","quick","fast"];
+
+    const score = (keywords: string[], text: string) =>
+      keywords.reduce((acc, kw) => acc + (text.includes(kw) ? 1 : 0), 0);
+
+    const confirmScore = score(confirmKeywords, lastClientMsg) * 3 + score(confirmKeywords, allClientText);
+    const saveScore = score(saveKeywords, allClientText) * 2;
+    const callScore = score(callKeywords, lastClientMsg) * 2 + score(callKeywords, allClientText);
+    const recurringScore = score(recurringKeywords, allClientText) + (msgs.length >= 4 && saveScore === 0 ? 1 : 0);
+
+    const actions = [
+      {
+        id: "confirm" as const,
+        label: "Confirm & Lock",
+        desc: "Customer accepted — ready to book.",
+        footer: "High booking intent",
+        score: confirmScore,
+        color: "emerald",
+        prefill: "Great! Let me lock that in for you right now. I'll send you a confirmation shortly — you're all set! 🎉",
+      },
+      {
+        id: "recurring" as const,
+        label: "Push to Recurring",
+        desc: "Positive signals — strong recurring fit.",
+        footer: "High LTV upside",
+        score: recurringScore,
+        color: "violet",
+        prefill: "Since you've been happy with our service, have you considered setting up a recurring schedule? We offer weekly, bi-weekly, and monthly plans — and recurring clients get priority scheduling plus a small discount. Interested?",
+      },
+      {
+        id: "save" as const,
+        label: "Save / De-escalate",
+        desc: "Negative sentiment — reassurance matters.",
+        footer: "Churn risk",
+        score: saveScore,
+        color: "amber",
+        prefill: "I completely understand your frustration, and I'm sorry this didn't meet your expectations. I'd love to make this right — can I arrange a complimentary re-clean or find another solution that works for you?",
+      },
+      {
+        id: "call" as const,
+        label: "Call Now",
+        desc: "High-intent — phone is the fastest path.",
+        footer: "Fast close",
+        score: callScore,
+        color: "blue",
+        prefill: "I'd love to give you a quick call to sort this out in 2 minutes — what's the best number to reach you?",
+      },
+    ];
+
+    const maxScore = Math.max(...actions.map((a) => a.score));
+    // Tiebreak: confirm > save > call > recurring
+    const tieOrder = ["confirm", "save", "call", "recurring"];
+    const recommended = actions.reduce((best, a) => {
+      if (a.score > best.score) return a;
+      if (a.score === best.score && tieOrder.indexOf(a.id) < tieOrder.indexOf(best.id)) return a;
+      return best;
+    });
+
+    return { actions, recommendedId: maxScore > 0 ? recommended.id : "confirm" };
+  }, [selected?.id, selected?.messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const utils = trpc.useUtils();
 
   useOpsStream({
@@ -2379,78 +2455,85 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       )}
                     </div>
                   )}
-                  <div className="mt-3 flex flex-col gap-2">
-                    {/* Row 1: AI + Send quote + Make it right + Refer a friend + FAQ */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="rounded-full h-8 w-8 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
-                        disabled={loadingAction !== null || !selected}
-                        onClick={() => fireQuickReply("ai_suggest")}
-                        title="AI Suggest — picks the best reply for this conversation"
-                      >
-                        {loadingAction === "ai_suggest" ? (
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Bot className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <div className="h-5 w-px bg-slate-200" />
-                      {([
-                        { action: "send_quote",    label: "Send quote",     icon: <Tag className="h-3.5 w-3.5" /> },
-                        { action: "make_it_right", label: "Make it right",  icon: <AlertTriangle className="h-3.5 w-3.5" /> },
-                        { action: "refer_friend",  label: "Refer a friend", icon: <Users className="h-3.5 w-3.5" /> },
-                      ] as const).map(({ action, label, icon }) => (
-                        <Button
-                          key={action}
-                          variant="outline"
-                          className="rounded-full text-xs gap-1.5 h-8 px-3"
-                          disabled={loadingAction !== null || !selected}
-                          onClick={() => fireQuickReply(action)}
-                        >
-                          {loadingAction === action ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : icon}
-                          {label}
-                        </Button>
-                      ))}
-                      <div className="h-5 w-px bg-slate-200" />
-                      <Button
-                        variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
-                      >
-                        <BookOpen className="h-3.5 w-3.5" />
-                        FAQ
-                      </Button>
+                  {/* ── Next Best Action Engine ── */}
+                  {nbaActions && !isTeamsConv && (
+                    <div className="mt-3 border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5">
+                        <Brain className="h-3.5 w-3.5 text-violet-500" />
+                        <span className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Next Best Action</span>
+                      </div>
+                      <div className="grid grid-cols-4 divide-x divide-slate-200">
+                        {nbaActions.actions.map((action) => {
+                          const isRec = action.id === nbaActions.recommendedId;
+                          const colorMap: Record<string, { bg: string; border: string; badge: string; icon: string }> = {
+                            emerald: { bg: "bg-emerald-50", border: "border-emerald-400", badge: "bg-emerald-600 text-white", icon: "text-emerald-600" },
+                            violet:  { bg: "bg-violet-50",  border: "border-violet-400",  badge: "bg-violet-600 text-white",  icon: "text-violet-600" },
+                            amber:   { bg: "bg-amber-50",   border: "border-amber-400",   badge: "bg-amber-500 text-white",   icon: "text-amber-600" },
+                            blue:    { bg: "bg-blue-50",    border: "border-blue-400",    badge: "bg-blue-600 text-white",    icon: "text-blue-600" },
+                          };
+                          const c = colorMap[action.color];
+                          const iconMap: Record<string, React.ReactNode> = {
+                            confirm:   <CheckCircle2 className={`h-4 w-4 ${c.icon}`} />,
+                            recurring: <RefreshCw className={`h-4 w-4 ${c.icon}`} />,
+                            save:      <ShieldAlert className={`h-4 w-4 ${c.icon}`} />,
+                            call:      <Phone className={`h-4 w-4 ${c.icon}`} />,
+                          };
+                          return (
+                            <button
+                              key={action.id}
+                              onClick={() => setCompose(action.prefill)}
+                              className={`relative flex flex-col gap-1 p-2.5 text-left transition-colors hover:bg-slate-100 ${
+                                isRec ? `${c.bg} border-t-2 ${c.border}` : "bg-white border-t-2 border-transparent"
+                              }`}
+                            >
+                              {isRec && (
+                                <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>Rec</span>
+                              )}
+                              <div className="flex items-center gap-1.5">
+                                {iconMap[action.id]}
+                              </div>
+                              <p className="text-[11px] font-semibold text-slate-800 leading-tight pr-6">{action.label}</p>
+                              <p className="text-[10px] text-slate-500 leading-tight">{action.desc}</p>
+                              <p className={`text-[9px] font-medium mt-0.5 ${c.icon}`}>{action.footer}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    {/* Row 2: Running late + On the way + Review + rebook + Objections */}
-                    <div className="flex items-center gap-2">
-                      {([
-                        { action: "running_late",  label: "Running late",    icon: <Clock3 className="h-3.5 w-3.5" /> },
-                        { action: "on_the_way",    label: "On the way",      icon: <MapPin className="h-3.5 w-3.5" /> },
-                        { action: "review_rebook", label: "Review + rebook", icon: <Star className="h-3.5 w-3.5" /> },
-                      ] as const).map(({ action, label, icon }) => (
-                        <Button
-                          key={action}
-                          variant="outline"
-                          className="rounded-full text-xs gap-1.5 h-8 px-3"
-                          disabled={loadingAction !== null || !selected}
-                          onClick={() => fireQuickReply(action)}
-                        >
-                          {loadingAction === action ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : icon}
-                          {label}
-                        </Button>
-                      ))}
-                      <div className="h-5 w-px bg-slate-200" />
-                      <Button
-                        variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
-                        onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
-                      >
-                        <ShieldAlert className="h-3.5 w-3.5" />
-                        Objections
-                      </Button>
-                    </div>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    {/* AI Suggest */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="rounded-full h-8 w-8 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
+                      disabled={loadingAction !== null || !selected}
+                      onClick={() => fireQuickReply("ai_suggest")}
+                      title="AI Suggest — picks the best reply for this conversation"
+                    >
+                      {loadingAction === "ai_suggest" ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Bot className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <div className="h-5 w-px bg-slate-200" />
+                    <Button
+                      variant="outline"
+                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      FAQ
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
+                      onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
+                    >
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      Objections
+                    </Button>
                   </div>
                 </div>
               </div>

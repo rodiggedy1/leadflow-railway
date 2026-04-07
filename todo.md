@@ -1057,3 +1057,8 @@
 - [x] CS Inbox: BUG — resolving a conversation doesn't update resolved count or show in resolved queue
 - [ ] CS Inbox: BUG — New tab not showing conversations that should be there (e.g. Ricky Wilkins)
 - [x] CS Inbox: Add "All" tab as default showing all unresolved conversations
+- [ ] Remove action pills from CS chat (keep FAQs and Objections)
+- [ ] Build Next Best Action Engine: 4-card inline UI (Confirm & Lock, Push to Recurring, Save/De-escalate, Call Now)
+- [ ] Rules engine: re-evaluate on each inbound message, highlight recommended card
+- [ ] Pre-fill reply input when a card is clicked
+- [ ] Only show for customer conversations (not Teams)
