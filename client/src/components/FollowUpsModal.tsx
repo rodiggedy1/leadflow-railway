@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ const NEXT_STEP_OPTIONS = [
 
 // OWNERS is now fetched live from the DB via trpc.followUps.listAgents
 // Fallback list used only when the query hasn't resolved yet
-const OWNERS_FALLBACK = ["Madison", "Ariana", "Kevin", "Jade"];
+const OWNERS_FALLBACK: string[] = [];
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -278,17 +279,19 @@ function NewFollowUpView({
   onBack,
   onSaved,
   agents,
+  currentUser,
 }: {
   onBack: () => void;
   onSaved: () => void;
   agents: string[];
+  currentUser: string;
 }) {
   const utils = trpc.useUtils();
   const createMutation = trpc.followUps.create.useMutation({
     onSuccess: () => { utils.followUps.list.invalidate(); onSaved(); },
   });
   const [selectedType, setSelectedType] = useState<FollowUpType | null>(null);
-  const [owner, setOwner] = useState("Madison");
+  const [owner, setOwner] = useState(currentUser);
   const [priority, setPriority] = useState<Priority>("Normal");
   const [nextStep, setNextStep] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState(
@@ -786,6 +789,8 @@ export default function FollowUpsModal({ open, onClose, initialItemId, initialVi
     enabled: open,
     refetchInterval: open ? 30_000 : false,
   });
+  const { user } = useAuth();
+  const currentUserName = user?.name ?? "";
   const { data: agentNames = OWNERS_FALLBACK } = trpc.followUps.listAgents.useQuery(undefined, {
     enabled: open,
     staleTime: 5 * 60_000,
@@ -828,7 +833,7 @@ export default function FollowUpsModal({ open, onClose, initialItemId, initialVi
           />
         )}
         {view === "new" && (
-          <NewFollowUpView onBack={handleBack} onSaved={handleBack} agents={agentNames} />
+          <NewFollowUpView onBack={handleBack} onSaved={handleBack} agents={agentNames} currentUser={currentUserName} />
         )}
         {view === "detail" && selectedItem && (
           <DetailView
