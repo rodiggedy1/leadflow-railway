@@ -2147,11 +2147,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               key={action.id}
                               onClick={() => setCompose(action.prefill)}
                               className={`relative flex flex-col gap-1 p-2.5 text-left transition-colors hover:bg-slate-100 ${
-                                isRec ? `${c.bg} border-t-2 ${c.border}` : "bg-white border-t-2 border-transparent"
+                                isRec ? `${c.bg} ring-2 ring-inset ring-violet-500` : "bg-white"
                               }`}
                             >
                               {isRec && (
-                                <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>Rec</span>
+                                <span className={`inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full mb-0.5 ${c.badge}`}>Recommended</span>
                               )}
                               <div className="flex items-center gap-1.5">
                                 {iconMap[action.id]}
