@@ -2477,14 +2477,19 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               <Button
                                 className="rounded-l-none rounded-r-xl h-10 px-2 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
                                 disabled={!compose.trim() || sendMessage.isPending || !selected}
+                                onPointerDown={(e) => e.stopPropagation()}
                               >
                                 <ChevronDown className="h-3.5 w-3.5" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-lg border border-slate-200 p-1">
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-56 rounded-xl shadow-lg border border-slate-200 p-1"
+                              onCloseAutoFocus={(e) => e.preventDefault()}
+                            >
                               <DropdownMenuItem
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                                onClick={handleCsSend}
+                                onSelect={(e) => { e.preventDefault(); requestAnimationFrame(() => handleCsSend()); }}
                               >
                                 <Send className="h-4 w-4 text-slate-500 shrink-0" />
                                 <div>
@@ -2495,9 +2500,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuItem
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-violet-50"
-                                onClick={() => {
-                                  handleCsSend();
-                                  setAddFollowUpOpen(true);
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  requestAnimationFrame(() => {
+                                    handleCsSend();
+                                    setAddFollowUpOpen(true);
+                                  });
                                 }}
                               >
                                 <Calendar className="h-4 w-4 text-violet-500 shrink-0" />
@@ -2508,9 +2516,12 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50"
-                                onClick={() => {
-                                  handleCsSend();
-                                  if (selected) resolveSession.mutate({ sessionId: selected.id });
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  requestAnimationFrame(() => {
+                                    handleCsSend();
+                                    if (selected) resolveSession.mutate({ sessionId: selected.id });
+                                  });
                                 }}
                               >
                                 <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />
