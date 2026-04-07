@@ -1096,7 +1096,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
 
   // ── LLM-powered NBA analysis ──────────────────────────────────────────────
-  const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string } | null>(null);
+  const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null } | null>(null);
   const [nbaLlmFetchedKey, setNbaLlmFetchedKey] = useState<string | null>(null);
   const [nbaLlmLoading, setNbaLlmLoading] = useState(false);
   const nbaLlmMutation = trpc.opsChat.csNbaAnalysis.useMutation({
@@ -2193,6 +2193,22 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                               <p className="text-[13px] font-semibold text-slate-900 leading-snug">{nbaLlmResult.instruction}</p>
                               {nbaLlmResult.reason && (
                                 <p className="text-[11px] text-slate-500 mt-1.5 leading-snug italic">{nbaLlmResult.reason}</p>
+                              )}
+                              {nbaLlmResult.prefillScript && (
+                                <button
+                                  onClick={() => {
+                                    setCompose(nbaLlmResult.prefillScript!);
+                                    // scroll compose into view
+                                    setTimeout(() => {
+                                      const el = document.querySelector<HTMLTextAreaElement>('textarea[placeholder]');
+                                      el?.focus();
+                                    }, 50);
+                                  }}
+                                  className={`mt-2 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${cta.border} ${cta.headerBg} text-white hover:opacity-90 transition-opacity`}
+                                >
+                                  <PenSquare className="h-3 w-3" />
+                                  Use this script
+                                </button>
                               )}
                             </div>
                           </div>

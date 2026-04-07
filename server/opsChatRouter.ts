@@ -3085,6 +3085,14 @@ REVENUE PRIORITY RULES (apply these when there is no urgent service issue):
 3. HAPPY RECURRING CUSTOMER → If ${firstName} is already on a recurring plan and says something positive, push a referral. The exact offer: both ${firstName} AND the friend each receive a $50 credit applied to their next clean — but the credit only activates after the referred friend completes their first clean. Use this script: "By the way — we have a referral program where you and a friend each get $50 off. Once they complete their first clean, the $50 credit automatically applies to your next service. Just send us their name and number and we'll reach out to them directly!"
 4. RECURRING CUSTOMER ON LOW FREQUENCY (monthly) → If ${firstName} is monthly and happy, suggest upgrading to bi-weekly: "Since you love the service, have you considered switching to bi-weekly? You'd get a 10% discount and your home would stay cleaner between visits."
 
+AVAILABLE ADD-ON SERVICES (upsell these when the client mentions a relevant need):
+- Inside Oven cleaning: +$45 — recommend when client mentions oven, cooking smells, or baked-on grease
+- Inside Fridge cleaning: +$45 — recommend when client mentions fridge, food smells, or spring cleaning
+- Laundry (wash + dry + fold, up to 2 loads): +$35 — recommend when client mentions laundry, clothes, or overwhelm
+- Interior Window cleaning: +$60 — recommend when client mentions windows, light, or deep clean
+- Organizing (1 area): +$50 — recommend when client mentions clutter, chaos, or organizing
+- Move-out/Move-in deep clean: premium pricing — recommend when client mentions moving
+
 Other good instructions:
 - "Log into the CRM and reschedule ${firstName}'s booking to next Thursday — she confirmed that date works."
 - "Close the booking — ${firstName} agreed to the 3BR deep clean on Friday at 10am. Lock it in and send confirmation."
@@ -3092,7 +3100,7 @@ Other good instructions:
 - "Issue a $30 credit and apologize — ${firstName} says the bathroom was missed. Log it in the CRM under her account."
 - "Send the quote — ${firstName} asked for pricing on a 2BR move-out clean. Give her a number and ask to book."
 - "Ask for a review — ${firstName} just said the clean was amazing. Strike while the iron is hot."
-- "Upsell the inside-oven add-on — ${firstName} mentioned her oven is a mess and her booking is tomorrow."
+- "Upsell the inside-oven add-on (+$45) — ${firstName} mentioned her oven is a mess and her booking is tomorrow."
 - "Confirm the team is on the way — ${firstName} is asking for an ETA. Check the schedule and reply with a time."
 - "Pitch recurring service — ${firstName} just confirmed her booking. Follow up with: 'Have you thought about setting up a recurring schedule? Recurring clients save 10–15% and get priority slots.'"
 - "Push a referral — ${firstName} is a happy recurring customer. Text her: 'Quick one — we have a referral program: refer a friend and once they complete their first clean, you both get a $50 credit toward your next service. Know anyone who could use a great cleaner? Just send me their name and number!'"
@@ -3108,8 +3116,10 @@ Choose a ctaType that best fits the action:
 - "review": asking for a review
 - "info": general advisory or wait-and-see
 
+Also include a "prefillScript" field: for ctaType "reply", "upsell", or "referral", write the exact SMS message the agent should send (ready to copy-send, in first person as the agent, warm and friendly tone, max 2 sentences). For other ctaTypes, set prefillScript to null.
+
 Respond ONLY with valid JSON, no markdown:
-{"label": "Close Booking", "instruction": "Lock in the 3BR deep clean for Friday 10am — client confirmed.", "ctaType": "book", "reason": "Client said 'that works, let\'s do it' after you quoted Friday."}`;
+{"label": "Close Booking", "instruction": "Lock in the 3BR deep clean for Friday 10am — client confirmed.", "ctaType": "book", "reason": "Client said 'that works, let\'s do it' after you quoted Friday.", "prefillScript": null}`;
 
       const result = await invokeLLM({
         messages: [
@@ -3120,17 +3130,18 @@ Respond ONLY with valid JSON, no markdown:
       });
       const raw = ((result.choices?.[0]?.message?.content as string) ?? "").trim();
       try {
-        const parsed = JSON.parse(raw) as { label: string; instruction: string; ctaType: string; reason: string };
-        const validCtaTypes = ["book", "crm", "call", "upsell", "reply", "review", "info"] as const;
+        const parsed = JSON.parse(raw) as { label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null };
+        const validCtaTypes = ["book", "crm", "call", "upsell", "reply", "review", "referral", "info"] as const;
         const ctaType = validCtaTypes.includes(parsed.ctaType as any) ? parsed.ctaType as typeof validCtaTypes[number] : "info";
         return {
           label: parsed.label ?? "Next Action",
           instruction: parsed.instruction ?? "",
           ctaType,
           reason: parsed.reason ?? "",
+          prefillScript: parsed.prefillScript ?? null,
         };
       } catch {
-        return { label: "Review conversation", instruction: "Read the full context before responding.", ctaType: "info" as const, reason: "" };
+        return { label: "Review conversation", instruction: "Read the full context before responding.", ctaType: "info" as const, reason: "", prefillScript: null };
       }
     }),
 });
