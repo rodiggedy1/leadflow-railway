@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,9 @@ import {
   StickyNote,
   SprayCan,
   Gift,
+  ChevronDown,
+  Calendar,
+  CheckCheck,
 } from "lucide-react";
 import {
   Tooltip,
@@ -2452,21 +2456,72 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           )}
                         </Button>
                       ) : (
-                        <Button
-                          className="rounded-xl h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
-                          disabled={!compose.trim() || sendMessage.isPending || !selected}
-                          onClick={handleCsSend}
-                        >
-                          {elevateReply.isPending ? (
-                            <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
-                          ) : sendMessage.isPending ? (
-                            <><Send className="h-4 w-4" /> Sending…</>
-                          ) : elevateStreaming ? (
-                            <><Send className="h-4 w-4" /> Send</>  
-                          ) : (
-                            <><Send className="h-4 w-4" /> Send</>
-                          )}
-                        </Button>
+                        <div className="flex items-stretch shrink-0">
+                          {/* Primary send button */}
+                          <Button
+                            className="rounded-l-xl rounded-r-none h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
+                            disabled={!compose.trim() || sendMessage.isPending || !selected}
+                            onClick={handleCsSend}
+                          >
+                            {elevateReply.isPending ? (
+                              <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
+                            ) : sendMessage.isPending ? (
+                              <><Send className="h-4 w-4" /> Sending…</>
+                            ) : (
+                              <><Send className="h-4 w-4" /> Send</>
+                            )}
+                          </Button>
+                          {/* Dropdown for additional send actions */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                className="rounded-l-none rounded-r-xl h-10 px-2 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
+                                disabled={!compose.trim() || sendMessage.isPending || !selected}
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-lg border border-slate-200 p-1">
+                              <DropdownMenuItem
+                                className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                                onClick={handleCsSend}
+                              >
+                                <Send className="h-4 w-4 text-slate-500 shrink-0" />
+                                <div>
+                                  <div className="font-semibold text-slate-900">Send</div>
+                                  <div className="text-[11px] text-slate-400 font-normal">Just send the message</div>
+                                </div>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="my-1" />
+                              <DropdownMenuItem
+                                className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-violet-50"
+                                onClick={() => {
+                                  handleCsSend();
+                                  setAddFollowUpOpen(true);
+                                }}
+                              >
+                                <Calendar className="h-4 w-4 text-violet-500 shrink-0" />
+                                <div>
+                                  <div className="font-semibold text-slate-900">Send + Schedule Follow-Up</div>
+                                  <div className="text-[11px] text-slate-400 font-normal">Send and open follow-up scheduler</div>
+                                </div>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50"
+                                onClick={() => {
+                                  handleCsSend();
+                                  if (selected) resolveSession.mutate({ sessionId: selected.id });
+                                }}
+                              >
+                                <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                                <div>
+                                  <div className="font-semibold text-slate-900">Send + Resolve</div>
+                                  <div className="text-[11px] text-slate-400 font-normal">Send and mark conversation resolved</div>
+                                </div>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -3583,6 +3638,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       open={addFollowUpOpen}
       onClose={() => setAddFollowUpOpen(false)}
       initialView="new"
+      initialName={selected?.name ?? ""}
     />
     </>
   );

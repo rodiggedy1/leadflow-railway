@@ -280,11 +280,13 @@ function NewFollowUpView({
   onSaved,
   agents,
   currentUser,
+  initialName,
 }: {
   onBack: () => void;
   onSaved: () => void;
   agents: string[];
   currentUser: string;
+  initialName?: string;
 }) {
   const utils = trpc.useUtils();
   const createMutation = trpc.followUps.create.useMutation({
@@ -300,7 +302,7 @@ function NewFollowUpView({
   const [dueTime, setDueTime] = useState("2:00 PM");
   const [note, setNote] = useState("");
   const [customerMove, setCustomerMove] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
 
   function handleSave() {
     if (!selectedType || !name.trim()) return;
@@ -769,9 +771,10 @@ interface FollowUpsModalProps {
   onClose: () => void;
   initialItemId?: number | null;
   initialView?: View;
+  initialName?: string;
 }
 
-export default function FollowUpsModal({ open, onClose, initialItemId, initialView }: FollowUpsModalProps) {
+export default function FollowUpsModal({ open, onClose, initialItemId, initialView, initialName }: FollowUpsModalProps) {
   const [view, setView] = useState<View>(initialItemId ? "detail" : (initialView ?? "queue"));
   const [selectedId, setSelectedId] = useState<number | null>(initialItemId ?? null);
 
@@ -833,7 +836,7 @@ export default function FollowUpsModal({ open, onClose, initialItemId, initialVi
           />
         )}
         {view === "new" && (
-          <NewFollowUpView onBack={handleBack} onSaved={handleBack} agents={agentNames} currentUser={currentUserName} />
+          <NewFollowUpView onBack={handleBack} onSaved={handleBack} agents={agentNames} currentUser={currentUserName} initialName={initialName} />
         )}
         {view === "detail" && selectedItem && (
           <DetailView
