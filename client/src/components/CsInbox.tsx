@@ -572,22 +572,25 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     }, 1500);
   }
 
-  function doSendCs() {
+  function doSendCs(afterSend?: () => void) {
     if (!selected || !compose.trim()) return;
-    sendMessage.mutate({ sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+    sendMessage.mutate(
+      { sessionId: selected.id, message: compose.trim(), fromNumberId: "PN0wVLcpCq" },
+      afterSend ? { onSuccess: () => { afterSend(); } } : undefined
+    );
   }
 
-  function handleCsSend() {
+  function handleCsSend(afterSend?: () => void) {
     if (!selected || !compose.trim()) return;
     const isTeams = selected.queue === "Teams";
     // Teams: send directly, no elevation
-    if (isTeams) { doSendCs(); return; }
+    if (isTeams) { doSendCs(afterSend); return; }
     // Agent explicitly approved this exact text — send directly
-    if (elevateApprovedText !== null && compose.trim() === elevateApprovedText) { doSendCs(); return; }
+    if (elevateApprovedText !== null && compose.trim() === elevateApprovedText) { doSendCs(afterSend); return; }
     // Auto-draft is still streaming — text is AI-generated, send directly without gate
-    if (autoDraftLoading) { doSendCs(); return; }
+    if (autoDraftLoading) { doSendCs(afterSend); return; }
     // Short message: send directly
-    if (compose.trim().length < 10) { doSendCs(); return; }
+    if (compose.trim().length < 10) { doSendCs(afterSend); return; }
     // Cancel any pending debounce + in-flight stream so they can't wipe the suggestion card
     if (elevateDebounceRef.current) { clearTimeout(elevateDebounceRef.current); elevateDebounceRef.current = null; }
     if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
@@ -608,7 +611,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           setElevateStreaming(false);
           // Gate is now shown — agent must choose Use or Send Original
         },
-        onError: () => { setElevateStreaming(false); doSendCs(); },
+        onError: () => { setElevateStreaming(false); doSendCs(afterSend); },
       }
     );
   }
@@ -2461,7 +2464,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <Button
                             className="rounded-l-xl rounded-r-none h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
-                            onClick={handleCsSend}
+                            onClick={() => handleCsSend()}
                           >
                             {elevateReply.isPending ? (
                               <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
@@ -2503,8 +2506,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 onSelect={(e) => {
                                   e.preventDefault();
                                   requestAnimationFrame(() => {
-                                    handleCsSend();
-                                    setAddFollowUpOpen(true);
+                                    handleCsSend(() => setAddFollowUpOpen(true));
                                   });
                                 }}
                               >
@@ -2519,8 +2521,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 onSelect={(e) => {
                                   e.preventDefault();
                                   requestAnimationFrame(() => {
-                                    handleCsSend();
-                                    if (selected) resolveSession.mutate({ sessionId: selected.id });
+                                    handleCsSend(() => { if (selected) resolveSession.mutate({ sessionId: selected.id }); });
                                   });
                                 }}
                               >
