@@ -966,6 +966,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (!selected || selected.queue === "Teams") return null;
     const msgs = selected.messages ?? [];
     if (msgs.length < 1) return null;
+    // Only show NBA when the last message is from the client (agent already replied → hide)
+    const lastMsg = msgs[msgs.length - 1];
+    if (lastMsg?.sender !== "client") return null;
     const clientMsgs = msgs.filter((m) => m.sender === "client").map((m) => m.text.toLowerCase());
     const lastClientMsg = clientMsgs[clientMsgs.length - 1] ?? "";
     const allClientText = clientMsgs.join(" ");
