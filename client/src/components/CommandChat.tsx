@@ -558,11 +558,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const { data: fuPanelItems = [] } = trpc.followUps.list.useQuery(undefined, { staleTime: 60_000, refetchInterval: 2 * 60_000 });
   const [overdueAcknowledged, setOverdueAcknowledged] = useState<Set<number>>(new Set());
   const { user: currentUser } = useAuth();
+  const currentFirstName = currentUser?.name?.split(/\s+/)[0]?.toLowerCase() ?? "";
   const overdueItems = (fuPanelItems as any[]).filter((fu) =>
     fu.dueAt < Date.now() &&
     !fu.completedAt &&
     !overdueAcknowledged.has(fu.id) &&
-    fu.owner === currentUser?.name
+    currentFirstName.length > 0 &&
+    (fu.owner as string)?.toLowerCase().startsWith(currentFirstName)
   );
   const showOverdueModal = overdueItems.length > 0;
   const completeFuMutation = trpc.followUps.complete.useMutation({
