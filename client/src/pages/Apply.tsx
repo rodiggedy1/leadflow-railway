@@ -200,13 +200,12 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
       {/* ── Two-column body — fills remaining viewport height ── */}
       <div
-        className="flex-1 flex flex-col lg:flex-row"
-        style={{ minHeight: "calc(100vh - 56px)" }}
+        className="flex-1 flex flex-col lg:flex-row mx-auto w-full"
+        style={{ maxWidth: "1200px", minHeight: "calc(100vh - 56px)" }}
       >
         {/* ── LEFT: video + copy ── */}
         <div
-          className="flex-1 flex flex-col justify-center px-6 py-6 lg:px-8"
-          style={{ maxWidth: "700px" }}
+          className="flex-1 flex flex-col justify-center px-6 py-6 lg:px-10"
         >
           {/* Wistia video — large, dominant */}
           <div
