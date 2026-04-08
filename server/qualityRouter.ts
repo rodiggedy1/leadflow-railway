@@ -695,7 +695,10 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
         };
         if (existing) {
           const previousStatus = existing.bookingStatus;
-          const isTerminalStatus = previousStatus === "completed" || previousStatus === "cancelled" || previousStatus === "rescheduled";
+          // Only "completed" and "cancelled" are truly terminal — L27 can reassign a
+          // "rescheduled" job back to "assigned" (e.g. after a server-down stale-cleanup
+          // incorrectly marked it). Always allow L27 to override "rescheduled" back to active.
+          const isTerminalStatus = previousStatus === "completed" || previousStatus === "cancelled";
           const syncData = isTerminalStatus ? (({ bookingStatus, ...rest }) => rest)(jobData) : jobData;
           await db.update(cleanerJobs).set(syncData).where(eq(cleanerJobs.id, existing.id));
           updated++;

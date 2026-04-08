@@ -1064,3 +1064,4 @@
 - [ ] Only show for customer conversations (not Teams)
 - [x] Field Mgmt Sync: ALL jobs for a date must sync to cleanerJobs regardless of phone validity; bad phones flagged with phoneInvalid=1 instead of being silently dropped from completedJobs
 - [x] Phone normalization pass: after sync, attempt to fix phoneInvalid=1 rows to valid +1XXXXXXXXXX format and clear the flag; rows that still cannot be fixed remain flagged
+- [x] Fix: stale-cleanup incorrectly marks jobs as rescheduled when server is down; terminal-status guard then locks it permanently — allow L27 to override rescheduled back to assigned if L27 says active
