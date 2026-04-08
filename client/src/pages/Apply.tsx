@@ -176,26 +176,53 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       style={{ backgroundColor: DARK_BG, minHeight: "100vh" }}
     >
       {/* ── Top bar ── */}
+      <style>{`
+        @keyframes blink-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.2; }
+        }
+        .blink-dot { animation: blink-dot 1.4s ease-in-out infinite; }
+      `}</style>
       <header
-        className="flex items-center justify-between px-6 h-14 shrink-0"
-        style={{ borderBottom: `1px solid ${DARK_BORDER}` }}
+        className="flex items-center justify-between px-8 shrink-0"
+        style={{
+          height: 60,
+          backgroundColor: "#0e1628",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          boxShadow: "0 1px 0 rgba(255,255,255,0.04)",
+        }}
       >
-        <div className="flex items-center gap-2.5">
+        {/* Left: logo + brand */}
+        <div className="flex items-center gap-3">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-xs"
-            style={{ backgroundColor: BRAND_GREEN }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-xs tracking-tight shrink-0"
+            style={{ backgroundColor: BRAND_GREEN, boxShadow: `0 0 12px rgba(22,163,74,0.5)` }}
           >
             MIB
           </div>
-          <span className="text-white text-sm font-semibold tracking-wide">Maids in Black</span>
-          <span
-            className="text-xs font-semibold px-2.5 py-1 rounded-full ml-1"
-            style={{ backgroundColor: BRAND_GREEN, color: "#fff" }}
-          >
-            NOW HIRING
-          </span>
+          <div className="flex flex-col leading-none">
+            <span className="text-white text-sm font-bold tracking-wide">Maids in Black</span>
+            <span className="text-gray-500 text-xs mt-0.5">Washington DC · MD · VA</span>
+          </div>
         </div>
-        <span className="text-xs text-gray-400">DC · MD · VA</span>
+
+        {/* Center: now hiring pill */}
+        <div
+          className="flex items-center gap-2 px-4 py-1.5 rounded-full"
+          style={{ backgroundColor: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.25)" }}
+        >
+          <span
+            className="blink-dot w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: BRAND_GREEN, boxShadow: `0 0 6px ${BRAND_GREEN}` }}
+          />
+          <span className="text-xs font-bold tracking-widest uppercase" style={{ color: BRAND_GREEN }}>Now Hiring</span>
+        </div>
+
+        {/* Right: positions available */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500">Positions available:</span>
+          <span className="text-xs font-bold text-white">DC · MD · VA</span>
+        </div>
       </header>
 
       {/* ── Two-column body — fills remaining viewport height ── */}
