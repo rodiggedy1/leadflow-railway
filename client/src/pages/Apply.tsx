@@ -452,50 +452,56 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               </div>
               <p className="text-sm font-bold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.35)" }}>What our cleaners say</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {[
                 {
-                  quote: "I've been with Maids in Black for 2 years. The pay is consistent, clients are respectful, and I set my own hours around my kids' school schedule.",
+                  img: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/A06747B3-2B59-4267-8357-C332DA7A7571_cd71156d.webp",
+                  quote: "I've been with Maids in Black for 2 years. The pay is consistent, clients are respectful, and I set my own hours around my kids' schedule.",
                   name: "Maria T.",
                   role: "Cleaner · DC · 2 years",
-                  initials: "MT",
                 },
                 {
+                  img: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/C8318EE9-85A1-41E5-810D-2DFA74C8C778_b5d06308.webp",
                   quote: "I was skeptical about the AI interview but it took literally 5 minutes from my phone. Had my first job within a week. Best decision I made.",
-                  name: "James R.",
+                  name: "Jennifer S.",
                   role: "Cleaner · Maryland · 1 year",
-                  initials: "JR",
                 },
                 {
+                  img: "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/IMG_05-04-2025-17-15-05_92176c9c.webp",
                   quote: "The tips alone make this worth it. Clients are premium — they actually appreciate the work. I keep every dollar and get paid every Friday.",
                   name: "Aisha K.",
                   role: "Team Lead · Virginia · 3 years",
-                  initials: "AK",
                 },
               ].map(t => (
                 <div
                   key={t.name}
-                  className="rounded-2xl p-6 flex flex-col gap-4"
-                  style={{ backgroundColor: "#0d1829", border: `1px solid ${DARK_BORDER}` }}
+                  className="relative rounded-2xl overflow-hidden"
+                  style={{ aspectRatio: "3/4", border: `1px solid ${DARK_BORDER}` }}
                 >
-                  <div className="flex gap-0.5">
-                    {[...Array(5)].map((_, i) => (
-                      <svg key={i} width="14" height="14" viewBox="0 0 18 18" fill="#16a34a"><path d="M9 1l2.39 4.84L17 6.76l-4 3.9.94 5.5L9 13.77l-4.94 2.39.94-5.5-4-3.9 5.61-.92z"/></svg>
-                    ))}
-                  </div>
-                  <p className="text-sm leading-relaxed flex-1" style={{ color: "rgba(255,255,255,0.7)" }}>
-                    &ldquo;{t.quote}&rdquo;
-                  </p>
-                  <div className="flex items-center gap-3 pt-2" style={{ borderTop: `1px solid ${DARK_BORDER}` }}>
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0"
-                      style={{ backgroundColor: "#16a34a" }}
-                    >
-                      {t.initials}
+                  {/* Photo fills the full card */}
+                  <img
+                    src={t.img}
+                    alt={t.name}
+                    className="absolute inset-0 w-full h-full object-cover object-top"
+                  />
+                  {/* Dark gradient overlay at bottom */}
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: "linear-gradient(to top, rgba(5,10,20,0.95) 0%, rgba(5,10,20,0.6) 45%, transparent 75%)" }}
+                  />
+                  {/* Quote + name pinned to bottom */}
+                  <div className="absolute bottom-0 left-0 right-0 p-6">
+                    <div className="flex gap-0.5 mb-3">
+                      {[...Array(5)].map((_, i) => (
+                        <svg key={i} width="13" height="13" viewBox="0 0 18 18" fill="#16a34a"><path d="M9 1l2.39 4.84L17 6.76l-4 3.9.94 5.5L9 13.77l-4.94 2.39.94-5.5-4-3.9 5.61-.92z"/></svg>
+                      ))}
                     </div>
+                    <p className="text-sm leading-relaxed mb-4" style={{ color: "rgba(255,255,255,0.85)" }}>
+                      &ldquo;{t.quote}&rdquo;
+                    </p>
                     <div>
-                      <p className="text-sm font-semibold text-white">{t.name}</p>
-                      <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{t.role}</p>
+                      <p className="text-sm font-bold text-white">{t.name}</p>
+                      <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{t.role}</p>
                     </div>
                   </div>
                 </div>
