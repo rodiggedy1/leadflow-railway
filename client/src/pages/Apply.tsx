@@ -165,9 +165,11 @@ function InputField({
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   const DARK_BG = "#0a0f1e";
-  const DARK_CARD = "#111827";
-  const DARK_CARD_INNER = "#1a2235";
+  const DARK_CARD = "#0f1e3a";
+  const DARK_CARD_INNER = "#162240";
   const DARK_BORDER = "rgba(255,255,255,0.08)";
+  const RIGHT_BG = "#0d1e3b";
+  const RIGHT_BORDER = "rgba(99,179,237,0.12)";  // subtle blue tint
   const BRAND_GREEN = GREEN;
 
   return (
@@ -284,7 +286,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               <div
                 key={p.label}
                 className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-gray-300"
-                style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${DARK_BORDER}` }}
+                style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${RIGHT_BORDER}` }}
               >
                 <span>{p.emoji}</span>
                 <span>{p.label}</span>
@@ -296,12 +298,12 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         {/* ── RIGHT: AI badge + CTA card ── */}
         <div
           className="w-full lg:w-[460px] xl:w-[480px] shrink-0 flex flex-col justify-start px-8 lg:px-10"
-          style={{ borderLeft: `1px solid ${DARK_BORDER}`, backgroundColor: "#0d1829", paddingTop: "24px", paddingBottom: "24px" }}
+          style={{ borderLeft: `1px solid ${RIGHT_BORDER}`, backgroundColor: RIGHT_BG, paddingTop: "24px", paddingBottom: "24px", backgroundImage: "radial-gradient(ellipse at 80% 0%, rgba(37,99,235,0.08) 0%, transparent 60%)" }}
         >
           {/* AI Interview badge */}
           <div
             className="rounded-2xl p-5 mb-6 flex items-center gap-3"
-            style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${DARK_BORDER}` }}
+            style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${RIGHT_BORDER}` }}
           >
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
@@ -344,23 +346,28 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           {/* Card */}
           <div
             className="rounded-2xl p-7"
-            style={{ backgroundColor: DARK_CARD, border: `1px solid ${DARK_BORDER}`, boxShadow: "0 4px 32px rgba(0,0,0,0.5)" }}
+            style={{
+              backgroundColor: DARK_CARD,
+              border: `1px solid ${RIGHT_BORDER}`,
+              boxShadow: "0 12px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(99,179,237,0.08)",
+              backgroundImage: "radial-gradient(ellipse at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 70%)",
+            }}
           >
-            <h2 className="text-2xl font-bold text-white mb-1.5">Let's Get Started</h2>
-            <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-              Join DC's top cleaning team. The application takes about 5–10 minutes.
+            <h2 className="text-2xl font-extrabold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>Let's Get Started</h2>
+            <p className="text-sm mb-5 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+              Join DC's top cleaning team. Takes about 5–10 min.
             </p>
 
             {/* What to expect */}
-            <div className="flex flex-col gap-4 mb-8">
+            <div className="flex flex-col gap-3 mb-7">
               {[
                 { icon: "✅", text: "Basic contact info" },
                 { icon: "📋", text: "Work requirements" },
                 { icon: "🎤", text: "Quick AI interview" },
               ].map(item => (
                 <div key={item.text} className="flex items-center gap-3">
-                  <span className="text-lg">{item.icon}</span>
-                  <span className="text-sm font-semibold text-gray-200">{item.text}</span>
+                  <span className="text-base leading-none">{item.icon}</span>
+                  <span className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>{item.text}</span>
                 </div>
               ))}
             </div>
@@ -369,15 +376,15 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
             <button
               onClick={onNext}
               className="w-full flex items-center justify-center gap-2 rounded-xl text-white font-bold text-base transition-all active:scale-[0.98]"
-              style={{ backgroundColor: BRAND_GREEN, height: 56, boxShadow: "0 4px 16px rgba(22,163,74,0.4)" }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#15803d")}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = BRAND_GREEN)}
+              style={{ backgroundColor: BRAND_GREEN, height: 54, boxShadow: `0 0 0 0 rgba(22,163,74,0), 0 6px 20px rgba(22,163,74,0.45)` }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#15803d"; e.currentTarget.style.boxShadow = "0 0 0 4px rgba(22,163,74,0.2), 0 6px 20px rgba(22,163,74,0.5)"; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = BRAND_GREEN; e.currentTarget.style.boxShadow = "0 0 0 0 rgba(22,163,74,0), 0 6px 20px rgba(22,163,74,0.45)"; }}
             >
               Get Started
-              <ChevronRight size={20} />
+              <ChevronRight size={18} />
             </button>
 
-            <p className="text-center text-xs text-gray-500 mt-3">Free · No commitment · Takes 5–10 min</p>
+            <p className="text-center text-xs mt-3" style={{ color: "rgba(255,255,255,0.3)" }}>Free · No commitment · Takes 5–10 min</p>
           </div>
         </div>
       </div>
