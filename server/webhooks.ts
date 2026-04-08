@@ -44,6 +44,7 @@ import { sendPushToAll } from "./webPush";
 import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
+import { getSetting } from "./settingsRouter";
 import { ENV } from "./_core/env";
 
 export function registerWebhookRoutes(app: Express) {
@@ -215,6 +216,14 @@ export function registerWebhookRoutes(app: Express) {
           // Extract the short URL (thmtk.com/... or any URL in the text)
           const urlMatch  = inboundText.match(/https?:\/\/\S+|thmtk\.com\/\S+/);
           const ttUrl     = urlMatch?.[0] ?? null;
+
+          // ── Silenced services — controlled via Settings page ──────────────────────
+          const silencedRaw = await getSetting("silenced_services", "");
+          const silencedList = silencedRaw.split(",").map(s => s.trim()).filter(Boolean);
+          if (silencedList.some(s => ttService.toLowerCase().includes(s.toLowerCase()))) {
+            console.log(`[Webhook] Thumbtack SMS silenced service "${ttService}" — dropping lead silently`);
+            return;
+          }
 
           // ── Duplicate detection ─────────────────────────────────────────────
           // If the same name + service + city arrived within the last 24 hours,

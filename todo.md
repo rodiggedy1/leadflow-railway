@@ -1069,3 +1069,4 @@
 - [x] AI elevation: add hard rule to never change dates, times, or specific numbers from the agent's draft
 - [x] AI csReply: add hard rule to never change dates, times, or specific numbers from job context or conversation
 - [x] Restore carpet cleaning leads: removed from silenced_services setting (DB + seed default)
+- [x] Silence check: add dynamic silenced_services filter to thumbtack-sms handler in webhooks.ts and replace hard-coded arrays in thumbtackWebhook.ts + emailLeadWebhook.ts

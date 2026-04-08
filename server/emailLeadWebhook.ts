@@ -903,8 +903,9 @@ export async function handleThumbtackEmail(
   const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
   const bathrooms = parsed.bathrooms ?? "2 Bathrooms";
 
-  // ── Silenced services — drop lead immediately ──────────────────────────────
-  const SILENCED_SERVICES = ["Window Cleaning", "Carpet Cleaning"];
+  // ── Silenced services — controlled via Settings page ──────────────────────
+  const silencedRaw = await getSetting("silenced_services", "");
+  const SILENCED_SERVICES = silencedRaw.split(",").map(s => s.trim()).filter(Boolean);
   if (SILENCED_SERVICES.some(s => parsed.serviceType.toLowerCase().includes(s.toLowerCase()))) {
     console.log(`[EmailLead] Silenced service "${parsed.serviceType}" — dropping lead silently`);
     return;

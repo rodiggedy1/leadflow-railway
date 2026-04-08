@@ -29,6 +29,7 @@ import { getNextAvailableSlots, formatAvailabilityQuestion } from "./availabilit
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { normalizePhone } from "./routers";
+import { getSetting } from "./settingsRouter";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -290,8 +291,9 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
   const bathrooms = extracted.bathrooms ?? "2 Bathrooms";
   const serviceType = extracted.serviceType ?? "Standard Clean";
 
-  // ── Silenced services — drop lead immediately ──────────────────────────────
-  const SILENCED_SERVICES = ["Window Cleaning", "Carpet Cleaning"];
+  // ── Silenced services — controlled via Settings page ──────────────────────
+  const silencedRaw = await getSetting("silenced_services", "");
+  const SILENCED_SERVICES = silencedRaw.split(",").map(s => s.trim()).filter(Boolean);
   if (SILENCED_SERVICES.some(s => serviceType.toLowerCase().includes(s.toLowerCase()))) {
     console.log(`[ThumbTackWebhook] Silenced service "${serviceType}" — dropping lead silently`);
     return;
