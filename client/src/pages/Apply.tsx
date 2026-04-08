@@ -164,49 +164,183 @@ function InputField({
 // ── Step screens ───────────────────────────────────────────────────────────────
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  // Dark background constants
+  const DARK_BG = "#0a0f1e";
+  const DARK_CARD = "#111827";
+  const DARK_CARD_INNER = "#1a2235";
+  const DARK_BORDER = "rgba(255,255,255,0.08)";
+  const BRAND_GREEN = GREEN; // #16a34a
+  const BRAND_BLUE = GREEN; // use MIB brand green for accents
+
   return (
-    <div className="max-w-2xl">
-      {/* Wistia video embed */}
-      <div className="rounded-2xl overflow-hidden mb-5" style={{ aspectRatio: "16/9" }}>
-        <style>{`wistia-player[media-id='hwmi77abbz']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/hwmi77abbz/swatch');display:block;filter:blur(5px);padding-top:56.25%;}`}</style>
-        {/* @ts-ignore — custom element registered by Wistia script */}
-        {/* @ts-ignore */}
-        <wistia-player media-id="hwmi77abbz" seo="false" aspect="1.7777777777777777" style={{ width: "100%", height: "100%", display: "block" }}></wistia-player>
-      </div>
-
-      {/* CTA directly below video */}
-      <button
-        onClick={onNext}
-        className="w-full flex items-center justify-center gap-2 rounded-2xl text-white font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] mb-8"
-        style={{ backgroundColor: GREEN, height: 52 }}
+    <div
+      className="min-h-screen w-full flex flex-col"
+      style={{ backgroundColor: DARK_BG }}
+    >
+      {/* ── Top bar ── */}
+      <header
+        className="flex items-center justify-between px-6 py-4 shrink-0"
+        style={{ borderBottom: `1px solid ${DARK_BORDER}` }}
       >
-        Start Application
-        <ChevronRight size={18} />
-      </button>
-
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Cleaning Professional Application</h1>
-      <p className="text-gray-500 mb-8 leading-relaxed">
-        Join our team of top-rated cleaning professionals. This application takes about 5–10 minutes
-        and will help us match you with the right clients.
-      </p>
-
-      {/* Perks */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { emoji: "💰", title: "Competitive Pay", desc: "Earn $18–$28/hr" },
-          { emoji: "📅", title: "Flexible Hours", desc: "Set your own schedule" },
-          { emoji: "🌟", title: "Top Clients", desc: "Premium households" },
-        ].map(p => (
+        <div className="flex items-center gap-2.5">
           <div
-            key={p.title}
-            className="rounded-2xl p-4 text-center"
-            style={{ backgroundColor: GREEN_LIGHT, border: `1px solid ${GREEN_MID}` }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-xs"
+            style={{ backgroundColor: BRAND_GREEN }}
           >
-            <div className="text-2xl mb-1">{p.emoji}</div>
-            <p className="text-xs font-semibold text-gray-800">{p.title}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
+            MIB
           </div>
-        ))}
+          <span className="text-white text-sm font-semibold tracking-wide">Maids in Black</span>
+          <span
+            className="text-xs font-semibold px-2.5 py-1 rounded-full ml-1"
+            style={{ backgroundColor: BRAND_GREEN, color: "#fff" }}
+          >
+            NOW HIRING
+          </span>
+        </div>
+        <span className="text-xs text-gray-400">DC · MD · VA</span>
+      </header>
+
+      {/* ── Two-column body ── */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-0">
+
+        {/* ── LEFT: video + copy ── */}
+        <div className="flex-1 flex flex-col justify-center px-6 py-10 lg:px-14 lg:py-16 max-w-3xl">
+
+          {/* Wistia video */}
+          <div
+            className="rounded-2xl overflow-hidden mb-8 w-full"
+            style={{ aspectRatio: "16/9", boxShadow: "0 8px 40px rgba(0,0,0,0.6)" }}
+          >
+            <style>{`wistia-player[media-id='hwmi77abbz']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/hwmi77abbz/swatch');display:block;filter:blur(5px);padding-top:56.25%;}`}</style>
+            {/* @ts-ignore */}
+            <wistia-player
+              media-id="hwmi77abbz"
+              seo="false"
+              aspect="1.7777777777777777"
+              style={{ width: "100%", height: "100%", display: "block" }}
+            />
+          </div>
+
+          {/* Hiring badge */}
+          <div className="flex items-center gap-2 mb-4">
+            <span
+              className="w-2 h-2 rounded-full inline-block"
+              style={{ backgroundColor: BRAND_GREEN }}
+            />
+            <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Now Hiring · DC · MD · VA</span>
+          </div>
+
+          {/* Headline */}
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight mb-4">
+            Earn{" "}
+            <span style={{ color: BRAND_GREEN }}>$22–$28/hr.</span>
+            <br />
+            Join the Elite.{" "}
+          </h1>
+          <p className="text-gray-400 text-base leading-relaxed max-w-md">
+            DC's highest-rated cleaning company. Work on your terms.<br />
+            Get paid every week.
+          </p>
+
+          {/* Perks row */}
+          <div className="flex flex-wrap gap-3 mt-8">
+            {[
+              { emoji: "💰", label: "Weekly Pay" },
+              { emoji: "📅", label: "Flexible Schedule" },
+              { emoji: "🌟", label: "Premium Clients" },
+            ].map(p => (
+              <div
+                key={p.label}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-gray-300"
+                style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${DARK_BORDER}` }}
+              >
+                <span>{p.emoji}</span>
+                <span>{p.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── RIGHT: AI badge + CTA card ── */}
+        <div
+          className="w-full lg:w-[420px] shrink-0 flex flex-col justify-center px-6 py-10 lg:px-10 lg:py-16"
+          style={{ borderLeft: `1px solid ${DARK_BORDER}` }}
+        >
+          {/* AI Interview badge */}
+          <div
+            className="rounded-2xl p-4 mb-6 flex items-start gap-3"
+            style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${DARK_BORDER}` }}
+          >
+            <span className="text-2xl mt-0.5">🎤</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="w-2 h-2 rounded-full inline-block"
+                  style={{ backgroundColor: BRAND_GREEN }}
+                />
+                <span className="text-sm font-bold text-white">AI Interview Included</span>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Apply now → Interview with Taylor (AI) · Takes ~5 min · Works on any phone
+              </p>
+            </div>
+            <span
+              className="text-xs font-bold px-2.5 py-1 rounded-lg shrink-0"
+              style={{ backgroundColor: BRAND_GREEN, color: "#fff" }}
+            >
+              FREE
+            </span>
+          </div>
+
+          {/* Step label */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold tracking-widest" style={{ color: BRAND_GREEN }}>STEP 1 OF 3</span>
+              <span className="text-xs text-gray-500">·</span>
+              <span className="text-xs font-bold tracking-widest text-gray-500">CONTACT &amp; INFO</span>
+            </div>
+            <div className="h-0.5 rounded-full w-full" style={{ backgroundColor: DARK_BORDER }}>
+              <div className="h-full rounded-full w-1/3" style={{ backgroundColor: BRAND_GREEN }} />
+            </div>
+          </div>
+
+          {/* Card */}
+          <div
+            className="rounded-2xl p-6"
+            style={{ backgroundColor: DARK_CARD, border: `1px solid ${DARK_BORDER}`, boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}
+          >
+            <h2 className="text-2xl font-bold text-white mb-2">Let's Get Started</h2>
+            <p className="text-sm text-gray-400 mb-6 leading-relaxed">
+              Join DC's top cleaning team. The application takes about 5–10 minutes.
+            </p>
+
+            {/* What to expect */}
+            <div className="flex flex-col gap-3 mb-8">
+              {[
+                { icon: "✅", text: "Basic contact info" },
+                { icon: "📋", text: "Work requirements" },
+                { icon: "🎤", text: "Quick AI interview" },
+              ].map(item => (
+                <div key={item.text} className="flex items-center gap-3">
+                  <span className="text-base">{item.icon}</span>
+                  <span className="text-sm text-gray-300">{item.text}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={onNext}
+              className="w-full flex items-center justify-center gap-2 rounded-xl text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+              style={{ backgroundColor: BRAND_GREEN, height: 52 }}
+            >
+              Get Started
+              <ChevronRight size={18} />
+            </button>
+
+            <p className="text-center text-xs text-gray-500 mt-3">Free · No commitment · Takes 5–10 min</p>
+          </div>
+        </div>
       </div>
     </div>
   );

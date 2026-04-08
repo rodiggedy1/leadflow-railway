@@ -1071,3 +1071,4 @@
 - [x] Restore carpet cleaning leads: removed from silenced_services setting (DB + seed default)
 - [x] Silence check: add dynamic silenced_services filter to thumbtack-sms handler in webhooks.ts and replace hard-coded arrays in thumbtackWebhook.ts + emailLeadWebhook.ts
 - [x] Settings: replace silenced_services textarea with checkbox list UI
+- [x] Apply /apply welcome page: redesign to Maid Marines-style dark layout with video left, AI badge + Get Started CTA right
