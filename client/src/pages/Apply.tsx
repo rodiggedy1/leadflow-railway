@@ -267,7 +267,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           {/* Headline — display-size, always visible */}
           <h1 className="font-black text-white leading-none mb-3" style={{ fontSize: "clamp(2.8rem, 5.5vw, 5rem)", letterSpacing: "-0.02em" }}>
             Earn{" "}
-            <span style={{ color: BRAND_GREEN }}>$22–$28/hr.</span>
+            <span style={{ color: BRAND_GREEN }}>$22–$40/hr.</span>
             <br />
             Join the Elite.
           </h1>
@@ -386,6 +386,123 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
             <p className="text-center text-xs mt-3" style={{ color: "rgba(255,255,255,0.3)" }}>Free · No commitment · Takes 5–10 min</p>
           </div>
+        </div>
+      </div>
+
+      {/* ── BELOW FOLD SECTIONS ── */}
+      <div style={{ backgroundColor: DARK_BG }}>
+
+        {/* Stats bar */}
+        <div style={{ borderTop: `1px solid ${DARK_BORDER}`, borderBottom: `1px solid ${DARK_BORDER}` }}>
+          <div className="mx-auto grid grid-cols-2 lg:grid-cols-4" style={{ maxWidth: "1200px" }}>
+            {[
+              { value: "$22–$40", label: "PER HOUR" },
+              { value: "Flexible", label: "SCHEDULE" },
+              { value: "1 Week", label: "TO FIRST JOB" },
+              { value: "100%", label: "TIPS KEPT" },
+            ].map((s, i) => (
+              <div
+                key={s.label}
+                className="flex flex-col px-8 py-7"
+                style={{ borderRight: i < 3 ? `1px solid ${DARK_BORDER}` : "none" }}
+              >
+                <span className="text-white font-black text-2xl" style={{ letterSpacing: "-0.02em" }}>{s.value}</span>
+                <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Benefits grid */}
+        <div className="mx-auto px-6 lg:px-10 py-20" style={{ maxWidth: "1200px" }}>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl lg:text-4xl font-black text-white mb-3" style={{ letterSpacing: "-0.02em" }}>Why cleaners choose Maids in Black</h2>
+            <p style={{ color: "rgba(255,255,255,0.45)" }} className="text-base">DC's highest-paying cleaning company — because we hire the best.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { icon: "💰", title: "Weekly Pay + 100% Tips", desc: "Get paid every Friday. Keep every dollar your clients tip." },
+              { icon: "📅", title: "Flexible Schedule", desc: "Full-time or part-time. You pick your days and hours." },
+              { icon: "🚀", title: "Career Growth", desc: "Advance from cleaner to team lead. We promote from within." },
+              { icon: "🛡️", title: "Fully Insured", desc: "You're covered on every job. Peace of mind guaranteed." },
+              { icon: "🧹", title: "Supplies Provided", desc: "All professional equipment included — nothing out of pocket." },
+              { icon: "⭐", title: "Elite Team", desc: "Join the highest-rated cleaning team in DC, MD & VA." },
+            ].map(b => (
+              <div
+                key={b.title}
+                className="rounded-2xl p-6"
+                style={{ backgroundColor: "#0d1829", border: `1px solid ${DARK_BORDER}` }}
+              >
+                <span className="text-2xl mb-4 block">{b.icon}</span>
+                <h3 className="text-white font-bold text-base mb-2">{b.title}</h3>
+                <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>{b.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <FaqSection darkBg={DARK_BG} darkBorder={DARK_BORDER} />
+
+        {/* Final CTA */}
+        <div
+          className="py-20 px-6 text-center"
+          style={{ borderTop: `1px solid ${DARK_BORDER}` }}
+        >
+          <h2 className="text-3xl lg:text-4xl font-black text-white mb-3" style={{ letterSpacing: "-0.02em" }}>Ready to join the team?</h2>
+          <p className="mb-8 text-base" style={{ color: "rgba(255,255,255,0.45)" }}>Takes 5–10 minutes. Start earning within a week.</p>
+          <button
+            onClick={onNext}
+            className="inline-flex items-center gap-2 rounded-xl text-white font-bold text-base px-10 transition-all active:scale-[0.98]"
+            style={{ backgroundColor: BRAND_GREEN, height: 56, boxShadow: "0 6px 24px rgba(22,163,74,0.45)" }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#15803d")}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = BRAND_GREEN)}
+          >
+            Apply Now
+            <ChevronRight size={20} />
+          </button>
+          <p className="text-xs mt-4" style={{ color: "rgba(255,255,255,0.25)" }}>Free · No commitment · Positions in DC · MD · VA</p>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+function FaqSection({ darkBg, darkBorder }: { darkBg: string; darkBorder: string }) {
+  const [open, setOpen] = React.useState<number | null>(null);
+  const faqs = [
+    { q: "Do I need my own car?", a: "No car needed. All of our jobs are transit-accessible across DC, MD, and VA. We route you to clients near public transportation." },
+    { q: "What does the AI interview involve?", a: "It's a 5-minute phone call with Taylor, our AI interviewer. Taylor will ask a few basic questions about your experience and availability. You can do it from any phone, right now." },
+    { q: "How quickly will I hear back?", a: "Most applicants receive a decision within 24–48 hours. If selected, you can be on your first job within 1 week of completing onboarding." },
+    { q: "Do I need to bring my own supplies?", a: "No. Maids in Black provides all professional cleaning equipment and supplies. You show up ready to work — we handle the rest." },
+    { q: "What's the pay like?", a: "Cleaners earn $22–$40/hr depending on job type and experience. You keep 100% of your tips. Pay is deposited every Friday." },
+    { q: "Can I set my own schedule?", a: "Yes. You choose which days and hours you work. Full-time and part-time positions are available. Minimum commitment is 2 days per week." },
+  ];
+  return (
+    <div style={{ borderTop: `1px solid ${darkBorder}` }}>
+      <div className="mx-auto px-6 lg:px-10 py-20" style={{ maxWidth: "800px" }}>
+        <h2 className="text-3xl lg:text-4xl font-black text-white text-center mb-12" style={{ letterSpacing: "-0.02em" }}>Common questions</h2>
+        <div className="flex flex-col">
+          {faqs.map((faq, i) => (
+            <div key={i} style={{ borderBottom: `1px solid ${darkBorder}` }}>
+              <button
+                className="w-full flex items-center justify-between py-5 text-left"
+                onClick={() => setOpen(open === i ? null : i)}
+              >
+                <span className="text-base font-semibold text-white pr-4">{faq.q}</span>
+                <span
+                  className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-transform"
+                  style={{ color: "rgba(255,255,255,0.4)", transform: open === i ? "rotate(45deg)" : "none", transition: "transform 0.2s" }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                </span>
+              </button>
+              {open === i && (
+                <p className="pb-5 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>{faq.a}</p>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
