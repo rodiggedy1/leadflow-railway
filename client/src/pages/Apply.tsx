@@ -164,22 +164,20 @@ function InputField({
 // ── Step screens ───────────────────────────────────────────────────────────────
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
-  // Dark background constants
   const DARK_BG = "#0a0f1e";
   const DARK_CARD = "#111827";
   const DARK_CARD_INNER = "#1a2235";
   const DARK_BORDER = "rgba(255,255,255,0.08)";
-  const BRAND_GREEN = GREEN; // #16a34a
-  const BRAND_BLUE = GREEN; // use MIB brand green for accents
+  const BRAND_GREEN = GREEN;
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col"
-      style={{ backgroundColor: DARK_BG }}
+      className="w-full flex flex-col"
+      style={{ backgroundColor: DARK_BG, minHeight: "100vh" }}
     >
       {/* ── Top bar ── */}
       <header
-        className="flex items-center justify-between px-6 py-4 shrink-0"
+        className="flex items-center justify-between px-6 h-14 shrink-0"
         style={{ borderBottom: `1px solid ${DARK_BORDER}` }}
       >
         <div className="flex items-center gap-2.5">
@@ -200,16 +198,23 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         <span className="text-xs text-gray-400">DC · MD · VA</span>
       </header>
 
-      {/* ── Two-column body ── */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-0">
-
+      {/* ── Two-column body — fills remaining viewport height ── */}
+      <div
+        className="flex-1 flex flex-col lg:flex-row"
+        style={{ minHeight: "calc(100vh - 56px)" }}
+      >
         {/* ── LEFT: video + copy ── */}
-        <div className="flex-1 flex flex-col justify-center px-6 py-10 lg:px-14 lg:py-16 max-w-3xl">
-
-          {/* Wistia video */}
+        <div
+          className="flex-1 flex flex-col justify-center px-6 py-6 lg:px-8"
+        >
+          {/* Wistia video — large, dominant */}
           <div
-            className="rounded-2xl overflow-hidden mb-8 w-full"
-            style={{ aspectRatio: "16/9", boxShadow: "0 8px 40px rgba(0,0,0,0.6)" }}
+            className="rounded-2xl overflow-hidden w-full"
+            style={{
+              aspectRatio: "16/9",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+              marginBottom: "24px",
+            }}
           >
             <style>{`wistia-player[media-id='hwmi77abbz']:not(:defined){background:center/contain no-repeat url('https://fast.wistia.com/embed/medias/hwmi77abbz/swatch');display:block;filter:blur(5px);padding-top:56.25%;}`}</style>
             {/* @ts-ignore */}
@@ -222,7 +227,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           </div>
 
           {/* Hiring badge */}
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <span
               className="w-2 h-2 rounded-full inline-block"
               style={{ backgroundColor: BRAND_GREEN }}
@@ -230,20 +235,20 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
             <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Now Hiring · DC · MD · VA</span>
           </div>
 
-          {/* Headline */}
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight mb-4">
+          {/* Headline — display-size, always visible */}
+          <h1 className="font-black text-white leading-none mb-3" style={{ fontSize: "clamp(2.8rem, 5.5vw, 5rem)", letterSpacing: "-0.02em" }}>
             Earn{" "}
             <span style={{ color: BRAND_GREEN }}>$22–$28/hr.</span>
             <br />
-            Join the Elite.{" "}
+            Join the Elite.
           </h1>
-          <p className="text-gray-400 text-base leading-relaxed max-w-md">
+          <p className="text-gray-400 leading-relaxed" style={{ fontSize: "clamp(0.9rem, 1.4vw, 1rem)", maxWidth: "520px" }}>
             DC's highest-rated cleaning company. Work on your terms.<br />
             Get paid every week.
           </p>
 
           {/* Perks row */}
-          <div className="flex flex-wrap gap-3 mt-8">
+          <div className="flex flex-wrap gap-3 mt-6">
             {[
               { emoji: "💰", label: "Weekly Pay" },
               { emoji: "📅", label: "Flexible Schedule" },
@@ -263,17 +268,22 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
         {/* ── RIGHT: AI badge + CTA card ── */}
         <div
-          className="w-full lg:w-[420px] shrink-0 flex flex-col justify-center px-6 py-10 lg:px-10 lg:py-16"
-          style={{ borderLeft: `1px solid ${DARK_BORDER}` }}
+          className="w-full lg:w-[460px] xl:w-[480px] shrink-0 flex flex-col justify-center px-8 py-12 lg:px-10"
+          style={{ borderLeft: `1px solid ${DARK_BORDER}`, backgroundColor: "#0d1829" }}
         >
           {/* AI Interview badge */}
           <div
-            className="rounded-2xl p-4 mb-6 flex items-start gap-3"
+            className="rounded-2xl p-5 mb-6 flex items-center gap-3"
             style={{ backgroundColor: DARK_CARD_INNER, border: `1px solid ${DARK_BORDER}` }}
           >
-            <span className="text-2xl mt-0.5">🎤</span>
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ backgroundColor: "rgba(22,163,74,0.15)", border: `1px solid rgba(22,163,74,0.3)` }}
+            >
+              <span className="text-xl">🎤</span>
+            </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-0.5">
                 <span
                   className="w-2 h-2 rounded-full inline-block"
                   style={{ backgroundColor: BRAND_GREEN }}
@@ -285,7 +295,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               </p>
             </div>
             <span
-              className="text-xs font-bold px-2.5 py-1 rounded-lg shrink-0"
+              className="text-xs font-bold px-2.5 py-1.5 rounded-lg shrink-0"
               style={{ backgroundColor: BRAND_GREEN, color: "#fff" }}
             >
               FREE
@@ -293,8 +303,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           </div>
 
           {/* Step label */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-bold tracking-widest" style={{ color: BRAND_GREEN }}>STEP 1 OF 3</span>
               <span className="text-xs text-gray-500">·</span>
               <span className="text-xs font-bold tracking-widest text-gray-500">CONTACT &amp; INFO</span>
@@ -306,24 +316,24 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
           {/* Card */}
           <div
-            className="rounded-2xl p-6"
-            style={{ backgroundColor: DARK_CARD, border: `1px solid ${DARK_BORDER}`, boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}
+            className="rounded-2xl p-7"
+            style={{ backgroundColor: DARK_CARD, border: `1px solid ${DARK_BORDER}`, boxShadow: "0 4px 32px rgba(0,0,0,0.5)" }}
           >
-            <h2 className="text-2xl font-bold text-white mb-2">Let's Get Started</h2>
+            <h2 className="text-2xl font-bold text-white mb-1.5">Let's Get Started</h2>
             <p className="text-sm text-gray-400 mb-6 leading-relaxed">
               Join DC's top cleaning team. The application takes about 5–10 minutes.
             </p>
 
             {/* What to expect */}
-            <div className="flex flex-col gap-3 mb-8">
+            <div className="flex flex-col gap-4 mb-8">
               {[
                 { icon: "✅", text: "Basic contact info" },
                 { icon: "📋", text: "Work requirements" },
                 { icon: "🎤", text: "Quick AI interview" },
               ].map(item => (
                 <div key={item.text} className="flex items-center gap-3">
-                  <span className="text-base">{item.icon}</span>
-                  <span className="text-sm text-gray-300">{item.text}</span>
+                  <span className="text-lg">{item.icon}</span>
+                  <span className="text-sm font-semibold text-gray-200">{item.text}</span>
                 </div>
               ))}
             </div>
@@ -331,11 +341,13 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
             {/* CTA */}
             <button
               onClick={onNext}
-              className="w-full flex items-center justify-center gap-2 rounded-xl text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
-              style={{ backgroundColor: BRAND_GREEN, height: 52 }}
+              className="w-full flex items-center justify-center gap-2 rounded-xl text-white font-bold text-base transition-all active:scale-[0.98]"
+              style={{ backgroundColor: BRAND_GREEN, height: 56, boxShadow: "0 4px 16px rgba(22,163,74,0.4)" }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#15803d")}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = BRAND_GREEN)}
             >
               Get Started
-              <ChevronRight size={18} />
+              <ChevronRight size={20} />
             </button>
 
             <p className="text-center text-xs text-gray-500 mt-3">Free · No commitment · Takes 5–10 min</p>
