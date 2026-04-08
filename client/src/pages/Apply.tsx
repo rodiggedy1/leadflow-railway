@@ -269,7 +269,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         {/* ── RIGHT: AI badge + CTA card ── */}
         <div
           className="w-full lg:w-[460px] xl:w-[480px] shrink-0 flex flex-col justify-start px-8 lg:px-10"
-          style={{ borderLeft: `1px solid ${DARK_BORDER}`, backgroundColor: "#0d1829", paddingTop: "183px", paddingBottom: "clamp(24px, 4vh, 48px)" }}
+          style={{ borderLeft: `1px solid ${DARK_BORDER}`, backgroundColor: "#0d1829", paddingTop: "24px", paddingBottom: "24px" }}
         >
           {/* AI Interview badge */}
           <div
