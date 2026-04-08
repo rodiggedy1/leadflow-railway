@@ -1068,3 +1068,4 @@
 - [x] CS chat SMS pre-send date/time sanity check: wrong day-of-week, implausible AM time, date mismatch vs conversation — inline warning card with Send Anyway / Edit
 - [x] AI elevation: add hard rule to never change dates, times, or specific numbers from the agent's draft
 - [x] AI csReply: add hard rule to never change dates, times, or specific numbers from job context or conversation
+- [x] Restore carpet cleaning leads: removed from silenced_services setting (DB + seed default)

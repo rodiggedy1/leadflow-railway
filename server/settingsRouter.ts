@@ -262,7 +262,7 @@ const DEFAULT_SETTINGS = [
   },
   {
     key: "silenced_services",
-    value: "Window Cleaning,Carpet Cleaning",
+    value: "Window Cleaning",
     label: "Silenced Services",
     description: "Comma-separated list of service types to completely suppress — no leads saved, no SMS sent, no alerts fired. Leave blank to allow all services.",
     fieldType: "textarea",
