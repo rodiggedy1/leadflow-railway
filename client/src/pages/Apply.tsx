@@ -1318,7 +1318,7 @@ export default function Apply() {
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#f8fafc" }}>
 
       {/* ── Mobile top progress bar (hidden on md+) ── */}
-      {!isDone && (
+      {!isDone && step !== "welcome" && (
         <div
           className="md:hidden sticky top-0 z-20 px-4 py-3"
           style={{ backgroundColor: "#fff", borderBottom: "1px solid #f1f5f9" }}
@@ -1365,7 +1365,7 @@ export default function Apply() {
       )}
 
       {/* ── Left sidebar nav (hidden on mobile, shown on md+) ── */}
-      {!isDone && (
+      {!isDone && step !== "welcome" && (
         <aside
           className="hidden md:flex w-60 shrink-0 flex-col py-8 px-4"
           style={{ backgroundColor: "#fff", borderRight: "1px solid #f1f5f9" }}
@@ -1428,7 +1428,7 @@ export default function Apply() {
 
       {/* ── Main content ── */}
       <main className="flex-1 overflow-y-auto">
-        <div className={isDone ? "w-full" : "max-w-3xl mx-auto px-4 py-6 sm:px-6 md:px-10 md:py-10"}>
+        <div className={isDone || step === "welcome" ? "w-full" : "max-w-3xl mx-auto px-4 py-6 sm:px-6 md:px-10 md:py-10"}>
           {step === "welcome" && <WelcomeStep onNext={next} />}
           {step === "basic-info" && <BasicInfoStep data={formData} onChange={patch} onNext={next} />}
           {step === "requirements" && <RequirementsStep data={formData} onChange={patch} onNext={next} />}
