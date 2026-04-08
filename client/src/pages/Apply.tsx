@@ -425,7 +425,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               { icon: "📅", title: "Flexible Schedule", desc: "Full-time or part-time. You pick your days and hours." },
               { icon: "🚀", title: "Career Growth", desc: "Advance from cleaner to team lead. We promote from within." },
               { icon: "🛡️", title: "Fully Insured", desc: "You're covered on every job. Peace of mind guaranteed." },
-              { icon: "🧹", title: "Supplies Provided", desc: "All professional equipment included — nothing out of pocket." },
+              { icon: "🏆", title: "Top-Rated Company", desc: "Work for DC's highest-rated cleaning company. Our reputation means better clients, better tips, and steady work year-round." },
               { icon: "⭐", title: "Elite Team", desc: "Join the highest-rated cleaning team in DC, MD & VA." },
             ].map(b => (
               <div
@@ -472,10 +472,10 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 function FaqSection({ darkBg, darkBorder }: { darkBg: string; darkBorder: string }) {
   const [open, setOpen] = React.useState<number | null>(null);
   const faqs = [
-    { q: "Do I need my own car?", a: "No car needed. All of our jobs are transit-accessible across DC, MD, and VA. We route you to clients near public transportation." },
+    { q: "Do I need my own car?", a: "A car is preferred but not required. Many of our jobs are accessible by public transit across DC, MD, and VA. Having a car does open up more job opportunities and higher-paying routes." },
     { q: "What does the AI interview involve?", a: "It's a 5-minute phone call with Taylor, our AI interviewer. Taylor will ask a few basic questions about your experience and availability. You can do it from any phone, right now." },
     { q: "How quickly will I hear back?", a: "Most applicants receive a decision within 24–48 hours. If selected, you can be on your first job within 1 week of completing onboarding." },
-    { q: "Do I need to bring my own supplies?", a: "No. Maids in Black provides all professional cleaning equipment and supplies. You show up ready to work — we handle the rest." },
+    { q: "Do I need to bring my own supplies?", a: "Yes. Cleaners are expected to bring their own professional cleaning supplies and equipment to each job. This ensures you use products you trust and are comfortable with." },
     { q: "What's the pay like?", a: "Cleaners earn $22–$40/hr depending on job type and experience. You keep 100% of your tips. Pay is deposited every Friday." },
     { q: "Can I set my own schedule?", a: "Yes. You choose which days and hours you work. Full-time and part-time positions are available. Minimum commitment is 2 days per week." },
   ];
