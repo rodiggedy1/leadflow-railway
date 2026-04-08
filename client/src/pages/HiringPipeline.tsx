@@ -51,6 +51,9 @@ import {
   Trash2,
   Archive,
   MoreVertical,
+  Send,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -92,6 +95,7 @@ interface Candidate {
   notes?: string[];
   videoUrl?: string;
   interviewVideoUrl?: string;
+  interviewCallId?: string | null;
   bioPhotoUrl?: string;
   // Full application data
   phone?: string;
@@ -328,6 +332,40 @@ function CandidateCard({
           }}
         >
           ZIP {candidate.zip}
+        </span>
+        {/* Video submitted icon */}
+        <span
+          title={candidate.videoUrl ? "Application video submitted" : "No application video"}
+          className="inline-flex items-center gap-1 rounded-full border"
+          style={{
+            borderColor: candidate.videoUrl ? "#bbf7d0" : "#e2e8f0",
+            backgroundColor: candidate.videoUrl ? "#f0fdf4" : "#f8fafc",
+            color: candidate.videoUrl ? "#16a34a" : "#cbd5e1",
+            fontSize: "12px",
+            fontWeight: 500,
+            padding: "3px 8px 3px 6px",
+            lineHeight: 1.4,
+          }}
+        >
+          <Video style={{ width: 11, height: 11, strokeWidth: 2 }} />
+          <span style={{ fontSize: 10 }}>Vid</span>
+        </span>
+        {/* AI interview icon */}
+        <span
+          title={candidate.interviewCallId ? "AI interview completed" : "AI interview not yet done"}
+          className="inline-flex items-center gap-1 rounded-full border"
+          style={{
+            borderColor: candidate.interviewCallId ? "#bfdbfe" : "#e2e8f0",
+            backgroundColor: candidate.interviewCallId ? "#eff6ff" : "#f8fafc",
+            color: candidate.interviewCallId ? "#2563eb" : "#cbd5e1",
+            fontSize: "12px",
+            fontWeight: 500,
+            padding: "3px 8px 3px 6px",
+            lineHeight: 1.4,
+          }}
+        >
+          <Bot style={{ width: 11, height: 11, strokeWidth: 2 }} />
+          <span style={{ fontSize: 10 }}>AI</span>
         </span>
       </div>
 
@@ -836,10 +874,14 @@ function ApplicationDetailsModal({ candidate, onClose }: { candidate: Candidate;
 
 // ── Candidate Detail Panel ────────────────────────────────────────────────────
 
-function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate | null; onScoreUpdated?: () => void }) {
+function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candidate: Candidate | null; onScoreUpdated?: () => void; onStageAdvanced?: () => void }) {
   const [editableNotes, setEditableNotes] = React.useState<string[]>(candidate?.notes ?? []);
   const [showAppModal, setShowAppModal] = React.useState(false);
+  const [showInbox, setShowInbox] = React.useState(false);
+  const [compose, setCompose] = React.useState("");
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
+
   const rescoreMutation = trpc.hiring.rescoreCandidate.useMutation({
     onSuccess: () => {
       utils.hiring.getCandidates.invalidate();
@@ -847,10 +889,43 @@ function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate |
     },
   });
 
+  const advanceStageMutation = trpc.hiring.updateStage.useMutation({
+    onSuccess: () => {
+      utils.hiring.getCandidates.invalidate();
+      onStageAdvanced?.();
+    },
+  });
+
+  const rejectMutation = trpc.hiring.updateStage.useMutation({
+    onSuccess: () => {
+      utils.hiring.getCandidates.invalidate();
+    },
+  });
+
+  const conversationQuery = trpc.hiring.getSessionByPhone.useQuery(
+    { phone: candidate?.phone ?? "" },
+    { enabled: showInbox && !!candidate?.phone, refetchInterval: showInbox ? 8000 : false }
+  );
+
+  const sendMutation = trpc.leads.sendMessage.useMutation({
+    onSuccess: () => {
+      setCompose("");
+      utils.hiring.getSessionByPhone.invalidate();
+    },
+  });
+
   React.useEffect(() => {
     setEditableNotes(candidate?.notes ?? []);
     setShowAppModal(false);
+    setShowInbox(false);
+    setCompose("");
   }, [candidate?.id]);
+
+  React.useEffect(() => {
+    if (showInbox && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [conversationQuery.data?.messages?.length, showInbox]);
 
   if (!candidate) {
     return (
@@ -1100,30 +1175,123 @@ function CandidateDetail({ candidate, onScoreUpdated }: { candidate: Candidate |
       {/* Action buttons */}
       <div className="grid grid-cols-2 gap-2.5 pt-1">
         <button
-          className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: "#0f172a" }}
+          disabled={advanceStageMutation.isPending}
+          onClick={() => {
+            if (!candidate) return;
+            const idx = STAGES.indexOf(candidate.stage);
+            const nextStage = STAGES[idx + 1];
+            if (nextStage) advanceStageMutation.mutate({ id: candidate.id, stage: nextStage });
+          }}
         >
-          Advance stage
+          {advanceStageMutation.isPending ? "Moving…" : "Advance stage"}
+        </button>
+        <button
+          className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50 flex items-center justify-center gap-1.5"
+          style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
+          onClick={() => setShowInbox(v => !v)}
+        >
+          <MessageSquare size={14} />
+          Text {showInbox ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </button>
         <button
           className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50"
           style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
-        >
-          Send message
-        </button>
-        <button
-          className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50"
-          style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
+          onClick={() => {
+            if (candidate?.phone) window.open(`https://calendly.com`, "_blank");
+          }}
         >
           Book interview
         </button>
         <button
-          className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           style={{ backgroundColor: "#ef4444" }}
+          disabled={rejectMutation.isPending}
+          onClick={() => {
+            if (!candidate) return;
+            if (!window.confirm(`Reject ${candidate.name}?`)) return;
+            rejectMutation.mutate({ id: candidate.id, stage: "Application Submitted" as Stage, sendSmsNotification: false });
+          }}
         >
-          Reject
+          {rejectMutation.isPending ? "Rejecting…" : "Reject"}
         </button>
       </div>
+
+      {/* SMS Inbox */}
+      {showInbox && (
+        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "#e2e8f0" }}>
+          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "#e2e8f0", backgroundColor: "#f8fafc" }}>
+            <MessageSquare size={14} style={{ color: "#6366f1" }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Text conversation</span>
+            {candidate.phone && <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: "auto" }}>{candidate.phone}</span>}
+          </div>
+
+          {/* Messages */}
+          <div className="overflow-y-auto p-4 space-y-3" style={{ maxHeight: 320, backgroundColor: "#ffffff" }}>
+            {conversationQuery.isLoading && (
+              <p style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>Loading…</p>
+            )}
+            {!conversationQuery.isLoading && (!conversationQuery.data?.messages?.length) && (
+              <p style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>No messages yet. Send the first one below.</p>
+            )}
+            {conversationQuery.data?.messages?.map((msg: { role: string; content: string; ts?: number }, i: number) => {
+              const isOutbound = msg.role === "assistant";
+              return (
+                <div key={i} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className="rounded-2xl px-3 py-2 max-w-[85%]"
+                    style={{
+                      backgroundColor: isOutbound ? "#0f172a" : "#f1f5f9",
+                      color: isOutbound ? "#fff" : "#0f172a",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {msg.content}
+                    <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4, textAlign: isOutbound ? "right" : "left" }}>
+                      {msg.ts ? new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Compose */}
+          <div className="flex gap-2 p-3 border-t" style={{ borderColor: "#e2e8f0", backgroundColor: "#f8fafc" }}>
+            <input
+              type="text"
+              value={compose}
+              onChange={e => setCompose(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey && compose.trim() && candidate?.phone) {
+                  e.preventDefault();
+                  sendMutation.mutate({ sessionId: conversationQuery.data?.sessionId ?? 0, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                }
+              }}
+              placeholder="Type a message…"
+              className="flex-1 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              style={{ borderColor: "#e2e8f0", backgroundColor: "#fff", fontSize: 13 }}
+              disabled={sendMutation.isPending}
+            />
+            <button
+              onClick={() => {
+                if (compose.trim() && candidate?.phone) {
+                  sendMutation.mutate({ sessionId: conversationQuery.data?.sessionId ?? 0, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                }
+              }}
+              disabled={!compose.trim() || sendMutation.isPending || !candidate?.phone}
+              className="rounded-xl px-3 py-2 text-white transition-opacity hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5"
+              style={{ backgroundColor: "#0f172a", fontSize: 13, fontWeight: 600 }}
+            >
+              <Send size={13} />
+              {sendMutation.isPending ? "…" : "Send"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1246,6 +1414,7 @@ export default function HiringPipeline() {
       notes: [],
       videoUrl: r.videoUrl ?? undefined,
       interviewVideoUrl: r.interviewVideoUrl ?? undefined,
+      interviewCallId: (r as any).interviewCallId ?? null,
       bioPhotoUrl: r.bioPhotoUrl ?? undefined,
       phone: r.phone,
       email: r.email ?? undefined,
@@ -1468,7 +1637,7 @@ export default function HiringPipeline() {
                 )
               )}
             </div>
-            <CandidateDetail candidate={selectedCandidate} />
+            <CandidateDetail candidate={selectedCandidate} onScoreUpdated={() => candidatesQuery.refetch()} onStageAdvanced={() => candidatesQuery.refetch()} />
           </div>
 
           {/* Automations */}
@@ -1564,3 +1733,4 @@ export default function HiringPipeline() {
     </div>
   );
 }
+

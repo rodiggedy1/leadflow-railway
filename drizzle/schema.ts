@@ -143,6 +143,11 @@ export const conversationStages = [
    * Agent handles manually; no AI auto-reply.
    */
   "OPEN",
+  /**
+   * HIRING_OUTBOUND → manual agent SMS sent to a job applicant from the hiring pipeline.
+   * aiMode is always 0 (manual). No AI auto-reply.
+   */
+  "HIRING_OUTBOUND",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];

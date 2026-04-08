@@ -1072,3 +1072,4 @@
 - [x] Silence check: add dynamic silenced_services filter to thumbtack-sms handler in webhooks.ts and replace hard-coded arrays in thumbtackWebhook.ts + emailLeadWebhook.ts
 - [x] Settings: replace silenced_services textarea with checkbox list UI
 - [x] Apply /apply welcome page: redesign to Maid Marines-style dark layout with video left, AI badge + Get Started CTA right
+- [x] Hiring Pipeline SMS inbox: reuse leads.sendMessage (same phone number) instead of custom getConversation/sendToCandidate procedures; extract hiringRouter to separate file to fix TypeScript type inference depth limit
