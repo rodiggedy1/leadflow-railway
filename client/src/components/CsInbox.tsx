@@ -80,6 +80,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { runSmsSanityCheck, type SanityWarning } from "@/lib/smsSanityCheck";
 import { senderHex } from "@/lib/senderColor";
 import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
@@ -331,6 +332,9 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [elevateStreaming, setElevateStreaming] = useState(false);
   // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
   const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
+  // SMS date/time sanity check warnings — shown as a blocking card before send
+  const [sanityWarnings, setSanityWarnings] = useState<SanityWarning[]>([]);
+  const [sanityApprovedText, setSanityApprovedText] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -583,7 +587,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   function handleCsSend(afterSend?: () => void) {
     if (!selected || !compose.trim()) return;
     const isTeams = selected.queue === "Teams";
-    // Teams: send directly, no elevation
+    // Teams: send directly, no elevation or sanity check
     if (isTeams) { doSendCs(afterSend); return; }
     // Agent explicitly approved this exact text — send directly
     if (elevateApprovedText !== null && compose.trim() === elevateApprovedText) { doSendCs(afterSend); return; }
@@ -591,6 +595,23 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (autoDraftLoading) { doSendCs(afterSend); return; }
     // Short message: send directly
     if (compose.trim().length < 10) { doSendCs(afterSend); return; }
+    // ── Date/time sanity check ──────────────────────────────────────────────
+    // Run only if the agent hasn't already acknowledged these exact warnings.
+    if (sanityApprovedText === null || compose.trim() !== sanityApprovedText) {
+      const recentCustomerMsgs = (selected.messages ?? [])
+        .filter((m) => m.sender === "client")
+        .slice(-5)
+        .map((m) => m.text);
+      const warnings = runSmsSanityCheck({ outbound: compose.trim(), recentCustomerMessages: recentCustomerMsgs });
+      if (warnings.length > 0) {
+        setSanityWarnings(warnings);
+        setSanityApprovedText(null); // force re-acknowledge if text changes
+        return; // block send — agent must dismiss or approve
+      }
+    }
+    // Clear any stale warnings
+    setSanityWarnings([]);
+    setSanityApprovedText(null);
     // Cancel any pending debounce + in-flight stream so they can't wipe the suggestion card
     if (elevateDebounceRef.current) { clearTimeout(elevateDebounceRef.current); elevateDebounceRef.current = null; }
     if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
@@ -2368,6 +2389,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           setElevateSuggestion(null);
                           setElevateApprovedText(null);
                           triggerElevateDebounced(val, selected);
+                          // Dismiss sanity warning card when agent edits the message
+                          if (sanityWarnings.length > 0) { setSanityWarnings([]); setSanityApprovedText(null); }
                         }
                       }}
                       onKeyDown={(e) => {
@@ -2537,6 +2560,47 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       )}
                     </div>
                   </div>
+                  {/* Date/time sanity warning card */}
+                  {sanityWarnings.length > 0 && (
+                    <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-semibold text-amber-700">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span>Date/time check</span>
+                        </div>
+                        <button
+                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
+                          className="text-amber-400 hover:text-amber-600 shrink-0"
+                        ><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <ul className="space-y-1">
+                        {sanityWarnings.map((w, i) => (
+                          <li key={i} className="text-amber-800 leading-snug">{w.message}</li>
+                        ))}
+                      </ul>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <button
+                          onClick={() => {
+                            const text = compose.trim();
+                            setSanityWarnings([]);
+                            setSanityApprovedText(text);
+                            // Re-invoke handleCsSend — sanityApprovedText is now set so it will pass through
+                            // Use a microtask so state has flushed before the next call
+                            setTimeout(() => {
+                              setSanityApprovedText(text);
+                            }, 0);
+                            // Directly proceed to elevation / send
+                            doSendCs();
+                          }}
+                          className="text-[11px] font-semibold text-amber-700 border border-amber-400 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
+                        >Send Anyway</button>
+                        <button
+                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
+                          className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 underline"
+                        >Edit message</button>
+                      </div>
+                    </div>
+                  )}
                   {/* AI Elevate suggestion card */}
                   {/* Loading state: tRPC on-send path (no streaming yet) */}
                   {elevateReply.isPending && !elevateSuggestion && (
