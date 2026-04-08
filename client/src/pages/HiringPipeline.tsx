@@ -907,10 +907,13 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
     { enabled: showInbox && !!candidate?.phone, refetchInterval: showInbox ? 8000 : false }
   );
 
-  const sendMutation = trpc.leads.sendMessage.useMutation({
+  const sendMutation = trpc.hiring.sendCandidateMessage.useMutation({
     onSuccess: () => {
       setCompose("");
       utils.hiring.getSessionByPhone.invalidate();
+    },
+    onError: (e) => {
+      alert(`Failed to send: ${e.message}`);
     },
   });
 
@@ -1268,7 +1271,7 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
               onKeyDown={e => {
                 if (e.key === "Enter" && !e.shiftKey && compose.trim() && candidate?.phone) {
                   e.preventDefault();
-                  sendMutation.mutate({ sessionId: conversationQuery.data?.sessionId ?? 0, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                  sendMutation.mutate({ phone: candidate.phone, candidateName: candidate.name, message: compose.trim() });
                 }
               }}
               placeholder="Type a message…"
@@ -1279,7 +1282,7 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
             <button
               onClick={() => {
                 if (compose.trim() && candidate?.phone) {
-                  sendMutation.mutate({ sessionId: conversationQuery.data?.sessionId ?? 0, message: compose.trim(), fromNumberId: "PN0wVLcpCq" });
+                  sendMutation.mutate({ phone: candidate.phone, candidateName: candidate.name, message: compose.trim() });
                 }
               }}
               disabled={!compose.trim() || sendMutation.isPending || !candidate?.phone}

@@ -1073,3 +1073,5 @@
 - [x] Settings: replace silenced_services textarea with checkbox list UI
 - [x] Apply /apply welcome page: redesign to Maid Marines-style dark layout with video left, AI badge + Get Started CTA right
 - [x] Hiring Pipeline SMS inbox: reuse leads.sendMessage (same phone number) instead of custom getConversation/sendToCandidate procedures; extract hiringRouter to separate file to fix TypeScript type inference depth limit
+- [x] BUG: Hiring pipeline archive count shows 0 — confirmed no archive section exists in UI, was a misread
+- [x] BUG: Hiring pipeline SMS send button does nothing — sessionId is null when candidate has no existing conversation session; need to create session on first send

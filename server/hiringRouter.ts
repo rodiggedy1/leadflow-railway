@@ -511,6 +511,60 @@ export const hiringRouter = router({
         return { success: true };
       }),
 
+    /**
+     * Send a message to a candidate — finds or creates a conversation session.
+     * Uses the CS phone number (PN0wVLcpCq), same as the lead drawer.
+     */
+    sendCandidateMessage: agentProcedure
+      .input(z.object({
+        phone: z.string(),
+        candidateName: z.string(),
+        message: z.string().min(1).max(1600),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const rawPhone = input.phone.replace(/[^\d]/g, "");
+        const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+        // Find existing session or create one
+        const existing = await db
+          .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.leadPhone, e164Phone))
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(1);
+        let sessionId: number;
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+        if (existing[0]) {
+          sessionId = existing[0].id;
+          try { history = JSON.parse(existing[0].messageHistory ?? "[]"); } catch { history = []; }
+        } else {
+          // No session yet — create one (aiMode=0 so AI doesn't auto-reply)
+          const [ins] = await db.insert(conversationSessions).values({
+            leadPhone: e164Phone,
+            leadName: input.candidateName,
+            messageHistory: "[]",
+            leadSource: "hiring" as any,
+            aiMode: 0,
+          });
+          sessionId = (ins as any).insertId as number;
+        }
+        // Append outbound message
+        const now = Date.now();
+        const agentName = (ctx as any).agent?.agentName ?? "Agent";
+        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentName });
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(history) })
+          .where(eq(conversationSessions.id, sessionId));
+        // Send via OpenPhone CS line
+        const smsResult = await sendSms({ to: e164Phone, content: input.message, fromNumberId: "PN0wVLcpCq" });
+        if (!smsResult.success) {
+          console.error(`[sendCandidateMessage] SMS failed to ${e164Phone}:`, smsResult.error);
+        }
+        return { success: true, sessionId, smsSent: smsResult.success };
+      }),
+
     getInterviewRecordingUrl: publicProcedure
       .input(z.object({ candidateId: z.number() }))
       .query(async ({ input }) => {
