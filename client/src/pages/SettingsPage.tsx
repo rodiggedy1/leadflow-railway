@@ -33,7 +33,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { PhoneCall as PhoneCallIcon } from "lucide-react";
@@ -100,11 +100,12 @@ function SilencedServicesCard({
               key={service}
               className="flex items-center gap-2 cursor-pointer select-none group"
             >
-              <Checkbox
+              <input
+                type="checkbox"
                 checked={silenced.includes(service)}
-                onCheckedChange={(checked) => toggle(service, checked === true)}
+                onChange={(e) => toggle(service, e.target.checked)}
                 disabled={saving}
-                className="data-[state=checked]:bg-[#E8735A] data-[state=checked]:border-[#E8735A]"
+                className="w-4 h-4 rounded accent-[#E8735A] cursor-pointer disabled:cursor-not-allowed"
               />
               <span className="text-sm text-gray-700 group-hover:text-gray-900">{service}</span>
             </label>
