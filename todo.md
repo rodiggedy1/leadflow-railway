@@ -1066,3 +1066,4 @@
 - [x] Phone normalization pass: after sync, attempt to fix phoneInvalid=1 rows to valid +1XXXXXXXXXX format and clear the flag; rows that still cannot be fixed remain flagged
 - [x] Fix: stale-cleanup incorrectly marks jobs as rescheduled when server is down; terminal-status guard then locks it permanently — allow L27 to override rescheduled back to assigned if L27 says active
 - [x] CS chat SMS pre-send date/time sanity check: wrong day-of-week, implausible AM time, date mismatch vs conversation — inline warning card with Send Anyway / Edit
+- [x] AI elevation: add hard rule to never change dates, times, or specific numbers from the agent's draft

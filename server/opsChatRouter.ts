@@ -2853,6 +2853,7 @@ RULES:
 1. Return ONLY the rewritten message — no explanation, no preamble, no labels.
 2. Keep roughly the same length as the draft — do NOT pad it out.
 3. Keep the same intent and facts — do not invent new information or prices.
+3a. NEVER change any date, time, day name, or number from the draft. If the draft says "3pm", the rewrite must say "3pm" — not "3am", not "3 PM", not "afternoon". If it says "Tuesday April 14", the rewrite must say "Tuesday April 14". Copy every date, time, and number character-for-character. This rule overrides everything else — even if you think there is a typo, do NOT correct it.
 4. Use the client's first name (${firstName}) once, naturally.
 5. Replace vague phrases ("whenever you're ready", "let me know", "feel free to reach out") with specific, action-oriented language.
 6. Sound like a real person who genuinely wants to help, not a script. Direct, warm, confident.
