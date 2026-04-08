@@ -33,9 +33,87 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MessageFlowPanel from "@/components/MessageFlowPanel";
 import { PhoneCall as PhoneCallIcon } from "lucide-react";
+
+// ── Known service types that can be silenced ──────────────────────────────────
+const KNOWN_SERVICE_TYPES = [
+  "Window Cleaning",
+  "Carpet Cleaning",
+  "Junk Removal",
+  "Office Cleaning",
+  "Post-Construction Cleaning",
+  "Move-In / Move-Out Cleaning",
+  "Deep Cleaning",
+  "Standard Cleaning",
+];
+
+// ── Silenced Services Card ────────────────────────────────────────────────────
+function SilencedServicesCard({
+  currentValue,
+  onSave,
+}: {
+  currentValue: string;
+  onSave: (key: string, value: string) => Promise<void>;
+}) {
+  const silenced = currentValue.split(",").map(s => s.trim()).filter(Boolean);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const toggle = async (service: string, checked: boolean) => {
+    const next = checked
+      ? Array.from(new Set([...silenced, service]))
+      : silenced.filter(s => s !== service);
+    setSaving(true);
+    try {
+      await onSave("silenced_services", next.join(","));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="border border-gray-200 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <span className="text-[#E8735A]"><Settings className="w-4 h-4" /></span>
+          Silenced Service Types
+          {saved && (
+            <span className="flex items-center gap-1 text-emerald-600 text-xs font-medium ml-1">
+              <CheckCircle2 className="w-3 h-3" /> Saved
+            </span>
+          )}
+          {saving && <Loader2 className="w-3 h-3 animate-spin text-gray-400 ml-1" />}
+        </CardTitle>
+        <CardDescription className="text-xs text-gray-500">
+          Checked service types are completely suppressed — no lead saved, no SMS sent, no alert fired.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-3">
+          {KNOWN_SERVICE_TYPES.map(service => (
+            <label
+              key={service}
+              className="flex items-center gap-2 cursor-pointer select-none group"
+            >
+              <Checkbox
+                checked={silenced.includes(service)}
+                onCheckedChange={(checked) => toggle(service, checked === true)}
+                disabled={saving}
+                className="data-[state=checked]:bg-[#E8735A] data-[state=checked]:border-[#E8735A]"
+              />
+              <span className="text-sm text-gray-700 group-hover:text-gray-900">{service}</span>
+            </label>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 // ── OpenPhone Sync Card ───────────────────────────────────────────────────
 
@@ -1718,6 +1796,13 @@ export default function SettingsPage() {
                   </Card>
                 )}
 
+                {/* Silenced Services */}
+                {serverSettings["silenced_services"] && (
+                  <SilencedServicesCard
+                    currentValue={localEdits["silenced_services"] ?? serverSettings["silenced_services"].value}
+                    onSave={handleSave}
+                  />
+                )}
                 {/* OpenPhone Agent Mapping */}
                 <OpenPhoneSyncCard />
               </div>
