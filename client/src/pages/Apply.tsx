@@ -206,6 +206,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         {/* ── LEFT: video + copy ── */}
         <div
           className="flex-1 flex flex-col justify-center px-6 py-6 lg:px-8"
+          style={{ maxWidth: "700px" }}
         >
           {/* Wistia video — large, dominant */}
           <div
@@ -268,8 +269,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
         {/* ── RIGHT: AI badge + CTA card ── */}
         <div
-          className="w-full lg:w-[460px] xl:w-[480px] shrink-0 flex flex-col justify-center px-8 py-12 lg:px-10"
-          style={{ borderLeft: `1px solid ${DARK_BORDER}`, backgroundColor: "#0d1829" }}
+          className="w-full lg:w-[460px] xl:w-[480px] shrink-0 flex flex-col justify-start px-8 lg:px-10"
+          style={{ borderLeft: `1px solid ${DARK_BORDER}`, backgroundColor: "#0d1829", paddingTop: "clamp(40px, 12vh, 184px)", paddingBottom: "clamp(24px, 4vh, 48px)" }}
         >
           {/* AI Interview badge */}
           <div
