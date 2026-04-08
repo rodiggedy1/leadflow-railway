@@ -15,7 +15,7 @@ import type { Express, Request, Response } from "express";
 import { getCompletedBookingsForDate } from "./launch27";
 import { getDb } from "./db";
 import { completedJobs, completedJobBatches, syncRuns } from "../drizzle/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, ne } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
@@ -67,6 +67,78 @@ async function recordSyncRun(
   } catch (err) {
     console.error("[SyncRuns] Failed to record sync run (non-fatal):", err);
   }
+}
+
+/**
+ * Attempts to normalize phone numbers for all completedJobs rows flagged as phoneInvalid=1.
+ *
+ * Strategy (applied in order until one produces a valid 10-digit US number):
+ *   1. Strip all non-digits — if result is 10 digits with valid NPA/NXX → done.
+ *   2. If 11 digits starting with 1 → strip leading 1 → done.
+ *   3. If 7 digits → prepend the most common DC/MD/VA area codes in sequence
+ *      (202, 301, 240, 703, 571) and take the first valid match.
+ *   4. Anything else → leave flagged.
+ *
+ * Rows that get fixed: phone updated to +1XXXXXXXXXX, phoneInvalid cleared to 0.
+ * Rows that can't be fixed: remain phoneInvalid=1 with a server-side warning.
+ *
+ * Returns counts of { fixed, stillInvalid }.
+ */
+export async function normalizeInvalidPhones(): Promise<{ fixed: number; stillInvalid: number }> {
+  const db = await getDb();
+  if (!db) return { fixed: 0, stillInvalid: 0 };
+
+  const flagged = await db
+    .select({ id: completedJobs.id, phone: completedJobs.phone, name: completedJobs.name, launch27BookingId: completedJobs.launch27BookingId })
+    .from(completedJobs)
+    .where(ne(completedJobs.phoneInvalid, 0));
+
+  if (flagged.length === 0) return { fixed: 0, stillInvalid: 0 };
+
+  let fixed = 0;
+  let stillInvalid = 0;
+
+  for (const row of flagged) {
+    const raw = row.phone ?? "";
+    const normalized = tryNormalizePhone(raw);
+    if (normalized) {
+      await db
+        .update(completedJobs)
+        .set({ phone: normalized, phoneInvalid: 0 })
+        .where(eq(completedJobs.id, row.id));
+      console.log(`[PhoneNorm] Fixed booking ${row.launch27BookingId} (${row.name}): "${raw}" → "${normalized}"`);
+      fixed++;
+    } else {
+      console.warn(`[PhoneNorm] Cannot normalize booking ${row.launch27BookingId} (${row.name}): "${raw}" — still flagged`);
+      stillInvalid++;
+    }
+  }
+
+  return { fixed, stillInvalid };
+}
+
+/**
+ * Tries every normalization strategy on a raw phone string.
+ * Returns a valid E.164 US number (+1XXXXXXXXXX) or null.
+ */
+function tryNormalizePhone(raw: string): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/[^\d]/g, "");
+
+  // Strategy 1 & 2: standard 10- or 11-digit US number
+  const direct = extractUSDigits(raw);
+  if (direct) return `+1${direct}`;
+
+  // Strategy 3: 7-digit local number — try common area codes
+  if (digits.length === 7) {
+    const areaCodes = ["202", "301", "240", "703", "571", "410", "443", "667"];
+    for (const areaCode of areaCodes) {
+      const candidate = extractUSDigits(areaCode + digits);
+      if (candidate) return `+1${candidate}`;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -222,7 +294,25 @@ export async function runNightlySync(targetDate?: string): Promise<{
     inserted++;
   }
 
-  const message = `Nightly sync for ${date}: inserted ${inserted} new jobs (${invalidCount} flagged invalid phone), skipped ${skipped} duplicates.`;
+  // ── Phone normalization pass ────────────────────────────────────────────────
+  // Attempt to fix any phoneInvalid=1 rows just inserted (and any pre-existing ones).
+  // Runs only when there were flagged phones to avoid unnecessary DB round-trips.
+  let phoneFixed = 0;
+  let phoneStillInvalid = 0;
+  if (invalidCount > 0) {
+    try {
+      const normResult = await normalizeInvalidPhones();
+      phoneFixed = normResult.fixed;
+      phoneStillInvalid = normResult.stillInvalid;
+      if (phoneFixed > 0) {
+        console.log(`[NightlySync] Phone normalization: fixed ${phoneFixed}, still invalid ${phoneStillInvalid}`);
+      }
+    } catch (normErr) {
+      console.error("[NightlySync] Phone normalization error (non-fatal):", normErr);
+    }
+  }
+
+  const message = `Nightly sync for ${date}: inserted ${inserted} new jobs (${invalidCount} flagged invalid phone, ${phoneFixed} auto-fixed), skipped ${skipped} duplicates.`;
 
   // ── Always-On Campaign enrollment ─────────────────────────────────────────
   // After syncing, enroll any newly eligible contacts into the always-on groups.

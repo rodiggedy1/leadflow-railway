@@ -789,6 +789,18 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
   } catch (mmErr) {
     errors.push(`Mismatch check error: ${mmErr instanceof Error ? mmErr.message : String(mmErr)}`);
   }
+  // ── Phone normalization pass ────────────────────────────────────────────────
+  // Attempt to fix any phoneInvalid=1 rows (non-fatal, dynamic import avoids circular dep).
+  try {
+    const { normalizeInvalidPhones } = await import("./cronSync");
+    const normResult = await normalizeInvalidPhones();
+    if (normResult.fixed > 0) {
+      console.log(`[TodaySync] Phone normalization: fixed ${normResult.fixed}, still invalid ${normResult.stillInvalid}`);
+    }
+  } catch (normErr) {
+    console.error("[TodaySync] Phone normalization error (non-fatal):", normErr);
+  }
+
   return { date: dateStr, bookingsFetched: bookings.length, jobsCreated: created, jobsUpdated: updated, teamReassignRemoved, staleMarked, mismatches, errors };
 }
 
