@@ -1062,3 +1062,4 @@
 - [ ] Rules engine: re-evaluate on each inbound message, highlight recommended card
 - [ ] Pre-fill reply input when a card is clicked
 - [ ] Only show for customer conversations (not Teams)
+- [x] Field Mgmt Sync: ALL jobs for a date must sync to cleanerJobs regardless of phone validity; bad phones flagged with phoneInvalid=1 instead of being silently dropped from completedJobs

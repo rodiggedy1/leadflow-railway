@@ -619,9 +619,14 @@ export const completedJobs = mysqlTable("completed_jobs", {
    * without affecting their eligibility for other campaigns (reactivation, etc.).
    */
   reviewSkipped: int("reviewSkipped").default(0).notNull(),
+  /**
+   * When 1, the phone number from Launch27 was not a valid US number.
+   * The job is still stored so it appears in field management and reports,
+   * but it will be excluded from all outbound SMS flows until corrected.
+   */
+  phoneInvalid: int("phoneInvalid").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
-
 export type CompletedJob = typeof completedJobs.$inferSelect;
 export type InsertCompletedJob = typeof completedJobs.$inferInsert;
 

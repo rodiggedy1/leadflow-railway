@@ -142,29 +142,17 @@ export async function runNightlySync(targetDate?: string): Promise<{
     };
   }
 
-  // Filter to valid US phones only
-  const validBookings = result.bookings.filter((b) => {
-    const digits = extractUSDigits(b.phone);
-    return digits !== null && isValidUSPhone(digits);
-  });
-
-  const invalidCount = result.bookings.length - validBookings.length;
-
-  if (validBookings.length === 0) {
-    return {
-      date,
-      inserted: 0,
-      skipped: result.bookings.length,
-      batchId: null,
-      message: `All ${result.bookings.length} bookings had invalid/non-US phone numbers`,
-    };
-  }
+  // Include ALL bookings — jobs with invalid phones are flagged (phoneInvalid=1) instead of dropped.
+  // This ensures every job appears in field management and reports.
+  // SMS flows (review, reactivation, always-on) skip phoneInvalid=1 rows.
+  const allBookings = result.bookings;
+  let invalidCount = 0;
 
   // Create batch record
   const [batchInsert] = await db.insert(completedJobBatches).values({
     filename: `launch27-auto-${date}`,
     jobDate: date,
-    totalCount: validBookings.length,
+    totalCount: allBookings.length,
     sentCount: 0,
     positiveCount: 0,
     negativeCount: 0,
@@ -176,18 +164,20 @@ export async function runNightlySync(targetDate?: string): Promise<{
   let inserted = 0;
   let skipped = 0;
 
-  for (const b of validBookings) {
-    const digits = extractUSDigits(b.phone)!;
-    const normalizedPhone = `+1${digits}`;
+  for (const b of allBookings) {
+    const digits = extractUSDigits(b.phone);
+    const isPhoneValid = digits !== null && isValidUSPhone(digits);
+    const normalizedPhone = isPhoneValid ? `+1${digits!}` : (b.phone?.trim() || "invalid");
+    if (!isPhoneValid) invalidCount++;
     const jobDate = new Date(b.serviceDate).toISOString().slice(0, 10);
 
-    // Deduplicate: same phone + same job date
+    // Deduplicate by launch27BookingId + jobDate (phone may be invalid/missing)
     const existing = await db
       .select({ id: completedJobs.id })
       .from(completedJobs)
       .where(
         and(
-          eq(completedJobs.phone, normalizedPhone),
+          eq(completedJobs.launch27BookingId, String(b.id)),
           eq(completedJobs.jobDate, jobDate)
         )
       )
@@ -198,12 +188,12 @@ export async function runNightlySync(targetDate?: string): Promise<{
       continue;
     }
 
-    // Determine reactivation eligibility
+    // Reactivation eligibility only applies to valid-phone jobs (can't SMS invalid phones)
     const isOneTime = !b.frequency || /one.?time|once/i.test(b.frequency);
     const jobDateObj = new Date(jobDate);
     const reactivationDate = new Date(jobDateObj);
     reactivationDate.setDate(reactivationDate.getDate() + 30);
-    const isAlreadyEligible = isOneTime || reactivationDate <= new Date();
+    const isAlreadyEligible = isPhoneValid && (isOneTime || reactivationDate <= new Date());
 
     await db.insert(completedJobs).values({
       batchId,
@@ -222,12 +212,17 @@ export async function runNightlySync(targetDate?: string): Promise<{
       status: "PENDING",
       reactivationEligible: isAlreadyEligible ? 1 : 0,
       reactivationEligibleAt: isAlreadyEligible ? new Date() : null,
+      phoneInvalid: isPhoneValid ? 0 : 1,
     });
+
+    if (!isPhoneValid) {
+      console.warn(`[NightlySync] Invalid phone for booking ${b.id} (${b.fullName}): "${b.phone}" — stored with phoneInvalid=1, excluded from SMS flows`);
+    }
 
     inserted++;
   }
 
-  const message = `Nightly sync for ${date}: inserted ${inserted} new jobs, skipped ${skipped + invalidCount} (${skipped} duplicates, ${invalidCount} invalid phones).`;
+  const message = `Nightly sync for ${date}: inserted ${inserted} new jobs (${invalidCount} flagged invalid phone), skipped ${skipped} duplicates.`;
 
   // ── Always-On Campaign enrollment ─────────────────────────────────────────
   // After syncing, enroll any newly eligible contacts into the always-on groups.

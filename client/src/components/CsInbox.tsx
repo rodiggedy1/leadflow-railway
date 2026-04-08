@@ -303,7 +303,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   // Follow-up modal state (CS chat — add only, no queue)
   const [addFollowUpOpen, setAddFollowUpOpen] = useState(false);
-  const [sendDropOpen, setSendDropOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
@@ -849,9 +848,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     setElevateSuggestion(null);
     setElevateApprovedText(null);
     setElevateStreaming(false);
-    setNbaLlmResult(null);
-    setNbaLlmFetchedKey(null);
-    setNbaLlmLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1107,21 +1103,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
 
   // ── LLM-powered NBA analysis ──────────────────────────────────────────────
-  type NbaResult = { label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null };
-  const nbaCache = useRef<Map<string, NbaResult>>(new Map());
-  const [nbaLlmResult, setNbaLlmResult] = useState<NbaResult | null>(null);
+  const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null } | null>(null);
   const [nbaLlmFetchedKey, setNbaLlmFetchedKey] = useState<string | null>(null);
   const [nbaLlmLoading, setNbaLlmLoading] = useState(false);
   const nbaLlmMutation = trpc.opsChat.csNbaAnalysis.useMutation({
-    onSuccess: (data) => {
-      setNbaLlmResult(data);
-      setNbaLlmLoading(false);
-      // Store in cache so switching back doesn't re-fire
-      if (selected) {
-        const key = `${selected.id}:${selected.messages.length}`;
-        nbaCache.current.set(key, data);
-      }
-    },
+    onSuccess: (data) => { setNbaLlmResult(data); setNbaLlmLoading(false); },
     onError: () => setNbaLlmLoading(false),
   });
 
@@ -1132,13 +1118,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     const key = `${selected.id}:${selected.messages.length}`;
     if (nbaLlmFetchedKey === key) return;
     setNbaLlmFetchedKey(key);
-    // Check cache first
-    const cached = nbaCache.current.get(key);
-    if (cached) {
-      setNbaLlmResult(cached);
-      setNbaLlmLoading(false);
-      return;
-    }
     setNbaLlmResult(null);
     setNbaLlmLoading(true);
     const freq = clientProfile?.frequency ?? "";
@@ -1150,7 +1129,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       clientName: selected.name ?? undefined,
       clientProfile: clientProfileSummary,
       isAlreadyRecurring,
-      todayJobContext: jobContext || undefined,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
@@ -2486,7 +2464,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <Button
                             className="rounded-l-xl rounded-r-none h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
-                            onClick={() => handleCsSend()}
+                            onClick={handleCsSend}
                           >
                             {elevateReply.isPending ? (
                               <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
@@ -2497,7 +2475,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             )}
                           </Button>
                           {/* Dropdown for additional send actions */}
-                          <DropdownMenu open={sendDropOpen} onOpenChange={setSendDropOpen}>
+                          <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
                                 className="rounded-l-none rounded-r-xl h-10 px-2 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
@@ -2514,7 +2492,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             >
                               <DropdownMenuItem
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                                onSelect={(e) => { e.preventDefault(); setSendDropOpen(false); requestAnimationFrame(() => handleCsSend()); }}
+                                onSelect={(e) => { e.preventDefault(); requestAnimationFrame(() => handleCsSend()); }}
                               >
                                 <Send className="h-4 w-4 text-slate-500 shrink-0" />
                                 <div>
@@ -2527,7 +2505,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-violet-50"
                                 onSelect={(e) => {
                                   e.preventDefault();
-                                  setSendDropOpen(false);
                                   requestAnimationFrame(() => {
                                     handleCsSend(() => setAddFollowUpOpen(true));
                                   });
@@ -2543,7 +2520,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                                 className="rounded-lg px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50"
                                 onSelect={(e) => {
                                   e.preventDefault();
-                                  setSendDropOpen(false);
                                   requestAnimationFrame(() => {
                                     handleCsSend(() => { if (selected) resolveSession.mutate({ sessionId: selected.id }); });
                                   });

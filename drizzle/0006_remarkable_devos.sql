@@ -1,0 +1,1 @@
+ALTER TABLE `completed_jobs` ADD `phoneInvalid` int DEFAULT 0 NOT NULL;

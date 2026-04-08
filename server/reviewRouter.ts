@@ -7,7 +7,7 @@
  *  - Auto-create reactivation contact when customer confirms they left a review
  */
 import { z } from "zod";
-import { and, desc, eq, gte, isNull, lt, sql, count } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, ne, sql, count } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -155,6 +155,7 @@ export async function sendPendingReviewSms(): Promise<number> {
       and(
         eq(completedJobs.status, "PENDING"),
         isNull(completedJobs.smsSentAt),
+        ne(completedJobs.phoneInvalid, 1),
         sql`${completedJobs.jobDate} <= ${yesterday}`,
         sql`${completedJobs.jobDate} >= ${lookback}`
       )

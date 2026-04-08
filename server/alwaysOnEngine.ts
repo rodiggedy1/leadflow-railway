@@ -371,10 +371,12 @@ export async function enrollNewlyEligible(nowMs: number = Date.now()): Promise<R
   // Fetch all completed jobs not yet enrolled by phone
   const allJobs = await db.select().from(completedJobs);
 
-  // Deduplicate by phone: keep only the most recent job per phone number
+  // Deduplicate by phone: keep only the most recent job per phone number.
+  // Skip jobs with invalid phones — they cannot receive SMS.
   const latestJobByPhone = new Map<string, typeof allJobs[0]>();
   for (const job of allJobs) {
     if (!job.phone) continue;
+    if (job.phoneInvalid === 1) continue;
     if (excludePhones.has(job.phone)) continue;
     const existing = latestJobByPhone.get(job.phone);
     if (!existing || (job.jobDate ?? '') > (existing.jobDate ?? '')) {
