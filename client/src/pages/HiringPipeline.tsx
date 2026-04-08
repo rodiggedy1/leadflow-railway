@@ -4,6 +4,7 @@
  * Data is static/mock for now; will be wired to backend in a future phase.
  */
 import React, { useState, useMemo, useRef } from "react";
+import { ConversationDrawer, type Session as LeadSession } from "./AgentDashboard";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import {
@@ -877,10 +878,9 @@ function ApplicationDetailsModal({ candidate, onClose }: { candidate: Candidate;
 function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candidate: Candidate | null; onScoreUpdated?: () => void; onStageAdvanced?: () => void }) {
   const [editableNotes, setEditableNotes] = React.useState<string[]>(candidate?.notes ?? []);
   const [showAppModal, setShowAppModal] = React.useState(false);
-  const [showInbox, setShowInbox] = React.useState(false);
-  const [compose, setCompose] = React.useState("");
-  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const [drawerSession, setDrawerSession] = React.useState<LeadSession | null>(null);
   const utils = trpc.useUtils();
+  const trpcUtils = trpc.useUtils();
 
   const rescoreMutation = trpc.hiring.rescoreCandidate.useMutation({
     onSuccess: () => {
@@ -902,33 +902,15 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
     },
   });
 
-  const conversationQuery = trpc.hiring.getSessionByPhone.useQuery(
-    { phone: candidate?.phone ?? "" },
-    { enabled: showInbox && !!candidate?.phone, refetchInterval: showInbox ? 8000 : false }
-  );
-
-  const sendMutation = trpc.hiring.sendCandidateMessage.useMutation({
-    onSuccess: () => {
-      setCompose("");
-      utils.hiring.getSessionByPhone.invalidate();
-    },
-    onError: (e) => {
-      alert(`Failed to send: ${e.message}`);
-    },
-  });
+;
 
   React.useEffect(() => {
     setEditableNotes(candidate?.notes ?? []);
     setShowAppModal(false);
-    setShowInbox(false);
-    setCompose("");
+    setDrawerSession(null);
   }, [candidate?.id]);
 
-  React.useEffect(() => {
-    if (showInbox && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [conversationQuery.data?.messages?.length, showInbox]);
+
 
   if (!candidate) {
     return (
@@ -1193,10 +1175,51 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
         <button
           className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50 flex items-center justify-center gap-1.5"
           style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
-          onClick={() => setShowInbox(v => !v)}
+          onClick={async () => {
+            if (!candidate?.phone) return;
+            const { sessionId } = await trpcUtils.hiring.getSessionByPhone.fetch({ phone: candidate.phone }).catch(() => ({ sessionId: null }));
+            if (sessionId) {
+              const session = await trpcUtils.leads.getById.fetch({ id: sessionId }).catch(() => null);
+              if (session) {
+                setDrawerSession(session as unknown as LeadSession);
+                return;
+              }
+            }
+            // No session yet — open drawer with minimal session so user can send first message
+            const rawPhone = candidate.phone.replace(/[^\d]/g, "");
+            const e164 = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+            setDrawerSession({
+              id: 0,
+              leadPhone: e164,
+              leadName: candidate.name,
+              stage: "UNHANDLED",
+              quotedPrice: null,
+              serviceType: null,
+              bedrooms: null,
+              bathrooms: null,
+              extras: null,
+              selectedSlot: null,
+              address: null,
+              messageHistory: "[]",
+              assignedAgentId: null,
+              assignedAgentName: null,
+              lastCalledAt: null,
+              lastCalledByAgentName: null,
+              isBooked: 0,
+              bookedAt: null,
+              bookedByAgentName: null,
+              bookedAmount: null,
+              internalNotes: null,
+              aiMode: 0,
+              barkQA: null,
+              leadSource: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }}
         >
           <MessageSquare size={14} />
-          Text {showInbox ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          Send message
         </button>
         <button
           className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50"
@@ -1221,84 +1244,16 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
         </button>
       </div>
 
-      {/* SMS Inbox */}
-      {showInbox && (
-        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "#e2e8f0" }}>
-          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "#e2e8f0", backgroundColor: "#f8fafc" }}>
-            <MessageSquare size={14} style={{ color: "#6366f1" }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Text conversation</span>
-            {candidate.phone && <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: "auto" }}>{candidate.phone}</span>}
-          </div>
-
-          {/* Messages */}
-          <div className="overflow-y-auto p-4 space-y-3" style={{ maxHeight: 320, backgroundColor: "#ffffff" }}>
-            {conversationQuery.isLoading && (
-              <p style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>Loading…</p>
-            )}
-            {!conversationQuery.isLoading && (!conversationQuery.data?.messages?.length) && (
-              <p style={{ fontSize: 13, color: "#94a3b8", textAlign: "center" }}>No messages yet. Send the first one below.</p>
-            )}
-            {conversationQuery.data?.messages?.map((msg: { role: string; content: string; ts?: number }, i: number) => {
-              const isOutbound = msg.role === "assistant";
-              return (
-                <div key={i} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className="rounded-2xl px-3 py-2 max-w-[85%]"
-                    style={{
-                      backgroundColor: isOutbound ? "#0f172a" : "#f1f5f9",
-                      color: isOutbound ? "#fff" : "#0f172a",
-                      fontSize: 13,
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {msg.content}
-                    <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4, textAlign: isOutbound ? "right" : "left" }}>
-                      {msg.ts ? new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Compose */}
-          <div className="flex gap-2 p-3 border-t" style={{ borderColor: "#e2e8f0", backgroundColor: "#f8fafc" }}>
-            <input
-              type="text"
-              value={compose}
-              onChange={e => setCompose(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey && compose.trim() && candidate?.phone) {
-                  e.preventDefault();
-                  sendMutation.mutate({ phone: candidate.phone, candidateName: candidate.name, message: compose.trim() });
-                }
-              }}
-              placeholder="Type a message…"
-              className="flex-1 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-              style={{ borderColor: "#e2e8f0", backgroundColor: "#fff", fontSize: 13 }}
-              disabled={sendMutation.isPending}
-            />
-            <button
-              onClick={() => {
-                if (compose.trim() && candidate?.phone) {
-                  sendMutation.mutate({ phone: candidate.phone, candidateName: candidate.name, message: compose.trim() });
-                }
-              }}
-              disabled={!compose.trim() || sendMutation.isPending || !candidate?.phone}
-              className="rounded-xl px-3 py-2 text-white transition-opacity hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5"
-              style={{ backgroundColor: "#0f172a", fontSize: 13, fontWeight: 600 }}
-            >
-              <Send size={13} />
-              {sendMutation.isPending ? "…" : "Send"}
-            </button>
-          </div>
-        </div>
+      {drawerSession && (
+        <ConversationDrawer
+          session={drawerSession}
+          onClose={() => setDrawerSession(null)}
+          currentAgentId={0}
+        />
       )}
     </div>
   );
 }
-
 // ── Filter tabs ───────────────────────────────────────────────────────────────
 
 const FILTER_TABS = [

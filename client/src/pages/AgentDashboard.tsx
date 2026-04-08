@@ -81,7 +81,7 @@ function computeTotalQuote(quotedPrice: string | null, extrasJson: string | null
 
 // ── Types ─────────────────────────────────────────────────────────────────────────────────
 
-type Session = {
+export type Session = {
   id: number;
   leadPhone: string;
   leadName: string | null;
@@ -404,7 +404,7 @@ function AgentNotesSection({
   );
 }
 
-function ConversationDrawer({
+export function ConversationDrawer({
   session,
   onClose,
   currentAgentId,

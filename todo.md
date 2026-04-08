@@ -1075,3 +1075,5 @@
 - [x] Hiring Pipeline SMS inbox: reuse leads.sendMessage (same phone number) instead of custom getConversation/sendToCandidate procedures; extract hiringRouter to separate file to fix TypeScript type inference depth limit
 - [x] BUG: Hiring pipeline archive count shows 0 — confirmed no archive section exists in UI, was a misread
 - [x] BUG: Hiring pipeline SMS send button does nothing — sessionId is null when candidate has no existing conversation session; need to create session on first send
+- [ ] BUG: Hiring pipeline Text button does nothing when clicked — should open SMS drawer
+- [ ] Send message button in hiring opens exact same ConversationDrawer as AgentDashboard with candidate name+phone
