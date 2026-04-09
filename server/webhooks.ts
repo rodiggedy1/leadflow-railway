@@ -691,7 +691,26 @@ export function registerWebhookRoutes(app: Express) {
         session.stage === "INTERVIEW_NUDGE_1" ||
         session.stage === "INTERVIEW_NUDGE_2"
       ) {
-        // Any reply from the candidate — just acknowledge and mark done
+        // Check if candidate has already advanced past AI Interview — if so, close the session silently
+        const PAST_AI_STAGES = ["Real Interview", "Background Check", "Paid Test Clean", "Onboarding", "Rejected"];
+        const candidateRows = await db
+          .select({ stage: candidates.stage })
+          .from(candidates)
+          .where(eq(candidates.phone, session.leadPhone ?? ""))
+          .orderBy(desc(candidates.updatedAt))
+          .limit(1);
+        const candidateStage = candidateRows[0]?.stage ?? "";
+        if (PAST_AI_STAGES.includes(candidateStage)) {
+          // Candidate is past AI Interview — close this session, don't send the nudge
+          history.push({ role: "user", content: inboundText, ts: Date.now() });
+          await db
+            .update(conversationSessions)
+            .set({ stage: "DONE", messageHistory: JSON.stringify(history) })
+            .where(eq(conversationSessions.id, session.id));
+          console.log(`[Webhook] Interview session closed (candidate at ${candidateStage}) for ${fromPhone}`);
+          return;
+        }
+        // Any reply from the candidate — just acknowledge and keep link open
         const firstName = (session.leadName ?? "there").split(" ")[0] ?? "there";
         const replyMsg = `Thanks ${firstName}! When you're ready, just use the link we sent you to start your interview. 😊`;
         const smsResult = await sendSms({ to: fromPhone, content: replyMsg });

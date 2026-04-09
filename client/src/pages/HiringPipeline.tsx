@@ -178,6 +178,7 @@ function CandidateCard({
   isDragOverlay,
   onArchive,
   onDelete,
+  onSmsClick,
 }: {
   candidate: Candidate;
   isSelected: boolean;
@@ -185,6 +186,7 @@ function CandidateCard({
   isDragOverlay?: boolean;
   onArchive?: (id: number) => void;
   onDelete?: (id: number) => void;
+  onSmsClick?: (candidate: Candidate) => void;
 }) {
   const hasTransport = candidate.transport !== "No car";
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -247,6 +249,21 @@ function CandidateCard({
             >
               {candidate.name}
             </span>
+            {/* SMS icon button */}
+            {onSmsClick && (
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); onSmsClick(candidate); }}
+                className="relative p-0.5 rounded hover:bg-slate-100 transition-colors shrink-0"
+                style={{ color: candidate.hasUnreadReply ? "#d97706" : "#94a3b8" }}
+                aria-label="View SMS history"
+              >
+                <MessageSquare className="w-4 h-4" />
+                {candidate.hasUnreadReply && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 border border-white" />
+                )}
+              </button>
+            )}
             {/* Action menu — stops propagation so card click doesn't fire */}
             <div ref={menuRef} className="relative" onClick={e => e.stopPropagation()}>
               <button
@@ -433,6 +450,7 @@ function StageCard({
   onSelect,
   onArchive,
   onDelete,
+  onSmsClick,
 }: {
   stage: Stage;
   candidates: Candidate[];
@@ -440,6 +458,7 @@ function StageCard({
   onSelect: (c: Candidate) => void;
   onArchive?: (id: number) => void;
   onDelete?: (id: number) => void;
+  onSmsClick?: (candidate: Candidate) => void;
 }) {
   const badge = STAGE_BADGE[stage];
   const { setNodeRef, isOver } = useDroppable({ id: stage });
@@ -502,6 +521,7 @@ function StageCard({
               onClick={() => onSelect(c)}
               onArchive={onArchive}
               onDelete={onDelete}
+              onSmsClick={onSmsClick}
             />
           ))
         )}
@@ -1297,6 +1317,8 @@ type FilterTab = (typeof FILTER_TABS)[number] | "Rejected";
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function HiringPipeline() {
+  const boardTrpcUtils = trpc.useUtils();
+  const [boardDrawerSession, setBoardDrawerSession] = useState<LeadSession | null>(null);
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
   const isRejectedView = filterTab === "Rejected";
   const rejectedQuery = trpc.hiring.getRejectedCandidates.useQuery(undefined, {
@@ -1349,6 +1371,47 @@ export default function HiringPipeline() {
     },
   });
 
+  async function handleCardSmsClick(candidate: Candidate) {
+    if (!candidate.phone) return;
+    const { sessionId } = await boardTrpcUtils.hiring.getSessionByPhone.fetch({ phone: candidate.phone }).catch(() => ({ sessionId: null }));
+    if (sessionId) {
+      const session = await boardTrpcUtils.leads.getById.fetch({ id: sessionId }).catch(() => null);
+      if (session) {
+        setBoardDrawerSession(session as unknown as LeadSession);
+        return;
+      }
+    }
+    const rawPhone = candidate.phone.replace(/[^\d]/g, "");
+    const e164 = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+    setBoardDrawerSession({
+      id: 0,
+      leadPhone: e164,
+      leadName: candidate.name,
+      stage: "UNHANDLED",
+      quotedPrice: null,
+      serviceType: null,
+      bedrooms: null,
+      bathrooms: null,
+      extras: null,
+      selectedSlot: null,
+      address: null,
+      messageHistory: "[]",
+      assignedAgentId: null,
+      assignedAgentName: null,
+      lastCalledAt: null,
+      lastCalledByAgentName: null,
+      isBooked: 0,
+      bookedAt: null,
+      bookedByAgentName: null,
+      bookedAmount: null,
+      internalNotes: null,
+      aiMode: 0,
+      barkQA: null,
+      leadSource: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as LeadSession);
+  }
   function handleDragStart(event: DragStartEvent) {
     const candidate = event.active.data.current?.candidate as Candidate | undefined;
     setActiveCandidate(candidate ?? null);
@@ -1658,6 +1721,7 @@ export default function HiringPipeline() {
                   onSelect={c => setSelectedCandidate(c)}
                   onArchive={id => archiveCandidateMutation.mutate({ id, archived: true })}
                   onDelete={id => setConfirmDeleteId(id)}
+                  onSmsClick={handleCardSmsClick}
                 />
               ))}
             </div>
@@ -1775,6 +1839,13 @@ export default function HiringPipeline() {
       </div>
 
       {/* ── SMS Confirmation Popup ── */}
+      {boardDrawerSession && (
+        <ConversationDrawer
+          session={boardDrawerSession}
+          onClose={() => setBoardDrawerSession(null)}
+          currentAgentId={0}
+        />
+      )}
       {smsPending && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-sm w-full mx-4">
