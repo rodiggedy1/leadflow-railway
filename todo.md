@@ -1078,3 +1078,5 @@
 - [ ] BUG: Hiring pipeline Text button does nothing when clicked — should open SMS drawer
 - [ ] Send message button in hiring opens exact same ConversationDrawer as AgentDashboard with candidate name+phone
 - [x] BUG: Hiring pipeline candidate cards — AI badge now only shows when interviewVideoUrl exists; Vid badge only shows when videoUrl exists; both hidden when inactive
+- [ ] Fix Advance Stage button in hiring pipeline — must advance to next stage and send automated SMS
+- [ ] Fix Reject button in hiring pipeline — must set stage to Rejected and send automated SMS

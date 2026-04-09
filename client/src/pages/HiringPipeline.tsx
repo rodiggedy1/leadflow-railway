@@ -1171,7 +1171,7 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
             if (!candidate) return;
             const idx = STAGES.indexOf(candidate.stage);
             const nextStage = STAGES[idx + 1];
-            if (nextStage) advanceStageMutation.mutate({ id: candidate.id, stage: nextStage });
+            if (nextStage) advanceStageMutation.mutate({ id: candidate.id, stage: nextStage, sendSmsNotification: true });
           }}
         >
           {advanceStageMutation.isPending ? "Moving…" : "Advance stage"}
@@ -1241,7 +1241,7 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
           onClick={() => {
             if (!candidate) return;
             if (!window.confirm(`Reject ${candidate.name}?`)) return;
-            rejectMutation.mutate({ id: candidate.id, stage: "Application Submitted" as Stage, sendSmsNotification: false });
+            rejectMutation.mutate({ id: candidate.id, stage: "Rejected", sendSmsNotification: true });
           }}
         >
           {rejectMutation.isPending ? "Rejecting…" : "Reject"}

@@ -3,7 +3,7 @@
  * Extracted to a separate file to keep TypeScript inference tractable.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { conversationSessions } from "../drizzle/schema";
 import { invokeLLM } from "./_core/llm";
@@ -250,7 +250,7 @@ export const hiringRouter = router({
         const rows = await db
           .select()
           .from(candidates)
-          .where(eq(candidates.archived, 0))
+          .where(and(eq(candidates.archived, 0), ne(candidates.stage, "Rejected")))
           .orderBy(desc(candidates.createdAt));
         return rows.map(r => ({
           id: r.id,

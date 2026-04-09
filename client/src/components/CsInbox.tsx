@@ -2487,7 +2487,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                           <Button
                             className="rounded-l-xl rounded-r-none h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
-                            onClick={handleCsSend}
+                            onClick={() => handleCsSend()}
                           >
                             {elevateReply.isPending ? (
                               <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
