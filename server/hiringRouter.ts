@@ -3,7 +3,7 @@
  * Extracted to a separate file to keep TypeScript inference tractable.
  */
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, gte, ne, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { conversationSessions } from "../drizzle/schema";
 import { invokeLLM } from "./_core/llm";
@@ -719,10 +719,10 @@ export const hiringRouter = router({
             .where(eq(candidates.archived, 0)),
           // AI interviews completed all-time = candidates with an interviewCallId
           db.select({ cnt: count() }).from(candidates)
-            .where(and(eq(candidates.archived, 0), ne(sql`${candidates.interviewCallId}`, sql`NULL`))),
+            .where(and(eq(candidates.archived, 0), isNotNull(candidates.interviewCallId))),
           // Candidates in motion = non-rejected, non-archived (active in pipeline)
           db.select({ cnt: count() }).from(candidates)
-            .where(and(ne(candidates.stage, "Rejected"), eq(candidates.archived, 0))),
+            .where(and(eq(candidates.archived, 0), ne(candidates.stage, "Rejected"))),
           // Hires this week = moved to Active or Onboarding this week
           db.select({ cnt: count() }).from(candidates)
             .where(and(
