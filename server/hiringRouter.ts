@@ -252,32 +252,72 @@ export const hiringRouter = router({
           .from(candidates)
           .where(and(eq(candidates.archived, 0), ne(candidates.stage, "Rejected")))
           .orderBy(desc(candidates.createdAt));
-        return rows.map(r => ({
-          id: r.id,
-          firstName: r.firstName,
-          lastName: r.lastName,
-          email: r.email ?? null,
-          phone: r.phone,
-          streetAddress: r.streetAddress ?? null,
-          apt: r.apt ?? null,
-          city: r.city ?? null,
-          state: r.state ?? null,
-          zip: r.zip ?? null,
-          stage: r.stage,
-          experience: r.experience ?? null,
-          bioPhotoUrl: r.bioPhotoUrl ?? null,
-          videoUrl: r.videoUrl ?? null,
-          interviewVideoUrl: r.interviewVideoUrl ?? null,
-          specialties: r.specialties ? JSON.parse(r.specialties) as string[] : [],
-          hasCleaning: r.hasCleaning === 1,
-          hasBankAccount: r.hasBankAccount === 1,
-          isAuthorized: r.isAuthorized === 1,
-          consentBackground: r.consentBackground === 1,
-          aiScore: r.aiScore ?? null,
-          aiSummary: r.aiSummary ?? null,
-          interviewCallId: r.interviewCallId ?? null,
-          createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : Number(r.createdAt),
-        }));
+
+        // Build a phone → hasUnreadReply map by checking the most recent
+        // conversation_sessions row for each candidate's phone number.
+        // A session has an unread reply when the last role:"user" or role:"assistant"
+        // entry in messageHistory is role:"user" (inbound from candidate).
+        const phones = Array.from(new Set(
+          rows.map(r => {
+            const raw = r.phone.replace(/[^\d]/g, "");
+            return raw.length === 10 ? `+1${raw}` : `+${raw}`;
+          })
+        ));
+        const unreadPhones = new Set<string>();
+        if (phones.length > 0) {
+          // Fetch the most recent session per phone that has leadSource = 'hiring_interview'
+          const sessions = await db
+            .select({ leadPhone: conversationSessions.leadPhone, messageHistory: conversationSessions.messageHistory })
+            .from(conversationSessions)
+            .where(and(
+              eq(conversationSessions.leadSource, "hiring_interview"),
+              or(...phones.map(p => eq(conversationSessions.leadPhone, p)))
+            ))
+            .orderBy(desc(conversationSessions.createdAt));
+          // Deduplicate — keep only the most recent session per phone
+          const seenPhones = new Set<string>();
+          for (const s of sessions) {
+            const phone = s.leadPhone?.trim();
+            if (!phone || seenPhones.has(phone)) continue;
+            seenPhones.add(phone);
+            let history: { role: string }[] = [];
+            try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
+            const lastReal = [...history].reverse().find(e => e.role === "user" || e.role === "assistant");
+            if (lastReal?.role === "user") unreadPhones.add(phone);
+          }
+        }
+
+        return rows.map(r => {
+          const raw = r.phone.replace(/[^\d]/g, "");
+          const e164 = raw.length === 10 ? `+1${raw}` : `+${raw}`;
+          return {
+            id: r.id,
+            firstName: r.firstName,
+            lastName: r.lastName,
+            email: r.email ?? null,
+            phone: r.phone,
+            streetAddress: r.streetAddress ?? null,
+            apt: r.apt ?? null,
+            city: r.city ?? null,
+            state: r.state ?? null,
+            zip: r.zip ?? null,
+            stage: r.stage,
+            experience: r.experience ?? null,
+            bioPhotoUrl: r.bioPhotoUrl ?? null,
+            videoUrl: r.videoUrl ?? null,
+            interviewVideoUrl: r.interviewVideoUrl ?? null,
+            specialties: r.specialties ? JSON.parse(r.specialties) as string[] : [],
+            hasCleaning: r.hasCleaning === 1,
+            hasBankAccount: r.hasBankAccount === 1,
+            isAuthorized: r.isAuthorized === 1,
+            consentBackground: r.consentBackground === 1,
+            aiScore: r.aiScore ?? null,
+            aiSummary: r.aiSummary ?? null,
+            interviewCallId: r.interviewCallId ?? null,
+            createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : Number(r.createdAt),
+            hasUnreadReply: unreadPhones.has(e164),
+          };
+        });
       }),
 
     /**

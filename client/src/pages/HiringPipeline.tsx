@@ -98,6 +98,7 @@ interface Candidate {
   videoUrl?: string;
   interviewVideoUrl?: string;
   interviewCallId?: string | null;
+  hasUnreadReply?: boolean;
   bioPhotoUrl?: string;
   // Full application data
   phone?: string;
@@ -354,10 +355,10 @@ function CandidateCard({
             <span style={{ fontSize: 10 }}>Vid</span>
           </span>
         )}
-        {/* Inbox reply indicator — only shown for Real Interview stage */}
-        {candidate.stage === "Real Interview" && (
+        {/* Unread reply indicator — shown on any card with an unanswered inbound SMS */}
+        {candidate.hasUnreadReply && (
           <span
-            title="Awaiting availability reply — check inbox"
+            title="Candidate replied — check inbox"
             className="inline-flex items-center gap-1 rounded-full border"
             style={{
               borderColor: "#fde68a",
@@ -370,7 +371,7 @@ function CandidateCard({
             }}
           >
             <Inbox style={{ width: 11, height: 11, strokeWidth: 2 }} />
-            <span style={{ fontSize: 10 }}>Check inbox</span>
+            <span style={{ fontSize: 10 }}>Replied</span>
           </span>
         )}
         {/* AI badge — only shown when AI interview video exists */}
@@ -1397,6 +1398,7 @@ export default function HiringPipeline() {
       videoUrl: r.videoUrl ?? undefined,
       interviewVideoUrl: r.interviewVideoUrl ?? undefined,
       interviewCallId: (r as any).interviewCallId ?? null,
+      hasUnreadReply: (r as any).hasUnreadReply ?? false,
       bioPhotoUrl: r.bioPhotoUrl ?? undefined,
       phone: r.phone,
       email: r.email ?? undefined,
