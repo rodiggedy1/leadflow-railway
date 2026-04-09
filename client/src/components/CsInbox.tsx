@@ -1140,6 +1140,14 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     onError: () => setNbaLlmLoading(false),
   });
 
+  // Clear NBA result immediately whenever the selected conversation changes,
+  // regardless of whether the new conversation will trigger a new NBA fetch.
+  // This prevents stale results from a previous conversation from showing.
+  useEffect(() => {
+    setNbaLlmResult(null);
+    setNbaLlmLoading(false);
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!selected || selected.queue === "Teams" || selected.messages.length === 0) return;
     const lastMsg = selected.messages[selected.messages.length - 1];
