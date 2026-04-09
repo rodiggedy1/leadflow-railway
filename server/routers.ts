@@ -108,6 +108,8 @@ export const appRouter = router({
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner'))`,
           // Never show pure review-flow sessions in the lead list
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+          // Never show hiring applicant sessions in the lead list
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('hiring_interview', 'hiring'))`,
           or(
             // Organic / form leads — show immediately (no leadSource)
             sql`${conversationSessions.leadSource} IS NULL`,
