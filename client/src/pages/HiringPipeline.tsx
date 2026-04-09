@@ -1624,7 +1624,7 @@ export default function HiringPipeline() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{r.firstName} {r.lastName}</p>
                         <p className="text-xs text-gray-400 truncate">
-                          {r.specialties?.slice(0, 2).join(", ") || "New applicant"}
+                          {(typeof r.specialties === "string" ? JSON.parse(r.specialties) as string[] : (r.specialties ?? [])).slice(0, 2).join(", ") || "New applicant"}
                           {r.updatedAt ? ` · ${new Date(r.updatedAt).toLocaleDateString()}` : ""}
                         </p>
                       </div>
