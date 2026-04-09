@@ -1127,8 +1127,16 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null } | null>(null);
   const [nbaLlmFetchedKey, setNbaLlmFetchedKey] = useState<string | null>(null);
   const [nbaLlmLoading, setNbaLlmLoading] = useState(false);
+  // Track which session the in-flight NBA mutation was fired for so we can discard
+  // results that arrive after the user has switched to a different conversation.
+  const nbaInflightSessionIdRef = useRef<number | null>(null);
   const nbaLlmMutation = trpc.opsChat.csNbaAnalysis.useMutation({
-    onSuccess: (data) => { setNbaLlmResult(data); setNbaLlmLoading(false); },
+    onSuccess: (data) => {
+      // Discard stale result if user switched conversations while LLM was running
+      if (nbaInflightSessionIdRef.current !== effectiveSelectedIdRef.current) return;
+      setNbaLlmResult(data);
+      setNbaLlmLoading(false);
+    },
     onError: () => setNbaLlmLoading(false),
   });
 
@@ -1144,6 +1152,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     const freq = clientProfile?.frequency ?? "";
     const isOneTimeFreq = /one.time|one time|1.time|single/i.test(freq);
     const isAlreadyRecurring = !!freq && !isOneTimeFreq;
+    nbaInflightSessionIdRef.current = selected.id;
     nbaLlmMutation.mutate({
       sessionId: selected.id,
       messageHistory: insightMsgHistory,
