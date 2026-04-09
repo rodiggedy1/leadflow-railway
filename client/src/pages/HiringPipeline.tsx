@@ -1491,12 +1491,10 @@ export default function HiringPipeline() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {[
               {
-                label: "Applications today",
-                value: stats ? String(stats.applicationsToday) : "—",
+                label: "Total applications",
+                value: stats ? String(stats.totalApplications) : "—",
                 sub: stats
-                  ? stats.applicationsYesterday === 0
-                    ? stats.applicationsToday > 0 ? "New today" : "None yet today"
-                    : `${stats.applicationsToday > stats.applicationsYesterday ? "+" : ""}${Math.round(((stats.applicationsToday - stats.applicationsYesterday) / stats.applicationsYesterday) * 100)}% vs yesterday`
+                  ? stats.totalApplications === 1 ? "1 applicant all-time" : `${stats.totalApplications} applicants all-time`
                   : "Loading…",
                 icon: <User className="w-5 h-5 text-gray-400" />,
               },
@@ -1504,16 +1502,16 @@ export default function HiringPipeline() {
                 label: "AI interviews completed",
                 value: stats ? String(stats.aiInterviewsCompleted) : "—",
                 sub: stats
-                  ? stats.totalApplicants > 0
-                    ? `${Math.round((stats.aiInterviewsCompleted / stats.totalApplicants) * 100)}% completion rate`
+                  ? stats.totalApplications > 0
+                    ? `${Math.round((stats.aiInterviewsCompleted / stats.totalApplications) * 100)}% of all applicants`
                     : "No applicants yet"
                   : "Loading…",
                 icon: <MessageSquare className="w-5 h-5 text-gray-400" />,
               },
               {
-                label: "Interviews in motion",
-                value: stats ? String(stats.interviewsInMotion) : "—",
-                sub: stats ? `${stats.interviewsInMotion === 1 ? "1 candidate" : `${stats.interviewsInMotion} candidates`} in Real Interview` : "Loading…",
+                label: "Candidates in motion",
+                value: stats ? String(stats.candidatesInMotion) : "—",
+                sub: stats ? `${stats.candidatesInMotion === 1 ? "1 candidate" : `${stats.candidatesInMotion} candidates`} active in pipeline` : "Loading…",
                 icon: <Phone className="w-5 h-5 text-gray-400" />,
               },
               {

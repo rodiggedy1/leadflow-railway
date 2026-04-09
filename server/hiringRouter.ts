@@ -696,45 +696,33 @@ export const hiringRouter = router({
     getPipelineStats: agentProcedure
       .query(async () => {
         const db = await getDb();
-        if (!db) return { applicationsToday: 0, applicationsYesterday: 0, aiInterviewsCompleted: 0, totalApplicants: 0, interviewsInMotion: 0, hiresThisWeek: 0, pendingOnboarding: 0 };
+        if (!db) return { totalApplications: 0, aiInterviewsCompleted: 0, candidatesInMotion: 0, hiresThisWeek: 0, pendingOnboarding: 0 };
         const { candidates } = await import("../drizzle/schema");
 
-        // Time boundaries in UTC
+        // This week: last Monday midnight UTC
         const now = new Date();
-        // Today: midnight UTC
         const todayStart = new Date(now);
         todayStart.setUTCHours(0, 0, 0, 0);
-        // Yesterday: midnight UTC - 24h
-        const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-        // This week: last Monday midnight UTC
         const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon...
         const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
         const weekStart = new Date(todayStart.getTime() - daysToMonday * 24 * 60 * 60 * 1000);
 
         const [
-          appsTodayRows,
-          appsYesterdayRows,
+          totalAppRows,
           aiCompletedRows,
-          totalApplicantRows,
           inMotionRows,
           hiresWeekRows,
           pendingOnboardRows,
         ] = await Promise.all([
-          // Applications submitted today
+          // Total applications all-time (not archived)
           db.select({ cnt: count() }).from(candidates)
-            .where(and(gte(candidates.createdAt, todayStart), eq(candidates.archived, 0))),
-          // Applications submitted yesterday (for % change)
+            .where(eq(candidates.archived, 0)),
+          // AI interviews completed all-time = candidates with an interviewCallId
           db.select({ cnt: count() }).from(candidates)
-            .where(and(gte(candidates.createdAt, yesterdayStart), sql`${candidates.createdAt} < ${todayStart}`, eq(candidates.archived, 0))),
-          // AI interviews completed = candidates who have an interviewCallId (interview was started)
-          db.select({ cnt: count() }).from(candidates)
-            .where(and(ne(candidates.stage, "Rejected"), eq(candidates.archived, 0), ne(sql`${candidates.interviewCallId}`, sql`NULL`))),
-          // Total non-rejected, non-archived applicants (for completion rate denominator)
+            .where(and(eq(candidates.archived, 0), ne(sql`${candidates.interviewCallId}`, sql`NULL`))),
+          // Candidates in motion = non-rejected, non-archived (active in pipeline)
           db.select({ cnt: count() }).from(candidates)
             .where(and(ne(candidates.stage, "Rejected"), eq(candidates.archived, 0))),
-          // Interviews in motion = candidates in Real Interview stage
-          db.select({ cnt: count() }).from(candidates)
-            .where(and(eq(candidates.stage, "Real Interview"), eq(candidates.archived, 0))),
           // Hires this week = moved to Active or Onboarding this week
           db.select({ cnt: count() }).from(candidates)
             .where(and(
@@ -747,20 +735,16 @@ export const hiringRouter = router({
             .where(and(eq(candidates.stage, "Onboarding"), eq(candidates.archived, 0))),
         ]);
 
-        const applicationsToday = appsTodayRows[0]?.cnt ?? 0;
-        const applicationsYesterday = appsYesterdayRows[0]?.cnt ?? 0;
+        const totalApplications = totalAppRows[0]?.cnt ?? 0;
         const aiInterviewsCompleted = aiCompletedRows[0]?.cnt ?? 0;
-        const totalApplicants = totalApplicantRows[0]?.cnt ?? 0;
-        const interviewsInMotion = inMotionRows[0]?.cnt ?? 0;
+        const candidatesInMotion = inMotionRows[0]?.cnt ?? 0;
         const hiresThisWeek = hiresWeekRows[0]?.cnt ?? 0;
         const pendingOnboarding = pendingOnboardRows[0]?.cnt ?? 0;
 
         return {
-          applicationsToday,
-          applicationsYesterday,
+          totalApplications,
           aiInterviewsCompleted,
-          totalApplicants,
-          interviewsInMotion,
+          candidatesInMotion,
           hiresThisWeek,
           pendingOnboarding,
         };
