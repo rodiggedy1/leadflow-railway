@@ -1077,3 +1077,4 @@
 - [x] BUG: Hiring pipeline SMS send button does nothing — sessionId is null when candidate has no existing conversation session; need to create session on first send
 - [ ] BUG: Hiring pipeline Text button does nothing when clicked — should open SMS drawer
 - [ ] Send message button in hiring opens exact same ConversationDrawer as AgentDashboard with candidate name+phone
+- [x] BUG: Hiring pipeline candidate cards — AI badge now only shows when interviewVideoUrl exists; Vid badge only shows when videoUrl exists; both hidden when inactive

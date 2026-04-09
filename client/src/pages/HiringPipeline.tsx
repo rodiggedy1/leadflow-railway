@@ -334,40 +334,44 @@ function CandidateCard({
         >
           ZIP {candidate.zip}
         </span>
-        {/* Video submitted icon */}
-        <span
-          title={candidate.videoUrl ? "Application video submitted" : "No application video"}
-          className="inline-flex items-center gap-1 rounded-full border"
-          style={{
-            borderColor: candidate.videoUrl ? "#bbf7d0" : "#e2e8f0",
-            backgroundColor: candidate.videoUrl ? "#f0fdf4" : "#f8fafc",
-            color: candidate.videoUrl ? "#16a34a" : "#cbd5e1",
-            fontSize: "12px",
-            fontWeight: 500,
-            padding: "3px 8px 3px 6px",
-            lineHeight: 1.4,
-          }}
-        >
-          <Video style={{ width: 11, height: 11, strokeWidth: 2 }} />
-          <span style={{ fontSize: 10 }}>Vid</span>
-        </span>
-        {/* AI interview icon */}
-        <span
-          title={candidate.interviewCallId ? "AI interview completed" : "AI interview not yet done"}
-          className="inline-flex items-center gap-1 rounded-full border"
-          style={{
-            borderColor: candidate.interviewCallId ? "#bfdbfe" : "#e2e8f0",
-            backgroundColor: candidate.interviewCallId ? "#eff6ff" : "#f8fafc",
-            color: candidate.interviewCallId ? "#2563eb" : "#cbd5e1",
-            fontSize: "12px",
-            fontWeight: 500,
-            padding: "3px 8px 3px 6px",
-            lineHeight: 1.4,
-          }}
-        >
-          <Bot style={{ width: 11, height: 11, strokeWidth: 2 }} />
-          <span style={{ fontSize: 10 }}>AI</span>
-        </span>
+        {/* Video badge — only shown when application video exists */}
+        {candidate.videoUrl && (
+          <span
+            title="Application video submitted"
+            className="inline-flex items-center gap-1 rounded-full border"
+            style={{
+              borderColor: "#bbf7d0",
+              backgroundColor: "#f0fdf4",
+              color: "#16a34a",
+              fontSize: "12px",
+              fontWeight: 500,
+              padding: "3px 8px 3px 6px",
+              lineHeight: 1.4,
+            }}
+          >
+            <Video style={{ width: 11, height: 11, strokeWidth: 2 }} />
+            <span style={{ fontSize: 10 }}>Vid</span>
+          </span>
+        )}
+        {/* AI badge — only shown when AI interview video exists */}
+        {candidate.interviewVideoUrl && (
+          <span
+            title="AI interview video available"
+            className="inline-flex items-center gap-1 rounded-full border"
+            style={{
+              borderColor: "#bfdbfe",
+              backgroundColor: "#eff6ff",
+              color: "#2563eb",
+              fontSize: "12px",
+              fontWeight: 500,
+              padding: "3px 8px 3px 6px",
+              lineHeight: 1.4,
+            }}
+          >
+            <Bot style={{ width: 11, height: 11, strokeWidth: 2 }} />
+            <span style={{ fontSize: 10 }}>AI</span>
+          </span>
+        )}
       </div>
 
       {/* Tag + Score row */}
