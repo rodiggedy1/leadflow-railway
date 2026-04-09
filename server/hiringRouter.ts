@@ -3,7 +3,7 @@
  * Extracted to a separate file to keep TypeScript inference tractable.
  */
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, gte, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { conversationSessions } from "../drizzle/schema";
 import { invokeLLM } from "./_core/llm";
@@ -436,8 +436,29 @@ export const hiringRouter = router({
         const candidate = rows[0];
 
         await db.update(candidates).set({ stage: input.stage }).where(eq(candidates.id, input.id));
-
-        // Optionally send stage-change SMS
+        // Close any open interview sessions when advancing past AI Interview
+        const PAST_AI_STAGES = ["Real Interview", "Background Check", "Paid Test Clean", "Onboarding", "Active", "Rejected"];
+        if (PAST_AI_STAGES.includes(input.stage) && candidate?.phone) {
+          const rawPhone = candidate.phone.replace(/[^\d]/g, "");
+          const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+          setImmediate(async () => {
+            try {
+              await db
+                .update(conversationSessions)
+                .set({ stage: "DONE" })
+                .where(
+                  and(
+                    eq(conversationSessions.leadPhone, e164Phone),
+                    inArray(conversationSessions.stage as any, ["INTERVIEW_LINK_SENT", "INTERVIEW_NUDGE_1", "INTERVIEW_NUDGE_2"])
+                  )
+                );
+              console.log(`[Hiring] Closed interview session(s) for ${e164Phone} on advance to ${input.stage}`);
+            } catch (err: any) {
+              console.error(`[Hiring] Failed to close interview sessions for ${e164Phone}:`, err.message);
+            }
+          });
+        }
+        // Optionally send stage-change SMSS
         if (input.sendSmsNotification && candidate?.phone) {
           const rawPhone = candidate.phone.replace(/[^\d]/g, "");
           const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
