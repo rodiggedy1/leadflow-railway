@@ -749,4 +749,48 @@ export const hiringRouter = router({
           pendingOnboarding,
         };
       }),
+
+  /**
+   * Protected — list all rejected candidates for the Rejected tab
+   */
+  getRejectedCandidates: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const { candidates } = await import("../drizzle/schema");
+    const rows = await db
+      .select({
+        id: candidates.id,
+        firstName: candidates.firstName,
+        lastName: candidates.lastName,
+        phone: candidates.phone,
+        email: candidates.email,
+        zipCode: candidates.zip,
+        stage: candidates.stage,
+        updatedAt: candidates.updatedAt,
+        createdAt: candidates.createdAt,
+        specialties: candidates.specialties,
+        aiSummary: candidates.aiSummary,
+        aiScore: candidates.aiScore,
+      })
+      .from(candidates)
+      .where(and(eq(candidates.stage, "Rejected"), eq(candidates.archived, 0)))
+      .orderBy(desc(candidates.updatedAt));
+    return rows;
+  }),
+
+  /**
+   * Protected — restore a rejected candidate back to Application Submitted
+   */
+  restoreCandidate: agentProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { candidates } = await import("../drizzle/schema");
+      await db
+        .update(candidates)
+        .set({ stage: "Application Submitted", updatedAt: new Date() })
+        .where(and(eq(candidates.id, input.id), eq(candidates.stage, "Rejected")));
+      return { success: true };
+    }),
 });

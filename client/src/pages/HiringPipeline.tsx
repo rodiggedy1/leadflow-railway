@@ -56,6 +56,7 @@ import {
   ChevronDown,
   ChevronUp,
   Inbox,
+  RotateCcw,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1291,12 +1292,21 @@ const FILTER_TABS = [
   "Onboarding",
   "Active",
 ] as const;
-type FilterTab = (typeof FILTER_TABS)[number];
+type FilterTab = (typeof FILTER_TABS)[number] | "Rejected";
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function HiringPipeline() {
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
+  const isRejectedView = filterTab === "Rejected";
+  const rejectedQuery = trpc.hiring.getRejectedCandidates.useQuery(undefined, {
+    enabled: isRejectedView,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+  const restoreMutation = trpc.hiring.restoreCandidate.useMutation({
+    onSuccess: () => rejectedQuery.refetch(),
+  });
   const [search, setSearch] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
@@ -1573,15 +1583,66 @@ export default function HiringPipeline() {
                   {tab}
                 </button>
               ))}
+              {/* Rejected tab — separated visually */}
+              <button
+                onClick={() => setFilterTab("Rejected")}
+                className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all"
+                style={
+                  filterTab === "Rejected"
+                    ? { backgroundColor: "#ef4444", color: "#ffffff", borderColor: "#ef4444" }
+                    : { backgroundColor: "#ffffff", color: "#ef4444", borderColor: "#fca5a5" }
+                }
+              >
+                Rejected
+              </button>
             </div>
           </div>
 
           {/* Scroll indicator bar */}
-          <div className="mt-3 mb-5 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#f1f5f9" }}>
-            <div className="h-full w-1/3 rounded-full" style={{ backgroundColor: "#cbd5e1" }} />
-          </div>
-
-          {/* 2-column grid of stage cards — wrapped in DndContext for drag-and-drop */}
+          {!isRejectedView && (
+            <div className="mt-3 mb-5 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#f1f5f9" }}>
+              <div className="h-full w-1/3 rounded-full" style={{ backgroundColor: "#cbd5e1" }} />
+            </div>
+          )}
+          {/* ── Rejected list ── */}
+          {isRejectedView ? (
+            <div className="mt-4">
+              {rejectedQuery.isLoading ? (
+                <p className="text-sm text-gray-400 py-8 text-center">Loading…</p>
+              ) : !rejectedQuery.data?.length ? (
+                <p className="text-sm text-gray-400 py-8 text-center">No rejected candidates.</p>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "#f1f5f9" }}>
+                  {rejectedQuery.data.map((r: any) => (
+                    <div key={r.id} className="flex items-center gap-3 py-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                        style={{ backgroundColor: "#fee2e2", color: "#dc2626" }}
+                      >
+                        {`${r.firstName[0] ?? ""}${r.lastName[0] ?? ""}`.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{r.firstName} {r.lastName}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {r.specialties?.slice(0, 2).join(", ") || "New applicant"}
+                          {r.updatedAt ? ` · ${new Date(r.updatedAt).toLocaleDateString()}` : ""}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => restoreMutation.mutate({ id: r.id })}
+                        disabled={restoreMutation.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors hover:bg-gray-50 shrink-0"
+                        style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
           <DndContext
             sensors={sensors}
             onDragStart={handleDragStart}
@@ -1611,6 +1672,7 @@ export default function HiringPipeline() {
               ) : null}
             </DragOverlay>
           </DndContext>
+          )}
         </div>
 
         {/* ── Right panel ── */}
