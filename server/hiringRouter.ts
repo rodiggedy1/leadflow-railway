@@ -403,10 +403,10 @@ export const hiringRouter = router({
 
           const stageMessages: Record<string, string> = {
             // Display-name keys (what the pipeline sends)
-            "Real Interview": `Hey ${firstName} — great news from Maids in Black! 🎉 You've passed the AI interview and we'd love to schedule a real video interview with you. We'll be in touch shortly to confirm the time. — Jade`,
+            "Real Interview": `Hey ${firstName} — great news from Maids in Black! 🎉 You've passed the AI interview and we'd love to schedule a quick 5 minute phone call with you. What's your schedule like in the next few days? — Jade`,
             "Background Check": `Hey ${firstName} — Jade from Maids in Black here! You're moving forward to the background check stage. We'll send you a link shortly to complete it. Hang tight! 🙌`,
             "Paid Test Clean": `Hey ${firstName} — exciting news! You've been selected for a paid test clean with Maids in Black. We'll reach out with scheduling details soon. — Jade 🧹`,
-            "Onboarding": `Hey ${firstName} — welcome to the Maids in Black family! 🎊 You've been hired! Our team will reach out with onboarding details and your first assignment. So excited to have you! — Jade`,
+            "Onboarding": `Hey ${firstName} — welcome to the Maids in Black family! 🎊 We're excited to have you on our team! Our team will reach out with onboarding details and your first assignment. So excited to have you! — Jade`,
             "Rejected": `Hey ${firstName} — Jade from Maids in Black here. Thank you so much for taking the time to apply and complete the interview. After careful review, we've decided to move forward with other candidates at this time. We truly appreciate your interest and wish you all the best in your job search! 💙`,
           };
 
