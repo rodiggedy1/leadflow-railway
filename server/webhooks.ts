@@ -685,18 +685,20 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // -- INTERVIEW_LINK_SENT / NUDGE: close silently, no auto-reply --
+      // -- INTERVIEW_LINK_SENT / NUDGE: record the reply, no auto-reply SMS --
       if (
         session.stage === "INTERVIEW_LINK_SENT" ||
         session.stage === "INTERVIEW_NUDGE_1" ||
         session.stage === "INTERVIEW_NUDGE_2"
       ) {
         history.push({ role: "user", content: inboundText, ts: Date.now() });
+        // Keep session open so messages keep appearing in the SMS drawer.
+        // Do NOT send any auto-reply.
         await db
           .update(conversationSessions)
-          .set({ stage: "DONE", messageHistory: JSON.stringify(history) })
+          .set({ messageHistory: JSON.stringify(history) })
           .where(eq(conversationSessions.id, session.id));
-        console.log("[Webhook] Interview session closed silently for " + fromPhone);
+        console.log("[Webhook] Interview reply recorded (no auto-reply) for " + fromPhone);
         return;
       }
       // ── STOP / opt-out detection (before LLM, TCPA compliance) ────────────────
