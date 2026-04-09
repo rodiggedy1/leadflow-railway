@@ -55,6 +55,7 @@ import {
   Send,
   ChevronDown,
   ChevronUp,
+  Inbox,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -351,6 +352,25 @@ function CandidateCard({
           >
             <Video style={{ width: 11, height: 11, strokeWidth: 2 }} />
             <span style={{ fontSize: 10 }}>Vid</span>
+          </span>
+        )}
+        {/* Inbox reply indicator — only shown for Real Interview stage */}
+        {candidate.stage === "Real Interview" && (
+          <span
+            title="Awaiting availability reply — check inbox"
+            className="inline-flex items-center gap-1 rounded-full border"
+            style={{
+              borderColor: "#fde68a",
+              backgroundColor: "#fffbeb",
+              color: "#b45309",
+              fontSize: "12px",
+              fontWeight: 500,
+              padding: "3px 8px 3px 6px",
+              lineHeight: 1.4,
+            }}
+          >
+            <Inbox style={{ width: 11, height: 11, strokeWidth: 2 }} />
+            <span style={{ fontSize: 10 }}>Check inbox</span>
           </span>
         )}
         {/* AI badge — only shown when AI interview video exists */}
