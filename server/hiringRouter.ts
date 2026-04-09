@@ -168,7 +168,8 @@ export const hiringRouter = router({
                 // Only send if candidate hasn't completed interview
                 const { candidates: cTable } = await import("../drizzle/schema");
                 const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
-                if (!candidate || candidate.stage === "AI Interview") return;
+                const NUDGE_ALLOWED_STAGES = ["Application Submitted", "AI Interview"];
+                if (!candidate || !NUDGE_ALLOWED_STAGES.includes(candidate.stage ?? "")) return;
                 const nudge1 = `Hey ${firstName} — Jade from Maids in Black here! Your interview link is still waiting 👇\n${interviewLink}\nTakes 5 min and helps us move you forward faster.`;
                 await sendSms({ to: e164Phone, content: nudge1 });
                 await db.update(conversationSessions)
@@ -186,7 +187,8 @@ export const hiringRouter = router({
               try {
                 const { candidates: cTable } = await import("../drizzle/schema");
                 const [candidate] = await db.select({ stage: cTable.stage }).from(cTable).where(eq(cTable.id, candidateId)).limit(1);
-                if (!candidate || candidate.stage === "AI Interview") return;
+                const NUDGE_ALLOWED_STAGES2 = ["Application Submitted", "AI Interview"];
+                if (!candidate || !NUDGE_ALLOWED_STAGES2.includes(candidate.stage ?? "")) return;
                 const nudge2 = `Good morning ${firstName} — Jade from Maids in Black here 👋 We're still reviewing applications today — your interview spot is open:\n${interviewLink}\nThis is the last reminder — complete it to stay in the running!`;
                 await sendSms({ to: e164Phone, content: nudge2 });
                 await db.update(conversationSessions)
