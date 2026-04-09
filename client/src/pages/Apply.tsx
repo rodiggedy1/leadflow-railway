@@ -186,7 +186,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         .blink-dot { animation: blink-dot 1.4s ease-in-out infinite; }
       `}</style>
       <header
-        className="flex items-center justify-between px-8 shrink-0"
+        className="flex items-center justify-between px-4 sm:px-8 shrink-0"
         style={{
           height: 60,
           backgroundColor: "#0e1628",
@@ -195,22 +195,22 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         }}
       >
         {/* Left: logo + brand */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-xs tracking-tight shrink-0"
             style={{ backgroundColor: BRAND_GREEN, boxShadow: `0 0 12px rgba(22,163,74,0.5)` }}
           >
             MIB
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-white text-sm font-bold tracking-wide">Maids in Black</span>
-            <span className="text-gray-500 text-xs mt-0.5">Washington DC · MD · VA</span>
+          <div className="flex flex-col leading-none min-w-0">
+            <span className="text-white text-sm font-bold tracking-wide truncate">Maids in Black</span>
+            <span className="hidden sm:block text-gray-500 text-xs mt-0.5">Washington DC · MD · VA</span>
           </div>
         </div>
 
-        {/* Center: now hiring pill */}
+        {/* Center: now hiring pill — hidden on small screens */}
         <div
-          className="flex items-center gap-2 px-4 py-1.5 rounded-full"
+          className="hidden sm:flex items-center gap-2 px-4 py-1.5 rounded-full"
           style={{ backgroundColor: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.25)" }}
         >
           <span
@@ -220,10 +220,22 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           <span className="text-xs font-bold tracking-widest uppercase" style={{ color: BRAND_GREEN }}>Now Hiring</span>
         </div>
 
-        {/* Right: positions available */}
-        <div className="flex items-center gap-1.5">
+        {/* Right: positions available — hidden on small screens */}
+        <div className="hidden sm:flex items-center gap-1.5 shrink-0">
           <span className="text-xs text-gray-500">Positions available:</span>
           <span className="text-xs font-bold text-white">DC · MD · VA</span>
+        </div>
+
+        {/* Mobile-only compact badge */}
+        <div
+          className="flex sm:hidden items-center gap-1.5 px-3 py-1 rounded-full shrink-0"
+          style={{ backgroundColor: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.25)" }}
+        >
+          <span
+            className="blink-dot w-1.5 h-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: BRAND_GREEN }}
+          />
+          <span className="text-xs font-bold" style={{ color: BRAND_GREEN }}>Now Hiring</span>
         </div>
       </header>
 
