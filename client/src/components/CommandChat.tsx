@@ -1275,7 +1275,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       return;
     }
     // If already checked and warning acknowledged (or no text), send directly
-    if (qualityChecked || !hasText) { doSend(); return; }
+    // Also skip quality check for quote-replies — the quoted text belongs to the original sender, not this agent
+    if (qualityChecked || !hasText || replyTo) { doSend(); return; }
     // Run quality check first
     checkQualityMutation.mutate(
       { message: composer.trim() },
