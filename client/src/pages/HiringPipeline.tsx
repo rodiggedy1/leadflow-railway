@@ -3,7 +3,7 @@
  * Pixel-perfect match to the provided design screenshots.
  * Data is static/mock for now; will be wired to backend in a future phase.
  */
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { ConversationDrawer, type Session as LeadSession } from "./AgentDashboard";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
@@ -1499,6 +1499,14 @@ export default function HiringPipeline() {
       stageOverrides[c.id] ? { ...c, stage: stageOverrides[c.id] } : c
     );
   }, [candidatesQuery.data, stageOverrides]);
+  // Keep selectedCandidate in sync after stage advances
+  useEffect(() => {
+    if (!selectedCandidate) return;
+    const fresh = allCandidates.find(c => c.id === selectedCandidate.id);
+    if (fresh && fresh.stage !== selectedCandidate.stage) {
+      setSelectedCandidate(fresh);
+    }
+  }, [allCandidates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredCandidates = allCandidates.filter(c => {
     const matchesTab = filterTab === "All" || c.stage === filterTab;
