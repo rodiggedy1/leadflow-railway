@@ -685,49 +685,20 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // ── INTERVIEW_LINK_SENT / NUDGE: Candidate interview link flow ──────────────
+      // -- INTERVIEW_LINK_SENT / NUDGE: close silently, no auto-reply --
       if (
         session.stage === "INTERVIEW_LINK_SENT" ||
         session.stage === "INTERVIEW_NUDGE_1" ||
         session.stage === "INTERVIEW_NUDGE_2"
       ) {
-        // Check if candidate has already advanced past AI Interview — if so, close the session silently
-        const PAST_AI_STAGES = ["Real Interview", "Background Check", "Paid Test Clean", "Onboarding", "Rejected"];
-        const candidateRows = await db
-          .select({ stage: candidates.stage })
-          .from(candidates)
-          .where(eq(candidates.phone, session.leadPhone ?? ""))
-          .orderBy(desc(candidates.updatedAt))
-          .limit(1);
-        const candidateStage = candidateRows[0]?.stage ?? "";
-        if (PAST_AI_STAGES.includes(candidateStage)) {
-          // Candidate is past AI Interview — close this session, don't send the nudge
-          history.push({ role: "user", content: inboundText, ts: Date.now() });
-          await db
-            .update(conversationSessions)
-            .set({ stage: "DONE", messageHistory: JSON.stringify(history) })
-            .where(eq(conversationSessions.id, session.id));
-          console.log(`[Webhook] Interview session closed (candidate at ${candidateStage}) for ${fromPhone}`);
-          return;
-        }
-        // Any reply from the candidate — just acknowledge and keep link open
-        const firstName = (session.leadName ?? "there").split(" ")[0] ?? "there";
-        const replyMsg = `Thanks ${firstName}! When you're ready, just use the link we sent you to start your interview. 😊`;
-        const smsResult = await sendSms({ to: fromPhone, content: replyMsg });
-        if (!smsResult.success) {
-          console.error(`[Webhook] Failed to send interview reply to ${fromPhone}:`, smsResult.error);
-        }
         history.push({ role: "user", content: inboundText, ts: Date.now() });
-        history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
-
         await db
           .update(conversationSessions)
-          .set({ stage: "INTERVIEW_LINK_SENT", messageHistory: JSON.stringify(history) })
+          .set({ stage: "DONE", messageHistory: JSON.stringify(history) })
           .where(eq(conversationSessions.id, session.id));
-        console.log(`[Webhook] Interview link reply: ${session.stage} → INTERVIEW_LINK_SENT`);
+        console.log("[Webhook] Interview session closed silently for " + fromPhone);
         return;
       }
-
       // ── STOP / opt-out detection (before LLM, TCPA compliance) ────────────────
       const isStopReply = /^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(inboundText.trim());
       if (isStopReply) {
