@@ -3,7 +3,7 @@
  * Extracted to a separate file to keep TypeScript inference tractable.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, ne, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { conversationSessions } from "../drizzle/schema";
 import { invokeLLM } from "./_core/llm";
@@ -686,6 +686,83 @@ export const hiringRouter = router({
           appliedAt: c.createdAt,
           interviewLink,
           hasCompletedInterview: !!c.interviewCallId,
+        };
+      }),
+
+    /**
+     * Protected — real-time stats for the four pipeline stat cards.
+     * All counts are derived from the candidates table.
+     */
+    getPipelineStats: agentProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) return { applicationsToday: 0, applicationsYesterday: 0, aiInterviewsCompleted: 0, totalApplicants: 0, interviewsInMotion: 0, hiresThisWeek: 0, pendingOnboarding: 0 };
+        const { candidates } = await import("../drizzle/schema");
+
+        // Time boundaries in UTC
+        const now = new Date();
+        // Today: midnight UTC
+        const todayStart = new Date(now);
+        todayStart.setUTCHours(0, 0, 0, 0);
+        // Yesterday: midnight UTC - 24h
+        const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+        // This week: last Monday midnight UTC
+        const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon...
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const weekStart = new Date(todayStart.getTime() - daysToMonday * 24 * 60 * 60 * 1000);
+
+        const [
+          appsTodayRows,
+          appsYesterdayRows,
+          aiCompletedRows,
+          totalApplicantRows,
+          inMotionRows,
+          hiresWeekRows,
+          pendingOnboardRows,
+        ] = await Promise.all([
+          // Applications submitted today
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(gte(candidates.createdAt, todayStart), eq(candidates.archived, 0))),
+          // Applications submitted yesterday (for % change)
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(gte(candidates.createdAt, yesterdayStart), sql`${candidates.createdAt} < ${todayStart}`, eq(candidates.archived, 0))),
+          // AI interviews completed = candidates who have an interviewCallId (interview was started)
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(ne(candidates.stage, "Rejected"), eq(candidates.archived, 0), ne(sql`${candidates.interviewCallId}`, sql`NULL`))),
+          // Total non-rejected, non-archived applicants (for completion rate denominator)
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(ne(candidates.stage, "Rejected"), eq(candidates.archived, 0))),
+          // Interviews in motion = candidates in Real Interview stage
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(eq(candidates.stage, "Real Interview"), eq(candidates.archived, 0))),
+          // Hires this week = moved to Active or Onboarding this week
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(
+              or(eq(candidates.stage, "Active"), eq(candidates.stage, "Onboarding")),
+              gte(candidates.updatedAt, weekStart),
+              eq(candidates.archived, 0)
+            )),
+          // Pending onboarding = currently in Onboarding stage
+          db.select({ cnt: count() }).from(candidates)
+            .where(and(eq(candidates.stage, "Onboarding"), eq(candidates.archived, 0))),
+        ]);
+
+        const applicationsToday = appsTodayRows[0]?.cnt ?? 0;
+        const applicationsYesterday = appsYesterdayRows[0]?.cnt ?? 0;
+        const aiInterviewsCompleted = aiCompletedRows[0]?.cnt ?? 0;
+        const totalApplicants = totalApplicantRows[0]?.cnt ?? 0;
+        const interviewsInMotion = inMotionRows[0]?.cnt ?? 0;
+        const hiresThisWeek = hiresWeekRows[0]?.cnt ?? 0;
+        const pendingOnboarding = pendingOnboardRows[0]?.cnt ?? 0;
+
+        return {
+          applicationsToday,
+          applicationsYesterday,
+          aiInterviewsCompleted,
+          totalApplicants,
+          interviewsInMotion,
+          hiresThisWeek,
+          pendingOnboarding,
         };
       }),
 });

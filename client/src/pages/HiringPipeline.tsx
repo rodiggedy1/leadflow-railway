@@ -1365,6 +1365,13 @@ export default function HiringPipeline() {
     }
   }
 
+  const pipelineStatsQuery = trpc.hiring.getPipelineStats.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const stats = pipelineStatsQuery.data;
+
   const candidatesQuery = trpc.hiring.getCandidates.useQuery(undefined, {
     // Poll more frequently when any candidate is still awaiting AI scoring
     refetchInterval: (query) => {
@@ -1483,10 +1490,38 @@ export default function HiringPipeline() {
           {/* Stats row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {[
-              { label: "Applications today", value: "38", sub: "+18% from yesterday", icon: <User className="w-5 h-5 text-gray-400" /> },
-              { label: "AI interviews completed", value: "22", sub: "58% completion rate", icon: <MessageSquare className="w-5 h-5 text-gray-400" /> },
-              { label: "Interviews in motion", value: "4", sub: "3 scheduled today", icon: <Phone className="w-5 h-5 text-gray-400" /> },
-              { label: "Hires this week", value: "4", sub: "2 pending onboarding", icon: <CheckCircle2 className="w-5 h-5 text-gray-400" /> },
+              {
+                label: "Applications today",
+                value: stats ? String(stats.applicationsToday) : "—",
+                sub: stats
+                  ? stats.applicationsYesterday === 0
+                    ? stats.applicationsToday > 0 ? "New today" : "None yet today"
+                    : `${stats.applicationsToday > stats.applicationsYesterday ? "+" : ""}${Math.round(((stats.applicationsToday - stats.applicationsYesterday) / stats.applicationsYesterday) * 100)}% vs yesterday`
+                  : "Loading…",
+                icon: <User className="w-5 h-5 text-gray-400" />,
+              },
+              {
+                label: "AI interviews completed",
+                value: stats ? String(stats.aiInterviewsCompleted) : "—",
+                sub: stats
+                  ? stats.totalApplicants > 0
+                    ? `${Math.round((stats.aiInterviewsCompleted / stats.totalApplicants) * 100)}% completion rate`
+                    : "No applicants yet"
+                  : "Loading…",
+                icon: <MessageSquare className="w-5 h-5 text-gray-400" />,
+              },
+              {
+                label: "Interviews in motion",
+                value: stats ? String(stats.interviewsInMotion) : "—",
+                sub: stats ? `${stats.interviewsInMotion === 1 ? "1 candidate" : `${stats.interviewsInMotion} candidates`} in Real Interview` : "Loading…",
+                icon: <Phone className="w-5 h-5 text-gray-400" />,
+              },
+              {
+                label: "Hires this week",
+                value: stats ? String(stats.hiresThisWeek) : "—",
+                sub: stats ? `${stats.pendingOnboarding} pending onboarding` : "Loading…",
+                icon: <CheckCircle2 className="w-5 h-5 text-gray-400" />,
+              },
             ].map(({ label, value, sub, icon }) => (
               <div
                 key={label}
