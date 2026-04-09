@@ -729,11 +729,18 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
   // AbortController for the in-flight streaming auto-draft — cancel on conversation switch
   const autoDraftAbortRef = useRef<AbortController | null>(null);
+  // Track which session the auto-draft was fired for — discard results from stale sessions
+  const autoDraftInflightSessionIdRef = useRef<number | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   // Keep the tRPC mutation as fallback for the ai_suggest quick-reply button
   const csAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
+      // Discard stale draft if user switched conversations while LLM was running
+      if (autoDraftInflightSessionIdRef.current !== effectiveSelectedIdRef.current) {
+        setAutoDraftLoading(false);
+        return;
+      }
       const replyText = typeof data.reply === "string" ? data.reply : "";
       if (replyText) {
         setCompose(replyText);
@@ -754,40 +761,43 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     conversationContext: string;
     customerName: string;
     jobContext: string;
+    sessionId?: number;
   }) {
+    const { sessionId, ...fetchParams } = params;
     // Cancel any previous in-flight stream
     if (autoDraftAbortRef.current) {
       autoDraftAbortRef.current.abort();
     }
     const controller = new AbortController();
     autoDraftAbortRef.current = controller;
-
     setCompose("");
     setAutoDraftLoading(true);
-
     try {
       const res = await fetch("/api/cs-reply-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(params),
+        body: JSON.stringify(fetchParams),
         signal: controller.signal,
       });
-
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
       let accumulated = "";
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        // Guard: discard tokens if user switched conversations
+        if (sessionId != null && sessionId !== effectiveSelectedIdRef.current) {
+          reader.cancel();
+          setAutoDraftLoading(false);
+          autoDraftAbortRef.current = null;
+          return;
+        }
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
-
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed.startsWith("data:")) continue;
@@ -806,8 +816,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
           }
         }
       }
-      // Mark the final text as agent-approved so Send bypasses the elevate gate
-      if (accumulated) setElevateApprovedText(accumulated.trim());
+      // Guard: only apply final result if still on the same conversation
+      if (sessionId == null || sessionId === effectiveSelectedIdRef.current) {
+        if (accumulated) setElevateApprovedText(accumulated.trim());
+      }
       setAutoDraftLoading(false);
       autoDraftAbortRef.current = null;
     } catch (err) {
@@ -816,7 +828,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       console.warn("[auto-draft stream] falling back to tRPC:", err);
       setCompose("");
       setAutoDraftLoading(false);
-      csAutoDraft.mutate(params);
+      csAutoDraft.mutate(fetchParams);
       setAutoDraftLoading(true); // tRPC will set it false in onSuccess/onError
     }
   }
@@ -1320,6 +1332,8 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     if (!conv) return;
     if (autoDraftedForId.current === conv.id) return; // already drafted for this conversation
     autoDraftedForId.current = conv.id;
+    // Track which session this draft is for so we can discard stale results
+    autoDraftInflightSessionIdRef.current = conv.id;
     // Cancel any in-flight stream from the previous conversation
     if (autoDraftAbortRef.current) {
       autoDraftAbortRef.current.abort();
@@ -1334,6 +1348,7 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
       conversationContext,
       customerName: conv.name ?? "",
       jobContext: jobContext ?? "",
+      sessionId: conv.id,
     });
   }
 
