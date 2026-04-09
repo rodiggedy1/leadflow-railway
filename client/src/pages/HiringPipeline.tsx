@@ -1499,11 +1499,11 @@ export default function HiringPipeline() {
                 icon: <User className="w-5 h-5 text-gray-400" />,
               },
               {
-                label: "AI interviews completed",
-                value: stats ? String(stats.aiInterviewsCompleted) : "—",
+                label: "Videos submitted",
+                value: stats ? String(stats.videosSubmitted) : "—",
                 sub: stats
                   ? stats.totalApplications > 0
-                    ? `${Math.round((stats.aiInterviewsCompleted / stats.totalApplications) * 100)}% of all applicants`
+                    ? `${Math.round((stats.videosSubmitted / stats.totalApplications) * 100)}% of all applicants`
                     : "No applicants yet"
                   : "Loading…",
                 icon: <MessageSquare className="w-5 h-5 text-gray-400" />,

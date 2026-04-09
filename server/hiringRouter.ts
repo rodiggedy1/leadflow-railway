@@ -696,7 +696,7 @@ export const hiringRouter = router({
     getPipelineStats: agentProcedure
       .query(async () => {
         const db = await getDb();
-        if (!db) return { totalApplications: 0, aiInterviewsCompleted: 0, candidatesInMotion: 0, hiresThisWeek: 0, pendingOnboarding: 0 };
+        if (!db) return { totalApplications: 0, videosSubmitted: 0, candidatesInMotion: 0, hiresThisWeek: 0, pendingOnboarding: 0 };
         const { candidates } = await import("../drizzle/schema");
 
         // This week: last Monday midnight UTC
@@ -709,7 +709,7 @@ export const hiringRouter = router({
 
         const [
           totalAppRows,
-          aiCompletedRows,
+          videosSubmittedRows,
           inMotionRows,
           hiresWeekRows,
           pendingOnboardRows,
@@ -717,9 +717,9 @@ export const hiringRouter = router({
           // Total applications all-time (not archived)
           db.select({ cnt: count() }).from(candidates)
             .where(eq(candidates.archived, 0)),
-          // AI interviews completed all-time = candidates with an interviewCallId
+          // Videos submitted = candidates with a videoUrl (application video) OR an interviewCallId (AI interview)
           db.select({ cnt: count() }).from(candidates)
-            .where(and(eq(candidates.archived, 0), isNotNull(candidates.interviewCallId))),
+            .where(and(eq(candidates.archived, 0), or(isNotNull(candidates.videoUrl), isNotNull(candidates.interviewCallId)))),
           // Candidates in motion = non-rejected, non-archived (active in pipeline)
           db.select({ cnt: count() }).from(candidates)
             .where(and(eq(candidates.archived, 0), ne(candidates.stage, "Rejected"))),
@@ -736,14 +736,14 @@ export const hiringRouter = router({
         ]);
 
         const totalApplications = totalAppRows[0]?.cnt ?? 0;
-        const aiInterviewsCompleted = aiCompletedRows[0]?.cnt ?? 0;
+        const videosSubmitted = videosSubmittedRows[0]?.cnt ?? 0;
         const candidatesInMotion = inMotionRows[0]?.cnt ?? 0;
         const hiresThisWeek = hiresWeekRows[0]?.cnt ?? 0;
         const pendingOnboarding = pendingOnboardRows[0]?.cnt ?? 0;
 
         return {
           totalApplications,
-          aiInterviewsCompleted,
+          videosSubmitted,
           candidatesInMotion,
           hiresThisWeek,
           pendingOnboarding,
