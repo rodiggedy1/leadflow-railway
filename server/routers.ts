@@ -2697,7 +2697,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           // Skip note/system roles — only user/assistant count for unanswered detection
           const lastRealEntry = [...history].reverse().find((e) => e.role === "user" || e.role === "assistant");
           const hasUnanswered = !!lastRealEntry && lastRealEntry.role === "user";
-          return { ...s, lastMsgTs, hasUnanswered };
+          const lastSenderRole: "user" | "assistant" | null = lastRealEntry?.role === "user" ? "user" : lastRealEntry?.role === "assistant" ? "assistant" : null;
+          return { ...s, lastMsgTs, hasUnanswered, lastSenderRole };
         });
 
         // Sort: most recent last message first

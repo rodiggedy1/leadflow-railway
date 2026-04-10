@@ -1532,30 +1532,41 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
                     const gradient = gradientPalette[hashIdx];
 
-                    // ── Status pill — smarter logic ──
-                    type StatusKey = "priority" | "booked" | "waiting" | "live" | "replied" | "followup" | "resolved";
+                    // ── Status pill — 3 urgency tiers + directional sub-labels ──
+                    type StatusKey = "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
                     const csPriorityTag = (conversation as any).csPriorityTag;
                     const csQueue = (conversation as any).csQueue;
+                    const lastSenderRole = (conversation as any).lastSenderRole as "user" | "assistant" | null;
                     const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
+                    const waitMinDisplay = Math.floor(waitMs / 60_000);
                     const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000; // >10 min
                     const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
+
+                    // Phase 1: auto-detect direction from last sender
+                    // lastSenderRole === "user" means client sent last → agent needs to reply ("Your Turn")
+                    // lastSenderRole === "assistant" means agent sent last → waiting on client ("Their Turn")
+                    const waitingOnYou = lastSenderRole === "user"; // client messaged, agent hasn't replied
+                    const waitingOnClient = lastSenderRole === "assistant"; // agent replied, waiting on client
+
+                    // Phase 2: collapse into 3 urgency tiers
+                    // 🔴 Act Now  — priority tag OR waiting too long (>10 min unanswered)
+                    // 🟡 Your Turn — client sent last, agent hasn't replied (< 10 min)
+                    // 🔵 Their Turn — agent sent last, waiting on client
+                    // 🟢 Monitor  — resolved, booked, or low-urgency
                     const statusKey: StatusKey =
                       isResolved ? "resolved" :
-                      csPriorityTag ? "priority" :
-                      isBooked ? "booked" :
-                      waitingTooLong ? "waiting" :
-                      hasUnanswered ? "live" :
-                      activeFilter === "Active" ? "replied" :
-                      "followup";
-                    const waitMinDisplay = Math.floor(waitMs / 60_000);
-                    const statusCfg: Record<StatusKey, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
-                      priority:  { label: "Needs reply",     pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
-                      booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
-                      waiting:   { label: `Waiting ${waitMinDisplay}m`, pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", Icon: Clock3 },
-                      live:      { label: "New",             pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
-                      replied:   { label: "Replied",         pill: "bg-blue-50 text-blue-700 border-blue-200",            dot: "bg-blue-500",    Icon: CheckCircle2 },
-                      followup:  { label: "Follow up",       pill: "bg-slate-50 text-slate-500 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
-                      resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
+                      (csPriorityTag || waitingTooLong) ? "act_now" :
+                      waitingOnYou ? "your_turn" :
+                      waitingOnClient ? "their_turn" :
+                      "monitor";
+
+                    type StatusCfg = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
+                    const statusCfg: Record<StatusKey, StatusCfg> = {
+                      act_now:    { label: "⚡ Act Now",       action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority",  pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
+                      your_turn:  { label: "👉 Your Turn",     action: "Client waiting · reply now",                                                         pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
+                      their_turn: { label: "⏳ Their Turn",    action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client",           pill: "bg-blue-50 text-blue-700 border-blue-200",    dot: "bg-blue-400",    Icon: Clock3 },
+                      monitor:    { label: "👀 Monitor",       action: isBooked ? "Active booking · monitor" : "Low urgency · review when free",              pill: "bg-slate-50 text-slate-500 border-slate-200",  dot: "bg-slate-400",   Icon: CheckCircle2 },
+                      resolved:   { label: "✓ Resolved",       action: "Closed",                                                                              pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
                     const sc = statusCfg[statusKey];
 
@@ -1588,27 +1599,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                     // ── Avatar ring color keyed to status ──
                     const ringColorMap: Record<StatusKey, string> = {
-                      priority: "ring-rose-300 shadow-rose-100",
-                      booked:   "ring-green-400 shadow-green-100",
-                      waiting:  "ring-slate-300 shadow-slate-100",
-                      live:     "ring-emerald-400 shadow-emerald-100",
-                      replied:  "ring-blue-300 shadow-blue-100",
-                      followup: "ring-slate-300 shadow-slate-100",
-                      resolved: "ring-slate-200 shadow-slate-100",
+                      act_now:    "ring-rose-300 shadow-rose-100",
+                      your_turn:  "ring-amber-400 shadow-amber-100",
+                      their_turn: "ring-blue-300 shadow-blue-100",
+                      monitor:    "ring-slate-300 shadow-slate-100",
+                      resolved:   "ring-slate-200 shadow-slate-100",
                     };
                     const ringColor = ringColorMap[statusKey];
-                    // ── Note line: context hint ──
-                    const noteText = isBooked
-                      ? "Booked today · high value lead"
-                      : csPriorityTag
-                      ? "Needs quick reply"
-                      : waitingTooLong
-                      ? `Waiting ${Math.floor(waitMs / 60_000)}m · no reply yet`
-                      : hasUnanswered
-                      ? "New message · awaiting reply"
-                      : isResolved
-                      ? "Resolved"
-                      : "Waiting on follow-up";
+                    // ── Note line: directional action hint ──
+                    const noteText = sc.action;
                     const isResolvingThis = resolvingId === conversation.id;
                     const linkedSessionId = (conversation as any).linkedSessionId ?? null;
                     return (
