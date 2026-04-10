@@ -1629,6 +1629,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         className={`w-full rounded-[20px] border px-4 py-4 text-left transition-all ${
                           isSelected
                             ? "border-slate-800 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.10)]"
+                            : isUnread
+                            ? "border-slate-200 bg-blue-50/50 hover:border-slate-300 hover:shadow-sm"
                             : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                         } ${
                           !isSelected && isUnread
@@ -1655,9 +1657,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           {/* Name + phone + queue */}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className={`text-[15px] font-bold leading-tight ${isSelected ? "text-slate-900" : "text-slate-900"}`}>{conversation.name}</span>
+                              {isUnread && (
+                                <span className="relative flex h-2 w-2 shrink-0">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                                </span>
+                              )}
+                              <span className="text-[15px] font-bold leading-tight text-slate-900">{conversation.name}</span>
                               {unreadCount > 0 && (
-                                <span className="inline-flex items-center justify-center rounded-full bg-slate-900 text-white text-[11px] font-bold min-w-[20px] h-5 px-1.5">{unreadCount}</span>
+                                <span className="inline-flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold min-w-[20px] h-5 px-1.5">{unreadCount}</span>
                               )}
                             </div>
                             <div className="mt-0.5 flex items-center gap-1 text-[12px] text-slate-400">
@@ -1666,21 +1674,32 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             </div>
                           </div>
 
-                          {/* Status pill — top right */}
-                          <div className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${sc.pill}`}>
-                            {sc.label}
+                          {/* Timestamp — top right */}
+                          <div className="shrink-0 text-[11px] text-slate-400 font-medium whitespace-nowrap">
+                            {conversation.lastMsgTs
+                              ? (() => {
+                                  const d = new Date(conversation.lastMsgTs);
+                                  const now = new Date();
+                                  const isToday = d.toDateString() === now.toDateString();
+                                  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+                                  const isYesterday = d.toDateString() === yesterday.toDateString();
+                                  if (isToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                                  if (isYesterday) return "Yesterday";
+                                  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+                                })()
+                              : conversation.wait
+                            }
                           </div>
                         </div>
 
                         {/* Row 2: Message preview */}
                         <div className="mt-3 text-[14px] text-slate-700 leading-snug line-clamp-2">{conversation.lastMessage || noteText}</div>
 
-                        {/* Row 3: Priority + job value + linked badge */}
+                        {/* Row 3: Status pill + job value + linked badge */}
                         <div className="mt-3 flex items-center gap-2">
-                          {/* Priority label */}
-                          <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                            <Sparkles className="h-3 w-3" />
-                            {priorityKey === "vip" ? "High" : priorityKey === "today" ? "High" : "Medium"}
+                          {/* Status pill — moved from top right */}
+                          <div className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${sc.pill}`}>
+                            {sc.label}
                           </div>
                           {/* Job value */}
                           {conversation.amount && (
@@ -3204,7 +3223,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         Urgent
                       </Badge>
                     </div>
-                    <div className="p-5 space-y-5 bg-white">
+                    <div className="p-5 space-y-0 bg-white">
                       {/* Name + phone + address */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
@@ -3247,7 +3266,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
 
                       {/* Stats grid */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 gap-3">
                         <div className="rounded-2xl border border-slate-200 p-3">
                           <div className="text-xs text-slate-400">Frequency</div>
                           <div className="mt-1 font-semibold text-sm">
@@ -3281,7 +3300,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const TjCard = tjUrl ? "a" : "div";
                         return (
                           <div>
-                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Today's job</div>
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100 mb-2">Today's job</div>
                             <TjCard
                               {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
                               className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
@@ -3311,7 +3330,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Recent job history */}
                       {clientProfile && clientProfile.recentJobs.length > 0 && (
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Recent history</div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100 mb-2">Recent history</div>
                           <div className="space-y-2">
                             {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
                               const l27Url = job.bookingId
@@ -3351,7 +3370,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Context flags */}
                       {!clientProfile && (
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Context flags</div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100">Context flags</div>
                           <div className="mt-3 space-y-2">
                             {[
                               selected.stats.bookings === 0
@@ -3430,7 +3449,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         );
                       })()}
 
-                      <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4">
+                      <div className="mt-6 pt-5 border-t border-slate-100 rounded-[24px] border border-blue-200 bg-blue-50 p-4">
                         <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
                           <Bot className="h-4 w-4" /> AI insight
                           {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-blue-400" />}
