@@ -481,7 +481,7 @@ export const cleanerRouter = router({
       if (input.status === "running_late") {
         let etaPart = "";
         if (updateData.etaTimestamp) {
-          const arrivalTime = new Date(updateData.etaTimestamp as number).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+          const arrivalTime = new Date(updateData.etaTimestamp as number).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
           etaPart = ` — arrives ~${arrivalTime}`;
         } else if (input.etaLabel === "Don't know") {
           etaPart = " — ETA unknown";

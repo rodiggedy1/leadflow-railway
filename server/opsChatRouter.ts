@@ -67,6 +67,7 @@ function formatTime(serviceDateTime: string | null | undefined): string {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: "America/New_York",
     });
   } catch {
     return "";
@@ -1014,7 +1015,7 @@ export const opsChatRouter = router({
       } else if (status === "soon") {
         const jobMs = j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0;
         const minutesUntil = Math.round((jobMs - now) / 60_000);
-        const startTime = jobMs ? new Date(jobMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : null;
+        const startTime = jobMs ? new Date(jobMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }) : null;
         const timeLabel = minutesUntil > 0 ? `in ${minutesUntil} min` : startTime ? `at ${startTime}` : "soon";
         const bodyParts = [j.serviceType ?? "Cleaning", j.teamName ?? null].filter(Boolean);
         alerts.push({
@@ -1050,7 +1051,7 @@ export const opsChatRouter = router({
       id: j.id,
       name: j.customerName ?? j.jobAddress ?? "Job",
       time: j.serviceDateTime
-        ? new Date(j.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+        ? new Date(j.serviceDateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })
         : "--",
       status: toPriorityStatus(j.jobStatus, j.flagged),
       address: j.jobAddress ?? "",
@@ -1134,7 +1135,7 @@ export const opsChatRouter = router({
         // Build etaLabel from: live etaTimestamp → meta.etaLabel → rawIssueNote (ETA string)
         let etaLabel: string | null = null;
         if (r.jobEtaTimestamp && r.jobEtaTimestamp > Date.now()) {
-          etaLabel = new Date(r.jobEtaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+          etaLabel = new Date(r.jobEtaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
         } else if ((meta.etaLabel as string | null)) {
           etaLabel = meta.etaLabel as string;
         } else if ((status === "on_the_way" || status === "running_late") && rawIssueNote) {
