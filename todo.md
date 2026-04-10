@@ -1092,3 +1092,5 @@
 - [x] Calendar cards (scheduled + unscheduled) open SMS chat drawer on click
 - [x] Fix LLM extraction: recruiter confirmation = confirmed time; candidate stated time = fallback
 - [x] Add Schedule button on unscheduled calendar cards (no need to leave Calendar tab)
+- [ ] CS Chat UI rebuild: 5-column layout (nav rail, client lane, team lane, chat, collapsible right panel)
+- [x] Rebuild CS Chat (CsInbox) into 5-column layout: Revenue Lane (clients) + Operations Lane (teams) + center thread + right unified profile

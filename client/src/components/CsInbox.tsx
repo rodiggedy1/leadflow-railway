@@ -682,6 +682,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     });
   }, [activeFilter, query, displayConversations, priorityItems, selectedId]);
 
+  // Split filtered into two lanes for the 5-column layout
+  const clientConvs = useMemo(() => filtered.filter((c) => c.queue !== "Teams"), [filtered]);
+  const teamConvs = useMemo(() => filtered.filter((c) => c.queue === "Teams"), [filtered]);
+
+  // For effectiveSelectedId: prefer client lane first, then team lane
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
 
@@ -1402,11 +1407,11 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
     <>
     <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
-        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_340px] gap-5 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
-          {/* ── LEFT: Queue sidebar ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_320px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+          {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-4 md:p-5 space-y-5 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
               {/* Tab switcher — Ops / Chat / CS */}
               {onSwitchTab && (
                 <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
@@ -1429,35 +1434,35 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   ))}
                 </div>
               )}
+              {/* Revenue Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Inbox</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Today</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Revenue Lane</div>
+                  <div className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">Clients</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">
-                  {filtered.length} active
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-600">
+                  {clientConvs.length} open
                 </div>
               </div>
 
-              {/* Search bar — above the filter grid */}
+              {/* Search bar */}
               <div className="relative">
                 <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search customer, phone, note…"
-                  className="pl-9 h-11 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300"
+                  placeholder="Search clients, leads, bookings"
+                  className="pl-9 h-10 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm"
                 />
               </div>
-              {/* Filter grid — 3 rows × 2 columns */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Filter pills — client-relevant filters only */}
+              <div className="grid grid-cols-2 gap-1.5">
                 {([
-                  { id: "All" as InboxFilter, dot: "bg-slate-400", label: "All", count: displayConversations.filter((c) => !(c as any).csResolvedAt).length },
+                  { id: "All" as InboxFilter, dot: "bg-slate-400", label: "All", count: displayConversations.filter((c) => !(c as any).csResolvedAt && c.queue !== "Teams").length },
                   { id: "Priority" as InboxFilter, dot: "bg-rose-500", label: "Priority", count: priorityItems.length },
-                  { id: "New" as InboxFilter, dot: "bg-blue-500", label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered).length },
+                  { id: "New" as InboxFilter, dot: "bg-blue-500", label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered && c.queue !== "Teams").length },
                   { id: "Active" as InboxFilter, dot: "bg-amber-400", label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
                   { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", label: "Resolved", count: resolvedCountData?.count ?? 0 },
-                  { id: "Teams" as InboxFilter, dot: "bg-violet-500", label: "Teams", count: displayConversations.filter((c) => c.queue === "Teams").length },
                 ] as const).map((tab) => (
                   <button
                     key={tab.id}
@@ -1468,60 +1473,61 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                       if (tab.id === "Resolved") setShowResolved(true);
                       if (tab.id !== "Resolved") setShowResolved(false);
                     }}
-                    className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all ${
+                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl transition-all ${
                       activeFilter === tab.id
                         ? "bg-slate-900 text-white shadow-sm"
                         : "bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${tab.dot}`} />
-                      <span className="text-sm font-medium truncate">{tab.label}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tab.dot}`} />
+                      <span className="text-xs font-medium truncate">{tab.label}</span>
                     </div>
-                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
                       activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
                     }`}>{tab.count}</span>
                   </button>
                 ))}
               </div>
 
-              {/* Show resolved toggle + backfill names */}
+              {/* Utility row */}
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setShowResolved((v) => !v)}
-                  className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <CheckCircle2 className="h-3 w-3" />
                   {showResolved ? "Hide resolved" : "Show resolved"}
                 </button>
                 <button
                   onClick={() => backfillCsNames.mutate()}
                   disabled={backfillCsNames.isPending}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 disabled:opacity-50"
-                  title="Fix missing names from database"
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 disabled:opacity-50"
+                  title="Fix missing names"
                 >
                   <RefreshCw className={`h-3 w-3 ${backfillCsNames.isPending ? 'animate-spin' : ''}`} />
                   Fix names
                 </button>
               </div>
 
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+              {/* AI priority queue */}
+              <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-3.5">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                    <Bot className="h-4 w-4" /> AI priority queue
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                    <Bot className="h-3.5 w-3.5" /> Client priority queue
                   </div>
                   {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />}
                 </div>
-                <div className="mt-3 space-y-2">
+                <div className="mt-2.5 space-y-2">
                   {priorityItems.length === 0 && !priorityLoading && (
-                    <div className="text-xs text-slate-400 text-center py-2">No urgent items right now</div>
+                    <div className="text-xs text-slate-400 text-center py-1.5">No urgent items right now</div>
                   )}
                   {priorityItems.map((item, idx) => {
                     const style = priorityTagStyle(item.tag);
                     return (
                       <div
                         key={item.id}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <button
@@ -1535,22 +1541,21 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                             }}
                           >
                             <div className="flex items-center gap-2">
-                              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                              <span className="relative flex h-2 w-2 shrink-0">
                                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
-                                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${style.dot}`} />
+                                <span className={`relative inline-flex rounded-full h-2 w-2 ${style.dot}`} />
                               </span>
-                              <span className="text-sm font-semibold text-slate-800">{idx + 1}. {item.name}</span>
-                              <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
+                              <span className="text-xs font-semibold text-slate-800 truncate">{idx + 1}. {item.name}</span>
+                              <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
                             </div>
-                            <div className="mt-1 text-xs text-slate-500 pl-4">{item.reason}</div>
-                            <div className="mt-1 text-[10px] text-slate-400 pl-4">{timeSince(item.taggedAt)}</div>
+                            <div className="mt-1 text-xs text-slate-500 pl-4 line-clamp-1">{item.reason}</div>
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
                             className="shrink-0 mt-0.5 text-slate-300 hover:text-slate-500 transition-colors"
                             title="Dismiss"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-3 w-3" />
                           </button>
                         </div>
                       </div>
@@ -1559,9 +1564,10 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                 </div>
               </div>
 
+              {/* Client conversation list */}
               <div>
-                <div className="mt-3 space-y-2.5">
-                  {filtered.map((conversation) => {
+                <div className="space-y-2">
+                  {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
                     const isSelected = selected.id === conversation.id;
@@ -1823,6 +1829,226 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                     );
                   })}
                 </div>
+              </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── COL 2: Operations Lane (Team conversations) ── */}
+          <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+              <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              {/* Operations Lane header */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Operations Lane</div>
+                  <div className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">Team</div>
+                </div>
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700">
+                  {teamConvs.filter((c) => !!(c as any).hasUnanswered).length} active
+                </div>
+              </div>
+
+              {/* Team search */}
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search cleaners, dispatch, field updates"
+                  className="pl-9 h-10 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm"
+                />
+              </div>
+
+              {/* Team conversation list */}
+              <div className="space-y-2">
+                {teamConvs.length === 0 && (
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                    <SprayCan className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <div className="text-sm text-slate-400">No team conversations</div>
+                    <div className="text-xs text-slate-300 mt-1">Cleaner messages appear here</div>
+                  </div>
+                )}
+                {teamConvs.map((conversation) => {
+                  const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
+                  const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected?.id !== (conversation as any).id;
+                  const isSelected = selected?.id === conversation.id;
+                  const hasUnanswered = !!(conversation as any).hasUnanswered;
+                  const isResolved = !!(conversation as any).csResolvedAt;
+
+                  const gradientPalette = [
+                    "from-violet-500 to-fuchsia-500",
+                    "from-rose-500 to-orange-400",
+                    "from-emerald-500 to-teal-500",
+                    "from-sky-500 to-cyan-500",
+                    "from-amber-500 to-yellow-400",
+                    "from-pink-500 to-rose-400",
+                    "from-indigo-500 to-blue-500",
+                    "from-teal-500 to-green-500",
+                  ];
+                  const initials = conversation.initials || "?";
+                  const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
+                  const gradient = gradientPalette[hashIdx];
+
+                  type StatusKey2 = "priority" | "booked" | "waiting" | "live" | "replied" | "followup" | "resolved";
+                  const csPriorityTag2 = (conversation as any).csPriorityTag;
+                  const csQueue2 = (conversation as any).csQueue;
+                  const waitMs2 = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
+                  const waitingTooLong2 = hasUnanswered && waitMs2 > 10 * 60 * 1000;
+                  const isBooked2 = csQueue2 === "Active jobs" || csQueue2 === "Hot leads";
+                  const statusKey2: StatusKey2 =
+                    isResolved ? "resolved" :
+                    csPriorityTag2 ? "priority" :
+                    isBooked2 ? "booked" :
+                    waitingTooLong2 ? "waiting" :
+                    hasUnanswered ? "live" :
+                    "followup";
+                  const statusCfg2: Record<StatusKey2, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
+                    priority:  { label: "Needs attention", pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
+                    booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
+                    waiting:   { label: "Waiting",         pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: Clock3 },
+                    live:      { label: "Field ops",       pill: "bg-violet-50 text-violet-700 border-violet-200",     dot: "bg-violet-500", Icon: SprayCan },
+                    replied:   { label: "Replied",         pill: "bg-blue-50 text-blue-700 border-blue-200",            dot: "bg-blue-500",    Icon: CheckCircle2 },
+                    followup:  { label: "Follow up",       pill: "bg-slate-50 text-slate-500 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
+                    resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
+                  };
+                  const sc2 = statusCfg2[statusKey2];
+                  const unreadCount2 = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
+                  const isResolvingThis2 = resolvingId === conversation.id;
+
+                  // Determine team status badge
+                  const teamStatusLabel = hasUnanswered
+                    ? waitingTooLong2 ? "Delay risk" : "Awaiting response"
+                    : isResolved ? "Resolved"
+                    : "FYI";
+                  const teamStatusStyle = hasUnanswered
+                    ? waitingTooLong2
+                      ? "bg-rose-100 text-rose-700 border-rose-200"
+                      : "bg-amber-100 text-amber-700 border-amber-200"
+                    : isResolved
+                    ? "bg-slate-100 text-slate-500 border-slate-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200";
+
+                  return (
+                    <motion.div
+                      key={conversation.id}
+                      layout
+                      animate={isResolvingThis2 ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
+                      transition={{ duration: 0.45 }}
+                      className="group relative overflow-hidden rounded-[20px]"
+                    >
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        onClick={() => {
+                          setSelectedId(conversation.id);
+                          userNavigatedToId.current = conversation.id;
+                          triggerAutoDraft(conversation);
+                        }}
+                        className={`w-full rounded-[20px] border px-4 py-3 text-left transition-all ${
+                          isSelected
+                            ? "border-violet-400 bg-violet-50 shadow-[0_6px_20px_rgba(109,40,217,0.08)]"
+                            : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/30"
+                        } ${
+                          !isSelected && isUnread
+                            ? "border-l-[3px] border-l-violet-500"
+                            : !isSelected && hasUnanswered
+                            ? "border-l-[3px] border-l-amber-400"
+                            : ""
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          {/* Avatar */}
+                          <div className="relative shrink-0 pt-0.5">
+                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-base font-bold text-white ring-2 ring-violet-200 shadow-md`}>
+                              {initials}
+                              <span className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white ${sc2.dot}`} />
+                            </div>
+                            {isSelected && (
+                              <motion.div
+                                layoutId="selectedGlowTeam"
+                                className="absolute inset-0 rounded-xl ring-2 ring-violet-400/30"
+                              />
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <div className={`truncate text-sm font-semibold ${
+                                    isSelected ? "text-violet-900" : "text-slate-800"
+                                  }`}>{conversation.name}</div>
+                                  {unreadCount2 > 0 && (
+                                    <div className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unreadCount2}</div>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 text-[11px] text-slate-400">
+                                  {conversation.phone}
+                                  {conversation.service && <span className="ml-1">· {conversation.service}</span>}
+                                </div>
+                              </div>
+                              <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                teamStatusStyle
+                              }`}>{teamStatusLabel}</span>
+                            </div>
+                            <div className="mt-1.5 line-clamp-2 text-xs text-slate-600">{conversation.lastMessage}</div>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${sc2.pill}`}>
+                                <sc2.Icon className="h-3 w-3" />
+                                {sc2.label}
+                              </div>
+                              <div className="text-[10px] text-slate-400">{conversation.wait}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.button>
+                      {/* Resolve button */}
+                      {!isResolved && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resolveSession.mutate({ sessionId: conversation.id });
+                          }}
+                          className="absolute right-3 top-3 rounded-lg bg-white/80 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-500 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                        >
+                          Resolve
+                        </button>
+                      )}
+                      {/* Celebration overlay */}
+                      <AnimatePresence>
+                        {isResolvingThis2 && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[20px]"
+                          >
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18 }}
+                              className="absolute inset-0 bg-violet-400/10"
+                            />
+                            <motion.div
+                              initial={{ scale: 0.6, opacity: 0, y: 6 }}
+                              animate={{ scale: [0.6, 1.08, 1], opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ duration: 0.45 }}
+                              className="absolute inset-0 flex items-center justify-center"
+                            >
+                              <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">
+                                Resolved ✨
+                              </div>
+                            </motion.div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })}
               </div>
               </div>
             </CardContent>
