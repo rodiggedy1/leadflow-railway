@@ -1525,19 +1525,22 @@ function InterviewCalendar({ onOpenDrawer }: { onOpenDrawer: (phone: string, nam
                     ) : (
                       entries.map(entry => {
                         const cs = confidenceStyle(entry.confidence);
+                        const isScheduling = schedulingId === entry.candidateId;
                         return (
                           <div
                             key={entry.candidateId}
-                            className="rounded-lg border p-2 flex flex-col gap-1 cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all"
-                            style={{ backgroundColor: "#ffffff", borderColor: "#e5e7eb" }}
-                            onClick={() => onOpenDrawer(entry.phone, entry.name)}
+                            className="rounded-lg border p-2 flex flex-col gap-1 transition-all"
+                            style={{ backgroundColor: "#ffffff", borderColor: isScheduling ? "#bfdbfe" : "#e5e7eb" }}
                           >
-                            <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{entry.name}</p>
+                            <p
+                              className="text-xs font-semibold text-gray-900 leading-tight truncate cursor-pointer hover:text-blue-600"
+                              onClick={() => onOpenDrawer(entry.phone, entry.name)}
+                            >{entry.name}</p>
                             {entry.scheduledTime && (
                               <p className="text-xs font-medium" style={{ color: "#2563eb" }}>{entry.scheduledTime}</p>
                             )}
                             <button
-                              onClick={() => copyPhone(entry.phone)}
+                              onClick={e => { e.stopPropagation(); copyPhone(entry.phone); }}
                               className="text-left text-xs font-mono text-gray-400 hover:text-gray-700 transition-colors truncate"
                               title="Click to copy phone"
                             >
@@ -1549,6 +1552,43 @@ function InterviewCalendar({ onOpenDrawer }: { onOpenDrawer: (phone: string, nam
                             >
                               {cs.label}
                             </span>
+                            {isScheduling ? (
+                              <div className="flex flex-col gap-1.5 mt-0.5">
+                                <input
+                                  type="datetime-local"
+                                  value={schedulingValue}
+                                  onChange={e => setSchedulingValue(e.target.value)}
+                                  className="w-full rounded-lg border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-200"
+                                  style={{ borderColor: "#cbd5e1", backgroundColor: "#fff", color: "#0f172a" }}
+                                  autoFocus
+                                />
+                                <div className="flex gap-1">
+                                  <button
+                                    disabled={!schedulingValue || scheduleCallMutation.isPending}
+                                    onClick={() => scheduleCallMutation.mutate({ candidateId: entry.candidateId, scheduledCallAt: new Date(schedulingValue).toISOString() })}
+                                    className="flex-1 h-6 rounded-lg text-[11px] font-semibold text-white disabled:opacity-40"
+                                    style={{ backgroundColor: "#2563eb" }}
+                                  >
+                                    {scheduleCallMutation.isPending ? "…" : "Save"}
+                                  </button>
+                                  <button
+                                    onClick={() => { setSchedulingId(null); setSchedulingValue(""); }}
+                                    className="h-6 px-2 rounded-lg text-[11px] border hover:bg-white"
+                                    style={{ borderColor: "#cbd5e1", color: "#64748b" }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setSchedulingId(entry.candidateId); setSchedulingValue(""); }}
+                                className="self-start flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors hover:bg-blue-100"
+                                style={{ backgroundColor: "#eff6ff", color: "#2563eb" }}
+                              >
+                                <Calendar className="w-2.5 h-2.5" /> {entry.scheduledTime ? "Reschedule" : "Schedule"}
+                              </button>
+                            )}
                             {entry.note && (
                               <p className="text-[10px] text-gray-400 italic leading-tight line-clamp-2">{entry.note}</p>
                             )}
