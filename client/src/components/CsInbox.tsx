@@ -1448,26 +1448,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 />
               </div>
 
-              {/* Utility row */}
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setShowResolved((v) => !v)}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1"
-                >
-                  <CheckCircle2 className="h-3 w-3" />
-                  {showResolved ? "Hide resolved" : "Show resolved"}
-                </button>
-                <button
-                  onClick={() => backfillCsNames.mutate()}
-                  disabled={backfillCsNames.isPending}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 disabled:opacity-50"
-                  title="Fix missing names"
-                >
-                  <RefreshCw className={`h-3 w-3 ${backfillCsNames.isPending ? 'animate-spin' : ''}`} />
-                  Fix names
-                </button>
-              </div>
-
               {/* AI priority queue — collapsed by default, hover to expand */}
               <div className="group rounded-[20px] bg-[#EEF2FF] p-4 cursor-default transition-all">
                 <div className="flex items-start gap-3">
