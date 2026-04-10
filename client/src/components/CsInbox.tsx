@@ -1418,35 +1418,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col bg-[radial-gradient(circle_at_top,#f8fafc,white_35%,#f8fafc_100%)] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
+    <div className="h-full overflow-hidden flex flex-col bg-[#F0F2F5] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
         <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_320px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
-              {/* Tab switcher — Ops / Chat / CS */}
-              {onSwitchTab && (
-                <div className="flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
-                  {([
-                    { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
-                    { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-                    { id: "cs"       as const, label: "CS",   icon: <Headphones    className="w-3.5 h-3.5" /> },
-                  ]).map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => onSwitchTab(tab.id)}
-                      className={cn(
-                        "flex-1 relative flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition",
-                        tab.id === "cs" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                      )}
-                    >
-                      {tab.icon}
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+
               {/* Revenue Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
