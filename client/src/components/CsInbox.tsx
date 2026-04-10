@@ -1565,12 +1565,18 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
 
-                    // Resolve status key: LLM tier takes priority, mechanical fallback if null
+                    // Client-side terminal-ack fast path (fires before mechanical fallback when LLM score not yet cached)
+                    const TERMINAL_ACKS = /^(ok|okay|ok!|okay!|ok\.?|thanks|thank you|thank you!|thanks!|ty|got it|got it!|sounds good|sounds good!|perfect|perfect!|great|great!|👍|✅|will do|will do!|noted|noted\.?|sure|sure!|alright|alright!|yep|yep!|yes|yes!|yup|yup!|no worries|no worries!|np|👌|🙏|done|done!|on it|on it!|confirmed|confirmed!|received|received\.?)$/i;
+                    const lastMsgText = (conversation.lastMessage || "").trim();
+                    const isTerminalAck = !llmTier && TERMINAL_ACKS.test(lastMsgText);
+
+                    // Resolve status key: LLM tier takes priority, terminal-ack fast path second, mechanical fallback if null
                     const validLlmKeys = new Set<string>(Object.keys(statusCfg));
                     const resolvedLlmKey = llmTier && validLlmKeys.has(llmTier) ? (llmTier as StatusKey) : null;
                     const statusKey: StatusKey =
                       isResolved ? "resolved" :
                       resolvedLlmKey ? resolvedLlmKey :
+                      isTerminalAck ? "solved" :
                       (csPriorityTag || waitingTooLong) ? "act_now" :
                       lastSenderRole === "user" ? "your_turn" :
                       lastSenderRole === "assistant" ? "their_turn" :
@@ -1928,12 +1934,18 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     resolved:           { label: "✓ Resolved",             action: "Closed",                              pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
                   };
 
-                  // Resolve: LLM tier first, mechanical fallback if null
+                  // Team-side terminal-ack fast path (fires before mechanical fallback when LLM score not yet cached)
+                  const TERMINAL_ACKS2 = /^(ok|okay|ok!|okay!|ok\.?|thanks|thank you|thank you!|thanks!|ty|got it|got it!|sounds good|sounds good!|perfect|perfect!|great|great!|👍|✅|will do|will do!|noted|noted\.?|sure|sure!|alright|alright!|yep|yep!|yes|yes!|yup|yup!|no worries|no worries!|np|👌|🙏|done|done!|on it|on it!|confirmed|confirmed!|received|received\.?)$/i;
+                  const lastMsgText2 = (conversation.lastMessage || "").trim();
+                  const isTerminalAck2 = !llmTier2 && TERMINAL_ACKS2.test(lastMsgText2);
+
+                  // Resolve: LLM tier first, terminal-ack fast path second, mechanical fallback if null
                   const validLlmKeys2 = new Set<string>(Object.keys(statusCfg2));
                   const resolvedLlmKey2 = llmTier2 && validLlmKeys2.has(llmTier2) ? (llmTier2 as StatusKey2) : null;
                   const statusKey2: StatusKey2 =
                     isResolved ? "resolved" :
                     resolvedLlmKey2 ? resolvedLlmKey2 :
+                    isTerminalAck2 ? "solved" :
                     (csPriorityTag2 || waitingTooLong2) ? "act_now" :
                     lastSenderRole2 === "user" ? "your_turn" :
                     lastSenderRole2 === "assistant" ? "their_turn" :
