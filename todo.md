@@ -1095,3 +1095,4 @@
 - [ ] CS Chat UI rebuild: 5-column layout (nav rail, client lane, team lane, chat, collapsible right panel)
 - [x] Rebuild CS Chat (CsInbox) into 5-column layout: Revenue Lane (clients) + Operations Lane (teams) + center thread + right unified profile
 - [x] Replace M/U/D/C/Calendar icons in DashboardLayout left sidebar with A/P/N/A/R filter buttons (All, Priority, New, Active, Resolved) for CS inbox filter
+- [x] Pixel-perfect redesign of Revenue Lane header (REVENUE LANE label, Clients heading, open count pill), priority queue card, and client conversation cards in CsInbox Col 1

@@ -1450,10 +1450,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Revenue Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Revenue Lane</div>
-                  <div className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">Clients</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Revenue Lane</div>
+                  <div className="text-[26px] font-bold tracking-tight text-slate-900 leading-none">Clients</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-600">
+                <div className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
                   {clientConvs.length} open
                 </div>
               </div>
@@ -1465,7 +1465,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search clients, leads, bookings"
-                  className="pl-9 h-10 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm"
+                  className="pl-9 h-11 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm shadow-none"
                 />
               </div>
 
@@ -1490,27 +1490,34 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* AI priority queue */}
-              <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                    <Bot className="h-3.5 w-3.5" /> Client priority queue
+              <div className="rounded-[20px] bg-[#EEF2FF] border border-[#E0E7FF] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
+                    <Sparkles className="h-5 w-5 text-white" />
                   </div>
-                  {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-bold text-slate-900">Client priority queue</div>
+                      {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
+                    </div>
+                    {priorityItems.length === 0 && !priorityLoading && (
+                      <div className="mt-1 text-sm text-slate-500">No urgent items right now.</div>
+                    )}
+                    {priorityItems.length > 0 && (
+                      <div className="mt-1 text-sm text-slate-600 leading-snug">
+                        {priorityItems.length} high-intent {priorityItems.length === 1 ? "opportunity" : "opportunities"}. {priorityItems.slice(0, 2).map(i => i.reason).join(" ")}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-2.5 space-y-2">
-                  {priorityItems.length === 0 && !priorityLoading && (
-                    <div className="text-xs text-slate-400 text-center py-1.5">No urgent items right now</div>
-                  )}
-                  {priorityItems.map((item, idx) => {
-                    const style = priorityTagStyle(item.tag);
-                    return (
-                      <div
-                        key={item.id}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left"
-                      >
-                        <div className="flex items-start justify-between gap-2">
+                {priorityItems.length > 0 && (
+                  <div className="mt-3 space-y-1.5">
+                    {priorityItems.map((item, idx) => {
+                      const style = priorityTagStyle(item.tag);
+                      return (
+                        <div key={item.id} className="flex items-center gap-2">
                           <button
-                            className="flex-1 text-left"
+                            className="flex-1 flex items-center gap-2 text-left"
                             onClick={() => {
                               setActiveFilter("Priority");
                               setSelectedId(item.id);
@@ -1519,28 +1526,25 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               if (found) triggerAutoDraft(found);
                             }}
                           >
-                            <div className="flex items-center gap-2">
-                              <span className="relative flex h-2 w-2 shrink-0">
-                                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
-                                <span className={`relative inline-flex rounded-full h-2 w-2 ${style.dot}`} />
-                              </span>
-                              <span className="text-xs font-semibold text-slate-800 truncate">{idx + 1}. {item.name}</span>
-                              <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500 pl-4 line-clamp-1">{item.reason}</div>
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${style.dot} opacity-60`} />
+                              <span className={`relative inline-flex rounded-full h-2 w-2 ${style.dot}`} />
+                            </span>
+                            <span className="text-xs font-semibold text-slate-800 truncate">{idx + 1}. {item.name}</span>
+                            <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${style.badge}`}>{style.label}</span>
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); dismissPriority.mutate({ sessionId: item.id }); }}
-                            className="shrink-0 mt-0.5 text-slate-300 hover:text-slate-500 transition-colors"
+                            className="shrink-0 text-slate-300 hover:text-slate-500 transition-colors"
                             title="Dismiss"
                           >
                             <X className="h-3 w-3" />
                           </button>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Client conversation list */}
@@ -1583,11 +1587,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       hasUnanswered ? "live" :
                       activeFilter === "Active" ? "replied" :
                       "followup";
+                    const waitMinDisplay = Math.floor(waitMs / 60_000);
                     const statusCfg: Record<StatusKey, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
-                      priority:  { label: "Needs attention", pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
+                      priority:  { label: "Needs reply",     pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
                       booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
-                      waiting:   { label: "Waiting",         pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: Clock3 },
-                      live:      { label: "Live",            pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
+                      waiting:   { label: `Waiting ${waitMinDisplay}m`, pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", Icon: Clock3 },
+                      live:      { label: "New",             pill: "bg-emerald-50 text-emerald-700 border-emerald-200",   dot: "bg-emerald-500", Icon: MessageSquare },
                       replied:   { label: "Replied",         pill: "bg-blue-50 text-blue-700 border-blue-200",            dot: "bg-blue-500",    Icon: CheckCircle2 },
                       followup:  { label: "Follow up",       pill: "bg-slate-50 text-slate-500 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
                       resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
@@ -1645,13 +1650,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ? "Resolved"
                       : "Waiting on follow-up";
                     const isResolvingThis = resolvingId === conversation.id;
+                    const linkedSessionId = (conversation as any).linkedSessionId ?? null;
                     return (
                       <motion.div
                         key={conversation.id}
                         layout
                         animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                         transition={{ duration: 0.45 }}
-                        className="group relative overflow-hidden rounded-[24px]"
+                        className="group relative overflow-hidden rounded-[20px]"
                       >
                       <motion.button
                         whileHover={{ y: -1 }}
@@ -1660,10 +1666,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[24px] border px-4 py-3 text-left transition-all ${
+                        className={`w-full rounded-[20px] border px-4 py-4 text-left transition-all ${
                           isSelected
-                            ? "border-slate-900 bg-slate-50 shadow-[0_10px_30px_rgba(15,23,42,0.08)]"
-                            : "border-slate-200 bg-white hover:border-slate-300"
+                            ? "border-slate-800 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.10)]"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                         } ${
                           !isSelected && isUnread
                             ? "border-l-[3px] border-l-blue-500"
@@ -1672,77 +1678,61 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             : ""
                         }`}
                       >
-                        <div className="flex gap-3">
-                          {/* Avatar with ring */}
-                          <div className="relative shrink-0 pt-0.5">
-                            <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-lg font-bold text-white ring-4 ${ringColor} shadow-lg`}>
+                        {/* Row 1: Avatar + Name + Unread badge + Status pill */}
+                        <div className="flex items-start gap-3">
+                          {/* Avatar */}
+                          <div className="relative shrink-0">
+                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-base font-bold text-white`}>
                               {initials}
-                              <span className={`absolute -bottom-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-white ${sc.dot}`} />
                             </div>
                             {pc.label ? (
-                              <div className={`absolute -left-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold shadow-md ${pc.className}`}>
+                              <div className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold shadow ${pc.className}`}>
                                 {pc.label}
                               </div>
                             ) : null}
-                            {isSelected && (
-                              <motion.div
-                                layoutId="selectedGlow"
-                                className="absolute inset-0 rounded-2xl ring-2 ring-slate-900/10"
-                              />
-                            )}
                           </div>
 
-                          {/* Content */}
+                          {/* Name + phone + queue */}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <div className={`truncate text-[15px] font-semibold ${isSelected ? "text-slate-900" : "text-slate-800"}`}>{conversation.name}</div>
-                                  {unreadCount > 0 && (
-                                    <div className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">{unreadCount}</div>
-                                  )}
-                                </div>
-                                <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                                  <span>{conversation.phone || conversation.service}</span>
-                                  <span>·</span>
-                                  <span>{conversation.wait}</span>
-                                </div>
-                              </div>
-                              <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${sc.dot}`} />
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[15px] font-bold leading-tight ${isSelected ? "text-slate-900" : "text-slate-900"}`}>{conversation.name}</span>
+                              {unreadCount > 0 && (
+                                <span className="inline-flex items-center justify-center rounded-full bg-slate-900 text-white text-[11px] font-bold min-w-[20px] h-5 px-1.5">{unreadCount}</span>
+                              )}
                             </div>
-
-                            <div className="mt-2 line-clamp-1 text-sm font-medium text-slate-700">{conversation.lastMessage}</div>
-                            <div className="mt-1 line-clamp-1 text-sm text-slate-500">{noteText}</div>
-
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2">
-                                <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${sc.pill}`}>
-                                  <sc.Icon className="h-3.5 w-3.5" />
-                                  {sc.label}
-                                </div>
-                                {pc.label && conversation.queue !== "Teams" && (
-                                  <div className={`inline-flex items-center justify-center h-6 w-6 rounded-full text-sm ${pc.className}`}>
-                                    {priorityKey === "today" ? "💰" : pc.label}
-                                  </div>
-                                )}
-                                {conversation.queue === "Teams" && (
-                                  <div className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-600">
-                                    <SprayCan className="h-3.5 w-3.5" />
-                                  </div>
-                                )}
-                              </div>
-                              {/* Activity strip */}
-                              <div className="flex items-end gap-1.5">
-                                {activityValues.map((value, i) => (
-                                  <div
-                                    key={i}
-                                    style={{ height: value + 4 }}
-                                    className={`w-1.5 rounded-full ${isSelected ? "bg-slate-900" : "bg-slate-300"}`}
-                                  />
-                                ))}
-                              </div>
+                            <div className="mt-0.5 flex items-center gap-1 text-[12px] text-slate-400">
+                              <span>{conversation.phone || conversation.location}</span>
+                              {conversation.service && <><span>·</span><span>{conversation.service}</span></>}
                             </div>
                           </div>
+
+                          {/* Status pill — top right */}
+                          <div className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${sc.pill}`}>
+                            {sc.label}
+                          </div>
+                        </div>
+
+                        {/* Row 2: Message preview */}
+                        <div className="mt-3 text-[14px] text-slate-700 leading-snug line-clamp-2">{conversation.lastMessage || noteText}</div>
+
+                        {/* Row 3: Priority + job value + linked badge */}
+                        <div className="mt-3 flex items-center gap-2">
+                          {/* Priority label */}
+                          <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                            <Sparkles className="h-3 w-3" />
+                            {priorityKey === "vip" ? "High" : priorityKey === "today" ? "High" : "Medium"}
+                          </div>
+                          {/* Job value */}
+                          {conversation.amount && (
+                            <span className="text-[12px] text-slate-500 font-medium">{conversation.amount} job</span>
+                          )}
+                          {/* Linked badge */}
+                          {linkedSessionId && (
+                            <div className="ml-auto inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                              <Link2 className="h-3 w-3" />
+                              Linked
+                            </div>
+                          )}
                         </div>
                       </motion.button>
                       {/* Subtle resolve button — only on unresolved cards */}
