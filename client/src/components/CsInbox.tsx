@@ -1880,44 +1880,43 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
                   const gradient = gradientPalette[hashIdx];
 
-                  type StatusKey2 = "priority" | "booked" | "waiting" | "live" | "replied" | "followup" | "resolved";
+                  // ── Teams card: same 3-tier directional status system as client cards ──
+                  type StatusKey2 = "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
                   const csPriorityTag2 = (conversation as any).csPriorityTag;
                   const csQueue2 = (conversation as any).csQueue;
+                  const lastSenderRole2 = (conversation as any).lastSenderRole as "user" | "assistant" | null;
                   const waitMs2 = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
+                  const waitMinDisplay2 = Math.floor(waitMs2 / 60_000);
                   const waitingTooLong2 = hasUnanswered && waitMs2 > 10 * 60 * 1000;
                   const isBooked2 = csQueue2 === "Active jobs" || csQueue2 === "Hot leads";
+
+                  // For Teams: "user" = cleaner/team sent last (agent needs to reply)
+                  //             "assistant" = agent replied, waiting on team
+                  const teamWaitingOnYou = lastSenderRole2 === "user";
+                  const teamWaitingOnThem = lastSenderRole2 === "assistant";
+
                   const statusKey2: StatusKey2 =
                     isResolved ? "resolved" :
-                    csPriorityTag2 ? "priority" :
-                    isBooked2 ? "booked" :
-                    waitingTooLong2 ? "waiting" :
-                    hasUnanswered ? "live" :
-                    "followup";
-                  const statusCfg2: Record<StatusKey2, { label: string; pill: string; dot: string; Icon: React.ElementType }> = {
-                    priority:  { label: "Needs attention", pill: "bg-rose-50 text-rose-700 border-rose-200",           dot: "bg-rose-500",    Icon: ShieldAlert },
-                    booked:    { label: "Booked",          pill: "bg-green-50 text-green-700 border-green-200",         dot: "bg-green-600",   Icon: CheckCircle2 },
-                    waiting:   { label: "Waiting",         pill: "bg-amber-50 text-amber-700 border-amber-200",         dot: "bg-amber-500",   Icon: Clock3 },
-                    live:      { label: "Field ops",       pill: "bg-violet-50 text-violet-700 border-violet-200",     dot: "bg-violet-500", Icon: SprayCan },
-                    replied:   { label: "Replied",         pill: "bg-blue-50 text-blue-700 border-blue-200",            dot: "bg-blue-500",    Icon: CheckCircle2 },
-                    followup:  { label: "Follow up",       pill: "bg-slate-50 text-slate-500 border-slate-200",         dot: "bg-slate-400",   Icon: Clock3 },
-                    resolved:  { label: "Resolved",        pill: "bg-slate-50 text-slate-400 border-slate-200",         dot: "bg-slate-300",   Icon: CheckCircle2 },
+                    (csPriorityTag2 || waitingTooLong2) ? "act_now" :
+                    teamWaitingOnYou ? "your_turn" :
+                    teamWaitingOnThem ? "their_turn" :
+                    "monitor";
+
+                  type StatusCfg2 = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
+                  const statusCfg2: Record<StatusKey2, StatusCfg2> = {
+                    act_now:    { label: "⚡ Act Now",    action: waitingTooLong2 ? `Reply now · ${waitMinDisplay2}m wait` : "Needs attention · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500",   Icon: ShieldAlert },
+                    your_turn:  { label: "👉 Your Turn",  action: "Team waiting · reply now",                                                           pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500",  Icon: MessageSquare },
+                    their_turn: { label: "⏳ Their Turn", action: "You replied · waiting on team",                                                           pill: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-400",   Icon: Clock3 },
+                    monitor:    { label: "👀 Monitor",    action: "Low urgency · review when free",                                                        pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400",  Icon: CheckCircle2 },
+                    resolved:   { label: "✓ Resolved",    action: "Closed",                                                                               pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
                   };
                   const sc2 = statusCfg2[statusKey2];
                   const unreadCount2 = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
                   const isResolvingThis2 = resolvingId === conversation.id;
 
-                  // Determine team status badge
-                  const teamStatusLabel = hasUnanswered
-                    ? waitingTooLong2 ? "Delay risk" : "Awaiting response"
-                    : isResolved ? "Resolved"
-                    : "FYI";
-                  const teamStatusStyle = hasUnanswered
-                    ? waitingTooLong2
-                      ? "bg-rose-100 text-rose-700 border-rose-200"
-                      : "bg-amber-100 text-amber-700 border-amber-200"
-                    : isResolved
-                    ? "bg-slate-100 text-slate-500 border-slate-200"
-                    : "bg-slate-100 text-slate-500 border-slate-200";
+                  // Top-right badge mirrors the tier label
+                  const teamStatusLabel = sc2.label;
+                  const teamStatusStyle = sc2.pill;
 
                   return (
                     <motion.div
