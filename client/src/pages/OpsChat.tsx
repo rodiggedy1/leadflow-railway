@@ -14,7 +14,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
-import CsInbox from "@/components/CsInbox";
+import CsInbox, { type InboxFilter } from "@/components/CsInbox";
 import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
 import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
@@ -854,6 +854,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
+  const [csFilter, setCsFilter] = useState<InboxFilter>("All");
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
@@ -1815,39 +1816,65 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           >
             <ChevronRight className="w-5 h-5" />
           </button>
-          {/* Channel icons */}
-          {CHANNELS.map((ch) => {
-            const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
-            return (
+          {activeTab === "cs" ? (
+            /* CS filter buttons: A P N A R */
+            ([
+              { id: "All"      as InboxFilter, label: "All",      dot: "bg-slate-400" },
+              { id: "Priority" as InboxFilter, label: "Priority", dot: "bg-rose-500"  },
+              { id: "New"      as InboxFilter, label: "New",      dot: "bg-blue-500"  },
+              { id: "Active"   as InboxFilter, label: "Active",   dot: "bg-amber-400" },
+              { id: "Resolved" as InboxFilter, label: "Resolved", dot: "bg-emerald-500" },
+            ] as const).map((f) => (
               <button
-                key={ch.key}
-                onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
+                key={f.id}
+                onClick={() => setCsFilter(f.id)}
                 className={cn(
                   "relative w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
-                  activeChannel === ch.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  csFilter === f.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 )}
-                title={ch.label}
+                title={f.label}
               >
-                {ch.label.charAt(0)}
-                {count > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
-                    {count > 9 ? "9+" : count}
-                  </span>
-                )}
+                <span className={cn("absolute top-1 right-1 w-1.5 h-1.5 rounded-full", f.dot)} />
+                {f.label.charAt(0)}
               </button>
-            );
-          })}
-          {/* Today ops icon */}
-          <button
-            onClick={() => { handleSetActiveTab("today"); }}
-            className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
-              activeTab === "today" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
-            title="Today Ops"
-          >
-            <CalendarDays className="w-4 h-4" />
-          </button>
+            ))
+          ) : (
+            <>
+              {/* Channel icons */}
+              {CHANNELS.map((ch) => {
+                const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
+                return (
+                  <button
+                    key={ch.key}
+                    onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
+                    className={cn(
+                      "relative w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
+                      activeChannel === ch.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    )}
+                    title={ch.label}
+                  >
+                    {ch.label.charAt(0)}
+                    {count > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
+                        {count > 9 ? "9+" : count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {/* Today ops icon */}
+              <button
+                onClick={() => { handleSetActiveTab("today"); }}
+                className={cn(
+                  "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
+                  activeTab === "today" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+                title="Today Ops"
+              >
+                <CalendarDays className="w-4 h-4" />
+              </button>
+            </>
+          )}
           {/* Agent status icon */}
           <div className="relative">
             <button
@@ -2799,7 +2826,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: CS Inbox */}
         {activeTab === "cs" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <CsInbox onSwitchTab={handleSetActiveTab} />
+            <CsInbox onSwitchTab={handleSetActiveTab} activeFilter={csFilter} setActiveFilter={setCsFilter} />
           </div>
         )}
       </div>

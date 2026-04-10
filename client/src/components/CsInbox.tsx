@@ -293,10 +293,16 @@ function jobStatusStyle(s: JobStatus): string {
   }
 }
 
-type InboxFilter = "All" | "Priority" | "New" | "Active" | "Resolved" | "Teams";
-type CsInboxProps = { onSwitchTab?: (tab: "today" | "channels" | "cs") => void };
-export default function CsInbox({ onSwitchTab }: CsInboxProps) {
-  const [activeFilter, setActiveFilter] = useState<InboxFilter>("All");
+export type InboxFilter = "All" | "Priority" | "New" | "Active" | "Resolved" | "Teams";
+type CsInboxProps = {
+  onSwitchTab?: (tab: "today" | "channels" | "cs") => void;
+  activeFilter?: InboxFilter;
+  setActiveFilter?: (f: InboxFilter) => void;
+};
+export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActiveFilter: setFilterProp }: CsInboxProps) {
+  const [activeFilterLocal, setActiveFilterLocal] = useState<InboxFilter>("All");
+  const activeFilter = filterProp ?? activeFilterLocal;
+  const setActiveFilter = setFilterProp ?? setActiveFilterLocal;
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [compose, setCompose] = useState("");
@@ -337,6 +343,13 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
   const [sanityApprovedText, setSanityApprovedText] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
+
+  // Sync showResolved when filter is driven externally (from sidebar)
+  useEffect(() => {
+    if (activeFilter === "Resolved") setShowResolved(true);
+    else setShowResolved(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter]);
 
   useOpsStream({
     onLeadUpdate: () => {
@@ -1454,40 +1467,6 @@ export default function CsInbox({ onSwitchTab }: CsInboxProps) {
                   placeholder="Search clients, leads, bookings"
                   className="pl-9 h-10 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm"
                 />
-              </div>
-              {/* Filter pills — client-relevant filters only */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {([
-                  { id: "All" as InboxFilter, dot: "bg-slate-400", label: "All", count: displayConversations.filter((c) => !(c as any).csResolvedAt && c.queue !== "Teams").length },
-                  { id: "Priority" as InboxFilter, dot: "bg-rose-500", label: "Priority", count: priorityItems.length },
-                  { id: "New" as InboxFilter, dot: "bg-blue-500", label: "New", count: displayConversations.filter((c) => !!(c as any).hasUnanswered && c.queue !== "Teams").length },
-                  { id: "Active" as InboxFilter, dot: "bg-amber-400", label: "Active", count: displayConversations.filter((c) => !(c as any).hasUnanswered && c.queue !== "Teams").length },
-                  { id: "Resolved" as InboxFilter, dot: "bg-emerald-500", label: "Resolved", count: resolvedCountData?.count ?? 0 },
-                ] as const).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      userPickedFilter.current = true;
-                      setSelectedId(null);
-                      setActiveFilter(tab.id);
-                      if (tab.id === "Resolved") setShowResolved(true);
-                      if (tab.id !== "Resolved") setShowResolved(false);
-                    }}
-                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl transition-all ${
-                      activeFilter === tab.id
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tab.dot}`} />
-                      <span className="text-xs font-medium truncate">{tab.label}</span>
-                    </div>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
-                      activeFilter === tab.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
-                    }`}>{tab.count}</span>
-                  </button>
-                ))}
               </div>
 
               {/* Utility row */}
