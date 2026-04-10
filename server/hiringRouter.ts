@@ -826,6 +826,7 @@ export const hiringRouter = router({
           firstName: candidates.firstName,
           lastName: candidates.lastName,
           phone: candidates.phone,
+          scheduledCallAt: candidates.scheduledCallAt,
         })
         .from(candidates)
         .where(eq(candidates.stage, "Real Interview"));
@@ -849,6 +850,22 @@ export const hiringRouter = router({
             .from(conversationSessions)
             .where(or(eq(conversationSessions.leadPhone, cand.phone), eq(conversationSessions.leadPhone, e164)))
             .limit(1);
+
+          // If manually scheduled, use that directly — skip LLM
+          if (cand.scheduledCallAt) {
+            const dt = new Date(cand.scheduledCallAt);
+            const scheduledDate = dt.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD
+            const scheduledTime = dt.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true });
+            return {
+              candidateId: cand.id,
+              name: `${cand.firstName} ${cand.lastName}`.trim(),
+              phone: cand.phone,
+              scheduledDate,
+              scheduledTime,
+              confidence: "confirmed" as const,
+              note: "Manually scheduled",
+            };
+          }
 
           const noSchedule = {
             candidateId: cand.id,
@@ -921,6 +938,25 @@ export const hiringRouter = router({
       );
 
       return results;
+    }),
+
+  /**
+   * Protected — save a manually scheduled call time for a candidate
+   */
+  scheduleCall: agentProcedure
+    .input(z.object({
+      candidateId: z.number(),
+      scheduledCallAt: z.string().nullable(), // ISO string or null to clear
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { candidates } = await import("../drizzle/schema");
+      await db
+        .update(candidates)
+        .set({ scheduledCallAt: input.scheduledCallAt ? new Date(input.scheduledCallAt) : null })
+        .where(eq(candidates.id, input.candidateId));
+      return { success: true };
     }),
 
   /**

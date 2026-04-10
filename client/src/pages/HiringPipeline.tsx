@@ -951,12 +951,23 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
     },
   });
 
-;
+  const scheduleCallMutation = trpc.hiring.scheduleCall.useMutation({
+    onSuccess: () => {
+      utils.hiring.getCandidates.invalidate();
+      utils.hiring.getInterviewCalendar.invalidate();
+      setShowScheduler(false);
+    },
+  });
+
+  const [showScheduler, setShowScheduler] = React.useState(false);
+  const [schedulerValue, setSchedulerValue] = React.useState("");
 
   React.useEffect(() => {
     setEditableNotes(candidate?.notes ?? []);
     setShowAppModal(false);
     setDrawerSession(null);
+    setShowScheduler(false);
+    setSchedulerValue("");
   }, [candidate?.id]);
 
 
@@ -1271,13 +1282,12 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
           Send message
         </button>
         <button
-          className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50"
-          style={{ borderColor: "#e2e8f0", color: "#374151", backgroundColor: "#fff" }}
-          onClick={() => {
-            if (candidate?.phone) window.open(`https://calendly.com`, "_blank");
-          }}
+          className="h-11 rounded-2xl text-sm font-semibold border transition-colors hover:bg-slate-50 flex items-center justify-center gap-1.5"
+          style={{ borderColor: "#bfdbfe", color: "#2563eb", backgroundColor: "#fff" }}
+          onClick={() => setShowScheduler(v => !v)}
         >
-          Book interview
+          <Calendar size={14} />
+          Schedule call
         </button>
         <button
           className="h-11 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
@@ -1292,6 +1302,46 @@ function CandidateDetail({ candidate, onScoreUpdated, onStageAdvanced }: { candi
           {rejectMutation.isPending ? "Rejecting…" : "Reject"}
         </button>
       </div>
+
+      {/* Inline scheduler panel */}
+      {showScheduler && (
+        <div
+          className="mt-3 rounded-2xl border p-4 flex flex-col gap-3"
+          style={{ backgroundColor: "#f8fafc", borderColor: "#bfdbfe" }}
+        >
+          <p className="text-xs font-semibold text-blue-700">Schedule interview call</p>
+          <input
+            type="datetime-local"
+            value={schedulerValue}
+            onChange={e => setSchedulerValue(e.target.value)}
+            className="w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+            style={{ borderColor: "#cbd5e1", backgroundColor: "#ffffff", color: "#0f172a" }}
+          />
+          <div className="flex gap-2">
+            <button
+              disabled={!schedulerValue || scheduleCallMutation.isPending}
+              onClick={() => {
+                if (!candidate || !schedulerValue) return;
+                scheduleCallMutation.mutate({
+                  candidateId: candidate.id,
+                  scheduledCallAt: new Date(schedulerValue).toISOString(),
+                });
+              }}
+              className="flex-1 h-9 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              style={{ backgroundColor: "#2563eb" }}
+            >
+              {scheduleCallMutation.isPending ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => setShowScheduler(false)}
+              className="h-9 px-4 rounded-xl text-sm font-medium border hover:bg-white transition-colors"
+              style={{ borderColor: "#cbd5e1", color: "#64748b" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {drawerSession && (
         <ConversationDrawer
@@ -1329,7 +1379,7 @@ type CalendarEntry = {
   note: string | null;
 };
 
-function InterviewCalendar() {
+function InterviewCalendar({ onOpenDrawer }: { onOpenDrawer: (phone: string, name: string) => void }) {
   const { data, isLoading, refetch, isFetching } = trpc.hiring.getInterviewCalendar.useQuery(undefined, {
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -1467,8 +1517,9 @@ function InterviewCalendar() {
                         return (
                           <div
                             key={entry.candidateId}
-                            className="rounded-lg border p-2 flex flex-col gap-1"
+                            className="rounded-lg border p-2 flex flex-col gap-1 cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all"
                             style={{ backgroundColor: "#ffffff", borderColor: "#e5e7eb" }}
+                            onClick={() => onOpenDrawer(entry.phone, entry.name)}
                           >
                             <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{entry.name}</p>
                             {entry.scheduledTime && (
@@ -1514,8 +1565,9 @@ function InterviewCalendar() {
                 {unscheduled.map(entry => (
                   <div
                     key={entry.candidateId}
-                    className="rounded-lg border p-2.5 flex flex-col gap-1"
+                    className="rounded-lg border p-2.5 flex flex-col gap-1 cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all"
                     style={{ backgroundColor: "#fafafa", borderColor: "#e5e7eb" }}
+                    onClick={() => onOpenDrawer(entry.phone, entry.name)}
                   >
                     <p className="text-xs font-semibold text-gray-900 truncate">{entry.name}</p>
                     <button
@@ -1923,7 +1975,16 @@ export default function HiringPipeline() {
           {/* ── Calendar view ── */}
           {isCalendarView ? (
             <div className="mt-4">
-              <InterviewCalendar />
+              <InterviewCalendar onOpenDrawer={async (phone, name) => {
+                const { sessionId } = await boardTrpcUtils.hiring.getSessionByPhone.fetch({ phone }).catch(() => ({ sessionId: null }));
+                if (sessionId) {
+                  const session = await boardTrpcUtils.leads.getById.fetch({ id: sessionId }).catch(() => null);
+                  if (session) { setBoardDrawerSession(session as unknown as LeadSession); return; }
+                }
+                const rawPhone = phone.replace(/[^\d]/g, "");
+                const e164 = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+                setBoardDrawerSession({ id: 0, leadPhone: e164, leadName: name, stage: "UNHANDLED", quotedPrice: null, serviceType: null, bedrooms: null, bathrooms: null, extras: null, selectedSlot: null, address: null, messageHistory: "[]", assignedAgentId: null, assignedAgentName: null, lastCalledAt: null, lastCalledByAgentName: null, isBooked: 0, bookedAt: null, bookedByAgentName: null, bookedAmount: null, internalNotes: null, aiMode: 0, barkQA: null, leadSource: null, createdAt: new Date(), updatedAt: new Date() } as unknown as LeadSession);
+              }} />
             </div>
           ) : isRejectedView ? (
             <div className="mt-4">

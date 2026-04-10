@@ -1842,6 +1842,8 @@ export const candidates = mysqlTable("candidates", {
   interviewSummary: text("interviewSummary"),
   // Status page magic link token
   statusToken: varchar("statusToken", { length: 64 }),
+  // Manually scheduled interview call time
+  scheduledCallAt: timestamp("scheduledCallAt"),
   // Archived (hidden from pipeline but not deleted)
   archived: tinyint("archived").notNull().default(0),
   // Metadata

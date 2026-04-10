@@ -1086,3 +1086,7 @@
 - [x] Fix no-check-in escalation card not dismissing when cleaner is running_late (had ETA but card stayed): added running_late to suppression filter in getCommandChatAlerts; also added auto-delete of noshow_alert/stale_eta cards from DB when cleaner updates status to on_the_way or arrived
 - [ ] Add Calendar tab to hiring pipeline: LLM extracts scheduled call times from Real Interview conversations, weekly grid view
 - [x] Add Calendar tab to hiring pipeline: LLM extracts scheduled call times from Real Interview conversations, weekly grid view
+- [ ] Schedule Call button in candidate detail panel with date/time picker, saves to DB, reflects in calendar
+- [ ] Calendar cards (scheduled + unscheduled) open SMS chat drawer for that candidate
+- [x] Schedule Call button in candidate detail panel with date/time picker, saves to DB, reflects in calendar
+- [x] Calendar cards (scheduled + unscheduled) open SMS chat drawer on click
