@@ -2029,10 +2029,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           {/* ── CENTER: Thread ── */}
           <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="border-b border-slate-200 px-5 py-2.5 md:px-6 bg-white">
+              {/* ── Chat header: single-row, clean typography hierarchy ── */}
+              <div className="border-b border-slate-100 px-5 py-3 md:px-6 bg-white">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-wrap min-w-0">
-                    {/* Avatar in header */}
+                  {/* Left: avatar + name stack */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Circular avatar */}
                     {selected && (() => {
                       const gradientPalette = [
                         "from-violet-500 to-fuchsia-500",
@@ -2047,12 +2049,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const ini = selected.initials || "?";
                       const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                       return (
-                        <div className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
+                        <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
                           {ini}
                         </div>
                       );
                     })()}
-                    <div className="flex items-center gap-2 flex-wrap">
+                    {/* Name + meta stack */}
+                    <div className="min-w-0">
+                      {/* Tiny uppercase label */}
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 leading-none mb-0.5">
+                        {selected.queue === "Teams" ? "TEAM CONVERSATION" : "CLIENT CONVERSATION"}
+                        {selected.service && <span className="text-slate-300"> · {selected.service}</span>}
+                      </p>
+                      {/* Large bold name with inline edit */}
                       {editingName ? (
                         <form
                           className="flex items-center gap-2"
@@ -2065,64 +2074,67 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             autoFocus
                             value={nameInput}
                             onChange={(e) => setNameInput(e.target.value)}
-                            className="h-9 text-lg font-semibold w-48"
+                            className="h-8 text-base font-semibold w-44"
                             placeholder="Enter name…"
                           />
-                          <Button type="submit" size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" disabled={updateCsName.isPending}>
-                            <Check className="h-4 w-4" />
+                          <Button type="submit" size="icon" variant="ghost" className="h-7 w-7 text-emerald-600" disabled={updateCsName.isPending}>
+                            <Check className="h-3.5 w-3.5" />
                           </Button>
-                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-slate-400" onClick={() => setEditingName(false)}>
-                            <X className="h-4 w-4" />
+                          <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-slate-400" onClick={() => setEditingName(false)}>
+                            <X className="h-3.5 w-3.5" />
                           </Button>
                         </form>
                       ) : (
-                        <div className="flex items-center gap-2 group">
-                          <h2 className="text-base font-semibold tracking-tight text-slate-900">{selected.name}</h2>
+                        <div className="flex items-center gap-1.5 group">
+                          <h2 className="text-[17px] font-bold tracking-tight text-slate-900 leading-tight truncate">{selected.name}</h2>
                           <button
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-500"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
                             title="Edit name"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Badge className={`rounded-full border cursor-pointer ${tone.tone} hover:opacity-80 transition-opacity`}>
-                            {selected.queue || "Set status"}
-                          </Badge>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-44">
-                          {QUEUES.map((q) => (
-                            <DropdownMenuItem
-                              key={q}
-                              onClick={() => {
-                                if (selected.id > 0) updateCsQueue.mutate({ sessionId: selected.id, queue: q });
-                              }}
-                              className={selected.queue === q ? "font-semibold" : ""}
-                            >
-                              <span className={`mr-2 h-2 w-2 rounded-full inline-block ${queueStyles[q].dot}`} />
-                              {q}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0 text-xs text-slate-400">
-                      {selected.phone && <span className="font-mono tracking-wide">{selected.phone}</span>}
-                      {selected.service && <><span className="text-slate-300">·</span><span>{selected.service}</span></>}
-                      {selected.amount && <><span className="text-slate-300">·</span><span>{selected.amount}</span></>}
+                      {/* Sub-line: phone + queue badge */}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {selected.phone && <span className="text-[11px] font-mono text-slate-400 tracking-wide">{selected.phone}</span>}
+                        {selected.phone && selected.queue && <span className="text-slate-200">·</span>}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Badge className={`rounded-full border cursor-pointer text-[10px] px-2 py-0 h-4 ${tone.tone} hover:opacity-80 transition-opacity`}>
+                              {selected.queue || "Set status"}
+                            </Badge>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-44">
+                            {QUEUES.map((q) => (
+                              <DropdownMenuItem
+                                key={q}
+                                onClick={() => {
+                                  if (selected.id > 0) updateCsQueue.mutate({ sessionId: selected.id, queue: q });
+                                }}
+                                className={selected.queue === q ? "font-semibold" : ""}
+                              >
+                                <span className={`mr-2 h-2 w-2 rounded-full inline-block ${queueStyles[q].dot}`} />
+                                {q}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        {selected.amount && <><span className="text-slate-200">·</span><span className="text-[11px] text-slate-400">{selected.amount}</span></>}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+
+                  {/* Right: action icons in a compact rounded pill row */}
+                  <div className="flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-1">
                     {/* Call via OpenPhone */}
                     {selected?.phone && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <a
                             href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
-                            className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                           >
                             <Phone className="h-4 w-4" />
                           </a>
@@ -2138,7 +2150,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             type="button"
                             onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
                             disabled={syncOutbound.isPending}
-                            className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
                           >
                             <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
                           </button>
@@ -2152,7 +2164,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <button
                           type="button"
                           onClick={() => setNewConvOpen(true)}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-colors"
                         >
                           <PenSquare className="h-4 w-4" />
                         </button>
@@ -2167,7 +2179,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             type="button"
                             onClick={() => resolveSession.mutate({ sessionId: selected.id })}
                             disabled={resolveSession.isPending}
-                            className="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
                           >
                             <CheckCircle2 className="h-4 w-4" />
                           </button>
@@ -2520,11 +2532,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   <TypingBubble typers={typers} />
                 </div>
               )}
-              <div className={`shrink-0 border-t px-5 py-2.5 md:px-6 backdrop-blur-sm transition-colors duration-200 ${
+              {/* ── Compose area ── */}
+              <div className={`shrink-0 border-t transition-colors duration-200 ${
                   composeMode === "note"
                     ? "border-amber-200 bg-amber-50/95"
-                    : "border-slate-100 bg-white/95"
+                    : "border-slate-100 bg-white"
                 }`}>
+                {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
                   <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
@@ -2540,33 +2554,40 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {selected.quickActions.map((action) => (
-                    <Button key={action} variant="outline" className="rounded-full h-7 text-xs px-3">
-                      {action}
-                    </Button>
-                  ))}
-                </div>
-                <div className={`rounded-[20px] border p-3.5 transition-all duration-200 ${
+                {/* Quick action chips */}
+                {selected.quickActions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 px-5 pt-3 md:px-6">
+                    {selected.quickActions.map((action) => (
+                      <Button key={action} variant="outline" className="rounded-full h-7 text-xs px-3">
+                        {action}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Compose card */}
+                <div className={`mx-4 my-3 rounded-[18px] border transition-all duration-200 ${
                   composeMode === "note"
                     ? "border-amber-300 bg-amber-50 shadow-sm"
-                    : autoDraftLoading ? "border-violet-300 bg-violet-50/60 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/80"
+                    : autoDraftLoading ? "border-violet-300 bg-violet-50/40 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/60"
                 }`}>
+
+                  {/* Top bar: note mode indicator OR world-class draft badge */}
                   {composeMode === "note" && (
-                    <div className="flex items-center gap-1.5 mb-2.5">
+                    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
                       <StickyNote className="h-3.5 w-3.5 text-amber-600" />
                       <span className="text-xs font-semibold text-amber-700">Internal note</span>
                       <span className="text-xs text-amber-500">— only visible to agents, never sent to the customer</span>
                     </div>
                   )}
                   {composeMode === "reply" && autoDraftLoading && (
-                    <div className="flex items-center gap-1.5 mb-2.5 text-xs font-medium text-violet-600">
+                    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 text-xs font-medium text-violet-600">
                       <RefreshCw className="h-3 w-3 animate-spin" />
                       <span>AI is drafting a reply…</span>
                     </div>
                   )}
                   {composeMode === "reply" && !autoDraftLoading && compose && !elevateSuggestion && (
-                    <div className="flex items-center gap-1.5 mb-2.5">
+                    <div className="flex items-center gap-2 px-4 pt-3 pb-0">
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
                         <Sparkles className="h-3 w-3" />
                         World-class draft
@@ -2576,7 +2597,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         type="button"
                         onClick={() => {
                           if (!selected) return;
-                          autoDraftedForId.current = null; // allow re-draft
+                          autoDraftedForId.current = null;
                           triggerAutoDraft(selected);
                         }}
                         className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 hover:text-violet-600 transition-colors"
@@ -2587,7 +2608,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </button>
                     </div>
                   )}
-                  <div className="relative flex items-start gap-3">
+
+                  {/* Full-width textarea */}
+                  <div className="relative px-4 pt-2.5 pb-1">
                     {/* Emoji picker popup — only in reply mode */}
                     {showEmojiPicker && composeMode === "reply" && (
                       <div ref={emojiPickerRef} className="absolute bottom-full mb-2 left-0 z-50 shadow-xl rounded-2xl overflow-hidden">
@@ -2604,7 +2627,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
                     )}
                     <textarea
-                      className={`flex-1 rounded-xl bg-transparent border-0 px-1 py-1 min-h-[80px] resize-none focus:outline-none text-sm leading-relaxed ${
+                      className={`w-full bg-transparent border-0 px-0 py-1 min-h-[100px] resize-none focus:outline-none text-sm leading-relaxed ${
                         composeMode === "note"
                           ? "text-amber-900 placeholder:text-amber-400"
                           : "text-slate-900 placeholder:text-slate-400"
@@ -2615,11 +2638,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const val = e.target.value;
                         setCompose(val);
                         if (composeMode === "reply") {
-                          // Reset elevation state whenever the draft changes so the gate always fires on the next send
                           setElevateSuggestion(null);
                           setElevateApprovedText(null);
                           triggerElevateDebounced(val, selected);
-                          // Dismiss sanity warning card when agent edits the message
                           if (sanityWarnings.length > 0) { setSanityWarnings([]); setSanityApprovedText(null); }
                         }
                       }}
@@ -2636,72 +2657,210 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       }}
                       onBlur={composeMode === "reply" ? onTypingBlur : undefined}
                     />
-                    <div className="flex flex-col gap-2 shrink-0">
-                      <div className="flex flex-row gap-1.5">
-                        {composeMode === "reply" && (
-                          <>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="rounded-xl h-7 w-7 border-slate-200 text-slate-500 hover:text-slate-800"
-                            onClick={() => setShowEmojiPicker((v) => !v)}
-                            title="Add emoji"
-                            type="button"
-                          >
-                            <Smile className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className={`rounded-xl h-7 w-7 transition-colors ${
-                              worldClassOpen
-                                ? "bg-violet-700 text-white border-violet-700"
-                                : "bg-violet-600 text-white border-violet-600 hover:bg-violet-700"
-                            }`}
-                            onClick={() => {
-                              setWorldClassOpen((v) => !v);
-                              setFaqOpen(false);
-                              setObjectionsOpen(false);
-                            }}
-                            title="World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles"
-                            type="button"
-                          >
-                            <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
-                          </Button>
-                          </>
-                        )}
-                        {/* Note toggle — embedded in toolbar */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              type="button"
-                              onClick={() => {
-                                if (composeMode === "note") {
-                                  setComposeMode("reply");
-                                } else {
-                                  setComposeMode("note");
-                                  setElevateSuggestion(null);
-                                }
-                              }}
-                              className={`rounded-xl h-7 w-7 transition-colors ${
-                                composeMode === "note"
-                                  ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
-                                  : "border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-600"
-                              }`}
-                            >
-                              <Lock className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            {composeMode === "note" ? "Switch to Reply mode" : "Switch to Note mode (internal only)"}
-                          </TooltipContent>
-                        </Tooltip>
+                  </div>
+
+                  {/* Date/time sanity warning card */}
+                  {sanityWarnings.length > 0 && (
+                    <div className="mx-4 mb-2 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-semibold text-amber-700">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span>Date/time check</span>
+                        </div>
+                        <button
+                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
+                          className="text-amber-400 hover:text-amber-600 shrink-0"
+                        ><X className="h-3.5 w-3.5" /></button>
                       </div>
+                      <ul className="space-y-1">
+                        {sanityWarnings.map((w, i) => (
+                          <li key={i} className="text-amber-800 leading-snug">{w.message}</li>
+                        ))}
+                      </ul>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <button
+                          onClick={() => {
+                            const text = compose.trim();
+                            setSanityWarnings([]);
+                            setSanityApprovedText(text);
+                            setTimeout(() => { setSanityApprovedText(text); }, 0);
+                            doSendCs();
+                          }}
+                          className="text-[11px] font-semibold text-amber-700 border border-amber-400 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
+                        >Send Anyway</button>
+                        <button
+                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
+                          className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 underline"
+                        >Edit message</button>
+                      </div>
+                    </div>
+                  )}
+                  {/* AI Elevate suggestion card */}
+                  {elevateReply.isPending && !elevateSuggestion && (
+                    <div className="mx-4 mb-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs flex items-center gap-2 text-violet-600">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                      <span className="font-medium">Elevating to world-class level…</span>
+                    </div>
+                  )}
+                  {(elevateSuggestion !== null && elevateSuggestion !== "") && selected?.queue !== "Teams" && (
+                    <div className="mx-4 mb-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-semibold text-violet-700">
+                          <Sparkles className={`h-3.5 w-3.5 shrink-0 ${elevateStreaming ? "animate-pulse" : ""}`} />
+                          <span>World-class suggestion</span>
+                          {elevateStreaming ? (
+                            <span className="text-[10px] font-normal text-violet-400 animate-pulse">writing…</span>
+                          ) : (
+                            <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
+                            setElevateSuggestion(null);
+                            setElevateApprovedText(null);
+                            setElevateStreaming(false);
+                          }}
+                          className="text-violet-400 hover:text-violet-600 shrink-0"
+                        ><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <p className="text-slate-700 italic flex-1 leading-relaxed">
+                          "{elevateSuggestion}"
+                          {elevateStreaming && <span className="inline-block w-0.5 h-3.5 bg-violet-500 ml-0.5 animate-pulse align-middle" />}
+                        </p>
+                        {!elevateStreaming && (
+                          <button
+                            onClick={() => { const t = elevateSuggestion!; setCompose(t); setElevateSuggestion(null); setElevateApprovedText(t.trim()); }}
+                            className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
+                          >Use</button>
+                        )}
+                      </div>
+                      {!elevateStreaming && (
+                        <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Bottom toolbar */}
+                  <div className="flex items-center justify-between gap-2 px-3 pb-3 pt-1">
+                    {/* Left: AI Suggest + FAQ + Objections */}
+                    <div className="flex items-center gap-1.5">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="rounded-full h-8 w-8 border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
+                            disabled={loadingAction !== null || !selected}
+                            onClick={() => fireQuickReply("ai_suggest")}
+                            type="button"
+                          >
+                            {loadingAction === "ai_suggest" ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Bot className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">AI Suggest — picks the best reply for this conversation</TooltipContent>
+                      </Tooltip>
+                      <div className="h-5 w-px bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
+                        type="button"
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        FAQ
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
+                        onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
+                        type="button"
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        Objections
+                      </Button>
+                    </div>
+
+                    {/* Right: emoji + sparkle + lock + Send */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {composeMode === "reply" && (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-full h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                                onClick={() => setShowEmojiPicker((v) => !v)}
+                                type="button"
+                              >
+                                <Smile className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">Add emoji</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`rounded-full h-8 w-8 transition-colors ${
+                                  worldClassOpen
+                                    ? "bg-violet-100 text-violet-700"
+                                    : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
+                                }`}
+                                onClick={() => {
+                                  setWorldClassOpen((v) => !v);
+                                  setFaqOpen(false);
+                                  setObjectionsOpen(false);
+                                }}
+                                type="button"
+                              >
+                                <Sparkles className="h-4 w-4 animate-sparkle-shake" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles</TooltipContent>
+                          </Tooltip>
+                        </>
+                      )}
+                      {/* Note toggle */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            type="button"
+                            onClick={() => {
+                              if (composeMode === "note") {
+                                setComposeMode("reply");
+                              } else {
+                                setComposeMode("note");
+                                setElevateSuggestion(null);
+                              }
+                            }}
+                            className={`rounded-full h-8 w-8 transition-colors ${
+                              composeMode === "note"
+                                ? "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                                : "text-slate-400 hover:text-amber-500 hover:bg-amber-50"
+                            }`}
+                          >
+                            <Lock className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {composeMode === "note" ? "Switch to Reply mode" : "Switch to Note mode (internal only)"}
+                        </TooltipContent>
+                      </Tooltip>
+
+                      {/* Send button */}
                       {composeMode === "note" ? (
                         <Button
-                          className="rounded-xl h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
+                          className="rounded-full h-9 px-5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm gap-1.5 shrink-0 disabled:opacity-30 transition-all duration-150"
                           disabled={!compose.trim() || addCsNote.isPending || !selected}
                           onClick={() => addCsNote.mutate({ sessionId: selected.id, note: compose.trim() })}
                         >
@@ -2713,9 +2872,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </Button>
                       ) : (
                         <div className="flex items-stretch shrink-0">
-                          {/* Primary send button */}
                           <Button
-                            className="rounded-l-xl rounded-r-none h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
+                            className="rounded-l-full rounded-r-none h-9 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
                             onClick={() => handleCsSend()}
                           >
@@ -2727,11 +2885,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               <><Send className="h-4 w-4" /> Send</>
                             )}
                           </Button>
-                          {/* Dropdown for additional send actions */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
-                                className="rounded-l-none rounded-r-xl h-10 px-2 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
+                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
                                 disabled={!compose.trim() || sendMessage.isPending || !selected}
                                 onPointerDown={(e) => e.stopPropagation()}
                               >
@@ -2789,129 +2946,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
                       )}
                     </div>
-                  </div>
-                  {/* Date/time sanity warning card */}
-                  {sanityWarnings.length > 0 && (
-                    <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 font-semibold text-amber-700">
-                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                          <span>Date/time check</span>
-                        </div>
-                        <button
-                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
-                          className="text-amber-400 hover:text-amber-600 shrink-0"
-                        ><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <ul className="space-y-1">
-                        {sanityWarnings.map((w, i) => (
-                          <li key={i} className="text-amber-800 leading-snug">{w.message}</li>
-                        ))}
-                      </ul>
-                      <div className="flex items-center gap-2 pt-0.5">
-                        <button
-                          onClick={() => {
-                            const text = compose.trim();
-                            setSanityWarnings([]);
-                            setSanityApprovedText(text);
-                            // Re-invoke handleCsSend — sanityApprovedText is now set so it will pass through
-                            // Use a microtask so state has flushed before the next call
-                            setTimeout(() => {
-                              setSanityApprovedText(text);
-                            }, 0);
-                            // Directly proceed to elevation / send
-                            doSendCs();
-                          }}
-                          className="text-[11px] font-semibold text-amber-700 border border-amber-400 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
-                        >Send Anyway</button>
-                        <button
-                          onClick={() => { setSanityWarnings([]); setSanityApprovedText(null); }}
-                          className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 underline"
-                        >Edit message</button>
-                      </div>
-                    </div>
-                  )}
-                  {/* AI Elevate suggestion card */}
-                  {/* Loading state: tRPC on-send path (no streaming yet) */}
-                  {elevateReply.isPending && !elevateSuggestion && (
-                    <div className="mt-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs flex items-center gap-2 text-violet-600">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
-                      <span className="font-medium">Elevating to world-class level…</span>
-                    </div>
-                  )}
-                  {/* Streaming card: shows tokens as they arrive, with a blinking cursor */}
-                  {(elevateSuggestion !== null && elevateSuggestion !== "") && selected?.queue !== "Teams" && (
-                    <div className="mt-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 font-semibold text-violet-700">
-                          <Sparkles className={`h-3.5 w-3.5 shrink-0 ${elevateStreaming ? "animate-pulse" : ""}`} />
-                          <span>World-class suggestion</span>
-                          {elevateStreaming ? (
-                            <span className="text-[10px] font-normal text-violet-400 animate-pulse">writing…</span>
-                          ) : (
-                            <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
-                            setElevateSuggestion(null);
-                            setElevateApprovedText(null);
-                            setElevateStreaming(false);
-                          }}
-                          className="text-violet-400 hover:text-violet-600 shrink-0"
-                        ><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <p className="text-slate-700 italic flex-1 leading-relaxed">
-                          "{elevateSuggestion}"
-                          {elevateStreaming && <span className="inline-block w-0.5 h-3.5 bg-violet-500 ml-0.5 animate-pulse align-middle" />}
-                        </p>
-                        {!elevateStreaming && (
-                          <button
-                            onClick={() => { const t = elevateSuggestion!; setCompose(t); setElevateSuggestion(null); setElevateApprovedText(t.trim()); }}
-                            className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
-                          >Use</button>
-                        )}
-                      </div>
-                      {!elevateStreaming && (
-                        <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center gap-2">
-                    {/* AI Suggest */}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="rounded-full h-8 w-8 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
-                      disabled={loadingAction !== null || !selected}
-                      onClick={() => fireQuickReply("ai_suggest")}
-                      title="AI Suggest — picks the best reply for this conversation"
-                    >
-                      {loadingAction === "ai_suggest" ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Bot className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <div className="h-5 w-px bg-slate-200" />
-                    <Button
-                      variant="outline"
-                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      FAQ
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
-                      onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
-                    >
-                      <ShieldAlert className="h-3.5 w-3.5" />
-                      Objections
-                    </Button>
                   </div>
                 </div>
               </div>

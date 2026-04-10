@@ -1100,3 +1100,5 @@
 - [x] Change CS inbox background to light grey matching the design
 - [x] Pixel-perfect both priority queue cards (client blue, team purple) with hover-to-expand; add Team priority queue card to Operations Lane
 - [x] Chat column: add rounded-[28px] card wrapper; right column: square corners, narrower width (280px); chat column wider; right column styling matches Unified Profile design
+- [ ] Redesign center column header: compact single-row, clean typography, action icons in pill group
+- [ ] Redesign compose area: full-width textarea, draft badge bar top, FAQ/Objections/Send toolbar bottom
