@@ -1201,8 +1201,8 @@ export const opsChatRouter = router({
       const jobId3 = (meta3.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
       if (!jobId3 || !todayJobIds.has(jobId3)) continue;
       const currentStatus3 = jobStatusMap.get(jobId3);
-      // Clear once cleaner has checked in
-      if (currentStatus3 && ["on_the_way", "arrived", "in_progress", "completed"].includes(currentStatus3)) continue;
+      // Clear once cleaner has checked in or is on the way (including running_late)
+      if (currentStatus3 && ["on_the_way", "running_late", "arrived", "in_progress", "completed"].includes(currentStatus3)) continue;
       const cleanerName3 = (meta3.cleanerName as string) ?? "Team";
       const customerName3 = (meta3.customerName as string | null) ?? null;
       const timeStr3 = (meta3.timeStr as string | null) ?? null;

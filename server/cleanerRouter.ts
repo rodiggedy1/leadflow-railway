@@ -451,6 +451,27 @@ export const cleanerRouter = router({
 
       // ── Field Management hooks ─────────────────────────────────────────────────
       // Fire-and-forget: don't let SMS failures block the status update response
+
+      // Auto-dismiss stale escalation cards when cleaner checks in or goes on the way
+      if (input.status === "on_the_way" || input.status === "arrived") {
+        const dismissActions = input.status === "arrived"
+          ? ["noshow_alert", "stale_eta"]
+          : ["noshow_alert"];
+        db.delete(opsChatMessages)
+          .where(
+            and(
+              eq(opsChatMessages.cleanerJobId, input.cleanerJobId),
+              inArray(opsChatMessages.quickAction as any, dismissActions)
+            )
+          )
+          .then(() => {
+            import("./sseBroadcast").then(({ broadcastOpsUpdate }) => {
+              broadcastOpsUpdate("new_message", { channel: "command" });
+            });
+          })
+          .catch(() => {});
+      }
+
       if (input.status === "on_the_way") {
         sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
           console.error("[FieldMgmt] sendClientOnTheWaySms error:", err)
