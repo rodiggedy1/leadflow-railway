@@ -1420,7 +1420,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     <>
     <div className="h-full overflow-hidden flex flex-col bg-[#F0F2F5] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
-        <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_320px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+        <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_260px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
@@ -2027,7 +2027,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] flex flex-col h-full py-0 gap-0">
+          <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="border-b border-slate-200 px-5 py-2.5 md:px-6 bg-white">
                 <div className="flex items-center justify-between gap-3">
@@ -2919,11 +2919,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="overflow-y-auto space-y-5">
+          <div className="overflow-y-auto h-full bg-white rounded-[16px] border border-slate-200 shadow-sm [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
                   <CardContent className="p-0">
                     {/* Header */}
                     <div className="p-5 bg-teal-50 border-b border-teal-200">
@@ -3096,7 +3096,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </Card>
 
                 {/* Team Actions — magic link */}
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-4">Team actions</div>
                     <div className="space-y-3">
@@ -3138,7 +3138,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </Card>
 
                 {/* Thread status for Teams */}
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
                     <div className="mt-4 space-y-3">
@@ -3165,7 +3165,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
             ) : (
               /* ── CLIENT PANEL (enriched with real data) ── */
               <>
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)] overflow-hidden">
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
                   <CardContent className="p-0">
                     <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 text-amber-800 font-medium">
@@ -3424,7 +3424,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                 {/* ─── AI Upsell Opportunity card ─────────────────── */}
                 {showUpsellCard && (
-                  <Card className="rounded-[28px] border-emerald-200 bg-emerald-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                  <Card className="rounded-xl border border-emerald-200 bg-emerald-50 shadow-none mx-4 mb-4">
                     <CardContent className="p-4">
                       <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
                         <TrendingUp className="h-4 w-4" /> Upsell opportunity
@@ -3479,7 +3479,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   };
                   const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
                   return (
-                    <Card className="rounded-[28px] border-purple-200 bg-purple-50 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                    <Card className="rounded-xl border border-purple-200 bg-purple-50 shadow-none mx-4 mb-4">
                       <CardContent className="p-5">
                         {/* Header row */}
                         <div className="flex items-center justify-between mb-4">
@@ -3551,7 +3551,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 })()}
 
                 {/* ─── Actions card (merged: follow-up + call + share link) ─── */}
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
                   <CardContent className="p-5">
                     <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-4">Actions</div>
                     <div className="flex flex-col gap-2.5">
@@ -3614,7 +3614,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-[28px] border-slate-200 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+                <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
                     <div className="mt-4 space-y-3">
