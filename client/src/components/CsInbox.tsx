@@ -1985,7 +1985,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div className="mt-2 flex items-center justify-between gap-2">
                               <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${sc2.pill}`}>
                                 <sc2.Icon className="h-3 w-3" />
-                                {sc2.label}
+                                {sc2.action}
                               </div>
                               <div className="text-[10px] text-slate-400">{conversation.wait}</div>
                             </div>
