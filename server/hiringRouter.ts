@@ -455,9 +455,8 @@ export const hiringRouter = router({
           if (smsText) {
             // Await inline — do NOT use setImmediate here. If the sandbox hibernates between
             // the DB update and a deferred callback, the SMS is silently dropped.
-            const { ENV } = await import("./_core/env");
             try {
-              const result = await sendSms({ to: e164Phone, content: smsText, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+              const result = await sendSms({ to: e164Phone, content: smsText });
               if (result.success) {
                 console.log(`[Hiring SMS] Stage-change SMS sent to ${e164Phone} for stage ${input.stage}, msgId=${result.messageId}`);
               } else {
