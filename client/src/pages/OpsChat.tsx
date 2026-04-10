@@ -1776,9 +1776,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       {/* ── Notification permission banner ── */}
-      {/* ── Away banner — visible to all team members when someone is away —— */}
-      <AwayBanner agents={agentStatusData?.agents ?? []} />
-
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
           <div className="flex items-center gap-2 text-sm text-amber-800">

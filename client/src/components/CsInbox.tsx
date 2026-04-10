@@ -2606,6 +2606,41 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <RefreshCw className="h-3 w-3" />
                         Regenerate
                       </button>
+                      {/* Emoji + World-Class Reply buttons — right side of top bar */}
+                      <div className="flex items-center gap-0.5 ml-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setShowEmojiPicker((v) => !v)}
+                              className="rounded-full h-6 w-6 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                              <Smile className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Add emoji</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWorldClassOpen((v) => !v);
+                                setFaqOpen(false);
+                                setObjectionsOpen(false);
+                              }}
+                              className={`rounded-full h-6 w-6 flex items-center justify-center transition-colors ${
+                                worldClassOpen
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
+                              }`}
+                            >
+                              <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">World-Class Reply</TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
                   )}
 
@@ -2786,48 +2821,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </Button>
                     </div>
 
-                    {/* Right: emoji + sparkle + lock + Send */}
+                    {/* Right: lock + Send */}
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {composeMode === "reply" && (
-                        <>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="rounded-full h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                                onClick={() => setShowEmojiPicker((v) => !v)}
-                                type="button"
-                              >
-                                <Smile className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">Add emoji</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={`rounded-full h-8 w-8 transition-colors ${
-                                  worldClassOpen
-                                    ? "bg-violet-100 text-violet-700"
-                                    : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
-                                }`}
-                                onClick={() => {
-                                  setWorldClassOpen((v) => !v);
-                                  setFaqOpen(false);
-                                  setObjectionsOpen(false);
-                                }}
-                                type="button"
-                              >
-                                <Sparkles className="h-4 w-4 animate-sparkle-shake" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">World-Class Reply — AI response using Disney, Ritz-Carlton & Zappos principles</TooltipContent>
-                          </Tooltip>
-                        </>
-                      )}
                       {/* Note toggle */}
                       <Tooltip>
                         <TooltipTrigger asChild>
