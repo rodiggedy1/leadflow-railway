@@ -1084,3 +1084,5 @@
 - [x] Fix ETA PASSED alert showing wrong time (UTC instead of ET): added timeZone: 'America/New_York' to toLocaleTimeString in StaleETA cron — DST-safe via IANA timezone
 - [x] Fix all Command Chat time displays using UTC instead of ET: added timeZone: 'America/New_York' to formatTime() helper, pinnedJobs time, soon-alert startTime, etaLabel from live etaTimestamp (opsChatRouter), and running_late arrivalTime (cleanerRouter)
 - [x] Fix no-check-in escalation card not dismissing when cleaner is running_late (had ETA but card stayed): added running_late to suppression filter in getCommandChatAlerts; also added auto-delete of noshow_alert/stale_eta cards from DB when cleaner updates status to on_the_way or arrived
+- [ ] Add Calendar tab to hiring pipeline: LLM extracts scheduled call times from Real Interview conversations, weekly grid view
+- [x] Add Calendar tab to hiring pipeline: LLM extracts scheduled call times from Real Interview conversations, weekly grid view

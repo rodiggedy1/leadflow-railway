@@ -811,6 +811,119 @@ export const hiringRouter = router({
   }),
 
   /**
+   * Returns scheduled interview call times for all Real Interview candidates,
+   * extracted from their conversation history via LLM.
+   */
+  getInterviewCalendar: agentProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { candidates } = await import("../drizzle/schema");
+
+      const realInterviewCandidates = await db
+        .select({
+          id: candidates.id,
+          firstName: candidates.firstName,
+          lastName: candidates.lastName,
+          phone: candidates.phone,
+        })
+        .from(candidates)
+        .where(eq(candidates.stage, "Real Interview"));
+
+      const today = new Date();
+      const todayStr = today.toLocaleDateString("en-US", {
+        timeZone: "America/New_York",
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      const results = await Promise.all(
+        realInterviewCandidates.map(async (cand) => {
+          const digits = cand.phone.replace(/[^0-9]/g, "");
+          const e164 = "+1" + digits.slice(-10);
+
+          const sessions = await db
+            .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
+            .from(conversationSessions)
+            .where(or(eq(conversationSessions.leadPhone, cand.phone), eq(conversationSessions.leadPhone, e164)))
+            .limit(1);
+
+          const noSchedule = {
+            candidateId: cand.id,
+            name: `${cand.firstName} ${cand.lastName}`.trim(),
+            phone: cand.phone,
+            scheduledDate: null as string | null,
+            scheduledTime: null as string | null,
+            confidence: "none" as "confirmed" | "proposed" | "none",
+            note: null as string | null,
+          };
+
+          if (!sessions.length || !sessions[0].messageHistory) return noSchedule;
+
+          let messages: { role: string; content: string; ts?: number }[] = [];
+          try { messages = JSON.parse(sessions[0].messageHistory); } catch { return noSchedule; }
+          messages.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+
+          const transcript = messages
+            .slice(-12)
+            .map(m => `${m.role === "user" ? "Candidate" : "Jade (recruiter)"}: ${String(m.content ?? "").substring(0, 300)}`)
+            .join("\n");
+
+          try {
+            const llmResult = await invokeLLM({
+              messages: [
+                {
+                  role: "system",
+                  content: `Today is ${todayStr}. You are extracting scheduling information from a recruiter-candidate SMS conversation. The recruiter (Jade) is scheduling a 5-minute phone call. Extract the most specific confirmed or proposed call time. Return JSON only.`,
+                },
+                {
+                  role: "user",
+                  content: `Conversation:\n${transcript}\n\nExtract the scheduled call time. If a specific date and time was agreed upon or proposed, return it. If only a vague time was mentioned (e.g. "tomorrow afternoon"), interpret it as specifically as possible. If no time was discussed at all, return null for both fields.`,
+                },
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "interview_schedule",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      scheduledDate: { type: ["string", "null"], description: "ISO date YYYY-MM-DD or null" },
+                      scheduledTime: { type: ["string", "null"], description: "12-hour time like '11:00 AM' or null" },
+                      confidence: { type: "string", enum: ["confirmed", "proposed", "none"], description: "confirmed=both agreed; proposed=one suggested; none=no time discussed" },
+                      note: { type: ["string", "null"], description: "Exact quote or paraphrase from conversation, max 120 chars" },
+                    },
+                    required: ["scheduledDate", "scheduledTime", "confidence", "note"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            });
+
+            const content = llmResult?.choices?.[0]?.message?.content;
+            const parsed = typeof content === "string" ? JSON.parse(content) : content;
+            return {
+              candidateId: cand.id,
+              name: `${cand.firstName} ${cand.lastName}`.trim(),
+              phone: cand.phone,
+              scheduledDate: (parsed.scheduledDate ?? null) as string | null,
+              scheduledTime: (parsed.scheduledTime ?? null) as string | null,
+              confidence: (parsed.confidence ?? "none") as "confirmed" | "proposed" | "none",
+              note: (parsed.note ?? null) as string | null,
+            };
+          } catch {
+            return noSchedule;
+          }
+        })
+      );
+
+      return results;
+    }),
+
+  /**
    * Protected — restore a rejected candidate back to Application Submitted
    */
   restoreCandidate: agentProcedure

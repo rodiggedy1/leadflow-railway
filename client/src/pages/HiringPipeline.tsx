@@ -3,7 +3,7 @@
  * Pixel-perfect match to the provided design screenshots.
  * Data is static/mock for now; will be wired to backend in a future phase.
  */
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { ConversationDrawer, type Session as LeadSession } from "./AgentDashboard";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
@@ -57,6 +57,9 @@ import {
   ChevronUp,
   Inbox,
   RotateCcw,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon,
+  RefreshCw,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1312,7 +1315,235 @@ const FILTER_TABS = [
   "Onboarding",
   "Active",
 ] as const;
-type FilterTab = (typeof FILTER_TABS)[number] | "Rejected";
+type FilterTab = (typeof FILTER_TABS)[number] | "Rejected" | "Calendar";
+
+// ── Interview Calendar View ─────────────────────────────────────────────────────────────────
+
+type CalendarEntry = {
+  candidateId: number;
+  name: string;
+  phone: string;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  confidence: "confirmed" | "proposed" | "none";
+  note: string | null;
+};
+
+function InterviewCalendar() {
+  const { data, isLoading, refetch, isFetching } = trpc.hiring.getInterviewCalendar.useQuery(undefined, {
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const weekStart = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + weekOffset * 7);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  }, [weekOffset]);
+
+  const weekDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return d;
+    });
+  }, [weekStart]);
+
+  const weekLabel = useMemo(() => {
+    const start = weekDays[0];
+    const end = weekDays[6];
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
+  }, [weekDays]);
+
+  const entriesByDate = useMemo(() => {
+    const map = new Map<string, CalendarEntry[]>();
+    if (!data) return map;
+    for (const entry of data as CalendarEntry[]) {
+      if (!entry.scheduledDate) continue;
+      const list = map.get(entry.scheduledDate) ?? [];
+      list.push(entry);
+      map.set(entry.scheduledDate, list);
+    }
+    return map;
+  }, [data]);
+
+  const unscheduled = useMemo(() => {
+    if (!data) return [];
+    return (data as CalendarEntry[]).filter(e => !e.scheduledDate);
+  }, [data]);
+
+  const copyPhone = useCallback((phone: string) => {
+    navigator.clipboard.writeText(phone).catch(() => {});
+  }, []);
+
+  const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  const confidenceStyle = (c: string) => {
+    if (c === "confirmed") return { bg: "#dcfce7", text: "#15803d", label: "Confirmed" };
+    if (c === "proposed") return { bg: "#fef9c3", text: "#a16207", label: "Proposed" };
+    return { bg: "#f1f5f9", text: "#64748b", label: "No time" };
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setWeekOffset(w => w - 1)}
+            className="w-8 h-8 rounded-full border flex items-center justify-center hover:bg-gray-50 transition-colors"
+            style={{ borderColor: "#e5e7eb" }}
+          >
+            <ChevronLeft className="w-4 h-4 text-gray-500" />
+          </button>
+          <span className="text-sm font-semibold text-gray-700 min-w-[200px] text-center">{weekLabel}</span>
+          <button
+            onClick={() => setWeekOffset(w => w + 1)}
+            className="w-8 h-8 rounded-full border flex items-center justify-center hover:bg-gray-50 transition-colors"
+            style={{ borderColor: "#e5e7eb" }}
+          >
+            <ChevronRightIcon className="w-4 h-4 text-gray-500" />
+          </button>
+          {weekOffset !== 0 && (
+            <button onClick={() => setWeekOffset(0)} className="text-xs text-blue-600 hover:underline font-medium">
+              Today
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          style={{ borderColor: "#e5e7eb" }}
+        >
+          <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+          {isFetching ? "Analyzing…" : "Refresh"}
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="py-20 text-center">
+          <RefreshCw className="w-5 h-5 animate-spin text-gray-400 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Analyzing conversations…</p>
+          <p className="text-xs text-gray-400 mt-1">This may take up to 30 seconds</p>
+        </div>
+      ) : (
+        <>
+          {/* 7-column weekly grid */}
+          <div className="grid grid-cols-7 gap-2">
+            {weekDays.map((day, i) => {
+              const iso = day.toISOString().slice(0, 10);
+              const isToday = iso === todayISO;
+              const entries = entriesByDate.get(iso) ?? [];
+              return (
+                <div key={iso} className="flex flex-col gap-1.5">
+                  <div
+                    className="text-center py-2 rounded-lg"
+                    style={isToday ? { backgroundColor: "#0f172a" } : { backgroundColor: "#f8fafc" }}
+                  >
+                    <p className="text-xs font-semibold" style={{ color: isToday ? "#ffffff" : "#94a3b8" }}>
+                      {DAY_NAMES[i]}
+                    </p>
+                    <p className="text-base font-bold" style={{ color: isToday ? "#ffffff" : "#1e293b" }}>
+                      {day.getDate()}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1.5" style={{ minHeight: 80 }}>
+                    {entries.length === 0 ? (
+                      <div
+                        className="flex-1 rounded-lg border border-dashed"
+                        style={{ borderColor: "#e2e8f0", minHeight: 60 }}
+                      />
+                    ) : (
+                      entries.map(entry => {
+                        const cs = confidenceStyle(entry.confidence);
+                        return (
+                          <div
+                            key={entry.candidateId}
+                            className="rounded-lg border p-2 flex flex-col gap-1"
+                            style={{ backgroundColor: "#ffffff", borderColor: "#e5e7eb" }}
+                          >
+                            <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{entry.name}</p>
+                            {entry.scheduledTime && (
+                              <p className="text-xs font-medium" style={{ color: "#2563eb" }}>{entry.scheduledTime}</p>
+                            )}
+                            <button
+                              onClick={() => copyPhone(entry.phone)}
+                              className="text-left text-xs font-mono text-gray-400 hover:text-gray-700 transition-colors truncate"
+                              title="Click to copy phone"
+                            >
+                              {entry.phone}
+                            </button>
+                            <span
+                              className="self-start text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                              style={{ backgroundColor: cs.bg, color: cs.text }}
+                            >
+                              {cs.label}
+                            </span>
+                            {entry.note && (
+                              <p className="text-[10px] text-gray-400 italic leading-tight line-clamp-2">{entry.note}</p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Unscheduled section */}
+          {unscheduled.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-px flex-1" style={{ backgroundColor: "#e5e7eb" }} />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Unscheduled ({unscheduled.length})
+                </span>
+                <div className="h-px flex-1" style={{ backgroundColor: "#e5e7eb" }} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {unscheduled.map(entry => (
+                  <div
+                    key={entry.candidateId}
+                    className="rounded-lg border p-2.5 flex flex-col gap-1"
+                    style={{ backgroundColor: "#fafafa", borderColor: "#e5e7eb" }}
+                  >
+                    <p className="text-xs font-semibold text-gray-900 truncate">{entry.name}</p>
+                    <button
+                      onClick={() => copyPhone(entry.phone)}
+                      className="text-left text-xs font-mono text-gray-400 hover:text-gray-700 transition-colors truncate"
+                      title="Click to copy phone"
+                    >
+                      {entry.phone}
+                    </button>
+                    <span
+                      className="self-start text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: "#f1f5f9", color: "#64748b" }}
+                    >
+                      No time yet
+                    </span>
+                    {entry.note && (
+                      <p className="text-[10px] text-gray-400 italic leading-tight line-clamp-2">{entry.note}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -1321,6 +1552,7 @@ export default function HiringPipeline() {
   const [boardDrawerSession, setBoardDrawerSession] = useState<LeadSession | null>(null);
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
   const isRejectedView = filterTab === "Rejected";
+  const isCalendarView = filterTab === "Calendar";
   const rejectedQuery = trpc.hiring.getRejectedCandidates.useQuery(undefined, {
     enabled: isRejectedView,
     staleTime: 0,
@@ -1666,17 +1898,34 @@ export default function HiringPipeline() {
               >
                 Rejected
               </button>
+              {/* Calendar tab */}
+              <button
+                onClick={() => setFilterTab("Calendar")}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all"
+                style={
+                  filterTab === "Calendar"
+                    ? { backgroundColor: "#2563eb", color: "#ffffff", borderColor: "#2563eb" }
+                    : { backgroundColor: "#ffffff", color: "#2563eb", borderColor: "#bfdbfe" }
+                }
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Calendar
+              </button>
             </div>
           </div>
 
           {/* Scroll indicator bar */}
-          {!isRejectedView && (
+          {!isRejectedView && !isCalendarView && (
             <div className="mt-3 mb-5 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#f1f5f9" }}>
               <div className="h-full w-1/3 rounded-full" style={{ backgroundColor: "#cbd5e1" }} />
             </div>
           )}
-          {/* ── Rejected list ── */}
-          {isRejectedView ? (
+          {/* ── Calendar view ── */}
+          {isCalendarView ? (
+            <div className="mt-4">
+              <InterviewCalendar />
+            </div>
+          ) : isRejectedView ? (
             <div className="mt-4">
               {rejectedQuery.isLoading ? (
                 <p className="text-sm text-gray-400 py-8 text-center">Loading…</p>
