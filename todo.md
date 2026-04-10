@@ -1098,3 +1098,4 @@
 - [x] Pixel-perfect redesign of Revenue Lane header (REVENUE LANE label, Clients heading, open count pill), priority queue card, and client conversation cards in CsInbox Col 1
 - [x] Remove Ops/Chat/CS tab switcher from inside Revenue Lane card in CsInbox
 - [x] Change CS inbox background to light grey matching the design
+- [x] Pixel-perfect both priority queue cards (client blue, team purple) with hover-to-expand; add Team priority queue card to Operations Lane

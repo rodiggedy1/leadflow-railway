@@ -1468,29 +1468,30 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </button>
               </div>
 
-              {/* AI priority queue */}
-              <div className="rounded-[20px] bg-[#EEF2FF] border border-[#E0E7FF] p-4">
+              {/* AI priority queue — collapsed by default, hover to expand */}
+              <div className="group rounded-[20px] bg-[#EEF2FF] p-4 cursor-default transition-all">
                 <div className="flex items-start gap-3">
                   <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
                     <Sparkles className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-bold text-slate-900">Client priority queue</div>
+                      <div className="text-[14px] font-bold text-slate-900">Client priority queue</div>
                       {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
                     </div>
                     {priorityItems.length === 0 && !priorityLoading && (
-                      <div className="mt-1 text-sm text-slate-500">No urgent items right now.</div>
+                      <div className="mt-1 text-[13px] text-slate-500 leading-snug">No urgent items right now.</div>
                     )}
                     {priorityItems.length > 0 && (
-                      <div className="mt-1 text-sm text-slate-600 leading-snug">
+                      <div className="mt-1 text-[13px] text-slate-600 leading-snug">
                         {priorityItems.length} high-intent {priorityItems.length === 1 ? "opportunity" : "opportunities"}. {priorityItems.slice(0, 2).map(i => i.reason).join(" ")}
                       </div>
                     )}
                   </div>
                 </div>
+                {/* Expanded items — visible on hover */}
                 {priorityItems.length > 0 && (
-                  <div className="mt-3 space-y-1.5">
+                  <div className="mt-3 space-y-1.5 max-h-0 overflow-hidden group-hover:max-h-96 transition-all duration-300">
                     {priorityItems.map((item, idx) => {
                       const style = priorityTagStyle(item.tag);
                       return (
@@ -1789,10 +1790,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Operations Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Operations Lane</div>
-                  <div className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">Team</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Operations Lane</div>
+                  <div className="text-[26px] font-bold tracking-tight text-slate-900 leading-none">Team</div>
                 </div>
-                <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700">
+                <div className="rounded-full bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
                   {teamConvs.filter((c) => !!(c as any).hasUnanswered).length} active
                 </div>
               </div>
@@ -1804,8 +1805,51 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search cleaners, dispatch, field updates"
-                  className="pl-9 h-10 rounded-2xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm"
+                  className="pl-9 h-11 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm shadow-none"
                 />
+              </div>
+
+              {/* Team priority queue — collapsed by default, hover to expand */}
+              <div className="group rounded-[20px] bg-[#F3F0FF] p-4 cursor-default transition-all">
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center shadow-sm">
+                    <Users className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-bold text-slate-900">Team priority queue</div>
+                    <div className="mt-1 text-[13px] text-slate-600 leading-snug">
+                      {teamConvs.filter((c) => !!(c as any).hasUnanswered).length > 0
+                        ? `${teamConvs.filter((c) => !!(c as any).hasUnanswered).length} route ${teamConvs.filter((c) => !!(c as any).hasUnanswered).length === 1 ? 'issue' : 'issues'} may impact a customer. ${teamConvs.filter((c) => (c as any).csPriorityTag).length > 0 ? `${teamConvs.filter((c) => (c as any).csPriorityTag).length} cleaner waiting on approval before replying.` : ''}`
+                        : "No urgent team items right now."}
+                    </div>
+                  </div>
+                </div>
+                {/* Expanded items — visible on hover */}
+                {teamConvs.filter((c) => !!(c as any).hasUnanswered).length > 0 && (
+                  <div className="mt-3 space-y-1.5 max-h-0 overflow-hidden group-hover:max-h-96 transition-all duration-300">
+                    {teamConvs.filter((c) => !!(c as any).hasUnanswered).slice(0, 5).map((item) => {
+                      const initials2 = item.initials || "?";
+                      return (
+                        <button
+                          key={item.id}
+                          className="w-full flex items-center gap-2 text-left rounded-xl px-2 py-1.5 hover:bg-violet-100/60 transition-colors"
+                          onClick={() => {
+                            setSelectedId(item.id);
+                            userNavigatedToId.current = item.id;
+                            triggerAutoDraft(item);
+                          }}
+                        >
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-60" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+                          </span>
+                          <span className="text-xs font-semibold text-slate-800 truncate">{item.name}</span>
+                          <span className="ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">{item.service || "Field ops"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Team conversation list */}
