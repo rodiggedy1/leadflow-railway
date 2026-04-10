@@ -893,11 +893,15 @@ export const hiringRouter = router({
               messages: [
                 {
                   role: "system",
-                  content: `Today is ${todayStr}. You are extracting scheduling information from a recruiter-candidate SMS conversation. The recruiter (Jade) is scheduling a 5-minute phone call. Extract the most specific confirmed or proposed call time. Return JSON only.`,
+                  content: `Today is ${todayStr}. You are extracting the scheduled interview call time from a recruiter-candidate SMS conversation. The recruiter is named Jade. Rules:
+1. If Jade (the recruiter) explicitly confirms a specific date and time (e.g. "I'll set you for Saturday at 11:30 am", "Let's do Friday at 11am"), that is the confirmed scheduled time — use it and set confidence to "confirmed".
+2. If no recruiter confirmation exists but the candidate stated one or more available times, use the LAST time slot mentioned by the candidate and set confidence to "proposed".
+3. If no specific time was discussed at all, return null for both fields and set confidence to "none".
+Always use the most recent confirmation or mention — not the first. Return JSON only.`,
                 },
                 {
                   role: "user",
-                  content: `Conversation:\n${transcript}\n\nExtract the scheduled call time. If a specific date and time was agreed upon or proposed, return it. If only a vague time was mentioned (e.g. "tomorrow afternoon"), interpret it as specifically as possible. If no time was discussed at all, return null for both fields.`,
+                  content: `Conversation:\n${transcript}\n\nApply the rules from the system prompt. Return the scheduled date (YYYY-MM-DD) and time (e.g. "11:30 AM"). If the recruiter confirmed a time, that is the answer. If not, use the last time slot the candidate mentioned. Interpret relative dates like "tomorrow" or "Friday" based on today's date (${todayStr}). If no time was discussed, return null for both fields.`,
                 },
               ],
               response_format: {
