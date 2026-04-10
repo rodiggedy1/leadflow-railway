@@ -323,6 +323,16 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   csMemoryCache: text("csMemoryCache"),
   /** Message count at time csMemoryCache was generated — used for staleness check */
   csMemoryCachedMsgLen: int("csMemoryCachedMsgLen"),
+  /**
+   * LLM-scored conversation status tier (one of the 21 status keys).
+   * Computed async after each new message; null = not yet scored or stale.
+   * Examples: "new_inquiry", "waiting_on_you", "hot_lead", "solved", "job_at_risk", etc.
+   */
+  csStatusTier: varchar("csStatusTier", { length: 32 }),
+  /** Unix ms timestamp when csStatusTier was last computed */
+  csStatusTieredAt: bigint("csStatusTieredAt", { mode: "number" }),
+  /** Message count at time csStatusTier was computed — used for staleness check */
+  csStatusMsgLen: int("csStatusMsgLen"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

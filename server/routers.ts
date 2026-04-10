@@ -2753,7 +2753,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           }
         }
 
-        return deduped.map((s) => {
+        const result = deduped.map((s) => {
           const d10 = digits10(s.leadPhone?.trim() ?? "");
           return {
             ...s,
@@ -2761,6 +2761,30 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             hasTodayJob: todayJobMap.get(d10) ?? false,
           };
         });
+
+        // Fire async LLM status scoring for stale sessions — never blocks the response
+        // Import inline to avoid circular deps at module load time
+        import("./csStatusScorer").then(({ scoreAndCacheStatus }) => {
+          for (const s of result) {
+            let hist: Array<{ role: string; content: string; ts?: number }> = [];
+            try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
+            const msgLen = hist.length;
+            const isTeam = s.leadSource === "cs-inbound-cleaner";
+            // Only score if stale (msgLen changed since last score)
+            if (s.csStatusMsgLen !== msgLen) {
+              scoreAndCacheStatus(
+                s.id,
+                isTeam,
+                hist,
+                msgLen,
+                s.csStatusTier ?? null,
+                s.csStatusMsgLen ?? null
+              ).catch(() => { /* silent — scoring is best-effort */ });
+            }
+          }
+        }).catch(() => { /* silent */ });
+
+        return result;
       }),
     /**
      * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.

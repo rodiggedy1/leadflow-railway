@@ -1532,42 +1532,50 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
                     const gradient = gradientPalette[hashIdx];
 
-                    // ── Status pill — 3 urgency tiers + directional sub-labels ──
-                    type StatusKey = "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
+                    // ── Status pill — full 21-state LLM-powered system ──
                     const csPriorityTag = (conversation as any).csPriorityTag;
                     const csQueue = (conversation as any).csQueue;
                     const lastSenderRole = (conversation as any).lastSenderRole as "user" | "assistant" | null;
+                    const llmTier = (conversation as any).csStatusTier as string | null;
                     const waitMs = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
                     const waitMinDisplay = Math.floor(waitMs / 60_000);
-                    const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000; // >10 min
+                    const waitingTooLong = hasUnanswered && waitMs > 10 * 60 * 1000;
                     const isBooked = csQueue === "Active jobs" || csQueue === "Hot leads";
 
-                    // Phase 1: auto-detect direction from last sender
-                    // lastSenderRole === "user" means client sent last → agent needs to reply ("Your Turn")
-                    // lastSenderRole === "assistant" means agent sent last → waiting on client ("Their Turn")
-                    const waitingOnYou = lastSenderRole === "user"; // client messaged, agent hasn't replied
-                    const waitingOnClient = lastSenderRole === "assistant"; // agent replied, waiting on client
-
-                    // Phase 2: collapse into 3 urgency tiers
-                    // 🔴 Act Now  — priority tag OR waiting too long (>10 min unanswered)
-                    // 🟡 Your Turn — client sent last, agent hasn't replied (< 10 min)
-                    // 🔵 Their Turn — agent sent last, waiting on client
-                    // 🟢 Monitor  — resolved, booked, or low-urgency
-                    const statusKey: StatusKey =
-                      isResolved ? "resolved" :
-                      (csPriorityTag || waitingTooLong) ? "act_now" :
-                      waitingOnYou ? "your_turn" :
-                      waitingOnClient ? "their_turn" :
-                      "monitor";
-
+                    // Full 21-state config map (client lane)
+                    type StatusKey = "new_inquiry" | "waiting_on_you" | "hot_lead" | "slow_response" | "scheduling" | "objection" | "post_job" | "happy_customer" | "cold_lead" | "solved" | "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
                     type StatusCfg = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
                     const statusCfg: Record<StatusKey, StatusCfg> = {
-                      act_now:    { label: "⚡ Act Now",       action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority",  pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
-                      your_turn:  { label: "👉 Your Turn",     action: "Client waiting · reply now",                                                         pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
-                      their_turn: { label: "⏳ Their Turn",    action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client",           pill: "bg-blue-50 text-blue-700 border-blue-200",    dot: "bg-blue-400",    Icon: Clock3 },
-                      monitor:    { label: "👀 Monitor",       action: isBooked ? "Active booking · monitor" : "Low urgency · review when free",              pill: "bg-slate-50 text-slate-500 border-slate-200",  dot: "bg-slate-400",   Icon: CheckCircle2 },
-                      resolved:   { label: "✓ Resolved",       action: "Closed",                                                                              pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
+                      // LLM-scored client states
+                      new_inquiry:     { label: "🟢 New Inquiry",       action: "Respond now · book this lead",           pill: "bg-emerald-50 text-emerald-700 border-emerald-200",  dot: "bg-emerald-500",  Icon: MessageSquare },
+                      waiting_on_you:  { label: "🟡 Waiting on You",    action: "Follow up now · recommended",            pill: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500",    Icon: ShieldAlert },
+                      hot_lead:        { label: "🔥 Hot Lead",           action: "Close now · send time + price",          pill: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-500",   Icon: TrendingUp },
+                      slow_response:   { label: "⏱️ Slow Response",      action: `Nudge now · ${waitMinDisplay}m wait`,    pill: "bg-rose-50 text-rose-700 border-rose-200",          dot: "bg-rose-500",     Icon: Clock3 },
+                      scheduling:      { label: "📅 Scheduling",         action: "Lock in time · confirm slot",            pill: "bg-sky-50 text-sky-700 border-sky-200",             dot: "bg-sky-500",      Icon: Clock3 },
+                      objection:       { label: "❌ Objection",          action: "Overcome objection · use script",        pill: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500",      Icon: ShieldAlert },
+                      post_job:        { label: "🔁 Post-job",           action: "Push to recurring",                      pill: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-400",   Icon: CheckCircle2 },
+                      happy_customer:  { label: "🌟 Happy Customer",     action: "Ask for review + rebook",               pill: "bg-yellow-50 text-yellow-700 border-yellow-200",    dot: "bg-yellow-400",   Icon: CheckCircle2 },
+                      cold_lead:       { label: "🧊 Cold Lead",          action: "Reactivate · last-minute opening",       pill: "bg-slate-50 text-slate-500 border-slate-200",       dot: "bg-slate-400",    Icon: Clock3 },
+                      solved:          { label: "✅ Solved",             action: "No action needed",                       pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
+                      // Mechanical fallbacks (used when llmTier is null)
+                      act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
+                      your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
+                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-400", Icon: Clock3 },
+                      monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
+                      resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
+
+                    // Resolve status key: LLM tier takes priority, mechanical fallback if null
+                    const validLlmKeys = new Set<string>(Object.keys(statusCfg));
+                    const resolvedLlmKey = llmTier && validLlmKeys.has(llmTier) ? (llmTier as StatusKey) : null;
+                    const statusKey: StatusKey =
+                      isResolved ? "resolved" :
+                      resolvedLlmKey ? resolvedLlmKey :
+                      (csPriorityTag || waitingTooLong) ? "act_now" :
+                      lastSenderRole === "user" ? "your_turn" :
+                      lastSenderRole === "assistant" ? "their_turn" :
+                      "monitor";
+
                     const sc = statusCfg[statusKey];
 
                     // ── Priority badge (top-left of avatar) ──
@@ -1599,11 +1607,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                     // ── Avatar ring color keyed to status ──
                     const ringColorMap: Record<StatusKey, string> = {
-                      act_now:    "ring-rose-300 shadow-rose-100",
-                      your_turn:  "ring-amber-400 shadow-amber-100",
-                      their_turn: "ring-blue-300 shadow-blue-100",
-                      monitor:    "ring-slate-300 shadow-slate-100",
-                      resolved:   "ring-slate-200 shadow-slate-100",
+                      new_inquiry:    "ring-emerald-300 shadow-emerald-100",
+                      waiting_on_you: "ring-amber-400 shadow-amber-100",
+                      hot_lead:       "ring-orange-400 shadow-orange-100",
+                      slow_response:  "ring-rose-400 shadow-rose-100",
+                      scheduling:     "ring-sky-300 shadow-sky-100",
+                      objection:      "ring-red-400 shadow-red-100",
+                      post_job:       "ring-violet-300 shadow-violet-100",
+                      happy_customer: "ring-yellow-300 shadow-yellow-100",
+                      cold_lead:      "ring-slate-300 shadow-slate-100",
+                      solved:         "ring-slate-200 shadow-slate-100",
+                      act_now:        "ring-rose-300 shadow-rose-100",
+                      your_turn:      "ring-amber-400 shadow-amber-100",
+                      their_turn:     "ring-blue-300 shadow-blue-100",
+                      monitor:        "ring-slate-300 shadow-slate-100",
+                      resolved:       "ring-slate-200 shadow-slate-100",
                     };
                     const ringColor = ringColorMap[statusKey];
                     // ── Note line: directional action hint ──
@@ -1880,36 +1898,47 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
                   const gradient = gradientPalette[hashIdx];
 
-                  // ── Teams card: same 3-tier directional status system as client cards ──
-                  type StatusKey2 = "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
+                  // ── Teams card: full 9-state LLM-powered ops system ──
                   const csPriorityTag2 = (conversation as any).csPriorityTag;
                   const csQueue2 = (conversation as any).csQueue;
                   const lastSenderRole2 = (conversation as any).lastSenderRole as "user" | "assistant" | null;
+                  const llmTier2 = (conversation as any).csStatusTier as string | null;
                   const waitMs2 = conversation.lastMsgTs ? Date.now() - conversation.lastMsgTs : 0;
                   const waitMinDisplay2 = Math.floor(waitMs2 / 60_000);
                   const waitingTooLong2 = hasUnanswered && waitMs2 > 10 * 60 * 1000;
-                  const isBooked2 = csQueue2 === "Active jobs" || csQueue2 === "Hot leads";
 
-                  // For Teams: "user" = cleaner/team sent last (agent needs to reply)
-                  //             "assistant" = agent replied, waiting on team
-                  const teamWaitingOnYou = lastSenderRole2 === "user";
-                  const teamWaitingOnThem = lastSenderRole2 === "assistant";
-
-                  const statusKey2: StatusKey2 =
-                    isResolved ? "resolved" :
-                    (csPriorityTag2 || waitingTooLong2) ? "act_now" :
-                    teamWaitingOnYou ? "your_turn" :
-                    teamWaitingOnThem ? "their_turn" :
-                    "monitor";
-
+                  type StatusKey2 = "job_at_risk" | "awaiting_team" | "needs_instruction" | "schedule_conflict" | "otw_missing" | "arrival_issue" | "payment_issue" | "fyi" | "solved" | "act_now" | "your_turn" | "their_turn" | "monitor" | "resolved";
                   type StatusCfg2 = { label: string; action: string; pill: string; dot: string; Icon: React.ElementType };
                   const statusCfg2: Record<StatusKey2, StatusCfg2> = {
-                    act_now:    { label: "⚡ Act Now",    action: waitingTooLong2 ? `Reply now · ${waitMinDisplay2}m wait` : "Needs attention · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500",   Icon: ShieldAlert },
-                    your_turn:  { label: "👉 Your Turn",  action: "Team waiting · reply now",                                                           pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500",  Icon: MessageSquare },
-                    their_turn: { label: "⏳ Their Turn", action: "You replied · waiting on team",                                                           pill: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-400",   Icon: Clock3 },
-                    monitor:    { label: "👀 Monitor",    action: "Low urgency · review when free",                                                        pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400",  Icon: CheckCircle2 },
-                    resolved:   { label: "✓ Resolved",    action: "Closed",                                                                               pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
+                    // LLM-scored team states
+                    job_at_risk:        { label: "🔴 Job at Risk",         action: "Fix now + notify client",              pill: "bg-rose-50 text-rose-700 border-rose-200",          dot: "bg-rose-500",     Icon: ShieldAlert },
+                    awaiting_team:      { label: "🟡 Awaiting Team",       action: "Ping team now",                        pill: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500",    Icon: MessageSquare },
+                    needs_instruction:  { label: "🟡 Needs Instruction",   action: "Send instructions",                   pill: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-400",   Icon: ShieldAlert },
+                    schedule_conflict:  { label: "🔁 Schedule Conflict",   action: "Adjust schedule",                     pill: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-400",   Icon: Clock3 },
+                    otw_missing:        { label: "🚗 OTW Missing",          action: "Confirm status now",                  pill: "bg-sky-50 text-sky-700 border-sky-200",             dot: "bg-sky-500",      Icon: Clock3 },
+                    arrival_issue:      { label: "📍 Arrival Issue",        action: "Check arrival + update client",       pill: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500",      Icon: ShieldAlert },
+                    payment_issue:      { label: "🯧 Payment Issue",        action: "Resolve + explain",                   pill: "bg-yellow-50 text-yellow-700 border-yellow-200",    dot: "bg-yellow-500",   Icon: ShieldAlert },
+                    fyi:                { label: "⚪ FYI",                  action: "Review · no action needed",             pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
+                    solved:             { label: "✅ Solved",               action: "No action needed",                    pill: "bg-slate-50 text-slate-400 border-slate-200",       dot: "bg-slate-300",    Icon: CheckCircle2 },
+                    // Mechanical fallbacks
+                    act_now:            { label: "⚡ Act Now",              action: waitingTooLong2 ? `Reply now · ${waitMinDisplay2}m wait` : "Needs attention · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500",   Icon: ShieldAlert },
+                    your_turn:          { label: "👉 Your Turn",           action: "Team waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500",  Icon: MessageSquare },
+                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-400",   Icon: Clock3 },
+                    monitor:            { label: "👀 Monitor",             action: "Low urgency · review when free",       pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400",  Icon: CheckCircle2 },
+                    resolved:           { label: "✓ Resolved",             action: "Closed",                              pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
                   };
+
+                  // Resolve: LLM tier first, mechanical fallback if null
+                  const validLlmKeys2 = new Set<string>(Object.keys(statusCfg2));
+                  const resolvedLlmKey2 = llmTier2 && validLlmKeys2.has(llmTier2) ? (llmTier2 as StatusKey2) : null;
+                  const statusKey2: StatusKey2 =
+                    isResolved ? "resolved" :
+                    resolvedLlmKey2 ? resolvedLlmKey2 :
+                    (csPriorityTag2 || waitingTooLong2) ? "act_now" :
+                    lastSenderRole2 === "user" ? "your_turn" :
+                    lastSenderRole2 === "assistant" ? "their_turn" :
+                    "monitor";
+
                   const sc2 = statusCfg2[statusKey2];
                   const unreadCount2 = (conversation as any).unreadCount ?? (isUnread ? 1 : 0);
                   const isResolvingThis2 = resolvingId === conversation.id;
