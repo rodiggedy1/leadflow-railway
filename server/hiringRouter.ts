@@ -453,14 +453,19 @@ export const hiringRouter = router({
 
           const smsText = stageMessages[input.stage];
           if (smsText) {
-            setImmediate(async () => {
-              try {
-                await sendSms({ to: e164Phone, content: smsText });
-                console.log(`[Hiring SMS] Stage-change SMS sent to ${e164Phone} for stage ${input.stage}`);
-              } catch (err: any) {
-                console.error(`[Hiring SMS] Stage-change SMS failed for candidate ${input.id}:`, err.message);
+            // Await inline — do NOT use setImmediate here. If the sandbox hibernates between
+            // the DB update and a deferred callback, the SMS is silently dropped.
+            const { ENV } = await import("./_core/env");
+            try {
+              const result = await sendSms({ to: e164Phone, content: smsText, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+              if (result.success) {
+                console.log(`[Hiring SMS] Stage-change SMS sent to ${e164Phone} for stage ${input.stage}, msgId=${result.messageId}`);
+              } else {
+                console.error(`[Hiring SMS] Stage-change SMS failed for candidate ${input.id}: ${result.error}`);
               }
-            });
+            } catch (err: any) {
+              console.error(`[Hiring SMS] Stage-change SMS threw for candidate ${input.id}:`, err.message);
+            }
           }
         }
 
