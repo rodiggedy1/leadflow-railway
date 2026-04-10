@@ -1081,3 +1081,4 @@
 - [ ] Fix Advance Stage button in hiring pipeline — must advance to next stage and send automated SMS
 - [ ] Fix Reject button in hiring pipeline — must set stage to Rejected and send automated SMS
 - [x] Fix stage-change SMS (Real Interview etc.) not firing: replaced setImmediate with inline await in updateStage; also switched to CS phone number (PN0wVLcpCq) for hiring SMS; manually sent missed SMS to all 18 Real Interview candidates
+- [x] Fix ETA PASSED alert showing wrong time (UTC instead of ET): added timeZone: 'America/New_York' to toLocaleTimeString in StaleETA cron — DST-safe via IANA timezone

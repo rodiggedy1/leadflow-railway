@@ -483,7 +483,7 @@ export function startInternalCron(): void {
         if (existing.length > 0) continue;
         // Post the alert card
         const cleanerFirst = (job.cleanerName ?? "Team").split(" ")[0];
-        const etaStr = new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        const etaStr = new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
         await db.insert(opsChatMessages).values({
           channel: "command",
           from: "System",

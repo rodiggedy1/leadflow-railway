@@ -459,6 +459,33 @@ export const hiringRouter = router({
               const result = await sendSms({ to: e164Phone, content: smsText });
               if (result.success) {
                 console.log(`[Hiring SMS] Stage-change SMS sent to ${e164Phone} for stage ${input.stage}, msgId=${result.messageId}`);
+                // Append to conversation session so the message shows in the SMS drawer
+                const existing = await db
+                  .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
+                  .from(conversationSessions)
+                  .where(eq(conversationSessions.leadPhone, e164Phone))
+                  .orderBy(desc(conversationSessions.createdAt))
+                  .limit(1);
+                const now = Date.now();
+                if (existing[0]) {
+                  let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+                  try { history = JSON.parse(existing[0].messageHistory ?? "[]"); } catch { history = []; }
+                  history.push({ role: "assistant", content: smsText, ts: now, senderName: "Jade" });
+                  await db
+                    .update(conversationSessions)
+                    .set({ messageHistory: JSON.stringify(history) })
+                    .where(eq(conversationSessions.id, existing[0].id));
+                } else {
+                  // No session yet — create one so the message is visible in the drawer
+                  await db.insert(conversationSessions).values({
+                    leadPhone: e164Phone,
+                    leadName: firstName,
+                    stage: "INTERVIEW_LINK_SENT" as any,
+                    leadSource: "hiring_interview" as any,
+                    aiMode: 0,
+                    messageHistory: JSON.stringify([{ role: "assistant", content: smsText, ts: now, senderName: "Jade" }]),
+                  });
+                }
               } else {
                 console.error(`[Hiring SMS] Stage-change SMS failed for candidate ${input.id}: ${result.error}`);
               }
