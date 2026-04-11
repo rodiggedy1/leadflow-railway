@@ -1964,8 +1964,6 @@ export const issueOwnership = mysqlTable("issue_ownership", {
   resolvedAt: bigint("resolvedAt", { mode: "number" }),
   /** Display name of the agent who resolved it */
   resolvedBy: varchar("resolvedBy", { length: 128 }),
-  /** Free-text note explaining how the issue was resolved */
-  resolutionNote: text("resolutionNote"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
@@ -1982,5 +1980,4 @@ export const issueComments = mysqlTable("issue_comments", {
   body: text("body").notNull(),
   type: varchar("type", { length: 32 }).notNull().default("text"), // "text" | "system"
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
-  linkedIssueKey: varchar("linked_issue_key", { length: 255 }),
 });

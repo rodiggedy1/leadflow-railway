@@ -1116,14 +1116,4 @@
 - [x] Issue comments: add issue_comments table (issueKey, authorName, body, type: text|system, createdAt)
 - [x] Issue comments: add addIssueComment + getIssueComments tRPC procedures; auto-log system events on claim/resolve
 - [x] Issue comments: inline collapsible thread below each issue card, live polling every 5s, composer at bottom
-- [x] Comment-to-issue: add linkedIssueKey column to issue_comments table
-- [x] Comment-to-issue: add convertCommentToIssue tRPC procedure (LLM prefill + issue creation + link back)
-- [x] Comment-to-issue: hover on comment reveals "Convert to issue" button; click opens ConvertToIssueModal with LLM-prefilled fields
-- [x] Comment-to-issue: after creation, comment shows linked-issue chip; clicking it switches left panel to Issues tab and highlights the card
-- [x] Convert-to-issue on chat messages: hover any main channel message → "Convert to issue" button appears, same modal + flow as comment threads
-- [x] Fix: chat convert button label should say "Create issue" not "Issue"
-- [x] Fix: created issue not appearing in Issues tab after conversion
-- [x] Fix: add notification chip on source chat message after issue is created (with link to issue)
-- [x] Add "Raise issue" button to Command Chat header for manual issue creation
-- [x] Issues panel: Resolve button on issue cards should open the Resolve Issue dialog (same as chat side) before submitting
-- [x] Fix: right column missing from CommandChat — remove toggle/close, make always visible
+- [x] Fix: resolved issues still showing as active alerts in Chat tab left panel — filter out resolved issues from live alerts

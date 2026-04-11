@@ -1,1 +1,0 @@
-ALTER TABLE `issue_comments` ADD `linked_issue_key` varchar(255);

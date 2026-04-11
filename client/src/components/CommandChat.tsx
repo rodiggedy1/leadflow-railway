@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Link2, Plus } from "lucide-react";
+  ShieldAlert, CircleCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -140,169 +140,21 @@ type IssueComment = {
   body: string;
   type: "text" | "system";
   createdAt: number;
-  linkedIssueKey?: string | null;
 };
-
-// ── ConvertToIssueModal ───────────────────────────────────────────────────────
-
-type ConvertModalState = {
-  commentId: number;
-  commentBody: string;
-  title: string;
-  severity: string;
-  team: string;
-  customer: string;
-  loading: boolean;
-  submitting: boolean;
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  Critical: "text-red-600",
-  High: "text-orange-500",
-  Medium: "text-amber-500",
-  Low: "text-slate-500",
-};
-
-function ConvertToIssueModal({
-  state,
-  onClose,
-  onFieldChange,
-  onSubmit,
-}: {
-  state: ConvertModalState;
-  onClose: () => void;
-  onFieldChange: (field: keyof Pick<ConvertModalState, "title" | "severity" | "team" | "customer">, value: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden rounded-2xl">
-        <div className="px-7 pt-7 pb-6">
-          {/* Header */}
-          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Create Issue</p>
-          <h2 className="text-2xl font-bold text-slate-900 mb-1">Convert discussion into action</h2>
-          <p className="text-sm text-slate-500 mb-5">Use this when the message needs ownership, escalation, or a clean resolution trail.</p>
-
-          {/* Source message */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 mb-4">
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5">Source Message</p>
-            <p className="text-sm text-slate-700 leading-relaxed">{state.commentBody}</p>
-          </div>
-
-          {state.loading ? (
-            <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Analyzing message...</span>
-            </div>
-          ) : (
-            <>
-              {/* Title + Severity */}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Title</p>
-                  <input
-                    value={state.title}
-                    onChange={e => onFieldChange("title", e.target.value)}
-                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
-                    placeholder="Issue title"
-                  />
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Severity</p>
-                  <select
-                    value={state.severity}
-                    onChange={e => onFieldChange("severity", e.target.value)}
-                    className={cn("w-full text-sm font-semibold bg-transparent outline-none", SEVERITY_COLORS[state.severity] ?? "text-slate-900")}
-                  >
-                    {["Critical", "High", "Medium", "Low"].map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Team + Customer */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Team</p>
-                  <input
-                    value={state.team}
-                    onChange={e => onFieldChange("team", e.target.value)}
-                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
-                    placeholder="e.g. Dispatch"
-                  />
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Customer</p>
-                  <input
-                    value={state.customer}
-                    onChange={e => onFieldChange("customer", e.target.value)}
-                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
-                    placeholder="Customer name"
-                  />
-                </div>
-              </div>
-
-              {/* Steps */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {(["Message selected", "Issue created", "Move to Issues lane"] as const).map((label, i) => (
-                  <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center">
-                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">{i + 1}</p>
-                    <p className="text-xs font-semibold text-slate-700">{label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Warning */}
-              <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 mb-1">
-                <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs font-semibold text-red-600">This should now have an owner and resolution path</p>
-              </div>
-            </>
-          )}
-        </div>
-
-        <DialogFooter className="px-7 pb-6 flex items-center justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSubmit}
-            disabled={state.submitting || state.loading || !state.title.trim()}
-            className="rounded-xl bg-slate-900 text-white px-5 py-2.5 text-sm font-semibold hover:bg-slate-800 disabled:opacity-40 transition flex items-center gap-2"
-          >
-            {state.submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Create issue
-            {!state.submitting && <ArrowRight className="h-3.5 w-3.5" />}
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── IssueCommentThread ────────────────────────────────────────────────────────
 
 function IssueCommentThread({
   issueKey,
   callerName,
   expanded,
   onToggle,
-  onNavigateToIssue,
 }: {
   issueKey: string;
   callerName: string;
   expanded: boolean;
   onToggle: () => void;
-  onNavigateToIssue?: (targetKey: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [hoveredCommentId, setHoveredCommentId] = useState<number | null>(null);
-  const [convertModal, setConvertModal] = useState<ConvertModalState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: comments = [], refetch } = trpc.opsChat.getIssueComments.useQuery(
@@ -311,11 +163,6 @@ function IssueCommentThread({
   );
 
   const addComment = trpc.opsChat.addIssueComment.useMutation({
-    onSuccess: () => refetch(),
-  });
-
-  const prefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
-  const convertMutation = trpc.opsChat.convertCommentToIssue.useMutation({
     onSuccess: () => refetch(),
   });
 
@@ -335,56 +182,6 @@ function IssueCommentThread({
       setDraft("");
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleOpenConvert(c: IssueComment) {
-    setConvertModal({
-      commentId: c.id,
-      commentBody: c.body,
-      title: "",
-      severity: "Medium",
-      team: "",
-      customer: "",
-      loading: true,
-      submitting: false,
-    });
-    try {
-      const prefill = await prefillMutation.mutateAsync({ commentBody: c.body });
-      setConvertModal(prev => prev ? {
-        ...prev,
-        title: prefill.title,
-        severity: prefill.severity,
-        team: prefill.team,
-        customer: prefill.customer,
-        loading: false,
-      } : null);
-    } catch {
-      setConvertModal(prev => prev ? { ...prev, loading: false } : null);
-    }
-  }
-
-  async function handleConvertSubmit() {
-    if (!convertModal || convertModal.submitting) return;
-    setConvertModal(prev => prev ? { ...prev, submitting: true } : null);
-    try {
-      const result = await convertMutation.mutateAsync({
-        commentId: convertModal.commentId,
-        issueKey,
-        title: convertModal.title,
-        severity: convertModal.severity,
-        team: convertModal.team,
-        customer: convertModal.customer,
-        authorName: callerName,
-        channel: "command",
-      });
-      setConvertModal(null);
-      // Navigate to the new issue
-      if (result.newIssueKey && onNavigateToIssue) {
-        onNavigateToIssue(result.newIssueKey);
-      }
-    } catch {
-      setConvertModal(prev => prev ? { ...prev, submitting: false } : null);
     }
   }
 
@@ -412,70 +209,38 @@ function IssueCommentThread({
         <div className="px-6 pb-4">
           {/* Comment list */}
           {comments.length > 0 && (
-            <div className="space-y-1.5 mb-3 max-h-48 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-              {(comments as IssueComment[]).map(c => {
-                const isSystemWithLink = c.type === "system" && c.linkedIssueKey;
-                return (
-                  <div
-                    key={c.id}
-                    className={cn(
-                      "group relative flex gap-2 items-start rounded-lg px-2 py-1.5 transition",
-                      c.type === "system" ? "opacity-70" : "hover:bg-slate-50"
-                    )}
-                    onMouseEnter={() => c.type === "text" && setHoveredCommentId(c.id)}
-                    onMouseLeave={() => setHoveredCommentId(null)}
-                  >
-                    {/* Avatar */}
-                    {c.type === "system" ? (
-                      <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
-                        <CheckCircle2 className="h-3 w-3 text-slate-500" />
-                      </div>
-                    ) : (
-                      <div
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 mt-0.5"
-                        style={{ background: `hsl(${Math.abs(c.authorName.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
-                      >
-                        {c.authorName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    {/* Body */}
-                    <div className="flex-1 min-w-0">
-                      {c.type !== "system" && (
-                        <span className="text-[10px] font-semibold text-slate-500 mr-1.5">{c.authorName}</span>
-                      )}
-                      <span className={cn(
-                        "text-xs",
-                        c.type === "system" ? "italic text-slate-400" : "text-slate-700"
-                      )}>{c.body}</span>
-                      <span className="text-[9px] text-slate-300 ml-1.5">
-                        {new Date(c.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
-                      </span>
-                      {/* Linked issue chip — shown on system comments that have a linkedIssueKey */}
-                      {isSystemWithLink && onNavigateToIssue && (
-                        <button
-                          onClick={() => onNavigateToIssue(c.linkedIssueKey!)}
-                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition"
-                        >
-                          <Link2 className="h-2.5 w-2.5" />
-                          View issue
-                        </button>
-                      )}
+            <div className="space-y-2 mb-3 max-h-48 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+              {(comments as IssueComment[]).map(c => (
+                <div key={c.id} className={cn(
+                  "flex gap-2 items-start",
+                  c.type === "system" ? "opacity-60" : ""
+                )}>
+                  {c.type === "system" ? (
+                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <CheckCircle2 className="h-3 w-3 text-slate-500" />
                     </div>
-
-                    {/* Hover: Convert to issue button — only on text comments without a linked issue */}
-                    {c.type === "text" && !c.linkedIssueKey && hoveredCommentId === c.id && (
-                      <button
-                        onClick={() => handleOpenConvert(c)}
-                        className="absolute right-2 top-1.5 flex items-center gap-1.5 rounded-full border border-red-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-red-600 shadow-sm hover:bg-red-50 transition"
-                      >
-                        <AlertTriangle className="h-3 w-3" />
-                        Convert to issue
-                      </button>
+                  ) : (
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 mt-0.5"
+                      style={{ background: `hsl(${Math.abs(c.authorName.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
+                    >
+                      {c.authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {c.type !== "system" && (
+                      <span className="text-[10px] font-semibold text-slate-500 mr-1.5">{c.authorName}</span>
                     )}
+                    <span className={cn(
+                      "text-xs",
+                      c.type === "system" ? "italic text-slate-400" : "text-slate-700"
+                    )}>{c.body}</span>
+                    <span className="text-[9px] text-slate-300 ml-1.5">
+                      {new Date(c.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    </span>
                   </div>
-                );
-              })}
+                </div>
+              ))}
               <div ref={bottomRef} />
             </div>
           )}
@@ -503,16 +268,6 @@ function IssueCommentThread({
             </button>
           </div>
         </div>
-      )}
-
-      {/* Convert to issue modal */}
-      {convertModal && (
-        <ConvertToIssueModal
-          state={convertModal}
-          onClose={() => setConvertModal(null)}
-          onFieldChange={(field, value) => setConvertModal(prev => prev ? { ...prev, [field]: value } : null)}
-          onSubmit={handleConvertSubmit}
-        />
       )}
     </div>
   );
@@ -827,10 +582,12 @@ function HotLeadCard({
 function HotLeadsTray({
   channelMsgs,
   claimLeadMutation,
+  onCollapse,
   onOpenFirstMsg,
 }: {
   channelMsgs: LeadMsg[];
   claimLeadMutation: ClaimMutation;
+  onCollapse: () => void;
   onOpenFirstMsg?: (details: string) => void;
 }) {
   // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
@@ -880,7 +637,14 @@ function HotLeadsTray({
             </span>
           )}
         </div>
-
+        <button
+          type="button"
+          onClick={onCollapse}
+          title="Collapse panel"
+          className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Lead cards */}
@@ -931,10 +695,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
-  const [highlightedIssueKey, setHighlightedIssueKey] = useState<string | null>(null);
-  const [chatConvertModal, setChatConvertModal] = useState<(ConvertModalState & { msgId: number }) | null>(null);
-  // Track which chat messages have been converted to issues: msgId -> newIssueKey
-  const [chatMsgIssueLinks, setChatMsgIssueLinks] = useState<Record<number, string>>({});
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
   // issueResolved: keyed by issueKey → true when resolved (DB-backed)
@@ -1180,57 +940,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   [reactionsData]);
   const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
 
-  // ── Chat message → issue conversion ─────────────────────────────────────────────────
-  const chatPrefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
-  const chatConvertMutation = trpc.opsChat.convertChatMessageToIssue.useMutation();
-
-  async function openChatConvert(msgId: number, msgBody: string) {
-    setChatConvertModal({ msgId, commentId: msgId, commentBody: msgBody, title: "", severity: "Medium", team: "", customer: "", loading: true, submitting: false });
-    try {
-      const prefill = await chatPrefillMutation.mutateAsync({ commentBody: msgBody });
-      setChatConvertModal(prev => prev ? { ...prev, title: prefill.title, severity: prefill.severity, team: prefill.team, customer: prefill.customer, loading: false } : null);
-    } catch {
-      setChatConvertModal(prev => prev ? { ...prev, loading: false } : null);
-    }
-  }
-
-  async function submitChatConvert() {
-    if (!chatConvertModal || chatConvertModal.submitting) return;
-    setChatConvertModal(prev => prev ? { ...prev, submitting: true } : null);
-    try {
-      const result = await chatConvertMutation.mutateAsync({
-        messageId: chatConvertModal.msgId,
-        title: chatConvertModal.title,
-        severity: chatConvertModal.severity,
-        team: chatConvertModal.team,
-        customer: chatConvertModal.customer,
-        authorName: callerName,
-        channel: "command",
-      });
-      const { msgId } = chatConvertModal;
-      setChatConvertModal(null);
-      if (result.newIssueKey) {
-        // Store the link so the source message shows a notification chip
-        setChatMsgIssueLinks(prev => ({ ...prev, [msgId]: result.newIssueKey }));
-        // Invalidate so the new issue appears immediately
-        utils.opsChat.getCommandChatData.invalidate();
-        // Navigate after a short delay to let the query refetch
-        setTimeout(() => {
-          setLeftTab("issues");
-          setCenterView("issues");
-          setHighlightedIssueKey(result.newIssueKey);
-          setTimeout(() => {
-            const el = document.getElementById(`issue-card-${result.newIssueKey}`);
-            el?.scrollIntoView({ behavior: "smooth", block: "center" });
-            setTimeout(() => setHighlightedIssueKey(null), 3000);
-          }, 300);
-        }, 400);
-      }
-    } catch {
-      setChatConvertModal(prev => prev ? { ...prev, submitting: false } : null);
-    }
-  }
-
   // ── Scroll-to-original ────────────────────────────────────────────────────────────────
   const cmdMsgRefMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const [highlightedCmdMsgId, setHighlightedCmdMsgId] = useState<number | null>(null);
@@ -1296,8 +1005,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [resolveIssueNote, setResolveIssueNote] = useState("");
   const [resolveIssueNoteText, setResolveIssueNoteText] = useState("");
   const [resolveIssueSubmitting, setResolveIssueSubmitting] = useState(false);
-  // When resolving from the Issues panel (ownership-based), store the issueKey here
-  const [resolveIssueIssueKey, setResolveIssueIssueKey] = useState<string | null>(null);
   const glitterRunning = useRef(false);
   const triggerGlitter = () => {
     if (glitterRunning.current) return; // already playing — ignore
@@ -1803,7 +1510,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
-  const rightCollapsed = false;
+  const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("cmd_rightCollapsed") === "true"; } catch { return false; }
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1811,7 +1520,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   useEffect(() => { try { localStorage.setItem("cmd_leftWidth",  String(leftWidth));  } catch {} }, [leftWidth]);
   useEffect(() => { try { localStorage.setItem("cmd_rightWidth", String(rightWidth)); } catch {} }, [rightWidth]);
   // left panel is always open
-
+  useEffect(() => { try { localStorage.setItem("cmd_rightCollapsed", String(rightCollapsed)); } catch {} }, [rightCollapsed]);
 
   // Drag handler factory
   function startDrag(side: "left" | "right") {
@@ -2074,6 +1783,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 {alerts.map((alert, i) => {
                   // general_issue cards are shown in the right panel under "Manual Issues"
                   if (alert.type === "general_issue") return null;
+                  // hide alerts that have been resolved via the Issues tab
+                  const alertKey = `alert-${alert.jobId}-${alert.ts}`;
+                  if (issueResolved[alertKey]) return null;
                   return (
                     <button
                       key={i}
@@ -2239,16 +1951,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
             {/* Icon buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {!searchOpen && (
-                <button
-                  onClick={() => setIssueOpen(true)}
-                  title="Raise issue"
-                  className="flex items-center gap-1.5 h-9 px-3 rounded-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-semibold transition-colors shadow-sm"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Raise issue
-                </button>
-              )}
               {!searchOpen && pendingReminderCount > 0 && (
                 <span className="flex items-center gap-1 text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5">
                   <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
@@ -2391,13 +2093,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <div
                         key={issue.key}
-                        id={`issue-card-${issue.key}`}
-                        className={cn(
-                          "rounded-2xl border bg-slate-50 shadow-sm transition hover:shadow-md",
-                          highlightedIssueKey === issue.key
-                            ? "border-blue-400 ring-2 ring-blue-200"
-                            : "border-slate-200"
-                        )}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 shadow-sm transition hover:shadow-md"
                       >
                         <div className="px-6 pt-5 pb-6">
                           {/* Card label */}
@@ -2447,16 +2143,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                     <span className="text-xs leading-tight">Owner:</span>
                                     <span className="text-sm font-bold leading-tight">{owner}</span>
                                   </div>
-                                  {/* Mark resolved — opens Resolve Issue dialog */}
+                                  {/* Mark resolved — solid green, centered icon+text */}
                                   <button
                                     onClick={() => {
-                                      setResolveIssueMessageId(-1); // sentinel: ownership-based resolve
-                                      setResolveIssueTitle(issue.title);
-                                      setResolveIssueNote(issue.body);
-                                      setResolveIssueNoteText("");
-                                      // store issueKey so the dialog can call resolveIssueOwnershipMutation
-                                      setResolveIssueIssueKey(issue.key);
-                                      setResolveIssueOpen(true);
+                                      setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
+                                      resolveIssueOwnershipMutation.mutate({ issueKey: issue.key, resolvedBy: callerName });
                                     }}
                                     className="flex flex-col items-center justify-center rounded-2xl bg-emerald-600 text-white text-sm font-bold px-5 py-3.5 min-w-[110px] gap-0.5 hover:bg-emerald-700 transition"
                                   >
@@ -2505,16 +2196,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             else next.add(issue.key);
                             return next;
                           })}
-                          onNavigateToIssue={(targetKey) => {
-                            setLeftTab("issues");
-                            setCenterView("issues");
-                            setHighlightedIssueKey(targetKey);
-                            setTimeout(() => {
-                              const el = document.getElementById(`issue-card-${targetKey}`);
-                              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                              setTimeout(() => setHighlightedIssueKey(null), 3000);
-                            }, 150);
-                          }}
                         />
                       </div>
                     );
@@ -3626,34 +3307,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             </div>
                           )}
                         </div>
-                        {/* Issue created notification chip */}
-                        {chatMsgIssueLinks[msg.id] && (
-                          <div className="mt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const key = chatMsgIssueLinks[msg.id];
-                                utils.opsChat.getCommandChatData.invalidate();
-                                setTimeout(() => {
-                                  setLeftTab("issues");
-                                  setCenterView("issues");
-                                  setHighlightedIssueKey(key);
-                                  setTimeout(() => {
-                                    const el = document.getElementById(`issue-card-${key}`);
-                                    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                                    setTimeout(() => setHighlightedIssueKey(null), 3000);
-                                  }, 300);
-                                }, 200);
-                              }}
-                              className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
-                            >
-                              <Link2 className="h-3 w-3" />
-                              <span>Issue created — continue conversation there</span>
-                              <ArrowRight className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
-                        {/* WhatsApp-style hover actions: Reply + quick-react strip + Convert to issue */}
+                        {/* WhatsApp-style hover actions: Reply + quick-react strip */}
                         {!isAlert && (
                           <div
                             className={cn(
@@ -3667,13 +3321,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             >
                               <ChevronDown className="h-3 w-3" />
                               <span>Reply</span>
-                            </button>
-                            <button
-                              onClick={() => openChatConvert(msg.id, msg.body)}
-                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
-                            >
-                              <AlertTriangle className="h-3 w-3" />
-                              <span>Create issue</span>
                             </button>
                             <div className="flex gap-0.5">
                               {["👍", "❤️", "✅", "🔥"].map(e => (
@@ -3699,15 +3346,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
         </div>{/* end relative wrapper */}
-        {/* Chat message → issue modal */}
-        {chatConvertModal && (
-          <ConvertToIssueModal
-            state={chatConvertModal}
-            onClose={() => setChatConvertModal(null)}
-            onFieldChange={(field, value) => setChatConvertModal(prev => prev ? { ...prev, [field]: value } : null)}
-            onSubmit={submitChatConvert}
-          />
-        )}
         {/* Composer — hidden when in issues view */}
         <div className={cn("relative shrink-0", centerView === "issues" && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
@@ -4089,10 +3727,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
       <div
-        className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200 bg-slate-100"
-        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
+        className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200 bg-slate-100"
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 space-y-5">
 
@@ -4100,6 +3737,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <HotLeadsTray
             channelMsgs={channelMsgs}
             claimLeadMutation={claimLeadMutation}
+            onCollapse={() => setRightCollapsed(true)}
             onOpenFirstMsg={(details) => {
               setFirstMsgDetails(details);
               setFirstMsgResult("");
@@ -4278,7 +3916,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
         </div>
         </div>{/* end white card */}
-        </div>{/* end scroll wrapper */}
       </div>
 
       {/* ── Open Issue Dialog ── */}
@@ -4581,30 +4218,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white"
                 disabled={!resolveIssueNoteText.trim() || resolveIssueSubmitting}
                 onClick={async () => {
-                  if (!resolveIssueNoteText.trim()) return;
+                  if (!resolveIssueNoteText.trim() || !resolveIssueMessageId) return;
                   setResolveIssueSubmitting(true);
                   try {
-                    if (resolveIssueMessageId === -1 && resolveIssueIssueKey) {
-                      // Issues panel resolve — use resolveIssueOwnership
-                      await resolveIssueOwnershipMutation.mutateAsync({
-                        issueKey: resolveIssueIssueKey,
-                        resolvedBy: callerName,
-                        resolutionNote: resolveIssueNoteText.trim(),
-                      });
-                      setIssueResolved(prev => ({ ...prev, [resolveIssueIssueKey]: true }));
-                    } else if (resolveIssueMessageId) {
-                      // Chat-side resolve — use openIssue with __resolve__ sentinel
-                      await openIssueMutation.mutateAsync({
-                        title: "__resolve__",
-                        note: "",
-                        messageId: resolveIssueMessageId,
-                        authorName: callerName,
-                        resolutionNote: resolveIssueNoteText.trim(),
-                      });
-                    }
+                    await openIssueMutation.mutateAsync({
+                      title: "__resolve__",
+                      note: "",
+                      messageId: resolveIssueMessageId,
+                      authorName: callerName,
+                      resolutionNote: resolveIssueNoteText.trim(),
+                    });
                     setResolveIssueOpen(false);
                     setResolveIssueNoteText("");
-                    setResolveIssueIssueKey(null);
                     toast.success("Issue resolved ✅");
                   } catch (err: unknown) {
                     toast.error("Failed to resolve issue", { description: err instanceof Error ? err.message : "Unknown error" });
