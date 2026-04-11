@@ -3366,6 +3366,48 @@ Respond ONLY with valid JSON, no markdown:
 
       return { ok: true, newIssueKey, newMessageId };
     }),
+
+  /**
+   * Convert a main-channel chat message into a general_issue.
+   * Does not require a parent issue thread — the message itself is the source.
+   */
+  convertChatMessageToIssue: opsChatProcedure
+    .input(z.object({
+      messageId: z.number().int().positive(),
+      title: z.string().min(1).max(200),
+      severity: z.string().max(32),
+      team: z.string().max(128),
+      customer: z.string().max(128),
+      authorName: z.string().min(1).max(128),
+      channel: z.string().default("command"),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const note = `Severity: ${input.severity}${input.team ? ` · Team: ${input.team}` : ""}${input.customer ? ` · Customer: ${input.customer}` : ""}`;
+      const meta = JSON.stringify({
+        issueTitle: input.title,
+        issueNote: note,
+        jobTitle: input.customer || null,
+        severity: input.severity,
+        team: input.team,
+        customer: input.customer,
+        sourceChatMessageId: input.messageId,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        channel: input.channel,
+        authorName: input.authorName,
+        authorRole: "office",
+        body: note ? `${input.title}\n${note}` : input.title,
+        quickAction: "general_issue",
+        metadata: meta,
+      }).$returningId();
+      const newMessageId = insertResult?.id;
+      const newIssueKey = `manual-${newMessageId}`;
+
+      return { ok: true, newIssueKey, newMessageId };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

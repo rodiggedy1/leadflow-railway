@@ -941,6 +941,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
   const [highlightedIssueKey, setHighlightedIssueKey] = useState<string | null>(null);
+  const [chatConvertModal, setChatConvertModal] = useState<(ConvertModalState & { msgId: number }) | null>(null);
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
   // issueResolved: keyed by issueKey → true when resolved (DB-backed)
@@ -1185,6 +1186,49 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     ),
   [reactionsData]);
   const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
+
+  // ── Chat message → issue conversion ─────────────────────────────────────────────────
+  const chatPrefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
+  const chatConvertMutation = trpc.opsChat.convertChatMessageToIssue.useMutation();
+
+  async function openChatConvert(msgId: number, msgBody: string) {
+    setChatConvertModal({ msgId, commentId: msgId, commentBody: msgBody, title: "", severity: "Medium", team: "", customer: "", loading: true, submitting: false });
+    try {
+      const prefill = await chatPrefillMutation.mutateAsync({ commentBody: msgBody });
+      setChatConvertModal(prev => prev ? { ...prev, title: prefill.title, severity: prefill.severity, team: prefill.team, customer: prefill.customer, loading: false } : null);
+    } catch {
+      setChatConvertModal(prev => prev ? { ...prev, loading: false } : null);
+    }
+  }
+
+  async function submitChatConvert() {
+    if (!chatConvertModal || chatConvertModal.submitting) return;
+    setChatConvertModal(prev => prev ? { ...prev, submitting: true } : null);
+    try {
+      const result = await chatConvertMutation.mutateAsync({
+        messageId: chatConvertModal.msgId,
+        title: chatConvertModal.title,
+        severity: chatConvertModal.severity,
+        team: chatConvertModal.team,
+        customer: chatConvertModal.customer,
+        authorName: callerName,
+        channel: "command",
+      });
+      setChatConvertModal(null);
+      if (result.newIssueKey) {
+        setLeftTab("issues");
+        setCenterView("issues");
+        setHighlightedIssueKey(result.newIssueKey);
+        setTimeout(() => {
+          const el = document.getElementById(`issue-card-${result.newIssueKey}`);
+          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => setHighlightedIssueKey(null), 3000);
+        }, 150);
+      }
+    } catch {
+      setChatConvertModal(prev => prev ? { ...prev, submitting: false } : null);
+    }
+  }
 
   // ── Scroll-to-original ────────────────────────────────────────────────────────────────
   const cmdMsgRefMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -3566,7 +3610,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             </div>
                           )}
                         </div>
-                        {/* WhatsApp-style hover actions: Reply + quick-react strip */}
+                        {/* WhatsApp-style hover actions: Reply + quick-react strip + Convert to issue */}
                         {!isAlert && (
                           <div
                             className={cn(
@@ -3580,6 +3624,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             >
                               <ChevronDown className="h-3 w-3" />
                               <span>Reply</span>
+                            </button>
+                            <button
+                              onClick={() => openChatConvert(msg.id, msg.body)}
+                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              <span>Issue</span>
                             </button>
                             <div className="flex gap-0.5">
                               {["👍", "❤️", "✅", "🔥"].map(e => (
@@ -3605,6 +3656,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
         </div>{/* end relative wrapper */}
+        {/* Chat message → issue modal */}
+        {chatConvertModal && (
+          <ConvertToIssueModal
+            state={chatConvertModal}
+            onClose={() => setChatConvertModal(null)}
+            onFieldChange={(field, value) => setChatConvertModal(prev => prev ? { ...prev, [field]: value } : null)}
+            onSubmit={submitChatConvert}
+          />
+        )}
         {/* Composer — hidden when in issues view */}
         <div className={cn("relative shrink-0", centerView === "issues" && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
