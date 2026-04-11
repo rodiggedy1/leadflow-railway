@@ -827,12 +827,10 @@ function HotLeadCard({
 function HotLeadsTray({
   channelMsgs,
   claimLeadMutation,
-  onCollapse,
   onOpenFirstMsg,
 }: {
   channelMsgs: LeadMsg[];
   claimLeadMutation: ClaimMutation;
-  onCollapse: () => void;
   onOpenFirstMsg?: (details: string) => void;
 }) {
   // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
@@ -882,14 +880,7 @@ function HotLeadsTray({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onCollapse}
-          title="Collapse panel"
-          className="w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+
       </div>
 
       {/* Lead cards */}
@@ -1812,9 +1803,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem("cmd_rightCollapsed") === "true"; } catch { return false; }
-  });
+  const rightCollapsed = false;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1822,7 +1811,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   useEffect(() => { try { localStorage.setItem("cmd_leftWidth",  String(leftWidth));  } catch {} }, [leftWidth]);
   useEffect(() => { try { localStorage.setItem("cmd_rightWidth", String(rightWidth)); } catch {} }, [rightWidth]);
   // left panel is always open
-  useEffect(() => { try { localStorage.setItem("cmd_rightCollapsed", String(rightCollapsed)); } catch {} }, [rightCollapsed]);
+
 
   // Drag handler factory
   function startDrag(side: "left" | "right") {
@@ -4111,7 +4100,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <HotLeadsTray
             channelMsgs={channelMsgs}
             claimLeadMutation={claimLeadMutation}
-            onCollapse={() => setRightCollapsed(true)}
             onOpenFirstMsg={(details) => {
               setFirstMsgDetails(details);
               setFirstMsgResult("");
