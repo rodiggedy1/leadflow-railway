@@ -131,6 +131,148 @@ function ElapsedTimer({ arrivedAt }: { arrivedAt: number }) {
   return <span className="text-red-600 font-semibold">{h}h {m}m ago</span>;
 }
 
+// ── IssueCommentThread ──────────────────────────────────────────────────────
+
+type IssueComment = {
+  id: number;
+  issueKey: string;
+  authorName: string;
+  body: string;
+  type: "text" | "system";
+  createdAt: number;
+};
+
+function IssueCommentThread({
+  issueKey,
+  callerName,
+  expanded,
+  onToggle,
+}: {
+  issueKey: string;
+  callerName: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const { data: comments = [], refetch } = trpc.opsChat.getIssueComments.useQuery(
+    { issueKey },
+    { enabled: expanded, refetchInterval: expanded ? 5000 : false, staleTime: 2000 }
+  );
+
+  const addComment = trpc.opsChat.addIssueComment.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  // Scroll to bottom when new comments arrive
+  useEffect(() => {
+    if (expanded && comments.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [expanded, comments.length]);
+
+  async function handleSubmit() {
+    const body = draft.trim();
+    if (!body || submitting) return;
+    setSubmitting(true);
+    try {
+      await addComment.mutateAsync({ issueKey, authorName: callerName, body, type: "text" });
+      setDraft("");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const commentCount = comments.length;
+
+  return (
+    <div className="border-t border-slate-200 mt-4">
+      {/* Toggle button */}
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-2 w-full px-6 py-3 text-left hover:bg-slate-100 transition rounded-b-2xl"
+      >
+        <MessageCircle className="h-4 w-4 text-slate-400 shrink-0" />
+        <span className="text-xs font-semibold text-slate-500">
+          {commentCount > 0 ? `${commentCount} comment${commentCount !== 1 ? "s" : ""}` : "Add comment"}
+        </span>
+        {commentCount > 0 && (
+          <span className="ml-auto text-xs text-slate-400">{expanded ? "Hide" : "Show"}</span>
+        )}
+        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", expanded && "rotate-180")} />
+      </button>
+
+      {/* Thread body */}
+      {expanded && (
+        <div className="px-6 pb-4">
+          {/* Comment list */}
+          {comments.length > 0 && (
+            <div className="space-y-2 mb-3 max-h-48 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+              {(comments as IssueComment[]).map(c => (
+                <div key={c.id} className={cn(
+                  "flex gap-2 items-start",
+                  c.type === "system" ? "opacity-60" : ""
+                )}>
+                  {c.type === "system" ? (
+                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <CheckCircle2 className="h-3 w-3 text-slate-500" />
+                    </div>
+                  ) : (
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 mt-0.5"
+                      style={{ background: `hsl(${Math.abs(c.authorName.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
+                    >
+                      {c.authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {c.type !== "system" && (
+                      <span className="text-[10px] font-semibold text-slate-500 mr-1.5">{c.authorName}</span>
+                    )}
+                    <span className={cn(
+                      "text-xs",
+                      c.type === "system" ? "italic text-slate-400" : "text-slate-700"
+                    )}>{c.body}</span>
+                    <span className="text-[9px] text-slate-300 ml-1.5">
+                      {new Date(c.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+          )}
+          {/* Composer */}
+          <div className="flex gap-2 items-end">
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              placeholder="Add a note..."
+              rows={2}
+              className="flex-1 min-w-0 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!draft.trim() || submitting}
+              className="shrink-0 rounded-xl bg-slate-800 text-white px-3 py-2 text-xs font-semibold hover:bg-slate-700 disabled:opacity-40 transition flex items-center gap-1"
+            >
+              {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HotLeadsTray ─────────────────────────────────────────────────────────────
 
 type LeadMsg = {
@@ -559,7 +701,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [issueResolved, setIssueResolved] = useState<Record<string, boolean>>({}); 
   // selectedIssueKey: which issue is expanded in center Issues view
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
-
+  // expandedComments: set of issueKeys whose comment thread is open
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
@@ -1303,7 +1446,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const resolveIssueOwnershipMutation = trpc.opsChat.resolveIssueOwnership.useMutation({
     onSuccess: () => refetchOwnership(),
   });
-
   function doSend() {
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
@@ -2040,6 +2182,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             </div>
                           </div>
                         </div>
+                        {/* Comment thread — inline below the card content */}
+                        <IssueCommentThread
+                          issueKey={issue.key}
+                          callerName={callerName}
+                          expanded={expandedComments.has(issue.key)}
+                          onToggle={() => setExpandedComments(prev => {
+                            const next = new Set(prev);
+                            if (next.has(issue.key)) next.delete(issue.key);
+                            else next.add(issue.key);
+                            return next;
+                          })}
+                        />
                       </div>
                     );
                   })}

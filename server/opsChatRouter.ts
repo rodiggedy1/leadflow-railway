@@ -27,6 +27,7 @@ import {
   opsChatMessages,
   issueFlags,
   issueOwnership,
+  issueComments,
   opsChatReads,
   opsChatReactions,
   channelPins,
@@ -3177,6 +3178,14 @@ Respond ONLY with valid JSON, no markdown:
         .insert(issueOwnership)
         .values({ issueKey: input.issueKey, claimedBy: input.claimedBy, claimedAt: now })
         .onDuplicateKeyUpdate({ set: { claimedBy: input.claimedBy, claimedAt: now, resolvedAt: null, resolvedBy: null } });
+      // Auto-post system event comment
+      await db.insert(issueComments).values({
+        issueKey: input.issueKey,
+        authorName: "system",
+        body: `${input.claimedBy} claimed this issue`,
+        type: "system",
+        createdAt: now,
+      });
       return { ok: true };
     }),
 
@@ -3193,7 +3202,62 @@ Respond ONLY with valid JSON, no markdown:
         .insert(issueOwnership)
         .values({ issueKey: input.issueKey, resolvedAt: now, resolvedBy: input.resolvedBy })
         .onDuplicateKeyUpdate({ set: { resolvedAt: now, resolvedBy: input.resolvedBy } });
+      // Auto-post system event comment
+      await db.insert(issueComments).values({
+        issueKey: input.issueKey,
+        authorName: "system",
+        body: `${input.resolvedBy} marked this issue resolved`,
+        type: "system",
+        createdAt: now,
+      });
       return { ok: true };
+    }),
+
+  /**
+   * Fetch all comments for a given issueKey, ordered oldest-first.
+   */
+  getIssueComments: opsChatProcedure
+    .input(z.object({ issueKey: z.string().max(128) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(issueComments)
+        .where(eq(issueComments.issueKey, input.issueKey))
+        .orderBy(issueComments.createdAt);
+      return rows.map(r => ({
+        id: r.id,
+        issueKey: r.issueKey,
+        authorName: r.authorName,
+        body: r.body,
+        type: r.type as "text" | "system",
+        createdAt: r.createdAt,
+      }));
+    }),
+
+  /**
+   * Add a comment (or system event) to an issue thread.
+   */
+  addIssueComment: opsChatProcedure
+    .input(z.object({
+      issueKey: z.string().max(128),
+      authorName: z.string().max(128),
+      body: z.string().max(2000),
+      type: z.enum(["text", "system"]).default("text"),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const now = Date.now();
+      await db.insert(issueComments).values({
+        issueKey: input.issueKey,
+        authorName: input.authorName,
+        body: input.body,
+        type: input.type,
+        createdAt: now,
+      });
+      return { ok: true, createdAt: now };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

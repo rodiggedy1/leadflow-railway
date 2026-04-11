@@ -1972,3 +1972,12 @@ export const issueOwnership = mysqlTable("issue_ownership", {
 }));
 export type IssueOwnership = typeof issueOwnership.$inferSelect;
 export type InsertIssueOwnership = typeof issueOwnership.$inferInsert;
+
+export const issueComments = mysqlTable("issue_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  issueKey: varchar("issue_key", { length: 255 }).notNull(),
+  authorName: varchar("author_name", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  type: varchar("type", { length: 32 }).notNull().default("text"), // "text" | "system"
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
