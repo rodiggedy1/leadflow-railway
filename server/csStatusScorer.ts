@@ -195,6 +195,44 @@ Choose the single most accurate status. When the last message is a simple acknow
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
+ * Convenience wrapper — fetches the session from DB then scores it.
+ * Use this from the webhook where only sessionId is available.
+ * Safe to call fire-and-forget (never throws).
+ */
+export async function scoreAndCacheStatusById(
+  sessionId: number,
+  isTeam: boolean
+): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    const [session] = await db
+      .select({
+        messageHistory: conversationSessions.messageHistory,
+        csStatusTier: conversationSessions.csStatusTier,
+        csStatusMsgLen: conversationSessions.csStatusMsgLen,
+      })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.id, sessionId))
+      .limit(1);
+    if (!session) return;
+    const history: Array<{ role: string; content: string; ts?: number }> =
+      JSON.parse((session.messageHistory as string) || "[]");
+    const currentMsgLen = history.length;
+    await scoreAndCacheStatus(
+      sessionId,
+      isTeam,
+      history,
+      currentMsgLen,
+      (session.csStatusTier as string | null) ?? null,
+      (session.csStatusMsgLen as number | null) ?? null
+    );
+  } catch (err) {
+    console.error(`[csStatusScorer] scoreAndCacheStatusById failed for session ${sessionId}:`, err);
+  }
+}
+
+/**
  * Scores a conversation's status tier and persists it to the DB.
  * Safe to call fire-and-forget (never throws).
  *

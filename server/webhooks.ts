@@ -46,6 +46,7 @@ import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { getSetting } from "./settingsRouter";
 import { ENV } from "./_core/env";
+import { scoreAndCacheStatusById } from "./csStatusScorer";
 
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
@@ -1547,6 +1548,10 @@ async function handleCsInboundMessage(msg: any) {
     return s?.id;
   })());
   if (resolvedSessionId) {
+    // Fire LLM status scoring async (non-blocking) — updates csStatusTier in real-time on new message
+    scoreAndCacheStatusById(resolvedSessionId, isCleaner).catch(err =>
+      console.warn("[CS] scoreAndCacheStatusById error:", err)
+    );
     syncCsOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
       console.warn("[CS] syncCsOutboundMessages error:", err)
     );
