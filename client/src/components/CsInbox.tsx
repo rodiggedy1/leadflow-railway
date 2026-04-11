@@ -1566,9 +1566,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     };
 
                     // Client-side terminal-ack fast path (fires before mechanical fallback when LLM score not yet cached)
-                    const TERMINAL_ACKS = /^(ok|okay|ok!|okay!|ok\.?|thanks|thank you|thank you!|thanks!|ty|got it|got it!|sounds good|sounds good!|perfect|perfect!|great|great!|👍|✅|will do|will do!|noted|noted\.?|sure|sure!|alright|alright!|yep|yep!|yes|yes!|yup|yup!|no worries|no worries!|np|👌|🙏|done|done!|on it|on it!|confirmed|confirmed!|received|received\.?)$/i;
+                    // Strategy: short messages (≤8 words) that start or end with a clear ack word/phrase → Solved
+                    // Catches: "yes thanks", "ok no problem", "yes that works", "sounds good thanks", etc.
+                    const ACK_WORDS = /\b(ok|okay|sure|yes|yep|yup|alright|great|perfect|sounds good|got it|will do|noted|confirmed|received|on it|done|no problem|no worries|thank you|thanks|ty|np|appreciate it|see you|see you then|we'll be there|on my way|just finished|all set|all good|good to go|makes sense|understood|copy that|roger|10-4)\b/i;
                     const lastMsgText = (conversation.lastMessage || "").trim();
-                    const isTerminalAck = !llmTier && TERMINAL_ACKS.test(lastMsgText);
+                    const wordCount = lastMsgText.split(/\s+/).filter(Boolean).length;
+                    // Short message (≤8 words) that contains at least one ack word and no question mark → Solved
+                    const isTerminalAck = !llmTier && wordCount <= 8 && ACK_WORDS.test(lastMsgText) && !lastMsgText.includes("?");
 
                     // Resolve status key: LLM tier takes priority, terminal-ack fast path second, mechanical fallback if null
                     const validLlmKeys = new Set<string>(Object.keys(statusCfg));
@@ -1935,9 +1939,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   };
 
                   // Team-side terminal-ack fast path (fires before mechanical fallback when LLM score not yet cached)
-                  const TERMINAL_ACKS2 = /^(ok|okay|ok!|okay!|ok\.?|thanks|thank you|thank you!|thanks!|ty|got it|got it!|sounds good|sounds good!|perfect|perfect!|great|great!|👍|✅|will do|will do!|noted|noted\.?|sure|sure!|alright|alright!|yep|yep!|yes|yes!|yup|yup!|no worries|no worries!|np|👌|🙏|done|done!|on it|on it!|confirmed|confirmed!|received|received\.?)$/i;
+                  // Strategy: short messages (≤8 words) containing an ack word with no question mark → Solved
+                  const ACK_WORDS2 = /\b(ok|okay|sure|yes|yep|yup|alright|great|perfect|sounds good|got it|will do|noted|confirmed|received|on it|done|no problem|no worries|thank you|thanks|ty|np|appreciate it|see you|see you then|we'll be there|on my way|just finished|all set|all good|good to go|makes sense|understood|copy that|roger|10-4)\b/i;
                   const lastMsgText2 = (conversation.lastMessage || "").trim();
-                  const isTerminalAck2 = !llmTier2 && TERMINAL_ACKS2.test(lastMsgText2);
+                  const wordCount2 = lastMsgText2.split(/\s+/).filter(Boolean).length;
+                  const isTerminalAck2 = !llmTier2 && wordCount2 <= 8 && ACK_WORDS2.test(lastMsgText2) && !lastMsgText2.includes("?");
 
                   // Resolve: LLM tier first, terminal-ack fast path second, mechanical fallback if null
                   const validLlmKeys2 = new Set<string>(Object.keys(statusCfg2));
