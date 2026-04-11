@@ -1116,4 +1116,4 @@
 - [x] Issue comments: add issue_comments table (issueKey, authorName, body, type: text|system, createdAt)
 - [x] Issue comments: add addIssueComment + getIssueComments tRPC procedures; auto-log system events on claim/resolve
 - [x] Issue comments: inline collapsible thread below each issue card, live polling every 5s, composer at bottom
-- [x] Fix: resolved issues still showing as active alerts in Chat tab left panel — filter out resolved issues from live alerts
+- [x] Fix: resolved issues in Chat tab Live Alerts now show same resolved treatment as Issues tab (strikethrough, green tint, Resolved ✓)

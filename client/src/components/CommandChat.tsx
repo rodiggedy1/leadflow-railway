@@ -1783,36 +1783,56 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 {alerts.map((alert, i) => {
                   // general_issue cards are shown in the right panel under "Manual Issues"
                   if (alert.type === "general_issue") return null;
-                  // hide alerts that have been resolved via the Issues tab
                   const alertKey = `alert-${alert.jobId}-${alert.ts}`;
-                  if (issueResolved[alertKey]) return null;
+                  const isResolved = !!issueResolved[alertKey];
+                  const owner = issueOwners[alertKey];
                   return (
-                    <button
+                    <div
                       key={i}
-                      onClick={() => onJumpToJob(alert.jobId)}
+                      onClick={() => !isResolved && onJumpToJob(alert.jobId)}
                       className={cn(
-                        "w-full text-left rounded-xl border p-3 transition hover:shadow-sm",
-                        alert.type === "issue" ? "bg-red-50 border-red-100 hover:bg-red-100" : "bg-amber-50 border-amber-100 hover:bg-amber-100"
+                        "w-full text-left rounded-xl border p-3 transition",
+                        isResolved
+                          ? "bg-emerald-50 border-emerald-100 opacity-60"
+                          : alert.type === "issue"
+                          ? "bg-red-50 border-red-100 hover:bg-red-100 hover:shadow-sm cursor-pointer"
+                          : "bg-amber-50 border-amber-100 hover:bg-amber-100 hover:shadow-sm cursor-pointer"
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className={cn("text-sm font-semibold leading-tight", alert.type === "issue" ? "text-red-700" : "text-amber-700")}>
+                        <p className={cn(
+                          "text-sm font-semibold leading-tight",
+                          isResolved ? "text-emerald-700 line-through" : alert.type === "issue" ? "text-red-700" : "text-amber-700"
+                        )}>
                           {alert.title}
                         </p>
-                        <span className={cn("text-[10px] font-medium shrink-0 mt-0.5", alert.type === "issue" ? "text-red-500" : "text-amber-500")}>
+                        <span className={cn(
+                          "text-[10px] font-medium shrink-0 mt-0.5",
+                          isResolved ? "text-emerald-400" : alert.type === "issue" ? "text-red-500" : "text-amber-500"
+                        )}>
                           {fmt12(alert.ts)}
                         </span>
                       </div>
-                      <p className={cn("text-xs mt-1 leading-snug", alert.type === "issue" ? "text-red-600" : "text-amber-600")}>
+                      <p className={cn(
+                        "text-xs mt-1 leading-snug",
+                        isResolved ? "text-emerald-600" : alert.type === "issue" ? "text-red-600" : "text-amber-600"
+                      )}>
                         {alert.body}
                       </p>
-                      <p className={cn("text-[10px] font-semibold uppercase tracking-wide mt-1.5", alert.type === "issue" ? "text-red-400" : "text-amber-400")}>
-                        {alert.source}
-                      </p>
-                    </button>
+                      <div className="flex items-center justify-between mt-1.5 gap-2">
+                        <p className={cn(
+                          "text-[10px] font-semibold uppercase tracking-wide",
+                          isResolved ? "text-emerald-500" : alert.type === "issue" ? "text-red-400" : "text-amber-400"
+                        )}>
+                          {owner ? `Owner: ${owner}` : alert.source}
+                        </p>
+                        {isResolved && (
+                          <span className="text-[10px] font-semibold text-emerald-600">Resolved ✓</span>
+                        )}
+                      </div>
+                    </div>
                   );
-                })
-              }
+                })}
               </div>
             )}
           </div>
