@@ -3932,7 +3932,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200 bg-slate-100"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm">
         <div className="px-5 py-4 space-y-5">
 
           {/* ── Hot Leads Tray ── */}
