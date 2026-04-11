@@ -1266,12 +1266,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     ...manualIssues.map(m => `manual-${m.messageId}`),
   ], [alerts, manualIssues]);
 
-  const { data: ownershipRows = [], refetch: refetchOwnership } = trpc.opsChat.getIssueOwnership.useQuery(
-    { issueKeys: allIssueKeys },
-    { enabled: allIssueKeys.length > 0, staleTime: 30_000, refetchInterval: 60_000 }
+  // Stable serialized key so tRPC doesn't see a new input object every render
+  const allIssueKeysStr = useMemo(() => [...allIssueKeys].sort().join(","), [allIssueKeys]);
+  const allIssueKeysParsed = useMemo(() => allIssueKeysStr ? allIssueKeysStr.split(",") : [], [allIssueKeysStr]);
+  // Unresolved count for badge — computed outside JSX to avoid IIFE re-renders
+  const unresolvedIssueCount = useMemo(
+    () => allIssueKeys.filter(k => !issueResolved[k]).length,
+    [allIssueKeys, issueResolved]
   );
 
-  // Sync DB rows into local state
+  const { data: ownershipRows = [], refetch: refetchOwnership } = trpc.opsChat.getIssueOwnership.useQuery(
+    { issueKeys: allIssueKeysParsed },
+    { enabled: allIssueKeysParsed.length > 0, staleTime: 30_000, refetchInterval: 60_000 }
+  );
+
+  // Sync DB rows into local state — use a stable serialized key to avoid infinite loops
+  const ownershipRowsKey = useMemo(
+    () => ownershipRows.map(r => `${r.issueKey}:${r.claimedBy ?? ""}:${r.resolvedAt ?? ""}`).join("|"),
+    [ownershipRows]
+  );
   useEffect(() => {
     const owners: Record<string, string> = {};
     const resolved: Record<string, boolean> = {};
@@ -1281,7 +1294,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     }
     setIssueOwners(owners);
     setIssueResolved(resolved);
-  }, [ownershipRows]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownershipRowsKey]);
 
   const claimIssueMutation = trpc.opsChat.claimIssue.useMutation({
     onSuccess: () => refetchOwnership(),
@@ -1521,17 +1535,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               >
                 <span className="text-base leading-none">🚨</span>
                 Issues
-                {(() => {
-                  const unresolvedCount = allIssueKeys.filter(k => !issueResolved[k]).length;
-                  return unresolvedCount > 0 ? (
-                    <span className={cn(
-                      "ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1 leading-none",
-                      leftTab === "issues" ? "bg-red-500 text-white" : "bg-red-500 text-white"
-                    )}>
-                      {unresolvedCount}
-                    </span>
-                  ) : null;
-                })()}
+                {unresolvedIssueCount > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1 leading-none bg-red-500 text-white">
+                    {unresolvedIssueCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
