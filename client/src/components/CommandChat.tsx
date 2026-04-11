@@ -2908,42 +2908,42 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className="relative shrink-0">
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
-        <div className="px-6 py-3 border-t border-slate-100 bg-white">
+        <div className="px-5 py-4 bg-white">
           {/* Quick-action chips */}
-          <div className="flex gap-2 mb-3 items-center justify-center w-full">
+          <div className="flex gap-2 mb-4 items-center flex-wrap">
             <button
               onClick={() => setBroadcastOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-slate-900 text-white hover:bg-slate-700 flex items-center gap-1.5 shadow-sm shrink-0"
+              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
             >
               <Radio className="h-3 w-3" /> Broadcast
             </button>
             <button
               onClick={() => setIssueOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-1.5 shadow-sm shrink-0"
+              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
             >
               <AlertTriangle className="h-3 w-3" /> Issue
             </button>
             <button
               onClick={() => setReminderOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 flex items-center gap-1.5 shadow-sm shrink-0"
+              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
             >
               <Bell className="h-3 w-3" /> Reminder
             </button>
             <button
               onClick={() => setPinOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1.5 shadow-sm shrink-0"
+              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
             >
               <Pin className="h-3 w-3" /> Pin
             </button>
             <button
               onClick={() => setFollowUpsOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5 shadow-sm shrink-0"
+              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
             >
               <ClipboardList className="h-3 w-3" /> Follow-ups
             </button>
             <button
               onClick={() => setFaqOpen(true)}
-              className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 shadow-sm shrink-0"
+              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
             >
               <BookOpen className="h-3 w-3" /> FAQ
             </button>
@@ -2951,7 +2951,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             {awayStatus ? (
               // Currently away — show "I'm Back" button to clear status
               <button
-                className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm shrink-0"
+                className="text-sm font-medium rounded-full px-4 py-2 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 shadow-sm shrink-0"
                 onClick={() => {
                   if (imBackFiredRef.current) return;
                   imBackFiredRef.current = true;
@@ -2966,7 +2966,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               // Not away — show Away picker
               <Popover open={awayOpen} onOpenChange={setAwayOpen}>
                 <PopoverTrigger asChild>
-                  <button className="text-xs font-semibold rounded-full px-3.5 py-1.5 transition bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0">
+                  <button className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0">
                     <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
                     Away
                   </button>
@@ -3068,6 +3068,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* Composer box with drag-drop */}
           <div className="relative">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2 px-1">General Chat Composer</p>
           {/* @mention autocomplete dropdown */}
           {mentionQuery !== null && mentionSuggestions.length > 0 && (
             <div className="absolute bottom-full mb-1 left-0 z-50 w-56 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
@@ -3107,7 +3108,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           )}
           <div
             className={cn(
-              "rounded-2xl border p-3 transition",
+              "rounded-2xl border p-4 transition",
               isDragging ? "border-slate-400 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200 bg-white shadow-sm"
             )}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -3135,8 +3136,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 }
               }}
               placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team… (Enter to send, Shift+Enter for new line)"}
-              rows={2}
-              className="resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
+              rows={3}
+              className="resize-none border-0 bg-transparent p-0 text-base text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
               onKeyDown={(e) => {
                 // @mention autocomplete navigation
                 if (mentionQuery !== null && mentionSuggestions.length > 0) {
@@ -3209,7 +3210,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <div className="flex items-center gap-1 relative">
                 {/* Photo */}
                 <button
-                  className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
+                  className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition text-sm font-medium flex items-center gap-1.5 shadow-sm"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   📷 Photo
@@ -3217,19 +3218,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 {/* Voice */}
                 {isRecording ? (
                   <button
-                    className="rounded-full px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-xs flex items-center gap-1.5 font-medium shadow-sm"
+                    className="rounded-full px-4 py-2 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-sm flex items-center gap-1.5 font-medium shadow-sm"
                     onClick={stopRecording}
                   >
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                     {recordingSeconds}s — Stop
                   </button>
                 ) : isTranscribing ? (
-                  <button disabled className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-400 transition text-xs flex items-center gap-1.5 shadow-sm">
+                  <button disabled className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-400 transition text-sm flex items-center gap-1.5 shadow-sm">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
                   </button>
                 ) : (
                   <button
-                    className="rounded-full px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
+                    className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition text-sm font-medium flex items-center gap-1.5 shadow-sm"
                     onClick={startRecording}
                   >
                     🎤 Voice
@@ -3237,7 +3238,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 )}
                 {/* Objections */}
                 <button
-                  className="rounded-full px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700 transition text-xs font-medium flex items-center gap-1.5 shadow-sm"
+                  className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition text-sm font-medium flex items-center gap-1.5 shadow-sm"
                   onClick={() => setObjectionOpen(true)}
                 >
                   🛡️ Objections
@@ -3245,7 +3246,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 {/* Emoji */}
                 <div ref={emojiRef} className="relative">
                   <button
-                    className={cn("rounded-full px-3 py-1.5 bg-white border transition text-xs font-medium shadow-sm", showEmoji ? "border-slate-400 text-slate-800" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800")}
+                    className={cn("rounded-full px-4 py-2 bg-white border transition text-sm font-medium shadow-sm", showEmoji ? "border-slate-400 text-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50")}
                     onClick={() => setShowEmoji(v => !v)}
                   >
                     😊
@@ -3266,12 +3267,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               </div>
               <Button
-                size="sm"
+                size="default"
                 onClick={handleSend}
                 disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0)}
-                className="rounded-xl px-4 font-semibold shadow-sm"
+                className="rounded-2xl px-6 py-3 font-semibold shadow-md bg-slate-900 hover:bg-slate-800 text-white text-sm h-auto"
               >
-                <Send className="h-3.5 w-3.5 mr-1.5" /> Send
+                <Send className="h-4 w-4 mr-2" /> Send to chat
               </Button>
             </div>
           </div>
