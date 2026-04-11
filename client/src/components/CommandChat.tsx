@@ -942,6 +942,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
   const [highlightedIssueKey, setHighlightedIssueKey] = useState<string | null>(null);
   const [chatConvertModal, setChatConvertModal] = useState<(ConvertModalState & { msgId: number }) | null>(null);
+  // Track which chat messages have been converted to issues: msgId -> newIssueKey
+  const [chatMsgIssueLinks, setChatMsgIssueLinks] = useState<Record<number, string>>({});
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
   // issueResolved: keyed by issueKey → true when resolved (DB-backed)
@@ -1214,16 +1216,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         authorName: callerName,
         channel: "command",
       });
+      const { msgId } = chatConvertModal;
       setChatConvertModal(null);
       if (result.newIssueKey) {
-        setLeftTab("issues");
-        setCenterView("issues");
-        setHighlightedIssueKey(result.newIssueKey);
+        // Store the link so the source message shows a notification chip
+        setChatMsgIssueLinks(prev => ({ ...prev, [msgId]: result.newIssueKey }));
+        // Invalidate so the new issue appears immediately
+        utils.opsChat.getCommandChatData.invalidate();
+        // Navigate after a short delay to let the query refetch
         setTimeout(() => {
-          const el = document.getElementById(`issue-card-${result.newIssueKey}`);
-          el?.scrollIntoView({ behavior: "smooth", block: "center" });
-          setTimeout(() => setHighlightedIssueKey(null), 3000);
-        }, 150);
+          setLeftTab("issues");
+          setCenterView("issues");
+          setHighlightedIssueKey(result.newIssueKey);
+          setTimeout(() => {
+            const el = document.getElementById(`issue-card-${result.newIssueKey}`);
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(() => setHighlightedIssueKey(null), 3000);
+          }, 300);
+        }, 400);
       }
     } catch {
       setChatConvertModal(prev => prev ? { ...prev, submitting: false } : null);
@@ -3610,6 +3620,33 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             </div>
                           )}
                         </div>
+                        {/* Issue created notification chip */}
+                        {chatMsgIssueLinks[msg.id] && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const key = chatMsgIssueLinks[msg.id];
+                                utils.opsChat.getCommandChatData.invalidate();
+                                setTimeout(() => {
+                                  setLeftTab("issues");
+                                  setCenterView("issues");
+                                  setHighlightedIssueKey(key);
+                                  setTimeout(() => {
+                                    const el = document.getElementById(`issue-card-${key}`);
+                                    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                    setTimeout(() => setHighlightedIssueKey(null), 3000);
+                                  }, 300);
+                                }, 200);
+                              }}
+                              className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                            >
+                              <Link2 className="h-3 w-3" />
+                              <span>Issue created — continue conversation there</span>
+                              <ArrowRight className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
                         {/* WhatsApp-style hover actions: Reply + quick-react strip + Convert to issue */}
                         {!isAlert && (
                           <div
@@ -3630,7 +3667,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
                             >
                               <AlertTriangle className="h-3 w-3" />
-                              <span>Issue</span>
+                              <span>Create issue</span>
                             </button>
                             <div className="flex gap-0.5">
                               {["👍", "❤️", "✅", "🔥"].map(e => (

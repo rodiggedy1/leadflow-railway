@@ -1121,3 +1121,6 @@
 - [x] Comment-to-issue: hover on comment reveals "Convert to issue" button; click opens ConvertToIssueModal with LLM-prefilled fields
 - [x] Comment-to-issue: after creation, comment shows linked-issue chip; clicking it switches left panel to Issues tab and highlights the card
 - [x] Convert-to-issue on chat messages: hover any main channel message → "Convert to issue" button appears, same modal + flow as comment threads
+- [x] Fix: chat convert button label should say "Create issue" not "Issue"
+- [x] Fix: created issue not appearing in Issues tab after conversion
+- [x] Fix: add notification chip on source chat message after issue is created (with link to issue)
