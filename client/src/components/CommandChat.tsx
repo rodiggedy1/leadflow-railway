@@ -1855,7 +1855,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 .filter(a => a.type !== "general_issue")
                 .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, source: a.source, ts: a.ts, type: "alert" as const })),
               ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", source: m.authorName, ts: m.ts, type: "manual" as const })),
-            ];
+            ].sort((a, b) => b.ts - a.ts);
             if (allIssues.length === 0) return (
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <CheckCheck className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
@@ -2244,7 +2244,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               .filter(a => a.type !== "general_issue")
               .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, source: a.source, ts: a.ts, type: "alert" as const })),
             ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", source: m.authorName, ts: m.ts, type: "manual" as const })),
-          ];
+          ].sort((a, b) => b.ts - a.ts);
           return (
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: "none" }}>
               <div className="flex items-center justify-between mb-4">
