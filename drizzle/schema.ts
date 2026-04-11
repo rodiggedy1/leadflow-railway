@@ -1964,6 +1964,8 @@ export const issueOwnership = mysqlTable("issue_ownership", {
   resolvedAt: bigint("resolvedAt", { mode: "number" }),
   /** Display name of the agent who resolved it */
   resolvedBy: varchar("resolvedBy", { length: 128 }),
+  /** Free-text note explaining how the issue was resolved */
+  resolutionNote: text("resolutionNote"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({

@@ -1,0 +1,1 @@
+ALTER TABLE `issue_ownership` ADD `resolutionNote` text;

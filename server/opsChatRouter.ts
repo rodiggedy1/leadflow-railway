@@ -3193,20 +3193,23 @@ Respond ONLY with valid JSON, no markdown:
    * Mark an issue as resolved.
    */
   resolveIssueOwnership: opsChatProcedure
-    .input(z.object({ issueKey: z.string().max(128), resolvedBy: z.string().max(128) }))
+    .input(z.object({ issueKey: z.string().max(128), resolvedBy: z.string().max(128), resolutionNote: z.string().max(2000).optional() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
       const now = Date.now();
       await db
         .insert(issueOwnership)
-        .values({ issueKey: input.issueKey, resolvedAt: now, resolvedBy: input.resolvedBy })
-        .onDuplicateKeyUpdate({ set: { resolvedAt: now, resolvedBy: input.resolvedBy } });
+        .values({ issueKey: input.issueKey, resolvedAt: now, resolvedBy: input.resolvedBy, resolutionNote: input.resolutionNote ?? null })
+        .onDuplicateKeyUpdate({ set: { resolvedAt: now, resolvedBy: input.resolvedBy, resolutionNote: input.resolutionNote ?? null } });
       // Auto-post system event comment
+      const commentBody = input.resolutionNote
+        ? `${input.resolvedBy} marked this issue resolved: ${input.resolutionNote}`
+        : `${input.resolvedBy} marked this issue resolved`;
       await db.insert(issueComments).values({
         issueKey: input.issueKey,
         authorName: "system",
-        body: `${input.resolvedBy} marked this issue resolved`,
+        body: commentBody,
         type: "system",
         createdAt: now,
       });

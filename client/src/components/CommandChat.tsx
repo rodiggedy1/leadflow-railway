@@ -1305,6 +1305,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [resolveIssueNote, setResolveIssueNote] = useState("");
   const [resolveIssueNoteText, setResolveIssueNoteText] = useState("");
   const [resolveIssueSubmitting, setResolveIssueSubmitting] = useState(false);
+  // When resolving from the Issues panel (ownership-based), store the issueKey here
+  const [resolveIssueIssueKey, setResolveIssueIssueKey] = useState<string | null>(null);
   const glitterRunning = useRef(false);
   const triggerGlitter = () => {
     if (glitterRunning.current) return; // already playing — ignore
@@ -2456,11 +2458,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                     <span className="text-xs leading-tight">Owner:</span>
                                     <span className="text-sm font-bold leading-tight">{owner}</span>
                                   </div>
-                                  {/* Mark resolved — solid green, centered icon+text */}
+                                  {/* Mark resolved — opens Resolve Issue dialog */}
                                   <button
                                     onClick={() => {
-                                      setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
-                                      resolveIssueOwnershipMutation.mutate({ issueKey: issue.key, resolvedBy: callerName });
+                                      setResolveIssueMessageId(-1); // sentinel: ownership-based resolve
+                                      setResolveIssueTitle(issue.title);
+                                      setResolveIssueNote(issue.body);
+                                      setResolveIssueNoteText("");
+                                      // store issueKey so the dialog can call resolveIssueOwnershipMutation
+                                      setResolveIssueIssueKey(issue.key);
+                                      setResolveIssueOpen(true);
                                     }}
                                     className="flex flex-col items-center justify-center rounded-2xl bg-emerald-600 text-white text-sm font-bold px-5 py-3.5 min-w-[110px] gap-0.5 hover:bg-emerald-700 transition"
                                   >
@@ -4586,18 +4593,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white"
                 disabled={!resolveIssueNoteText.trim() || resolveIssueSubmitting}
                 onClick={async () => {
-                  if (!resolveIssueNoteText.trim() || !resolveIssueMessageId) return;
+                  if (!resolveIssueNoteText.trim()) return;
                   setResolveIssueSubmitting(true);
                   try {
-                    await openIssueMutation.mutateAsync({
-                      title: "__resolve__",
-                      note: "",
-                      messageId: resolveIssueMessageId,
-                      authorName: callerName,
-                      resolutionNote: resolveIssueNoteText.trim(),
-                    });
+                    if (resolveIssueMessageId === -1 && resolveIssueIssueKey) {
+                      // Issues panel resolve — use resolveIssueOwnership
+                      await resolveIssueOwnershipMutation.mutateAsync({
+                        issueKey: resolveIssueIssueKey,
+                        resolvedBy: callerName,
+                        resolutionNote: resolveIssueNoteText.trim(),
+                      });
+                      setIssueResolved(prev => ({ ...prev, [resolveIssueIssueKey]: true }));
+                    } else if (resolveIssueMessageId) {
+                      // Chat-side resolve — use openIssue with __resolve__ sentinel
+                      await openIssueMutation.mutateAsync({
+                        title: "__resolve__",
+                        note: "",
+                        messageId: resolveIssueMessageId,
+                        authorName: callerName,
+                        resolutionNote: resolveIssueNoteText.trim(),
+                      });
+                    }
                     setResolveIssueOpen(false);
                     setResolveIssueNoteText("");
+                    setResolveIssueIssueKey(null);
                     toast.success("Issue resolved ✅");
                   } catch (err: unknown) {
                     toast.error("Failed to resolve issue", { description: err instanceof Error ? err.message : "Unknown error" });
