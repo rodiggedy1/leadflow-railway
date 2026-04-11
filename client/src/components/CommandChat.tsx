@@ -1408,12 +1408,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
       <div
-        className="shrink-0 border-r border-slate-200 bg-[#F0F2F5] flex flex-col overflow-hidden transition-[width] duration-200"
+        className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200 bg-slate-100"
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Single scrollable area — header + content all scroll together */}
         <div className="flex-1 overflow-y-auto">
-          {/* Header section — white rounded card inside grey bg */}
+          {/* White content card with grey page bg showing on sides */}
+          <div className="mx-3 mt-4 mb-4 bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 pt-5 pb-4">
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5 whitespace-nowrap">General Command Chat</p>
             <h2 className="text-[28px] font-bold text-slate-900 whitespace-nowrap leading-tight mb-4">Ship Control</h2>
@@ -1592,6 +1593,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           )}
           </div>{/* end inner content */}
+          </div>{/* end white card */}
         </div>{/* end single scrollable area */}
       </div>
       {/* ── Left drag handle + collapse-expand toggle ── */}
