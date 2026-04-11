@@ -3266,6 +3266,88 @@ Respond ONLY with valid JSON, no markdown:
       });
       return { ok: true, createdAt: now };
     }),
+
+  /**
+   * Use LLM to prefill issue fields from a chat message body.
+   */
+  prefillIssueFromComment: opsChatProcedure
+    .input(z.object({ commentBody: z.string().max(2000) }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are an operations assistant. Given a chat message, extract a short issue title (max 8 words), a severity (Critical/High/Medium/Low), a team name (e.g. Dispatch, Cleaning, Office), and a customer name if mentioned. Respond in JSON with keys: title, severity, team, customer." },
+          { role: "user", content: input.commentBody },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "issue_prefill",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                severity: { type: "string" },
+                team: { type: "string" },
+                customer: { type: "string" },
+              },
+              required: ["title", "severity", "team", "customer"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const raw = result?.choices?.[0]?.message?.content ?? "{}";
+      const parsed = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw));
+      return {
+        title: parsed.title ?? "",
+        severity: ["Critical", "High", "Medium", "Low"].includes(parsed.severity) ? parsed.severity : "Medium",
+        team: parsed.team ?? "",
+        customer: parsed.customer ?? "",
+      };
+    }),
+
+  /**
+   * Convert a chat message to a manual issue (creates a general_issue opsChatMessage).
+   */
+  convertChatMessageToIssue: opsChatProcedure
+    .input(z.object({
+      messageId: z.number().int(),
+      title: z.string().max(256),
+      severity: z.string().max(32),
+      team: z.string().max(128),
+      customer: z.string().max(256),
+      authorName: z.string().max(128),
+      channel: z.string().max(64),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const now = Date.now();
+      const issueKey = `issue-${now}-${Math.random().toString(36).slice(2, 8)}`;
+      const meta = JSON.stringify({
+        issueTitle: input.title,
+        issueSeverity: input.severity,
+        issueTeam: input.team,
+        issueCustomer: input.customer,
+        sourceMessageId: input.messageId,
+        raisedBy: input.authorName,
+        ts: now,
+      });
+      await db.insert(opsChatMessages).values({
+        channel: input.channel,
+        authorName: input.authorName,
+        body: input.title,
+        quickAction: "general_issue",
+        metadata: meta,
+        createdAt: new Date(now),
+      });
+      await db.insert(issueOwnership).values({
+        issueKey,
+      });
+      return { ok: true, newIssueKey: issueKey };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

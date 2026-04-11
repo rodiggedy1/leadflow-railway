@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -129,6 +129,123 @@ function ElapsedTimer({ arrivedAt }: { arrivedAt: number }) {
   if (elapsed < 60) return <span className="text-amber-600 font-semibold">{elapsed}m ago</span>;
   const h = Math.floor(elapsed / 60), m = elapsed % 60;
   return <span className="text-red-600 font-semibold">{h}h {m}m ago</span>;
+}
+
+// ── ConvertToIssueModal ──────────────────────────────────────────────────────
+type ConvertModalState = {
+  commentId: number;
+  commentBody: string;
+  title: string;
+  severity: string;
+  team: string;
+  customer: string;
+  loading: boolean;
+  submitting: boolean;
+};
+const SEVERITY_COLORS: Record<string, string> = {
+  Critical: "text-red-600",
+  High: "text-orange-500",
+  Medium: "text-amber-500",
+  Low: "text-slate-500",
+};
+function ConvertToIssueModal({
+  state,
+  onClose,
+  onFieldChange,
+  onSubmit,
+}: {
+  state: ConvertModalState & { msgId?: number };
+  onClose: () => void;
+  onFieldChange: (field: keyof ConvertModalState, value: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            Create Issue
+          </DialogTitle>
+        </DialogHeader>
+        <div className="px-1 py-2">
+          {state.loading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Analyzing message...</span>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Title</p>
+                  <input
+                    value={state.title}
+                    onChange={e => onFieldChange("title", e.target.value)}
+                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                    placeholder="Issue title"
+                  />
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Severity</p>
+                  <select
+                    value={state.severity}
+                    onChange={e => onFieldChange("severity", e.target.value)}
+                    className={cn("w-full text-sm font-semibold bg-transparent outline-none", SEVERITY_COLORS[state.severity] ?? "text-slate-900")}
+                  >
+                    {["Critical", "High", "Medium", "Low"].map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Team</p>
+                  <input
+                    value={state.team}
+                    onChange={e => onFieldChange("team", e.target.value)}
+                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                    placeholder="e.g. Dispatch"
+                  />
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Customer</p>
+                  <input
+                    value={state.customer}
+                    onChange={e => onFieldChange("customer", e.target.value)}
+                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                    placeholder="Customer name"
+                  />
+                </div>
+              </div>
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 mb-1">
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-red-600">This should now have an owner and resolution path</p>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter className="px-7 pb-6 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={state.submitting || state.loading || !state.title.trim()}
+            className="rounded-xl bg-slate-900 text-white px-5 py-2.5 text-sm font-semibold hover:bg-slate-800 disabled:opacity-40 transition flex items-center gap-2"
+          >
+            {state.submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Create issue
+            {!state.submitting && <ArrowRight className="h-3.5 w-3.5" />}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ── IssueCommentThread ──────────────────────────────────────────────────────
@@ -703,6 +820,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   // expandedComments: set of issueKeys whose comment thread is open
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [chatConvertModal, setChatConvertModal] = useState<(ConvertModalState & { msgId: number }) | null>(null);
+  const [highlightedIssueKey, setHighlightedIssueKey] = useState<string | null>(null);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
@@ -939,6 +1058,45 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     ),
   [reactionsData]);
   const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
+  const chatPrefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
+  const chatConvertMutation = trpc.opsChat.convertChatMessageToIssue.useMutation();
+  async function openChatConvert(msgId: number, msgBody: string) {
+    setChatConvertModal({ msgId, commentId: msgId, commentBody: msgBody, title: "", severity: "Medium", team: "", customer: "", loading: true, submitting: false });
+    try {
+      const prefill = await chatPrefillMutation.mutateAsync({ commentBody: msgBody });
+      setChatConvertModal(prev => prev ? { ...prev, title: prefill.title, severity: prefill.severity, team: prefill.team, customer: prefill.customer, loading: false } : null);
+    } catch {
+      setChatConvertModal(prev => prev ? { ...prev, loading: false } : null);
+    }
+  }
+  async function submitChatConvert() {
+    if (!chatConvertModal || chatConvertModal.submitting) return;
+    setChatConvertModal(prev => prev ? { ...prev, submitting: true } : null);
+    try {
+      const result = await chatConvertMutation.mutateAsync({
+        messageId: chatConvertModal.msgId,
+        title: chatConvertModal.title,
+        severity: chatConvertModal.severity,
+        team: chatConvertModal.team,
+        customer: chatConvertModal.customer,
+        authorName: callerName,
+        channel: "command",
+      });
+      setChatConvertModal(null);
+      if (result.newIssueKey) {
+        setLeftTab("issues");
+        setCenterView("issues");
+        setHighlightedIssueKey(result.newIssueKey);
+        setTimeout(() => {
+          const el = document.getElementById(`issue-card-${result.newIssueKey}`);
+          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => setHighlightedIssueKey(null), 3000);
+        }, 150);
+      }
+    } catch {
+      setChatConvertModal(prev => prev ? { ...prev, submitting: false } : null);
+    }
+  }
 
   // ── Scroll-to-original ────────────────────────────────────────────────────────────────
   const cmdMsgRefMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -2115,7 +2273,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <div
                         key={issue.key}
-                        className="rounded-2xl border border-slate-200 bg-slate-50 shadow-sm transition hover:shadow-md"
+                        id={`issue-card-${issue.key}`}
+                        className={cn(
+                          "rounded-2xl border border-slate-200 bg-slate-50 shadow-sm transition hover:shadow-md",
+                          highlightedIssueKey === issue.key && "ring-2 ring-red-400 ring-offset-2"
+                        )}
                       >
                         <div className="px-6 pt-5 pb-6">
                           {/* Card label */}
@@ -3330,13 +3492,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           )}
                         </div>
                         {/* WhatsApp-style hover actions: Reply + quick-react strip */}
-                        {!isAlert && (
-                          <div
-                            className={cn(
-                              "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
-                              isMine ? "mr-1.5" : "ml-1.5"
-                            )}
-                          >
+                        <div
+                          className={cn(
+                            "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
+                            isMine ? "mr-1.5" : "ml-1.5"
+                          )}
+                        >
+                          {!isAlert && (
                             <button
                               onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
                               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -3344,6 +3506,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               <ChevronDown className="h-3 w-3" />
                               <span>Reply</span>
                             </button>
+                          )}
+                          <button
+                            onClick={() => openChatConvert(msg.id, msg.body)}
+                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
+                          >
+                            <AlertTriangle className="h-3 w-3" />
+                            <span>Issue</span>
+                          </button>
+                          {!isAlert && (
                             <div className="flex gap-0.5">
                               {["👍", "❤️", "✅", "🔥"].map(e => (
                                 <button
@@ -3356,8 +3527,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 </button>
                               ))}
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -3368,6 +3539,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
         </div>{/* end relative wrapper */}
+        {chatConvertModal && (
+          <ConvertToIssueModal
+            state={chatConvertModal}
+            onClose={() => setChatConvertModal(null)}
+            onFieldChange={(field, value) => setChatConvertModal(prev => prev ? { ...prev, [field]: value } : null)}
+            onSubmit={submitChatConvert}
+          />
+        )}
         {/* Composer — hidden when in issues view */}
         <div className={cn("relative shrink-0", centerView === "issues" && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
