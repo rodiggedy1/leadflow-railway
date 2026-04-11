@@ -1596,16 +1596,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>{/* end white card */}
         </div>{/* end single scrollable area */}
       </div>
-      {/* ── Left drag handle + collapse-expand toggle ── */}
+      {/* ── Left drag handle ── */}
       <div
-        className="relative flex-none flex items-center justify-center group"
-        style={{ width: 8, cursor: "col-resize", zIndex: 10 }}
+        className="relative flex-none"
+        style={{ width: 8, cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={leftCollapsed ? undefined : startDrag("left")}
-      >
-        {/* Drag track */}
-        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
-
-      </div>
+      />
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
@@ -3284,15 +3280,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>{/* end relative composer wrapper */}
         </div>{/* end white card */}
       </div>
-      {/* ── Right drag handle + collapse-expand toggle ── */}
+      {/* ── Right drag handle ── */}
       <div
-        className="relative flex-none flex items-center justify-center group"
-        style={{ width: 8, cursor: "col-resize", zIndex: 10 }}
+        className="relative flex-none"
+        style={{ width: 8, cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
-      >
-        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-slate-200 group-hover:bg-slate-400 transition-colors rounded-full" />
-
-      </div>
+      />
 
       {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
       <div
