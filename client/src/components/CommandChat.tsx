@@ -2917,12 +2917,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             >
               <Radio className="h-3 w-3" /> Broadcast
             </button>
-            <button
-              onClick={() => setIssueOpen(true)}
-              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
-            >
-              <AlertTriangle className="h-3 w-3" /> Issue
-            </button>
+
             <button
               onClick={() => setReminderOpen(true)}
               className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
