@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -140,21 +140,169 @@ type IssueComment = {
   body: string;
   type: "text" | "system";
   createdAt: number;
+  linkedIssueKey?: string | null;
 };
+
+// ── ConvertToIssueModal ───────────────────────────────────────────────────────
+
+type ConvertModalState = {
+  commentId: number;
+  commentBody: string;
+  title: string;
+  severity: string;
+  team: string;
+  customer: string;
+  loading: boolean;
+  submitting: boolean;
+};
+
+const SEVERITY_COLORS: Record<string, string> = {
+  Critical: "text-red-600",
+  High: "text-orange-500",
+  Medium: "text-amber-500",
+  Low: "text-slate-500",
+};
+
+function ConvertToIssueModal({
+  state,
+  onClose,
+  onFieldChange,
+  onSubmit,
+}: {
+  state: ConvertModalState;
+  onClose: () => void;
+  onFieldChange: (field: keyof Pick<ConvertModalState, "title" | "severity" | "team" | "customer">, value: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden rounded-2xl">
+        <div className="px-7 pt-7 pb-6">
+          {/* Header */}
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Create Issue</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-1">Convert discussion into action</h2>
+          <p className="text-sm text-slate-500 mb-5">Use this when the message needs ownership, escalation, or a clean resolution trail.</p>
+
+          {/* Source message */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 mb-4">
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5">Source Message</p>
+            <p className="text-sm text-slate-700 leading-relaxed">{state.commentBody}</p>
+          </div>
+
+          {state.loading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Analyzing message...</span>
+            </div>
+          ) : (
+            <>
+              {/* Title + Severity */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Title</p>
+                  <input
+                    value={state.title}
+                    onChange={e => onFieldChange("title", e.target.value)}
+                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                    placeholder="Issue title"
+                  />
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Severity</p>
+                  <select
+                    value={state.severity}
+                    onChange={e => onFieldChange("severity", e.target.value)}
+                    className={cn("w-full text-sm font-semibold bg-transparent outline-none", SEVERITY_COLORS[state.severity] ?? "text-slate-900")}
+                  >
+                    {["Critical", "High", "Medium", "Low"].map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Team + Customer */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Team</p>
+                  <input
+                    value={state.team}
+                    onChange={e => onFieldChange("team", e.target.value)}
+                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                    placeholder="e.g. Dispatch"
+                  />
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">Customer</p>
+                  <input
+                    value={state.customer}
+                    onChange={e => onFieldChange("customer", e.target.value)}
+                    className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                    placeholder="Customer name"
+                  />
+                </div>
+              </div>
+
+              {/* Steps */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {(["Message selected", "Issue created", "Move to Issues lane"] as const).map((label, i) => (
+                  <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center">
+                    <p className="text-[10px] font-semibold text-slate-400 mb-0.5">{i + 1}</p>
+                    <p className="text-xs font-semibold text-slate-700">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Warning */}
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 mb-1">
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-red-600">This should now have an owner and resolution path</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="px-7 pb-6 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={state.submitting || state.loading || !state.title.trim()}
+            className="rounded-xl bg-slate-900 text-white px-5 py-2.5 text-sm font-semibold hover:bg-slate-800 disabled:opacity-40 transition flex items-center gap-2"
+          >
+            {state.submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Create issue
+            {!state.submitting && <ArrowRight className="h-3.5 w-3.5" />}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── IssueCommentThread ────────────────────────────────────────────────────────
 
 function IssueCommentThread({
   issueKey,
   callerName,
   expanded,
   onToggle,
+  onNavigateToIssue,
 }: {
   issueKey: string;
   callerName: string;
   expanded: boolean;
   onToggle: () => void;
+  onNavigateToIssue?: (targetKey: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [hoveredCommentId, setHoveredCommentId] = useState<number | null>(null);
+  const [convertModal, setConvertModal] = useState<ConvertModalState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: comments = [], refetch } = trpc.opsChat.getIssueComments.useQuery(
@@ -163,6 +311,11 @@ function IssueCommentThread({
   );
 
   const addComment = trpc.opsChat.addIssueComment.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const prefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
+  const convertMutation = trpc.opsChat.convertCommentToIssue.useMutation({
     onSuccess: () => refetch(),
   });
 
@@ -182,6 +335,56 @@ function IssueCommentThread({
       setDraft("");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleOpenConvert(c: IssueComment) {
+    setConvertModal({
+      commentId: c.id,
+      commentBody: c.body,
+      title: "",
+      severity: "Medium",
+      team: "",
+      customer: "",
+      loading: true,
+      submitting: false,
+    });
+    try {
+      const prefill = await prefillMutation.mutateAsync({ commentBody: c.body });
+      setConvertModal(prev => prev ? {
+        ...prev,
+        title: prefill.title,
+        severity: prefill.severity,
+        team: prefill.team,
+        customer: prefill.customer,
+        loading: false,
+      } : null);
+    } catch {
+      setConvertModal(prev => prev ? { ...prev, loading: false } : null);
+    }
+  }
+
+  async function handleConvertSubmit() {
+    if (!convertModal || convertModal.submitting) return;
+    setConvertModal(prev => prev ? { ...prev, submitting: true } : null);
+    try {
+      const result = await convertMutation.mutateAsync({
+        commentId: convertModal.commentId,
+        issueKey,
+        title: convertModal.title,
+        severity: convertModal.severity,
+        team: convertModal.team,
+        customer: convertModal.customer,
+        authorName: callerName,
+        channel: "command",
+      });
+      setConvertModal(null);
+      // Navigate to the new issue
+      if (result.newIssueKey && onNavigateToIssue) {
+        onNavigateToIssue(result.newIssueKey);
+      }
+    } catch {
+      setConvertModal(prev => prev ? { ...prev, submitting: false } : null);
     }
   }
 
@@ -209,38 +412,70 @@ function IssueCommentThread({
         <div className="px-6 pb-4">
           {/* Comment list */}
           {comments.length > 0 && (
-            <div className="space-y-2 mb-3 max-h-48 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-              {(comments as IssueComment[]).map(c => (
-                <div key={c.id} className={cn(
-                  "flex gap-2 items-start",
-                  c.type === "system" ? "opacity-60" : ""
-                )}>
-                  {c.type === "system" ? (
-                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
-                      <CheckCircle2 className="h-3 w-3 text-slate-500" />
-                    </div>
-                  ) : (
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 mt-0.5"
-                      style={{ background: `hsl(${Math.abs(c.authorName.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
-                    >
-                      {c.authorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    {c.type !== "system" && (
-                      <span className="text-[10px] font-semibold text-slate-500 mr-1.5">{c.authorName}</span>
+            <div className="space-y-1.5 mb-3 max-h-48 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+              {(comments as IssueComment[]).map(c => {
+                const isSystemWithLink = c.type === "system" && c.linkedIssueKey;
+                return (
+                  <div
+                    key={c.id}
+                    className={cn(
+                      "group relative flex gap-2 items-start rounded-lg px-2 py-1.5 transition",
+                      c.type === "system" ? "opacity-70" : "hover:bg-slate-50"
                     )}
-                    <span className={cn(
-                      "text-xs",
-                      c.type === "system" ? "italic text-slate-400" : "text-slate-700"
-                    )}>{c.body}</span>
-                    <span className="text-[9px] text-slate-300 ml-1.5">
-                      {new Date(c.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
-                    </span>
+                    onMouseEnter={() => c.type === "text" && setHoveredCommentId(c.id)}
+                    onMouseLeave={() => setHoveredCommentId(null)}
+                  >
+                    {/* Avatar */}
+                    {c.type === "system" ? (
+                      <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                        <CheckCircle2 className="h-3 w-3 text-slate-500" />
+                      </div>
+                    ) : (
+                      <div
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 mt-0.5"
+                        style={{ background: `hsl(${Math.abs(c.authorName.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
+                      >
+                        {c.authorName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Body */}
+                    <div className="flex-1 min-w-0">
+                      {c.type !== "system" && (
+                        <span className="text-[10px] font-semibold text-slate-500 mr-1.5">{c.authorName}</span>
+                      )}
+                      <span className={cn(
+                        "text-xs",
+                        c.type === "system" ? "italic text-slate-400" : "text-slate-700"
+                      )}>{c.body}</span>
+                      <span className="text-[9px] text-slate-300 ml-1.5">
+                        {new Date(c.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                      </span>
+                      {/* Linked issue chip — shown on system comments that have a linkedIssueKey */}
+                      {isSystemWithLink && onNavigateToIssue && (
+                        <button
+                          onClick={() => onNavigateToIssue(c.linkedIssueKey!)}
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition"
+                        >
+                          <Link2 className="h-2.5 w-2.5" />
+                          View issue
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Hover: Convert to issue button — only on text comments without a linked issue */}
+                    {c.type === "text" && !c.linkedIssueKey && hoveredCommentId === c.id && (
+                      <button
+                        onClick={() => handleOpenConvert(c)}
+                        className="absolute right-2 top-1.5 flex items-center gap-1.5 rounded-full border border-red-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-red-600 shadow-sm hover:bg-red-50 transition"
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        Convert to issue
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={bottomRef} />
             </div>
           )}
@@ -268,6 +503,16 @@ function IssueCommentThread({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Convert to issue modal */}
+      {convertModal && (
+        <ConvertToIssueModal
+          state={convertModal}
+          onClose={() => setConvertModal(null)}
+          onFieldChange={(field, value) => setConvertModal(prev => prev ? { ...prev, [field]: value } : null)}
+          onSubmit={handleConvertSubmit}
+        />
       )}
     </div>
   );
@@ -695,6 +940,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
+  const [highlightedIssueKey, setHighlightedIssueKey] = useState<string | null>(null);
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
   // issueResolved: keyed by issueKey → true when resolved (DB-backed)
@@ -2090,7 +2336,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <div
                         key={issue.key}
-                        className="rounded-2xl border border-slate-200 bg-slate-50 shadow-sm transition hover:shadow-md"
+                        id={`issue-card-${issue.key}`}
+                        className={cn(
+                          "rounded-2xl border bg-slate-50 shadow-sm transition hover:shadow-md",
+                          highlightedIssueKey === issue.key
+                            ? "border-blue-400 ring-2 ring-blue-200"
+                            : "border-slate-200"
+                        )}
                       >
                         <div className="px-6 pt-5 pb-6">
                           {/* Card label */}
@@ -2193,6 +2445,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             else next.add(issue.key);
                             return next;
                           })}
+                          onNavigateToIssue={(targetKey) => {
+                            setLeftTab("issues");
+                            setCenterView("issues");
+                            setHighlightedIssueKey(targetKey);
+                            setTimeout(() => {
+                              const el = document.getElementById(`issue-card-${targetKey}`);
+                              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                              setTimeout(() => setHighlightedIssueKey(null), 3000);
+                            }, 150);
+                          }}
                         />
                       </div>
                     );

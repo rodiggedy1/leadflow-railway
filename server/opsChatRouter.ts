@@ -3233,6 +3233,7 @@ Respond ONLY with valid JSON, no markdown:
         body: r.body,
         type: r.type as "text" | "system",
         createdAt: r.createdAt,
+        linkedIssueKey: r.linkedIssueKey ?? null,
       }));
     }),
 
@@ -3258,6 +3259,112 @@ Respond ONLY with valid JSON, no markdown:
         createdAt: now,
       });
       return { ok: true, createdAt: now };
+    }),
+
+  /**
+   * Prefill issue fields from a comment body using LLM.
+   */
+  prefillIssueFromComment: opsChatProcedure
+    .input(z.object({ commentBody: z.string().max(2000) }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const result = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are an operations assistant for a home cleaning company. Given a comment from an ops team member, extract structured issue fields. Respond ONLY with valid JSON matching the schema exactly.`,
+          },
+          {
+            role: "user",
+            content: `Comment: "${input.commentBody}"\n\nExtract:\n- title: short issue title (max 8 words)\n- severity: one of Critical, High, Medium, Low\n- team: team or department responsible (e.g. "Dispatch", "Field", "Office", "Management")\n- customer: customer name if mentioned, else empty string`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "issue_prefill",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                severity: { type: "string", enum: ["Critical", "High", "Medium", "Low"] },
+                team: { type: "string" },
+                customer: { type: "string" },
+              },
+              required: ["title", "severity", "team", "customer"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const rawContent = result?.choices?.[0]?.message?.content ?? "{}";
+      const raw = typeof rawContent === "string" ? rawContent : "{}";
+      try {
+        return JSON.parse(raw) as { title: string; severity: string; team: string; customer: string };
+      } catch {
+        return { title: "", severity: "Medium", team: "", customer: "" };
+      }
+    }),
+
+  /**
+   * Convert a comment to an issue: create the issue, link it back on the comment, post a system event.
+   */
+  convertCommentToIssue: opsChatProcedure
+    .input(z.object({
+      commentId: z.number().int().positive(),
+      issueKey: z.string().max(128), // the parent issue thread this comment belongs to
+      title: z.string().min(1).max(200),
+      severity: z.string().max(32),
+      team: z.string().max(128),
+      customer: z.string().max(128),
+      authorName: z.string().min(1).max(128),
+      channel: z.string().default("command"),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Create the issue as a general_issue opsChatMessage
+      const note = `Severity: ${input.severity}${input.team ? ` · Team: ${input.team}` : ""}${input.customer ? ` · Customer: ${input.customer}` : ""}`;
+      const meta = JSON.stringify({
+        issueTitle: input.title,
+        issueNote: note,
+        jobTitle: input.customer || null,
+        severity: input.severity,
+        team: input.team,
+        customer: input.customer,
+        sourceCommentId: input.commentId,
+      });
+      const [insertResult] = await db.insert(opsChatMessages).values({
+        channel: input.channel,
+        authorName: input.authorName,
+        authorRole: "office",
+        body: note ? `${input.title}\n${note}` : input.title,
+        quickAction: "general_issue",
+        metadata: meta,
+      }).$returningId();
+      const newMessageId = insertResult?.id;
+      const newIssueKey = `manual-${newMessageId}`;
+
+      // Link the comment to the new issue
+      await db
+        .update(issueComments)
+        .set({ linkedIssueKey: newIssueKey })
+        .where(eq(issueComments.id, input.commentId));
+
+      // Post a system event comment on the original thread
+      const now = Date.now();
+      await db.insert(issueComments).values({
+        issueKey: input.issueKey,
+        authorName: "System",
+        body: `Issue created from this comment: "${input.title}"`,
+        type: "system",
+        createdAt: now,
+        linkedIssueKey: newIssueKey,
+      });
+
+      return { ok: true, newIssueKey, newMessageId };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

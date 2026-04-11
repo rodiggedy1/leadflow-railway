@@ -1980,4 +1980,5 @@ export const issueComments = mysqlTable("issue_comments", {
   body: text("body").notNull(),
   type: varchar("type", { length: 32 }).notNull().default("text"), // "text" | "system"
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  linkedIssueKey: varchar("linked_issue_key", { length: 255 }),
 });

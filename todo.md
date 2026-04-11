@@ -1116,3 +1116,7 @@
 - [x] Issue comments: add issue_comments table (issueKey, authorName, body, type: text|system, createdAt)
 - [x] Issue comments: add addIssueComment + getIssueComments tRPC procedures; auto-log system events on claim/resolve
 - [x] Issue comments: inline collapsible thread below each issue card, live polling every 5s, composer at bottom
+- [x] Comment-to-issue: add linkedIssueKey column to issue_comments table
+- [x] Comment-to-issue: add convertCommentToIssue tRPC procedure (LLM prefill + issue creation + link back)
+- [x] Comment-to-issue: hover on comment reveals "Convert to issue" button; click opens ConvertToIssueModal with LLM-prefilled fields
+- [x] Comment-to-issue: after creation, comment shows linked-issue chip; clicking it switches left panel to Issues tab and highlights the card
