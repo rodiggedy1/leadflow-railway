@@ -3512,7 +3512,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
                           >
                             <AlertTriangle className="h-3 w-3" />
-                            <span>Issue</span>
+                            <span>Create Issue</span>
                           </button>
                           {!isAlert && (
                             <div className="flex gap-0.5">
