@@ -1412,62 +1412,67 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200 bg-white">
-          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1 whitespace-nowrap">General Command Chat</p>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-2xl font-bold text-slate-900 whitespace-nowrap">Ship Control</h2>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {totalAlerts > 0 && (
-                <span className="text-xs font-semibold bg-slate-100 text-slate-700 rounded-full px-3 py-1 border border-slate-200 whitespace-nowrap">
-                  {totalAlerts} alert{totalAlerts !== 1 ? "s" : ""}
-                </span>
-              )}
+        <div className="px-5 pt-5 pb-4 border-b border-slate-200 bg-white">
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5 whitespace-nowrap">General Command Chat</p>
+          <h2 className="text-[28px] font-bold text-slate-900 whitespace-nowrap leading-tight mb-4">Ship Control</h2>
 
+          {/* 4 Stat Tiles */}
+          {cmdLoading ? (
+            <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5 mb-4">
+              {/* Needs attention */}
+              <div className="rounded-2xl bg-red-50 p-4">
+                <p className="text-sm font-semibold text-red-600 leading-snug">Needs<br/>attention</p>
+                <p className="text-4xl font-bold text-red-600 mt-2 leading-none">{snapshot.issue}</p>
+              </div>
+              {/* In progress */}
+              <div className="rounded-2xl bg-sky-50 p-4">
+                <p className="text-sm font-semibold text-sky-600 leading-snug">In progress</p>
+                <p className="text-4xl font-bold text-sky-600 mt-2 leading-none">{snapshot.progress}</p>
+              </div>
+              {/* Starting soon */}
+              <div className="rounded-2xl bg-amber-50 p-4">
+                <p className="text-sm font-semibold text-amber-600 leading-snug">Starting soon</p>
+                <p className="text-4xl font-bold text-amber-600 mt-2 leading-none">{snapshot.soon}</p>
+              </div>
+              {/* Completed */}
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <p className="text-sm font-semibold text-emerald-600 leading-snug">Completed</p>
+                <p className="text-4xl font-bold text-emerald-600 mt-2 leading-none">{snapshot.complete}</p>
+              </div>
             </div>
+          )}
+
+          {/* Command priority info card */}
+          <div className="rounded-2xl bg-indigo-50 p-4 mb-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900 mb-1">Command priority</p>
+              <p className="text-sm text-slate-600 leading-snug">General team chat stays lightweight. Any message can be converted into a structured issue when action is needed.</p>
+            </div>
+          </div>
+
+          {/* Chat / Issues tab switcher */}
+          <div className="flex bg-slate-100 rounded-2xl p-1 gap-1">
+            <button
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl py-2.5 bg-slate-900 text-white shadow-sm"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Chat
+            </button>
+            <button
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 text-slate-500 hover:text-slate-800 hover:bg-white/60 transition-all"
+            >
+              <span className="text-base leading-none">🚨</span>
+              Issues {totalAlerts > 0 && `(${totalAlerts})`}
+            </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          {/* View switcher pill */}
-          <div className="flex bg-slate-100 rounded-2xl border border-slate-200 p-1 gap-0.5">
-            <button
-              onClick={onSwitchToToday}
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-xl py-2 transition-all text-slate-500 hover:text-slate-800 hover:bg-white/60"
-            >
-              <CalendarDays className="w-3.5 h-3.5" />
-              Ops
-            </button>
-            <button
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-xl py-2 bg-slate-900 text-white shadow-sm"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              Chat
-            </button>
-            <button
-              onClick={onSwitchToCS}
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-xl py-2 transition-all text-slate-500 hover:text-slate-800 hover:bg-white/60"
-            >
-              <Headphones className="w-3.5 h-3.5" />
-              CS
-            </button>
-          </div>
-
-          {/* Ops Snapshot */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Ops Snapshot</p>
-            {cmdLoading ? (
-              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {(["issue", "progress", "soon", "complete"] as StatusBucket[]).map((bucket) => (
-                  <div key={bucket} className={cn("rounded-lg border p-3", BUCKET_BG[bucket])}>
-                    <p className={cn("text-xs font-medium", BUCKET_COLORS[bucket])}>{BUCKET_LABELS[bucket]}</p>
-                    <p className={cn("text-2xl font-bold mt-1", BUCKET_COLORS[bucket])}>{snapshot[bucket]}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Live Alerts & Escalations */}
           <div>
