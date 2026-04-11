@@ -3063,7 +3063,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* Composer box with drag-drop */}
           <div className="relative">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2 px-1">General Chat Composer</p>
+
           {/* @mention autocomplete dropdown */}
           {mentionQuery !== null && mentionSuggestions.length > 0 && (
             <div className="absolute bottom-full mb-1 left-0 z-50 w-56 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
@@ -3104,7 +3104,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div
             className={cn(
               "rounded-2xl border p-4 transition",
-              isDragging ? "border-slate-400 bg-slate-100 ring-2 ring-slate-900/10" : "border-slate-200 bg-white shadow-sm"
+              isDragging ? "border-slate-300 bg-slate-200 ring-2 ring-slate-900/10" : "border-slate-200 bg-slate-50"
             )}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
