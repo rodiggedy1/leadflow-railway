@@ -1362,7 +1362,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden bg-slate-100">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── Lightbox ── */}
@@ -3289,9 +3289,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
       <div
-        className="shrink-0 border-l border-slate-200 bg-slate-50 flex flex-col overflow-y-auto transition-[width] duration-200"
-        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined }}
+        className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200 bg-slate-100"
+        style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
+        <div className="mx-3 my-3 bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 space-y-5">
 
           {/* ── Hot Leads Tray ── */}
@@ -3476,6 +3477,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
 
         </div>
+        </div>{/* end white card */}
       </div>
 
       {/* ── Open Issue Dialog ── */}
