@@ -1003,6 +1003,13 @@ export const opsChatRouter = router({
       resolvedAt?: number | null;
     }> = [];
 
+    const flaggedAtByJobId: Record<number, number> = {};
+    for (const f of openFlags) {
+      if (f.cleanerJobId && !flaggedAtByJobId[f.cleanerJobId]) {
+        flaggedAtByJobId[f.cleanerJobId] = new Date(f.createdAt as string | number | Date).getTime();
+      }
+    }
+
     for (const j of jobs) {
       const status = toPriorityStatus(j.jobStatus, j.flagged);
       if (status === "issue") {
@@ -1012,7 +1019,7 @@ export const opsChatRouter = router({
           title: `Issue raised in ${j.customerName ?? j.jobAddress}`,
           body: j.issueNote ?? "Issue flagged — check job thread.",
           source: j.customerName ?? j.jobAddress ?? "Unknown",
-          ts: now,
+          ts: flaggedAtByJobId[j.id] ?? now,
         });
       } else if (status === "soon") {
         const jobMs = j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0;
