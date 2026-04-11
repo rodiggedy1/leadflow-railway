@@ -1412,7 +1412,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Single scrollable area — header + content all scroll together */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
           {/* White content card with grey page bg showing on sides */}
           <div className="mx-3 mt-4 mb-4 bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 pt-5 pb-4">
