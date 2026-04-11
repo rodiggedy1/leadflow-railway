@@ -1107,3 +1107,4 @@
 - [x] Command Chat Issues tab: build center Issues view with claim/resolve cards (shown when centerView === 'issues')
 - [x] Command Chat Issues tab: hide conversation thread and composer when centerView === 'issues'
 - [x] Redesign Issues center view cards: ACTIVE ISSUE CARD label, emoji+title+body left, Owner pill + Mark Resolved button right, 3 info tiles (Ownership / Customer Risk / Response Pressure) at bottom
+- [x] Fix Issues card styling: white tiles (not slate-50), large rounded pill buttons, blue text on Claim/Owner, solid green Mark Resolved, no title indent, correct spacing to match goal design

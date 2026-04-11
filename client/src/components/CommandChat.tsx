@@ -1894,38 +1894,38 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <div
                         key={issue.key}
-                        className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm transition hover:shadow-md"
+                        className="rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                       >
-                        <div className="px-5 pt-4 pb-5">
+                        <div className="px-6 pt-5 pb-6">
                           {/* Card label */}
-                          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">
+                          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">
                             {isResolved ? "Resolved Issue" : "Active Issue Card"}
                           </p>
 
                           {/* Top row: left = emoji + title + body, right = action buttons */}
-                          <div className="flex items-start justify-between gap-4 mb-4">
+                          <div className="flex items-start justify-between gap-6 mb-5">
                             {/* Left: title + body */}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xl shrink-0">{isResolved ? "🟢" : issue.type === "alert" ? "🚨" : "⚠️"}</span>
+                              <div className="flex items-center gap-2.5 mb-1.5">
+                                <span className="text-2xl shrink-0 leading-none">{isResolved ? "🟢" : issue.type === "alert" ? "🚨" : "⚠️"}</span>
                                 <p className={cn(
-                                  "text-lg font-bold leading-tight",
+                                  "text-xl font-bold leading-tight",
                                   isResolved ? "text-slate-400 line-through" : "text-slate-900"
                                 )}>
                                   {issue.title}
                                 </p>
                               </div>
                               {issue.body && (
-                                <p className="text-sm text-slate-500 leading-snug pl-8">{issue.body}</p>
+                                <p className="text-sm text-slate-500 leading-relaxed mt-1">{issue.body}</p>
                               )}
                             </div>
 
-                            {/* Right: action buttons stacked */}
-                            <div className="flex items-center gap-2 shrink-0">
+                            {/* Right: action buttons */}
+                            <div className="flex items-center gap-2.5 shrink-0 self-start mt-1">
                               {!isResolved && !owner && (
                                 <button
                                   onClick={() => setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }))}
-                                  className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-4 py-3 hover:bg-slate-50 transition shadow-sm"
+                                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-5 py-3.5 hover:bg-blue-50 hover:border-blue-200 transition"
                                 >
                                   <ShieldAlert className="h-4 w-4" />
                                   <span>Claim issue</span>
@@ -1933,21 +1933,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               )}
                               {!isResolved && owner && (
                                 <>
-                                  <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-4 py-3 shadow-sm">
-                                    <ShieldAlert className="h-4 w-4" />
-                                    <span>Owner:<br />{owner}</span>
+                                  <div className="flex flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-5 py-3 min-w-[90px] text-center">
+                                    <ShieldAlert className="h-4 w-4 mb-0.5" />
+                                    <span className="leading-tight">Owner:</span>
+                                    <span className="leading-tight">{owner}</span>
                                   </div>
                                   <button
                                     onClick={() => setIssueResolved(prev => ({ ...prev, [issue.key]: true }))}
-                                    className="flex items-center gap-1.5 rounded-2xl bg-emerald-600 text-white text-sm font-semibold px-4 py-3 hover:bg-emerald-700 transition shadow-sm"
+                                    className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-emerald-600 text-white text-sm font-bold px-5 py-3 min-w-[90px] text-center hover:bg-emerald-700 transition"
                                   >
-                                    <CircleCheckBig className="h-4 w-4" />
-                                    <span>Mark<br />resolved</span>
+                                    <CircleCheckBig className="h-4 w-4 mb-0.5" />
+                                    <span className="leading-tight">Mark</span>
+                                    <span className="leading-tight">resolved</span>
                                   </button>
                                 </>
                               )}
                               {isResolved && (
-                                <div className="flex items-center gap-1.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3">
+                                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-5 py-3.5">
                                   <CircleCheckBig className="h-4 w-4" />
                                   <span>Resolved</span>
                                 </div>
@@ -1955,21 +1957,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             </div>
                           </div>
 
-                          {/* Bottom: 3 info tiles */}
+                          {/* Bottom: 3 info tiles — white bg, slate border, rounded-xl */}
                           <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Ownership</p>
+                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Ownership</p>
                               <p className="text-sm font-bold text-slate-800">{owner ?? "Unclaimed"}</p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Customer Risk</p>
+                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Customer Risk</p>
                               <p className={cn(
                                 "text-sm font-bold",
                                 customerRisk === "High" ? "text-red-600" : "text-amber-600"
                               )}>{customerRisk}</p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Response Pressure</p>
+                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Response Pressure</p>
                               <p className="text-sm font-bold text-slate-800">{pressureLabel}</p>
                             </div>
                           </div>
