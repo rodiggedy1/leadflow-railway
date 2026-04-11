@@ -26,7 +26,8 @@ import {
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
-  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search } from "lucide-react";
+  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
+  ShieldAlert, CircleCheckBig } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1885,93 +1886,92 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {allIssues.map(issue => {
                     const isResolved = issueResolved[issue.key];
                     const owner = issueOwners[issue.key];
+                    // Derive customer risk from issue type
+                    const customerRisk = issue.type === "alert" ? "High" : "Medium";
+                    // Response pressure: time since issue was raised
+                    const minutesAgo = Math.floor((Date.now() - issue.ts) / 60000);
+                    const pressureLabel = minutesAgo < 1 ? "Just now" : minutesAgo < 60 ? `${minutesAgo}m ago` : `${Math.floor(minutesAgo / 60)}h ago`;
                     return (
                       <div
                         key={issue.key}
-                        className={cn(
-                          "rounded-2xl border overflow-hidden transition",
-                          isResolved ? "border-emerald-100" : issue.type === "alert" ? "border-red-100" : "border-orange-100"
-                        )}
+                        className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm transition hover:shadow-md"
                       >
-                        {/* Issue card header */}
-                        <div className={cn(
-                          "px-4 py-3",
-                          isResolved ? "bg-emerald-50" : issue.type === "alert" ? "bg-red-50" : "bg-orange-50"
-                        )}>
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">{isResolved ? "✅" : issue.type === "alert" ? "🚨" : "⚠️"}</span>
-                              <p className={cn(
-                                "text-sm font-bold leading-snug",
-                                isResolved ? "text-emerald-700 line-through opacity-60" : issue.type === "alert" ? "text-red-700" : "text-orange-700"
-                              )}>
-                                {issue.title}
-                              </p>
-                            </div>
-                            <span className={cn(
-                              "text-[10px] font-medium shrink-0 mt-0.5",
-                              isResolved ? "text-emerald-400" : issue.type === "alert" ? "text-red-400" : "text-orange-400"
-                            )}>
-                              {fmt12(issue.ts)}
-                            </span>
-                          </div>
-                          {issue.body && (
-                            <p className={cn(
-                              "text-xs leading-snug mb-2",
-                              isResolved ? "text-emerald-600" : issue.type === "alert" ? "text-red-600" : "text-orange-600"
-                            )}>
-                              {issue.body}
-                            </p>
-                          )}
-                          {/* Ownership / status tiles */}
-                          <div className="grid grid-cols-3 gap-2 mb-3">
-                            <div className="rounded-xl bg-white/70 border border-white/80 px-2.5 py-2">
-                              <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Ownership</p>
-                              <p className="text-xs font-semibold text-slate-700 truncate">{owner ?? "Unclaimed"}</p>
-                            </div>
-                            <div className="rounded-xl bg-white/70 border border-white/80 px-2.5 py-2">
-                              <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Source</p>
-                              <p className="text-xs font-semibold text-slate-700 truncate">{issue.source}</p>
-                            </div>
-                            <div className="rounded-xl bg-white/70 border border-white/80 px-2.5 py-2">
-                              <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Status</p>
-                              <p className={cn(
-                                "text-xs font-semibold truncate",
-                                isResolved ? "text-emerald-600" : owner ? "text-amber-600" : "text-red-500"
-                              )}>
-                                {isResolved ? "Resolved" : owner ? "In progress" : "Needs action"}
-                              </p>
-                            </div>
-                          </div>
-                          {/* Action buttons */}
-                          <div className="flex items-center gap-2">
-                            {!isResolved && !owner && (
-                              <button
-                                onClick={() => setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }))}
-                                className="flex-1 rounded-xl bg-slate-900 text-white text-xs font-semibold py-2.5 hover:bg-slate-700 transition"
-                              >
-                                Claim issue
-                              </button>
-                            )}
-                            {!isResolved && owner && (
-                              <>
-                                <span className="flex-1 text-center text-xs font-semibold text-slate-500 border border-slate-200 rounded-xl py-2.5 bg-white">
-                                  Owner: {owner}
-                                </span>
-                                <button
-                                  onClick={() => setIssueResolved(prev => ({ ...prev, [issue.key]: true }))}
-                                  className="flex-1 rounded-xl bg-emerald-500 text-white text-xs font-semibold py-2.5 hover:bg-emerald-600 transition"
-                                >
-                                  Mark resolved
-                                </button>
-                              </>
-                            )}
-                            {isResolved && (
-                              <div className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-600 border border-emerald-200 rounded-xl py-2.5 bg-emerald-50">
-                                <CheckCheck className="h-3.5 w-3.5" />
-                                Resolved
+                        <div className="px-5 pt-4 pb-5">
+                          {/* Card label */}
+                          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">
+                            {isResolved ? "Resolved Issue" : "Active Issue Card"}
+                          </p>
+
+                          {/* Top row: left = emoji + title + body, right = action buttons */}
+                          <div className="flex items-start justify-between gap-4 mb-4">
+                            {/* Left: title + body */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xl shrink-0">{isResolved ? "🟢" : issue.type === "alert" ? "🚨" : "⚠️"}</span>
+                                <p className={cn(
+                                  "text-lg font-bold leading-tight",
+                                  isResolved ? "text-slate-400 line-through" : "text-slate-900"
+                                )}>
+                                  {issue.title}
+                                </p>
                               </div>
-                            )}
+                              {issue.body && (
+                                <p className="text-sm text-slate-500 leading-snug pl-8">{issue.body}</p>
+                              )}
+                            </div>
+
+                            {/* Right: action buttons stacked */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {!isResolved && !owner && (
+                                <button
+                                  onClick={() => setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }))}
+                                  className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-4 py-3 hover:bg-slate-50 transition shadow-sm"
+                                >
+                                  <ShieldAlert className="h-4 w-4" />
+                                  <span>Claim issue</span>
+                                </button>
+                              )}
+                              {!isResolved && owner && (
+                                <>
+                                  <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-4 py-3 shadow-sm">
+                                    <ShieldAlert className="h-4 w-4" />
+                                    <span>Owner:<br />{owner}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => setIssueResolved(prev => ({ ...prev, [issue.key]: true }))}
+                                    className="flex items-center gap-1.5 rounded-2xl bg-emerald-600 text-white text-sm font-semibold px-4 py-3 hover:bg-emerald-700 transition shadow-sm"
+                                  >
+                                    <CircleCheckBig className="h-4 w-4" />
+                                    <span>Mark<br />resolved</span>
+                                  </button>
+                                </>
+                              )}
+                              {isResolved && (
+                                <div className="flex items-center gap-1.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3">
+                                  <CircleCheckBig className="h-4 w-4" />
+                                  <span>Resolved</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Bottom: 3 info tiles */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Ownership</p>
+                              <p className="text-sm font-bold text-slate-800">{owner ?? "Unclaimed"}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Customer Risk</p>
+                              <p className={cn(
+                                "text-sm font-bold",
+                                customerRisk === "High" ? "text-red-600" : "text-amber-600"
+                              )}>{customerRisk}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Response Pressure</p>
+                              <p className="text-sm font-bold text-slate-800">{pressureLabel}</p>
+                            </div>
                           </div>
                         </div>
                       </div>

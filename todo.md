@@ -1106,3 +1106,4 @@
 - [x] Command Chat Issues tab: render issue cards (alerts + manual issues) in left panel when leftTab === 'issues'
 - [x] Command Chat Issues tab: build center Issues view with claim/resolve cards (shown when centerView === 'issues')
 - [x] Command Chat Issues tab: hide conversation thread and composer when centerView === 'issues'
+- [x] Redesign Issues center view cards: ACTIVE ISSUE CARD label, emoji+title+body left, Owner pill + Mark Resolved button right, 3 info tiles (Ownership / Customer Risk / Response Pressure) at bottom
