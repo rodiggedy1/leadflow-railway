@@ -1420,7 +1420,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   const { data: ownershipRows = [], refetch: refetchOwnership } = trpc.opsChat.getIssueOwnership.useQuery(
     { issueKeys: allIssueKeysParsed },
-    { enabled: allIssueKeysParsed.length > 0, staleTime: 30_000, refetchInterval: 60_000 }
+    { enabled: allIssueKeysParsed.length > 0, staleTime: 10_000, refetchInterval: 15_000 }
   );
 
   // Sync DB rows into local state — use a stable serialized key to avoid infinite loops
@@ -1744,8 +1744,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               onClick={() => {
                                 if (!owner) {
                                   setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }));
+                                  claimIssueMutation.mutate({ issueKey: issue.key, claimedBy: callerName });
                                 } else {
                                   setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
+                                  resolveIssueOwnershipMutation.mutate({ issueKey: issue.key, resolvedBy: callerName });
                                 }
                               }}
                               className={cn(
@@ -4250,6 +4252,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     });
                     setResolveIssueOpen(false);
                     setResolveIssueNoteText("");
+                    refetchOwnership();
                     toast.success("Issue resolved ✅");
                   } catch (err: unknown) {
                     toast.error("Failed to resolve issue", { description: err instanceof Error ? err.message : "Unknown error" });

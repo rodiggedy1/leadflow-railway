@@ -1346,6 +1346,13 @@ export const opsChatRouter = router({
         meta.resolutionNote = input.resolutionNote ?? null;
         await db.update(opsChatMessages).set({ metadata: JSON.stringify(meta) }).where(eq(opsChatMessages.id, input.messageId));
 
+        // Persist resolved state to issue_ownership so it survives page reloads
+        const manualIssueKey = `manual-${input.messageId}`;
+        await db
+          .insert(issueOwnership)
+          .values({ issueKey: manualIssueKey, resolvedAt: Date.now(), resolvedBy: input.authorName })
+          .onDuplicateKeyUpdate({ set: { resolvedAt: Date.now(), resolvedBy: input.authorName } });
+
         // Post a styled issue_resolved card to the same channel
         const issueTitle = (meta.issueTitle as string) ?? "Issue";
         const issueNote = (meta.issueNote as string | null) ?? null;

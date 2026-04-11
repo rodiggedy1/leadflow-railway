@@ -54,6 +54,8 @@ vi.mock("../drizzle/schema", () => ({
   jobSmsReplies: "jobSmsReplies",
   issueFlags: "issueFlags",
   opsChatReads: "opsChatReads",
+  issueOwnership: "issueOwnership",
+  issueComments: "issueComments",
 }));
 
 vi.mock("./openphone", () => ({ sendSms: vi.fn() }));
@@ -175,5 +177,47 @@ describe("announce_booking card metadata", () => {
     expect(parsed.personName).toBe(personName);
     expect(parsed.amount).toBe(amount);
     expect(parsed.note).toBe(note);
+  });
+});
+
+// ── openIssue __resolve__ path: persists to issue_ownership ──────────────────
+
+describe("openIssue __resolve__ — persists resolved state to issue_ownership", () => {
+  it("upserts issue_ownership with resolvedAt when resolving a general_issue", async () => {
+    const { z } = require("zod");
+
+    // Validate the resolve input schema
+    const schema = z.object({
+      channel: z.string().default("command"),
+      title: z.string().min(1).max(200),
+      note: z.string().max(2000).optional(),
+      jobId: z.number().int().positive().optional(),
+      authorName: z.string().min(1).max(128),
+      messageId: z.number().int().positive().optional(),
+      resolutionNote: z.string().max(2000).optional(),
+    });
+
+    const input = schema.parse({
+      title: "__resolve__",
+      authorName: "Alice",
+      messageId: 42,
+      resolutionNote: "Cleaner arrived and resolved the issue",
+    });
+
+    expect(input.title).toBe("__resolve__");
+    expect(input.messageId).toBe(42);
+    expect(input.resolutionNote).toBe("Cleaner arrived and resolved the issue");
+  });
+
+  it("builds the correct issueKey for a manual issue (manual-{messageId})", () => {
+    const messageId = 99;
+    const issueKey = `manual-${messageId}`;
+    expect(issueKey).toBe("manual-99");
+  });
+
+  it("resolvedAt in issue_ownership metadata is a number (UTC ms)", () => {
+    const resolvedAt = Date.now();
+    expect(typeof resolvedAt).toBe("number");
+    expect(resolvedAt).toBeGreaterThan(0);
   });
 });

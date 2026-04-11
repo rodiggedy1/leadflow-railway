@@ -1117,3 +1117,4 @@
 - [x] Issue comments: add addIssueComment + getIssueComments tRPC procedures; auto-log system events on claim/resolve
 - [x] Issue comments: inline collapsible thread below each issue card, live polling every 5s, composer at bottom
 - [x] Fix: resolved issues in Chat tab Live Alerts now show same resolved treatment as Issues tab (strikethrough, green tint, Resolved ✓)
+- [x] Persist issue resolved state server-side: openIssue __resolve__ now upserts issue_ownership; Issues tab left panel Claim/Resolve buttons now call claimIssue/resolveIssueOwnership mutations; resolve dialog calls refetchOwnership after success; ownership poll interval reduced to 15s for cross-agent sync
