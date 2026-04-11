@@ -1124,3 +1124,4 @@
 - [x] Fix: chat convert button label should say "Create issue" not "Issue"
 - [x] Fix: created issue not appearing in Issues tab after conversion
 - [x] Fix: add notification chip on source chat message after issue is created (with link to issue)
+- [x] Add "Raise issue" button to Command Chat header for manual issue creation

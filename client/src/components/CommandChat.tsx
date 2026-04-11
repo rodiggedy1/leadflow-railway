@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Link2 } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Link2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2248,6 +2248,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
             {/* Icon buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
+              {!searchOpen && (
+                <button
+                  onClick={() => setIssueOpen(true)}
+                  title="Raise issue"
+                  className="flex items-center gap-1.5 h-9 px-3 rounded-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-semibold transition-colors shadow-sm"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Raise issue
+                </button>
+              )}
               {!searchOpen && pendingReminderCount > 0 && (
                 <span className="flex items-center gap-1 text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5">
                   <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
