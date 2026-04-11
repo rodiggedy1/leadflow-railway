@@ -553,10 +553,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
-  // issueOwners: keyed by `${type}-${id}` → owner name (local state only)
+  // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
-  // issueResolved: keyed by `${type}-${id}` → true when resolved
-  const [issueResolved, setIssueResolved] = useState<Record<string, boolean>>({});
+  // issueResolved: keyed by issueKey → true when resolved (DB-backed)
+  const [issueResolved, setIssueResolved] = useState<Record<string, boolean>>({}); 
   // selectedIssueKey: which issue is expanded in center Issues view
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
 
@@ -1259,6 +1259,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   const totalAlerts = snapshot.issue + snapshot.soon;
 
+  // ── Issue ownership — DB-backed ──────────────────────────────────────────
+  // Build stable issueKeys for all current issues
+  const allIssueKeys = useMemo(() => [
+    ...alerts.filter(a => a.type !== "general_issue").map(a => `alert-${a.jobId}-${a.ts}`),
+    ...manualIssues.map(m => `manual-${m.messageId}`),
+  ], [alerts, manualIssues]);
+
+  const { data: ownershipRows = [], refetch: refetchOwnership } = trpc.opsChat.getIssueOwnership.useQuery(
+    { issueKeys: allIssueKeys },
+    { enabled: allIssueKeys.length > 0, staleTime: 30_000, refetchInterval: 60_000 }
+  );
+
+  // Sync DB rows into local state
+  useEffect(() => {
+    const owners: Record<string, string> = {};
+    const resolved: Record<string, boolean> = {};
+    for (const row of ownershipRows) {
+      if (row.claimedBy) owners[row.issueKey] = row.claimedBy;
+      if (row.resolvedAt) resolved[row.issueKey] = true;
+    }
+    setIssueOwners(owners);
+    setIssueResolved(resolved);
+  }, [ownershipRows]);
+
+  const claimIssueMutation = trpc.opsChat.claimIssue.useMutation({
+    onSuccess: () => refetchOwnership(),
+  });
+  const resolveIssueOwnershipMutation = trpc.opsChat.resolveIssueOwnership.useMutation({
+    onSuccess: () => refetchOwnership(),
+  });
+
   function doSend() {
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
@@ -1484,12 +1515,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => { setLeftTab("issues"); setCenterView("issues"); }}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 transition-all",
+                  "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 transition-all relative",
                   leftTab === "issues" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                 )}
               >
                 <span className="text-base leading-none">🚨</span>
-                Issues {totalAlerts > 0 && `(${totalAlerts})`}
+                Issues
+                {(() => {
+                  const unresolvedCount = allIssueKeys.filter(k => !issueResolved[k]).length;
+                  return unresolvedCount > 0 ? (
+                    <span className={cn(
+                      "ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1 leading-none",
+                      leftTab === "issues" ? "bg-red-500 text-white" : "bg-red-500 text-white"
+                    )}>
+                      {unresolvedCount}
+                    </span>
+                  ) : null;
+                })()}
               </button>
             </div>
           </div>
@@ -1891,6 +1933,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     // Response pressure: time since issue was raised
                     const minutesAgo = Math.floor((Date.now() - issue.ts) / 60000);
                     const pressureLabel = minutesAgo < 1 ? "Just now" : minutesAgo < 60 ? `${minutesAgo}m ago` : `${Math.floor(minutesAgo / 60)}h ago`;
+                    // Recommended action subtitle derived from issue type
+                    const actionSubtitle = issue.type === "alert"
+                      ? "Call cleaner, fix issue + notify client"
+                      : "Claim issue, call cleaner, and notify client if arrival slips";
                     return (
                       <div
                         key={issue.key}
@@ -1915,6 +1961,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                   {issue.title}
                                 </p>
                               </div>
+                              {/* Recommended action subtitle */}
+                              <p className="text-sm font-semibold text-slate-700 leading-snug mt-1.5">{actionSubtitle}</p>
                               {issue.body && (
                                 <p className="text-sm text-slate-500 leading-relaxed mt-1">{issue.body}</p>
                               )}
@@ -1924,7 +1972,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             <div className="flex items-center gap-3 shrink-0 self-start mt-1">
                               {!isResolved && !owner && (
                                 <button
-                                  onClick={() => setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }))}
+                                  onClick={() => {
+                                    setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }));
+                                    claimIssueMutation.mutate({ issueKey: issue.key, claimedBy: callerName });
+                                  }}
                                   className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-5 py-4 hover:bg-blue-50 hover:border-blue-200 transition min-w-[120px] justify-center"
                                 >
                                   <ShieldAlert className="h-4 w-4 shrink-0" />
@@ -1941,7 +1992,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                   </div>
                                   {/* Mark resolved — solid green, centered icon+text */}
                                   <button
-                                    onClick={() => setIssueResolved(prev => ({ ...prev, [issue.key]: true }))}
+                                    onClick={() => {
+                                      setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
+                                      resolveIssueOwnershipMutation.mutate({ issueKey: issue.key, resolvedBy: callerName });
+                                    }}
                                     className="flex flex-col items-center justify-center rounded-2xl bg-emerald-600 text-white text-sm font-bold px-5 py-3.5 min-w-[110px] gap-0.5 hover:bg-emerald-700 transition"
                                   >
                                     <CircleCheckBig className="h-4 w-4" />

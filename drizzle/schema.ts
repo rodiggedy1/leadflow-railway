@@ -1946,3 +1946,29 @@ export const followUps = mysqlTable("follow_ups", {
 
 export type FollowUp = typeof followUps.$inferSelect;
 export type InsertFollowUp = typeof followUps.$inferInsert;
+
+// ── Issue Ownership ───────────────────────────────────────────────────────────
+/**
+ * Persists claim/resolve state for Command Chat issues.
+ * issueKey is a stable string: e.g. "stale_eta:123", "noshow:456", "manual:789", "issue:321"
+ */
+export const issueOwnership = mysqlTable("issue_ownership", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Stable key identifying the issue (type:jobId or type:messageId) */
+  issueKey: varchar("issueKey", { length: 128 }).notNull().unique(),
+  /** Display name of the agent who claimed this issue */
+  claimedBy: varchar("claimedBy", { length: 128 }),
+  /** UTC ms when claimed */
+  claimedAt: bigint("claimedAt", { mode: "number" }),
+  /** UTC ms when resolved (null = still open) */
+  resolvedAt: bigint("resolvedAt", { mode: "number" }),
+  /** Display name of the agent who resolved it */
+  resolvedBy: varchar("resolvedBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  idxKey: index("idx_io_key").on(table.issueKey),
+  idxResolved: index("idx_io_resolved").on(table.resolvedAt),
+}));
+export type IssueOwnership = typeof issueOwnership.$inferSelect;
+export type InsertIssueOwnership = typeof issueOwnership.$inferInsert;

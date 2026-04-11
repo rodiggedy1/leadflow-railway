@@ -26,6 +26,7 @@ import {
   jobSmsReplies,
   opsChatMessages,
   issueFlags,
+  issueOwnership,
   opsChatReads,
   opsChatReactions,
   channelPins,
@@ -34,7 +35,7 @@ import {
   users,
   quoteLeads,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, isNull, isNotNull, like, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -3146,6 +3147,53 @@ Respond ONLY with valid JSON, no markdown:
       } catch {
         return { label: "Review conversation", instruction: "Read the full context before responding.", ctaType: "info" as const, reason: "", prefillScript: null };
       }
+    }),
+
+  /**
+   * Fetch ownership state for a list of issue keys.
+   */
+  getIssueOwnership: opsChatProcedure
+    .input(z.object({ issueKeys: z.array(z.string()).max(100) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db || input.issueKeys.length === 0) return [];
+      const rows = await db
+        .select()
+        .from(issueOwnership)
+        .where(inArray(issueOwnership.issueKey, input.issueKeys));
+      return rows;
+    }),
+
+  /**
+   * Claim an issue (assign yourself as owner).
+   */
+  claimIssue: opsChatProcedure
+    .input(z.object({ issueKey: z.string().max(128), claimedBy: z.string().max(128) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const now = Date.now();
+      await db
+        .insert(issueOwnership)
+        .values({ issueKey: input.issueKey, claimedBy: input.claimedBy, claimedAt: now })
+        .onDuplicateKeyUpdate({ set: { claimedBy: input.claimedBy, claimedAt: now, resolvedAt: null, resolvedBy: null } });
+      return { ok: true };
+    }),
+
+  /**
+   * Mark an issue as resolved.
+   */
+  resolveIssueOwnership: opsChatProcedure
+    .input(z.object({ issueKey: z.string().max(128), resolvedBy: z.string().max(128) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const now = Date.now();
+      await db
+        .insert(issueOwnership)
+        .values({ issueKey: input.issueKey, resolvedAt: now, resolvedBy: input.resolvedBy })
+        .onDuplicateKeyUpdate({ set: { resolvedAt: now, resolvedBy: input.resolvedBy } });
+      return { ok: true };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
