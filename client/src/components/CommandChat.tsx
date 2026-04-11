@@ -964,6 +964,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onSuccess: () => {
       toast.success("Issue posted to Command Chat");
       setIssueOpen(false); setIssueTitle(""); setIssueNote(""); setIssueJobId(undefined);
+      utils.opsChat.getCommandChatData.invalidate();
     },
     onError: (err) => toast.error("Failed to post issue", { description: err.message }),
   });
@@ -1083,6 +1084,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         channel: "command",
       });
       setChatConvertModal(null);
+      utils.opsChat.getCommandChatData.invalidate();
       if (result.newIssueKey) {
         setLeftTab("issues");
         setCenterView("issues");

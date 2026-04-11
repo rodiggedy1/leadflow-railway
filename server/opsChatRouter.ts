@@ -1036,7 +1036,9 @@ export const opsChatRouter = router({
       let meta: Record<string, unknown> = {};
       try { meta = JSON.parse(gi.metadata ?? "{}"); } catch { /* ignore */ }
       const issueTitle = (meta.issueTitle as string) ?? gi.body.split("\n")[0] ?? "General Issue";
-      const issueNote = (meta.issueNote as string) ?? "";
+      const issueNote = (meta.issueNote as string) ||
+        [meta.issueSeverity ? `Severity: ${meta.issueSeverity}` : null, meta.issueTeam ? `Team: ${meta.issueTeam}` : null, meta.issueCustomer ? `Customer: ${meta.issueCustomer}` : null].filter(Boolean).join(" · ") ||
+        "";
       const jobTitle = (meta.jobTitle as string | null) ?? null;
       return {
         messageId: gi.id,
