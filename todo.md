@@ -1102,3 +1102,7 @@
 - [x] Chat column: add rounded-[28px] card wrapper; right column: square corners, narrower width (280px); chat column wider; right column styling matches Unified Profile design
 - [ ] Redesign center column header: compact single-row, clean typography, action icons in pill group
 - [ ] Redesign compose area: full-width textarea, draft badge bar top, FAQ/Objections/Send toolbar bottom
+- [x] Command Chat Issues tab: wire leftTab/centerView state to Chat/Issues tab buttons in left panel header
+- [x] Command Chat Issues tab: render issue cards (alerts + manual issues) in left panel when leftTab === 'issues'
+- [x] Command Chat Issues tab: build center Issues view with claim/resolve cards (shown when centerView === 'issues')
+- [x] Command Chat Issues tab: hide conversation thread and composer when centerView === 'issues'

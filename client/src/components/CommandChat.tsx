@@ -549,6 +549,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
+  // ── Issues tab state ─────────────────────────────────────────────────────
+  const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
+  const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
+  // issueOwners: keyed by `${type}-${id}` → owner name (local state only)
+  const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
+  // issueResolved: keyed by `${type}-${id}` → true when resolved
+  const [issueResolved, setIssueResolved] = useState<Record<string, boolean>>({});
+  // selectedIssueKey: which issue is expanded in center Issues view
+  const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
+
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
@@ -1461,13 +1471,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             {/* Chat / Issues tab switcher */}
             <div className="flex bg-white rounded-2xl p-1 gap-1 shadow-sm">
               <button
-                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl py-2.5 bg-slate-900 text-white shadow-sm"
+                onClick={() => { setLeftTab("chat"); setCenterView("chat"); }}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl py-2.5 transition-all",
+                  leftTab === "chat" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                )}
               >
                 <MessageCircle className="w-4 h-4" />
                 Chat
               </button>
               <button
-                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all"
+                onClick={() => { setLeftTab("issues"); setCenterView("issues"); }}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 transition-all",
+                  leftTab === "issues" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                )}
               >
                 <span className="text-base leading-none">🚨</span>
                 Issues {totalAlerts > 0 && `(${totalAlerts})`}
@@ -1477,6 +1495,85 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* Rest of scrollable content */}
           <div className="px-4 pb-4 space-y-4">
+
+          {/* Issues section — shown above Live Alerts when Issues tab is active */}
+          {leftTab === "issues" && (() => {
+            const allIssues: Array<{ key: string; title: string; body: string; source: string; ts: number; type: "alert" | "manual" }> = [
+              ...alerts
+                .filter(a => a.type !== "general_issue")
+                .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, source: a.source, ts: a.ts, type: "alert" as const })),
+              ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", source: m.authorName, ts: m.ts, type: "manual" as const })),
+            ];
+            if (allIssues.length === 0) return (
+              <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
+                <CheckCheck className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
+                <p className="text-xs text-slate-400">No open issues</p>
+              </div>
+            );
+            return (
+              <div>
+                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Open Issues</p>
+                <div className="space-y-2">
+                  {allIssues.map(issue => {
+                    const isResolved = issueResolved[issue.key];
+                    const owner = issueOwners[issue.key];
+                    return (
+                      <div
+                        key={issue.key}
+                        className={cn(
+                          "rounded-xl border p-3 transition",
+                          isResolved ? "bg-emerald-50 border-emerald-100 opacity-60" : issue.type === "alert" ? "bg-red-50 border-red-100" : "bg-orange-50 border-orange-100"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={cn("text-sm font-semibold leading-tight", isResolved ? "text-emerald-700 line-through" : issue.type === "alert" ? "text-red-700" : "text-orange-700")}>
+                            {issue.title}
+                          </p>
+                          <span className={cn("text-[10px] font-medium shrink-0 mt-0.5", isResolved ? "text-emerald-400" : issue.type === "alert" ? "text-red-400" : "text-orange-400")}>
+                            {fmt12(issue.ts)}
+                          </span>
+                        </div>
+                        {issue.body && (
+                          <p className={cn("text-xs mt-1 leading-snug", isResolved ? "text-emerald-600" : issue.type === "alert" ? "text-red-600" : "text-orange-600")}>
+                            {issue.body}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between mt-2 gap-2">
+                          {owner ? (
+                            <span className="text-[10px] font-semibold text-slate-500 border border-slate-200 rounded-full px-2 py-0.5">
+                              Owner: {owner}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{issue.source}</span>
+                          )}
+                          {!isResolved && (
+                            <button
+                              onClick={() => {
+                                if (!owner) {
+                                  setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }));
+                                } else {
+                                  setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
+                                }
+                              }}
+                              className={cn(
+                                "text-[10px] font-semibold rounded-full px-2.5 py-1 transition shrink-0",
+                                owner ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-slate-900 text-white hover:bg-slate-700"
+                              )}
+                            >
+                              {owner ? "Resolve" : "Claim"}
+                            </button>
+                          )}
+                          {isResolved && (
+                            <span className="text-[10px] font-semibold text-emerald-600">Resolved ✓</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Live Alerts & Escalations */}
           <div>
@@ -1763,8 +1860,131 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           )}
         </div>
 
-        {/* Active Sticky Pin banner — real sticky note look */}
-        {activePin && (
+        {/* Issues center view — shown when centerView === 'issues' */}
+        {centerView === "issues" && (() => {
+          const allIssues: Array<{ key: string; title: string; body: string; source: string; ts: number; type: "alert" | "manual" }> = [
+            ...alerts
+              .filter(a => a.type !== "general_issue")
+              .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, source: a.source, ts: a.ts, type: "alert" as const })),
+            ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", source: m.authorName, ts: m.ts, type: "manual" as const })),
+          ];
+          return (
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: "none" }}>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Active Issues</p>
+                <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{allIssues.length} open</span>
+              </div>
+              {allIssues.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+                  <CheckCheck className="h-10 w-10 opacity-30" />
+                  <p className="text-sm font-medium">No open issues</p>
+                  <p className="text-xs text-slate-300">All clear — nothing needs attention right now</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {allIssues.map(issue => {
+                    const isResolved = issueResolved[issue.key];
+                    const owner = issueOwners[issue.key];
+                    return (
+                      <div
+                        key={issue.key}
+                        className={cn(
+                          "rounded-2xl border overflow-hidden transition",
+                          isResolved ? "border-emerald-100" : issue.type === "alert" ? "border-red-100" : "border-orange-100"
+                        )}
+                      >
+                        {/* Issue card header */}
+                        <div className={cn(
+                          "px-4 py-3",
+                          isResolved ? "bg-emerald-50" : issue.type === "alert" ? "bg-red-50" : "bg-orange-50"
+                        )}>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">{isResolved ? "✅" : issue.type === "alert" ? "🚨" : "⚠️"}</span>
+                              <p className={cn(
+                                "text-sm font-bold leading-snug",
+                                isResolved ? "text-emerald-700 line-through opacity-60" : issue.type === "alert" ? "text-red-700" : "text-orange-700"
+                              )}>
+                                {issue.title}
+                              </p>
+                            </div>
+                            <span className={cn(
+                              "text-[10px] font-medium shrink-0 mt-0.5",
+                              isResolved ? "text-emerald-400" : issue.type === "alert" ? "text-red-400" : "text-orange-400"
+                            )}>
+                              {fmt12(issue.ts)}
+                            </span>
+                          </div>
+                          {issue.body && (
+                            <p className={cn(
+                              "text-xs leading-snug mb-2",
+                              isResolved ? "text-emerald-600" : issue.type === "alert" ? "text-red-600" : "text-orange-600"
+                            )}>
+                              {issue.body}
+                            </p>
+                          )}
+                          {/* Ownership / status tiles */}
+                          <div className="grid grid-cols-3 gap-2 mb-3">
+                            <div className="rounded-xl bg-white/70 border border-white/80 px-2.5 py-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Ownership</p>
+                              <p className="text-xs font-semibold text-slate-700 truncate">{owner ?? "Unclaimed"}</p>
+                            </div>
+                            <div className="rounded-xl bg-white/70 border border-white/80 px-2.5 py-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Source</p>
+                              <p className="text-xs font-semibold text-slate-700 truncate">{issue.source}</p>
+                            </div>
+                            <div className="rounded-xl bg-white/70 border border-white/80 px-2.5 py-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Status</p>
+                              <p className={cn(
+                                "text-xs font-semibold truncate",
+                                isResolved ? "text-emerald-600" : owner ? "text-amber-600" : "text-red-500"
+                              )}>
+                                {isResolved ? "Resolved" : owner ? "In progress" : "Needs action"}
+                              </p>
+                            </div>
+                          </div>
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-2">
+                            {!isResolved && !owner && (
+                              <button
+                                onClick={() => setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }))}
+                                className="flex-1 rounded-xl bg-slate-900 text-white text-xs font-semibold py-2.5 hover:bg-slate-700 transition"
+                              >
+                                Claim issue
+                              </button>
+                            )}
+                            {!isResolved && owner && (
+                              <>
+                                <span className="flex-1 text-center text-xs font-semibold text-slate-500 border border-slate-200 rounded-xl py-2.5 bg-white">
+                                  Owner: {owner}
+                                </span>
+                                <button
+                                  onClick={() => setIssueResolved(prev => ({ ...prev, [issue.key]: true }))}
+                                  className="flex-1 rounded-xl bg-emerald-500 text-white text-xs font-semibold py-2.5 hover:bg-emerald-600 transition"
+                                >
+                                  Mark resolved
+                                </button>
+                              </>
+                            )}
+                            {isResolved && (
+                              <div className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-600 border border-emerald-200 rounded-xl py-2.5 bg-emerald-50">
+                                <CheckCheck className="h-3.5 w-3.5" />
+                                Resolved
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Active Sticky Pin banner — real sticky note look (chat view only) */}
+        {centerView === "chat" && activePin && (
           <div className="relative mx-4 mt-3 mb-0" style={{ transform: "rotate(-0.8deg)", filter: "drop-shadow(2px 4px 8px rgba(0,0,0,0.18))" }}>
             {/* Pushpin */}
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))" }}>
@@ -1799,7 +2019,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
 
         {/* Conversation thread — relative wrapper for toast overlay */}
-        <div className="relative flex-1 min-h-0 flex flex-col">
+        <div className={cn("relative flex-1 min-h-0 flex flex-col", centerView === "issues" && "hidden")}>
           {/* @mention re-entry banner — sticky amber strip when there are unread @mentions */}
           {unreadTagIds.length > 0 && (
             <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800">
@@ -2899,13 +3119,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 }
               })
             )}
-            <div ref={threadBottomRef} />
+             <div ref={threadBottomRef} />
           </div>
         </div>
         </div>{/* end relative wrapper */}
-
-        {/* Composer */}
-        <div className="relative shrink-0">
+        {/* Composer — hidden when in issues view */}
+        <div className={cn("relative shrink-0", centerView === "issues" && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
         <div className="px-5 py-4 bg-white">
