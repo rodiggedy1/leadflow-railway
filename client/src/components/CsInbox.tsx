@@ -445,6 +445,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         hasTodayJob: (row as any).hasTodayJob ?? false,
         lastMsgTs: (row as any).lastMsgTs,
         csResolvedAt: (row as any).csResolvedAt ?? null,
+        lastSenderRole: (row as any).lastSenderRole ?? null,
+        csStatusTier: (row as any).csStatusTier ?? null,
       };
     });
   }, [csData, nameMap]);
