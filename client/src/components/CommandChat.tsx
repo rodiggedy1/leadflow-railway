@@ -1510,9 +1510,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem("cmd_rightCollapsed") === "true"; } catch { return false; }
-  });
+  // Right column is always visible — never collapsed
+  const rightCollapsed = false;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1520,7 +1519,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   useEffect(() => { try { localStorage.setItem("cmd_leftWidth",  String(leftWidth));  } catch {} }, [leftWidth]);
   useEffect(() => { try { localStorage.setItem("cmd_rightWidth", String(rightWidth)); } catch {} }, [rightWidth]);
   // left panel is always open
-  useEffect(() => { try { localStorage.setItem("cmd_rightCollapsed", String(rightCollapsed)); } catch {} }, [rightCollapsed]);
+  // Clear any stale rightCollapsed value from localStorage so it never re-hides the panel
+  useEffect(() => { try { localStorage.removeItem("cmd_rightCollapsed"); } catch {} }, []);
 
   // Drag handler factory
   function startDrag(side: "left" | "right") {
@@ -3759,7 +3759,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <HotLeadsTray
             channelMsgs={channelMsgs}
             claimLeadMutation={claimLeadMutation}
-            onCollapse={() => setRightCollapsed(true)}
+            onCollapse={() => {/* right column is always visible */}}
             onOpenFirstMsg={(details) => {
               setFirstMsgDetails(details);
               setFirstMsgResult("");
