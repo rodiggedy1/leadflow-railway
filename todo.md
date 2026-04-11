@@ -1118,3 +1118,5 @@
 - [x] Issue comments: inline collapsible thread below each issue card, live polling every 5s, composer at bottom
 - [x] Fix: resolved issues in Chat tab Live Alerts now show same resolved treatment as Issues tab (strikethrough, green tint, Resolved ✓)
 - [x] Persist issue resolved state server-side: openIssue __resolve__ now upserts issue_ownership; Issues tab left panel Claim/Resolve buttons now call claimIssue/resolveIssueOwnership mutations; resolve dialog calls refetchOwnership after success; ownership poll interval reduced to 15s for cross-agent sync
+- [x] Fix: resolving alert-type issues (Conrad Hipkins-jones) doesn't persist — comes back after refresh
+- [x] Fix: creating issue from comment should include the comment text in the issue

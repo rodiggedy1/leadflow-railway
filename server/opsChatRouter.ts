@@ -1052,6 +1052,7 @@ export const opsChatRouter = router({
         title: issueTitle,
         note: issueNote,
         jobTitle,
+        sourceBody: (meta.sourceMessageBody as string | null) ?? null,
         authorName: gi.authorName ?? "Team",
         ts: gi.createdAt ? new Date(gi.createdAt).getTime() : now,
       };
@@ -3226,6 +3227,22 @@ Respond ONLY with valid JSON, no markdown:
         type: "system",
         createdAt: now,
       });
+      // If this is an alert-type issue (key = "alert-{jobId}-{ts}"), also resolve
+      // the underlying issue_flags row so the alert stops reappearing on next poll.
+      const alertMatch = input.issueKey.match(/^alert-(\d+)-/);
+      if (alertMatch) {
+        const jobId = parseInt(alertMatch[1], 10);
+        // Resolve all open flags for this job
+        await db
+          .update(issueFlags)
+          .set({ resolvedAt: now, resolvedByName: input.resolvedBy, resolutionNote: "Resolved via Issues panel" })
+          .where(and(eq(issueFlags.cleanerJobId, jobId), isNull(issueFlags.resolvedAt)));
+        // Clear the job's flagged state
+        await db
+          .update(cleanerJobs)
+          .set({ flagged: 0 })
+          .where(eq(cleanerJobs.id, jobId));
+      }
       return { ok: true };
     }),
 
@@ -3329,6 +3346,7 @@ Respond ONLY with valid JSON, no markdown:
       customer: z.string().max(256),
       authorName: z.string().max(128),
       channel: z.string().max(64),
+      sourceMessageBody: z.string().max(2000).optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -3341,6 +3359,7 @@ Respond ONLY with valid JSON, no markdown:
         issueTeam: input.team,
         issueCustomer: input.customer,
         sourceMessageId: input.messageId,
+        sourceMessageBody: input.sourceMessageBody ?? null,
         raisedBy: input.authorName,
         ts: now,
       });

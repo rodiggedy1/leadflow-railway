@@ -1082,6 +1082,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         customer: chatConvertModal.customer,
         authorName: callerName,
         channel: "command",
+        sourceMessageBody: chatConvertModal.commentBody,
       });
       setChatConvertModal(null);
       utils.opsChat.getCommandChatData.invalidate();
@@ -1850,11 +1851,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* Issues section — shown above Live Alerts when Issues tab is active */}
           {leftTab === "issues" && (() => {
-            const allIssues: Array<{ key: string; title: string; body: string; source: string; ts: number; type: "alert" | "manual" }> = [
+            const allIssues: Array<{ key: string; title: string; body: string; sourceBody?: string | null; source: string; ts: number; type: "alert" | "manual" }> = [
               ...alerts
                 .filter(a => a.type !== "general_issue")
-                .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, source: a.source, ts: a.ts, type: "alert" as const })),
-              ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", source: m.authorName, ts: m.ts, type: "manual" as const })),
+                .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, sourceBody: null, source: a.source, ts: a.ts, type: "alert" as const })),
+              ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", sourceBody: m.sourceBody ?? null, source: m.authorName, ts: m.ts, type: "manual" as const })),
             ].sort((a, b) => Number(b.ts) - Number(a.ts));
             if (allIssues.length === 0) return (
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
@@ -2239,11 +2240,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
         {/* Issues center view — shown when centerView === 'issues' */}
         {centerView === "issues" && (() => {
-          const allIssues: Array<{ key: string; title: string; body: string; source: string; ts: number; type: "alert" | "manual" }> = [
+          const allIssues: Array<{ key: string; title: string; body: string; sourceBody?: string | null; source: string; ts: number; type: "alert" | "manual" }> = [
             ...alerts
               .filter(a => a.type !== "general_issue")
-              .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, source: a.source, ts: a.ts, type: "alert" as const })),
-            ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", source: m.authorName, ts: m.ts, type: "manual" as const })),
+              .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, sourceBody: null, source: a.source, ts: a.ts, type: "alert" as const })),
+            ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", sourceBody: m.sourceBody ?? null, source: m.authorName, ts: m.ts, type: "manual" as const })),
           ].sort((a, b) => Number(b.ts) - Number(a.ts));
           return (
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: "none" }}>
@@ -2303,6 +2304,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               <p className="text-sm font-semibold text-slate-700 leading-snug mt-1.5">{actionSubtitle}</p>
                               {issue.body && (
                                 <p className="text-sm text-slate-500 leading-relaxed mt-1">{issue.body}</p>
+                              )}
+                              {issue.sourceBody && (
+                                <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm text-slate-500 italic leading-snug">
+                                  &ldquo;{issue.sourceBody}&rdquo;
+                                </blockquote>
                               )}
                             </div>
 
