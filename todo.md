@@ -1120,3 +1120,4 @@
 - [x] Persist issue resolved state server-side: openIssue __resolve__ now upserts issue_ownership; Issues tab left panel Claim/Resolve buttons now call claimIssue/resolveIssueOwnership mutations; resolve dialog calls refetchOwnership after success; ownership poll interval reduced to 15s for cross-agent sync
 - [x] Fix: resolving alert-type issues (Conrad Hipkins-jones) doesn't persist — comes back after refresh
 - [x] Fix: creating issue from comment should include the comment text in the issue
+- [ ] Fix: resolution note popup missing when marking an issue as resolved in Command Chat

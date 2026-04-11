@@ -1161,6 +1161,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Resolve Issue modal state (Command Chat general_issue) ────────────────────
   const [resolveIssueOpen, setResolveIssueOpen] = useState(false);
   const [resolveIssueMessageId, setResolveIssueMessageId] = useState<number | null>(null);
+  const [resolveIssueKey, setResolveIssueKey] = useState<string | null>(null);
   const [resolveIssueTitle, setResolveIssueTitle] = useState("");
   const [resolveIssueNote, setResolveIssueNote] = useState("");
   const [resolveIssueNoteText, setResolveIssueNoteText] = useState("");
@@ -1606,6 +1607,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const resolveIssueOwnershipMutation = trpc.opsChat.resolveIssueOwnership.useMutation({
     onSuccess: () => refetchOwnership(),
   });
+  const addIssueCommentMutation = trpc.opsChat.addIssueComment.useMutation();
   function doSend() {
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
@@ -1906,8 +1908,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                   setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }));
                                   claimIssueMutation.mutate({ issueKey: issue.key, claimedBy: callerName });
                                 } else {
-                                  setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
-                                  resolveIssueOwnershipMutation.mutate({ issueKey: issue.key, resolvedBy: callerName });
+                                  setResolveIssueKey(issue.key);
+                                  setResolveIssueMessageId(null);
+                                  setResolveIssueTitle(issue.title);
+                                  setResolveIssueNote(issue.body ?? "");
+                                  setResolveIssueNoteText("");
+                                  setResolveIssueOpen(true);
                                 }
                               }}
                               className={cn(
@@ -2337,8 +2343,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                   {/* Mark resolved — solid green, centered icon+text */}
                                   <button
                                     onClick={() => {
-                                      setIssueResolved(prev => ({ ...prev, [issue.key]: true }));
-                                      resolveIssueOwnershipMutation.mutate({ issueKey: issue.key, resolvedBy: callerName });
+                                      setResolveIssueKey(issue.key);
+                                      setResolveIssueMessageId(null);
+                                      setResolveIssueTitle(issue.title);
+                                      setResolveIssueNote(issue.body ?? "");
+                                      setResolveIssueNoteText("");
+                                      setResolveIssueOpen(true);
                                     }}
                                     className="flex flex-col items-center justify-center rounded-2xl bg-emerald-600 text-white text-sm font-bold px-5 py-3.5 min-w-[110px] gap-0.5 hover:bg-emerald-700 transition"
                                   >
@@ -4366,7 +4376,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </Dialog>
 
       {/* ── Resolve Issue Modal (Command Chat general_issue) ───────────────────────────── */}
-      {resolveIssueOpen && resolveIssueMessageId && (
+      {resolveIssueOpen && (resolveIssueMessageId !== null || resolveIssueKey !== null) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
           onClick={() => !resolveIssueSubmitting && setResolveIssueOpen(false)}
@@ -4426,18 +4436,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white"
                 disabled={!resolveIssueNoteText.trim() || resolveIssueSubmitting}
                 onClick={async () => {
-                  if (!resolveIssueNoteText.trim() || !resolveIssueMessageId) return;
+                  if (!resolveIssueNoteText.trim()) return;
                   setResolveIssueSubmitting(true);
                   try {
-                    await openIssueMutation.mutateAsync({
-                      title: "__resolve__",
-                      note: "",
-                      messageId: resolveIssueMessageId,
-                      authorName: callerName,
-                      resolutionNote: resolveIssueNoteText.trim(),
-                    });
+                    if (resolveIssueMessageId) {
+                      // Manual general_issue path — update message metadata
+                      await openIssueMutation.mutateAsync({
+                        title: "__resolve__",
+                        note: "",
+                        messageId: resolveIssueMessageId,
+                        authorName: callerName,
+                        resolutionNote: resolveIssueNoteText.trim(),
+                      });
+                    } else if (resolveIssueKey) {
+                      // Alert / ownership path — mark resolved + add resolution note comment
+                      await resolveIssueOwnershipMutation.mutateAsync({ issueKey: resolveIssueKey, resolvedBy: callerName });
+                      await addIssueCommentMutation.mutateAsync({ issueKey: resolveIssueKey, authorName: callerName, body: resolveIssueNoteText.trim(), type: "text" });
+                      setIssueResolved(prev => ({ ...prev, [resolveIssueKey]: true }));
+                    }
                     setResolveIssueOpen(false);
                     setResolveIssueNoteText("");
+                    setResolveIssueKey(null);
                     refetchOwnership();
                     toast.success("Issue resolved ✅");
                   } catch (err: unknown) {
