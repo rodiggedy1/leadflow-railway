@@ -1933,8 +1933,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               )}
                               {!isResolved && owner && (
                                 <>
-                                  {/* Owner pill — outlined blue, centered icon+text */}
-                                  <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white text-blue-600 text-sm font-semibold px-5 py-3.5 min-w-[110px] gap-0.5">
+                                  {/* Owner pill — light blue bg, blue border, centered icon+text */}
+                                  <div className="flex flex-col items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 text-blue-600 text-sm font-semibold px-5 py-3.5 min-w-[110px] gap-0.5">
                                     <ShieldAlert className="h-4 w-4" />
                                     <span className="text-xs leading-tight">Owner:</span>
                                     <span className="text-sm font-bold leading-tight">{owner}</span>
