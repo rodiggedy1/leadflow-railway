@@ -1408,71 +1408,74 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
       <div
-        className="shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden transition-[width] duration-200"
+        className="shrink-0 border-r border-slate-200 bg-[#F0F2F5] flex flex-col overflow-hidden transition-[width] duration-200"
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-slate-200 bg-white">
-          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5 whitespace-nowrap">General Command Chat</p>
-          <h2 className="text-[28px] font-bold text-slate-900 whitespace-nowrap leading-tight mb-4">Ship Control</h2>
+        {/* Single scrollable area — header + content all scroll together */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Header section — white rounded card inside grey bg */}
+          <div className="px-4 pt-5 pb-4">
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5 whitespace-nowrap">General Command Chat</p>
+            <h2 className="text-[28px] font-bold text-slate-900 whitespace-nowrap leading-tight mb-4">Ship Control</h2>
 
-          {/* 4 Stat Tiles */}
-          {cmdLoading ? (
-            <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2.5 mb-4">
-              {/* Needs attention */}
-              <div className="rounded-2xl bg-red-50 p-4">
-                <p className="text-sm font-semibold text-red-600 leading-snug">Needs<br/>attention</p>
-                <p className="text-4xl font-bold text-red-600 mt-2 leading-none">{snapshot.issue}</p>
+            {/* 4 Stat Tiles */}
+            {cmdLoading ? (
+              <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5 mb-4">
+                {/* Needs attention */}
+                <div className="rounded-2xl bg-red-50 p-4">
+                  <p className="text-sm font-semibold text-red-600 leading-snug">Needs<br/>attention</p>
+                  <p className="text-4xl font-bold text-red-600 mt-2 leading-none">{snapshot.issue}</p>
+                </div>
+                {/* In progress */}
+                <div className="rounded-2xl bg-sky-50 p-4">
+                  <p className="text-sm font-semibold text-sky-600 leading-snug">In progress</p>
+                  <p className="text-4xl font-bold text-sky-600 mt-2 leading-none">{snapshot.progress}</p>
+                </div>
+                {/* Starting soon */}
+                <div className="rounded-2xl bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-600 leading-snug">Starting soon</p>
+                  <p className="text-4xl font-bold text-amber-600 mt-2 leading-none">{snapshot.soon}</p>
+                </div>
+                {/* Completed */}
+                <div className="rounded-2xl bg-emerald-50 p-4">
+                  <p className="text-sm font-semibold text-emerald-600 leading-snug">Completed</p>
+                  <p className="text-4xl font-bold text-emerald-600 mt-2 leading-none">{snapshot.complete}</p>
+                </div>
               </div>
-              {/* In progress */}
-              <div className="rounded-2xl bg-sky-50 p-4">
-                <p className="text-sm font-semibold text-sky-600 leading-snug">In progress</p>
-                <p className="text-4xl font-bold text-sky-600 mt-2 leading-none">{snapshot.progress}</p>
+            )}
+
+            {/* Command priority info card */}
+            <div className="rounded-2xl bg-indigo-50 p-4 mb-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4 text-white" />
               </div>
-              {/* Starting soon */}
-              <div className="rounded-2xl bg-amber-50 p-4">
-                <p className="text-sm font-semibold text-amber-600 leading-snug">Starting soon</p>
-                <p className="text-4xl font-bold text-amber-600 mt-2 leading-none">{snapshot.soon}</p>
-              </div>
-              {/* Completed */}
-              <div className="rounded-2xl bg-emerald-50 p-4">
-                <p className="text-sm font-semibold text-emerald-600 leading-snug">Completed</p>
-                <p className="text-4xl font-bold text-emerald-600 mt-2 leading-none">{snapshot.complete}</p>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900 mb-1">Command priority</p>
+                <p className="text-sm text-slate-600 leading-snug">General team chat stays lightweight. Any message can be converted into a structured issue when action is needed.</p>
               </div>
             </div>
-          )}
 
-          {/* Command priority info card */}
-          <div className="rounded-2xl bg-indigo-50 p-4 mb-4 flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900 mb-1">Command priority</p>
-              <p className="text-sm text-slate-600 leading-snug">General team chat stays lightweight. Any message can be converted into a structured issue when action is needed.</p>
+            {/* Chat / Issues tab switcher */}
+            <div className="flex bg-white rounded-2xl p-1 gap-1 shadow-sm">
+              <button
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl py-2.5 bg-slate-900 text-white shadow-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Chat
+              </button>
+              <button
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all"
+              >
+                <span className="text-base leading-none">🚨</span>
+                Issues {totalAlerts > 0 && `(${totalAlerts})`}
+              </button>
             </div>
           </div>
 
-          {/* Chat / Issues tab switcher */}
-          <div className="flex bg-slate-100 rounded-2xl p-1 gap-1">
-            <button
-              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl py-2.5 bg-slate-900 text-white shadow-sm"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Chat
-            </button>
-            <button
-              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 text-slate-500 hover:text-slate-800 hover:bg-white/60 transition-all"
-            >
-              <span className="text-base leading-none">🚨</span>
-              Issues {totalAlerts > 0 && `(${totalAlerts})`}
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {/* Rest of scrollable content */}
+          <div className="px-4 pb-4 space-y-4">
 
           {/* Live Alerts & Escalations */}
           <div>
@@ -1588,7 +1591,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             </div>
           )}
-        </div>
+          </div>{/* end inner content */}
+        </div>{/* end single scrollable area */}
       </div>
       {/* ── Left drag handle + collapse-expand toggle ── */}
       <div
