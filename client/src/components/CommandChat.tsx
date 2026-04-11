@@ -1148,12 +1148,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Inline issue note editing (right panel auto-raised issues) ──────────────
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [editingNoteText, setEditingNoteText] = useState("");
-  const { refetch: refetchCmdData } = trpc.opsChat.getCommandChatData.useQuery(undefined, { enabled: false });
   const updateIssueNoteMutation = trpc.opsChat.updateIssueNote.useMutation({
     onSuccess: () => {
       toast.success("Note saved");
       setEditingNoteId(null);
-      refetchCmdData();
+      utils.opsChat.getCommandChatData.invalidate();
     },
     onError: (err) => toast.error("Failed to save note", { description: err.message }),
   });
