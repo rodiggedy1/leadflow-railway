@@ -1112,3 +1112,4 @@
 - [x] Add recommended action subtitle to issue cards (bold instruction derived from issue type, e.g. "Call cleaner + notify client")
 - [x] Persist claim/resolve to DB: add claimedBy and resolvedAt columns to alerts table, wire claim/resolve tRPC mutations
 - [x] Add unresolved issue count badge (red pill) on Issues tab button in CommandChat left panel
+- [x] Fix CommandChat column spacing: uniform gutters between left panel, center panel, and collapsed right panel

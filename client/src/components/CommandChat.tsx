@@ -1418,7 +1418,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden bg-slate-100">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden bg-slate-100 p-3">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── Lightbox ── */}
@@ -1470,7 +1470,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Single scrollable area — header + content all scroll together */}
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
           {/* White content card with grey page bg showing on sides */}
-          <div className="mx-3 mt-4 mb-4 bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 pt-5 pb-4">
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5 whitespace-nowrap">General Command Chat</p>
             <h2 className="text-[28px] font-bold text-slate-900 whitespace-nowrap leading-tight mb-4">Ship Control</h2>
@@ -1747,14 +1747,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Left drag handle ── */}
       <div
         className="relative flex-none"
-        style={{ width: 8, cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
+        style={{ width: leftCollapsed ? 0 : 12, cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={leftCollapsed ? undefined : startDrag("left")}
       />
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* White card wrapper with grey showing on sides */}
-        <div className="mx-3 my-3 bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
           {/* Top row: labels + icon buttons */}
@@ -3564,7 +3564,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Right drag handle ── */}
       <div
         className="relative flex-none"
-        style={{ width: 8, cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
+        style={{ width: rightCollapsed ? 0 : 12, cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
       />
 
@@ -3573,7 +3573,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200 bg-slate-100"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <div className="mx-3 my-3 bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 space-y-5">
 
           {/* ── Hot Leads Tray ── */}
