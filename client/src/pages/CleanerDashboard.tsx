@@ -414,6 +414,7 @@ type JobRow = {
     manualAdjustment: string | null;
     manualAdjustmentNote: string | null;
     recleanPenalty: string | null;
+    googleReviewBonus: string | null;
     customerNotes: string | null;
     staffNotes: string | null;
     checklistItems: Array<{ text: string; checked: boolean }> | null;
@@ -454,6 +455,10 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
     onSuccess: () => onRefetch(),
     onError: (err) => toast.error("Failed", { description: err.message }),
   });
+  const setGoogleReview = trpc.quality.setGoogleReviewBonus.useMutation({
+    onSuccess: () => onRefetch(),
+    onError: (err) => toast.error("Failed", { description: err.message }),
+  });
   const setAdj = trpc.quality.setManualAdjustment.useMutation({
     onSuccess: () => { setEditingManual(false); onRefetch(); },
     onError: (err) => toast.error("Failed", { description: err.message }),
@@ -477,6 +482,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
   const appliedIds = new Set((rulesQuery.data?.applied ?? []).map((r) => r.customPayRuleId));
   const allActive = rulesQuery.data?.allActive ?? [];
   const hasReclean = ca.recleanPenalty != null;
+  const hasGoogleReview = ca.googleReviewBonus != null;
 
   // Compute net pay from all line items
   const base = parseFloat(ca.basePay ?? "0");
@@ -486,6 +492,7 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
   const photoBonusAmt = payRules?.photoBonus ?? 5;
   const noPhotoPenaltyAmt = payRules?.noPhotoPenalty ?? 10;
   const recleanPenaltyAmt = payRules?.recleanPenalty ?? 30;
+  const googleReviewBonusAmt = payRules?.googleReviewBonus ?? 50;
   // Photo adj is now always in DB (applied on upload). Fall back to computed value for safety.
   const photoAdj = ca.photoAdjustment != null
     ? parseFloat(ca.photoAdjustment)
@@ -493,13 +500,14 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
   const streak = parseFloat(ca.streakBonus ?? "0");
   const manual = parseFloat(ca.manualAdjustment ?? "0");
   const reclean = hasReclean ? parseFloat(ca.recleanPenalty ?? "0") : 0;
+  const googleReview = hasGoogleReview ? parseFloat(ca.googleReviewBonus ?? "0") : 0;
   const customTotal = (ca.appliedCustomRules ?? []).reduce(
     (s, r) => s + (r.appliedType === "bonus" ? 1 : -1) * parseFloat(r.appliedAmount),
     0
   );
-  const netPay = base + ratingAdj + photoAdj + streak + manual + reclean + customTotal;
+  const netPay = base + ratingAdj + photoAdj + streak + manual + reclean + googleReview + customTotal;
 
-  const hasAnyAdjustment = ratingAdj !== 0 || photoAdj !== 0 || streak !== 0 || manual !== 0 || hasReclean || (ca.appliedCustomRules?.length ?? 0) > 0;
+  const hasAnyAdjustment = ratingAdj !== 0 || photoAdj !== 0 || streak !== 0 || manual !== 0 || hasReclean || hasGoogleReview || (ca.appliedCustomRules?.length ?? 0) > 0;
 
   // Helper: a single toggleable/editable row in the breakdown
   function PayRow({
@@ -675,7 +683,16 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
               dimmed={!hasReclean}
               onToggle={() => setReclean.mutate({ cleanerJobId: cleanerJobId!, apply: !hasReclean })}
             />
-
+            {/* Google review bonus — always shown, toggleable */}
+            <PayRow
+              label="Google review bonus"
+              amount={hasGoogleReview ? googleReview : googleReviewBonusAmt}
+              color={hasGoogleReview ? "text-emerald-600" : "text-gray-400"}
+              toggled={hasGoogleReview}
+              pending={setGoogleReview.isPending}
+              dimmed={!hasGoogleReview}
+              onToggle={() => setGoogleReview.mutate({ cleanerJobId: cleanerJobId!, apply: !hasGoogleReview })}
+            />
             {/* Custom rules — each toggleable */}
             {rulesQuery.isLoading && open && (
               <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>

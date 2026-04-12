@@ -1062,6 +1062,7 @@ export const qualityRouter = router({
           manualAdjustment: cj.manualAdjustment ?? null,
           manualAdjustmentNote: cj.manualAdjustmentNote ?? null,
           recleanPenalty: cj.recleanPenalty ?? null,
+          googleReviewBonus: cj.googleReviewBonus ?? null,
           customerNotes: cj.customerNotes ?? null,
           staffNotes: cj.staffNotes ?? null,
           checklistItems: cj.checklistItems
@@ -1780,7 +1781,47 @@ export const qualityRouter = router({
         .where(eq(cleanerJobs.id, input.cleanerJobId));
       return { ok: true, penaltyAmount: penaltyValue };
     }),
-
+  /**
+   * Admin applies or removes the Google review bonus on a cleaner job.
+   * The bonus amount is read from app_settings (pay_googleReviewBonus), defaulting to $50.
+   * Pass apply=true to set the bonus, apply=false to clear it.
+   */
+  setGoogleReviewBonus: agentProcedure
+    .input(
+      z.object({
+        cleanerJobId: z.number(),
+        apply: z.boolean(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      let bonusValue: string | null = null;
+      if (input.apply) {
+        const rules = await getPayRules();
+        bonusValue = `${rules.googleReviewBonus.toFixed(2)}`;
+      }
+      // Fetch current job to recompute finalPay
+      const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      const cj = cjRow[0];
+      if (!cj) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      const base = parseFloat(cj.basePay ?? "0");
+      const ratingAdj = parseFloat(cj.ratingAdjustment ?? "0");
+      const photoAdj = parseFloat(cj.photoAdjustment ?? "0");
+      const streak = parseFloat(cj.streakBonus ?? "0");
+      const manual = parseFloat(cj.manualAdjustment ?? "0");
+      const reclean = parseFloat(cj.recleanPenalty ?? "0");
+      const reviewBonus = bonusValue !== null ? parseFloat(bonusValue) : 0;
+      const newFinalPay = Math.round((base + ratingAdj + photoAdj + streak + manual + reclean + reviewBonus) * 100) / 100;
+      await db
+        .update(cleanerJobs)
+        .set({
+          googleReviewBonus: bonusValue,
+          finalPay: String(newFinalPay),
+        })
+        .where(eq(cleanerJobs.id, input.cleanerJobId));
+      return { ok: true, bonusAmount: bonusValue };
+    }),
   /**
    * Get all active custom pay rules (for the popup selector) plus which ones
    * are already applied to a specific cleaner job.
