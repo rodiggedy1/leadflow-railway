@@ -1156,3 +1156,4 @@
 - [x] UI: build PayrollSummary page — spreadsheet table, totals row, CSV export button
 - [x] UI: add "Payroll Summary" button on Team Pay page to open the new page
 - [x] UI: register /payroll-summary route in App.tsx
+- [x] Fix: "Back to Team Pay" button on PayrollSummary page doesn't navigate — was using /team-pay instead of /admin/team-pay
