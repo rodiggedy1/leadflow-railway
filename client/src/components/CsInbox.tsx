@@ -123,130 +123,6 @@ const queueStyles: Record<Queue, { tone: string; dot: string }> = {
 };
 const QUEUES: Queue[] = ["Priority", "New", "Active", "Resolved", "Teams"];
 
-const conversations: Conversation[] = [
-  {
-    id: 1,
-    name: "Jillian McMahon",
-    initials: "JM",
-    queue: "Priority",
-    service: "3 bedroom clean",
-    location: "Alexandria, VA 22301",
-    amount: "$179.10",
-    lastMessage: "hey is someone coming today?",
-    wait: "12 min",
-    status: "Job starts in 18 min",
-    sentiment: "Concerned",
-    tags: ["Today", "Assigned", "High priority"],
-    phone: "(571) 555-0134",
-    stats: { bookings: 6, rating: "4.9", complaints: 1 },
-    aiInsight:
-      "Likely salvageable if answered immediately. Send running-late update and tracking link, then offer a small make-good only if delay exceeds 20 minutes.",
-    messages: [
-      { sender: "client", text: "Hey is someone coming today?", time: "12:12 PM" },
-      { sender: "system", text: "Your cleaning is scheduled for 12:30 PM today.", time: "12:13 PM" },
-      { sender: "cleaner", text: "Running about 15 min behind from prior job.", time: "12:17 PM" },
-      { sender: "agent", text: "Thanks — I'm checking with the team now.", time: "12:18 PM" },
-    ],
-    quickActions: ["Running late", "Send tracking link", "Offer discount", "Call client", "Escalate"],
-  },
-  {
-    id: 2,
-    name: "Monica Reed",
-    initials: "MR",
-    queue: "New",
-    service: "Move-out cleaning",
-    location: "Washington, DC 20011",
-    amount: "$320.00",
-    lastMessage: "can you do tomorrow morning?",
-    wait: "4 min",
-    status: "Ready to book",
-    sentiment: "High intent",
-    tags: ["New lead", "Tomorrow", "Large job"],
-    phone: "(202) 555-0118",
-    stats: { bookings: 0, rating: "—", complaints: 0 },
-    aiInsight:
-      "High-value lead with immediate intent. Push slot urgency and move to phone confirmation quickly.",
-    messages: [
-      { sender: "client", text: "Can you do tomorrow morning?", time: "10:04 AM" },
-      { sender: "system", text: "Lead came in from quote form. 3 bed / 2 bath move-out.", time: "10:04 AM" },
-      { sender: "agent", text: "Yes — we may have either 9 AM or 1 PM. Want me to grab one for you?", time: "10:06 AM" },
-    ],
-    quickActions: ["Offer 9 AM", "Offer 1 PM", "Send price", "Call lead", "Book now"],
-  },
-  {
-    id: 3,
-    name: "Daniel Price",
-    initials: "DP",
-    queue: "New",
-    service: "Recurring clean",
-    location: "Arlington, VA 22201",
-    amount: "$210.00",
-    lastMessage: "let me think about it",
-    wait: "19 hr",
-    status: "Quote sent",
-    sentiment: "Warm",
-    tags: ["Quote out", "Follow-up due"],
-    phone: "(703) 555-0142",
-    stats: { bookings: 1, rating: "5.0", complaints: 0 },
-    aiInsight:
-      "Soft close opportunity. A short nudge with availability pressure is more likely to convert than a long explanation.",
-    messages: [
-      { sender: "client", text: "Let me think about it.", time: "Yesterday 3:44 PM" },
-      { sender: "agent", text: "Totally — for a home that size most jobs land around $210 depending on condition.", time: "Yesterday 3:39 PM" },
-      { sender: "system", text: "Follow-up recommended after 18 hours.", time: "Today 10:00 AM" },
-    ],
-    quickActions: ["Last-minute opening", "Still interested?", "Resend quote", "Call", "Archive"],
-  },
-  {
-    id: 4,
-    name: "Priya Shah",
-    initials: "PS",
-    queue: "Resolved",
-    service: "Standard clean",
-    location: "Bethesda, MD 20814",
-    amount: "$165.00",
-    lastMessage: "looks great thank you",
-    wait: "38 min",
-    status: "Review opportunity",
-    sentiment: "Happy",
-    tags: ["5-star vibe", "Rebook chance"],
-    phone: "(301) 555-0188",
-    stats: { bookings: 3, rating: "5.0", complaints: 0 },
-    aiInsight:
-      "Best moment for review request and recurring-service ask. High probability of successful rebook while satisfaction is fresh.",
-    messages: [
-      { sender: "client", text: "Looks great thank you", time: "11:22 AM" },
-      { sender: "cleaner", text: "Finished up and did a final check with the client.", time: "11:18 AM" },
-      { sender: "system", text: "Post-job automation available: review + rebook.", time: "11:23 AM" },
-    ],
-    quickActions: ["Send review link", "Offer rebook", "Thank client", "Mark complete", "Call"],
-  },
-  {
-    id: 5,
-    name: "Ethan Long",
-    initials: "EL",
-    queue: "Active",
-    service: "Deep clean",
-    location: "Fairfax, VA 22030",
-    amount: "$260.00",
-    lastMessage: "please make sure they do the oven",
-    wait: "7 min",
-    status: "In progress",
-    sentiment: "Specific request",
-    tags: ["In progress", "Special request"],
-    phone: "(703) 555-0107",
-    stats: { bookings: 2, rating: "4.8", complaints: 0 },
-    aiInsight:
-      "Operational update needed, not sales. Confirm the request is logged and reassure before job completion.",
-    messages: [
-      { sender: "client", text: "Please make sure they do the oven.", time: "1:07 PM" },
-      { sender: "agent", text: "Absolutely — I'm noting that for the team right now.", time: "1:08 PM" },
-      { sender: "cleaner", text: "Got it. Adding oven to the checklist.", time: "1:10 PM" },
-    ],
-    quickActions: ["Confirm request", "Message team", "Call cleaner", "Mark issue", "Complete"],
-  },
-];
-
 function bubbleStyles(sender: MsgSender) {
   switch (sender) {
     case "client":
@@ -451,7 +327,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     });
   }, [csData, nameMap]);
 
-  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
+  const displayConversations = liveConversations;
 
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
@@ -1418,6 +1294,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     return `${Math.floor(diff / 3600_000)}h ago`;
   }
 
+  // Early return while csData is in-flight — prevents any selected.X crash
+  if (!csData) {
+    return (
+      <div className="h-full overflow-hidden flex flex-col bg-[#F0F2F5] px-4 md:px-6 pt-4 pb-4 text-slate-900">
+        <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
+          <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_260px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+            {[0,1,2,3].map((i) => (
+              <div key={i} className="rounded-[28px] bg-white/90 animate-pulse h-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
     <div className="h-full overflow-hidden flex flex-col bg-[#F0F2F5] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
@@ -1514,8 +1405,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 <div className="space-y-2">
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
-                    const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
-                    const isSelected = selected.id === conversation.id;
+                    const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected?.id !== (conversation as any).id;
+                    const isSelected = selected?.id === conversation.id;
                     const hasUnanswered = !!(conversation as any).hasUnanswered;
                     const isResolved = !!(conversation as any).csResolvedAt;
 
