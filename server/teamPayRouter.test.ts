@@ -61,3 +61,85 @@ describe("getPayWeekStart", () => {
     expect(result.getDate()).toBe(26);
   });
 });
+
+// ── missedCheckins filter logic ────────────────────────────────────────────
+
+const INACTIVE_BOOKING_STATUSES = ["rescheduled", "cancelled", "canceled", "no_show", "noshow"];
+
+interface JobStub {
+  jobStatus: string | null;
+  jobDate: string;
+  bookingStatus: string | null;
+}
+
+function countMissedCheckins(jobs: JobStub[], today: string): number {
+  return jobs.filter(
+    (j) =>
+      j.jobStatus === null &&
+      j.jobDate < today &&
+      !INACTIVE_BOOKING_STATUSES.includes((j.bookingStatus ?? "").toLowerCase())
+  ).length;
+}
+
+describe("countMissedCheckins", () => {
+  const today = "2026-04-12";
+
+  it("counts a past job with null jobStatus and active bookingStatus as missed", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-10", bookingStatus: "scheduled" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(1);
+  });
+
+  it("does NOT count a rescheduled job as missed", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-11", bookingStatus: "rescheduled" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(0);
+  });
+
+  it("does NOT count a cancelled job as missed", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-11", bookingStatus: "cancelled" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(0);
+  });
+
+  it("does NOT count a canceled (single-l) job as missed", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-11", bookingStatus: "canceled" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(0);
+  });
+
+  it("does NOT count a no_show job as missed", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-11", bookingStatus: "no_show" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(0);
+  });
+
+  it("does NOT count a future job as missed even if jobStatus is null", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-13", bookingStatus: "scheduled" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(0);
+  });
+
+  it("does NOT count a completed job as missed", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: "completed", jobDate: "2026-04-10", bookingStatus: "completed" },
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(0);
+  });
+
+  it("correctly counts mixed batch — only the truly missed job", () => {
+    const jobs: JobStub[] = [
+      { jobStatus: null, jobDate: "2026-04-11", bookingStatus: "rescheduled" }, // excluded
+      { jobStatus: null, jobDate: "2026-04-11", bookingStatus: "rescheduled" }, // excluded
+      { jobStatus: null, jobDate: "2026-04-10", bookingStatus: "scheduled" },   // missed ✓
+      { jobStatus: "completed", jobDate: "2026-04-09", bookingStatus: "completed" }, // excluded
+    ];
+    expect(countMissedCheckins(jobs, today)).toBe(1);
+  });
+});

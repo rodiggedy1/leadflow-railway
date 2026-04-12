@@ -173,8 +173,12 @@ export const teamPayRouter = router({
         ).length;
         const noEtaArrivalCount = teamJobs.filter((j) => j.noEtaArrival === 1).length;
         const complaintCount = teamJobs.filter((j) => j.customerComplaint !== null && j.customerComplaint !== "").length;
+        const INACTIVE_BOOKING_STATUSES = ["rescheduled", "cancelled", "canceled", "no_show", "noshow"];
         const missedCheckins = teamJobs.filter(
-          (j) => j.jobStatus === null && j.jobDate < today
+          (j) =>
+            j.jobStatus === null &&
+            j.jobDate < today &&
+            !INACTIVE_BOOKING_STATUSES.includes((j.bookingStatus ?? "").toLowerCase())
         ).length;
 
         const basePayout = parseFloat(team.payPercent ?? "50");

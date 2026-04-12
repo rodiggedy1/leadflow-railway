@@ -1148,3 +1148,4 @@
 - [x] Team Pay UI: add "Add complaint" manual button on job cards (like reclean toggle)
 - [x] CS Inbox UI: show "Flag as complaint" button on hover for inbound customer messages
 - [x] CS Inbox UI: complaint dialog with job link and optional −$20 charge checkbox
+- [x] Fix: missed check-ins count includes rescheduled/cancelled jobs (jobStatus=null but bookingStatus=rescheduled/cancelled) — exclude non-active bookingStatuses from missedCheckins filter
