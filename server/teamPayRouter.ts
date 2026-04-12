@@ -268,7 +268,7 @@ export const teamPayRouter = router({
           if (photoAdj !== 0) items.push({ label: photoAdj > 0 ? "Photo submitted bonus" : "Photo missing penalty", amount: photoAdj, weekly: photoAdj > 0 ? 1 : -2 });
           if (streakBonus !== 0) items.push({ label: "Streak bonus", amount: streakBonus, weekly: 1 });
           if (manualAdj !== 0) items.push({ label: j.manualAdjustmentNote ?? "Manual adjustment", amount: manualAdj, weekly: 0 });
-          if (reclean !== 0) items.push({ label: "Reclean penalty", amount: reclean, weekly: -5 });
+          // Reclean penalty is surfaced via the interactive toggle below the items list — not as a static item
           if (j.delayMinutes !== null && j.delayMinutes > 0) items.push({ label: `Late check-in (${j.delayMinutes} min)`, amount: 0, weekly: -3 });
 
           // Derive status label
