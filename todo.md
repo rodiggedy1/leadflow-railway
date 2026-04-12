@@ -1135,3 +1135,4 @@
 - [x] Wire googleReviewBonus column: auto-populate when Google Review custom rule is applied/removed
 - [x] Add reclean penalty toggle to Team Pay Job Impact job cards
 - [x] Fix: duplicate reclean penalty in Team Pay Job Impact — removed static reclean item from teamPayRouter items array, toggle is now sole source of truth
+- [x] Fix: reclean toggle fires but job card values (Instant pay impact, Final team pay) don't update — root cause was (1) setRecleanPenalty not updating finalPay in DB, (2) staleTime:60s blocking immediate refetch; fixed both

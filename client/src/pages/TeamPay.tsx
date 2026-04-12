@@ -91,7 +91,7 @@ function cx(...arr: (string | false | null | undefined)[]) {
 // ─── tRPC query hook ──────────────────────────────────────────────────────────
 
 function useTeamPayQuery(weekStart: string) {
-  return trpc.teamPay.getTeams.useQuery({ weekStart }, { staleTime: 60_000 });
+  return trpc.teamPay.getTeams.useQuery({ weekStart });
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────

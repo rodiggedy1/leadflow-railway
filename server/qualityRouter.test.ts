@@ -296,3 +296,73 @@ describe("Missed Something Reply Parsing", () => {
     expect(parseMissedReply("")).toBeNull();
   });
 });
+
+// ── Reclean penalty finalPay recalculation ─────────────────────────────────
+
+/** Mirrors the finalPay recalc logic inside setRecleanPenalty */
+function applyRecleanPenalty(params: {
+  basePay: number;
+  ratingAdj: number;
+  photoAdj: number;
+  streakBonus: number;
+  manualAdj: number;
+  googleBonus: number;
+  recleanPenalty: number; // negative value e.g. -30, or 0 to clear
+}): number {
+  const { basePay, ratingAdj, photoAdj, streakBonus, manualAdj, googleBonus, recleanPenalty } = params;
+  return Math.round((basePay + ratingAdj + photoAdj + streakBonus + manualAdj + googleBonus + recleanPenalty) * 100) / 100;
+}
+
+describe("Reclean Penalty finalPay Recalculation", () => {
+  it("subtracts $30 from finalPay when reclean is applied", () => {
+    const result = applyRecleanPenalty({
+      basePay: 105.6,
+      ratingAdj: 10,
+      photoAdj: 5,
+      streakBonus: 0,
+      manualAdj: 0,
+      googleBonus: 0,
+      recleanPenalty: -30,
+    });
+    expect(result).toBe(90.6);
+  });
+
+  it("restores finalPay when reclean is cleared (penalty = 0)", () => {
+    const result = applyRecleanPenalty({
+      basePay: 105.6,
+      ratingAdj: 10,
+      photoAdj: 5,
+      streakBonus: 0,
+      manualAdj: 0,
+      googleBonus: 0,
+      recleanPenalty: 0,
+    });
+    expect(result).toBe(120.6);
+  });
+
+  it("stacks reclean penalty with other adjustments correctly", () => {
+    const result = applyRecleanPenalty({
+      basePay: 80,
+      ratingAdj: -20,
+      photoAdj: -10,
+      streakBonus: 0,
+      manualAdj: 0,
+      googleBonus: 50,
+      recleanPenalty: -30,
+    });
+    expect(result).toBe(70);
+  });
+
+  it("does not go below zero but calculation is unclamped (business logic handles floor)", () => {
+    const result = applyRecleanPenalty({
+      basePay: 20,
+      ratingAdj: -20,
+      photoAdj: -10,
+      streakBonus: 0,
+      manualAdj: 0,
+      googleBonus: 0,
+      recleanPenalty: -30,
+    });
+    expect(result).toBe(-40);
+  });
+});

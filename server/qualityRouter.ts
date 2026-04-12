@@ -1775,9 +1775,21 @@ export const qualityRouter = router({
         const rules = await getPayRules();
         penaltyValue = `-${rules.recleanPenalty.toFixed(2)}`;
       }
+      // Fetch current job to recompute finalPay including the reclean penalty
+      const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      const cj = cjRow[0];
+      if (!cj) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      const base = parseFloat(cj.basePay ?? "0");
+      const ratingAdj = parseFloat(cj.ratingAdjustment ?? "0");
+      const photoAdj = parseFloat(cj.photoAdjustment ?? "0");
+      const streakB = parseFloat(cj.streakBonus ?? "0");
+      const manualAdj = parseFloat(cj.manualAdjustment ?? "0");
+      const googleBonus = parseFloat(cj.googleReviewBonus ?? "0");
+      const recleanAmt = penaltyValue ? parseFloat(penaltyValue) : 0;
+      const newFinalPay = Math.round((base + ratingAdj + photoAdj + streakB + manualAdj + googleBonus + recleanAmt) * 100) / 100;
       await db
         .update(cleanerJobs)
-        .set({ recleanPenalty: penaltyValue })
+        .set({ recleanPenalty: penaltyValue, finalPay: String(newFinalPay) })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
       return { ok: true, penaltyAmount: penaltyValue };
     }),
