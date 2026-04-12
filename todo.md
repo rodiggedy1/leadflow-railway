@@ -1124,3 +1124,4 @@
 
 - [x] Add Team Pay page UI under Jobs nav — leaderboard, payout breakdown, risk signals, timeline, recovery, job impact tabs (UI-only, mock data)
 - [x] Add CleanerView modal to TeamPay — cleaner-facing performance view per team, triggered by button on each leaderboard card (UI only, mock data)
+- [x] Wire TeamPay to real DB data — teamPayRouter.ts with getTeams procedure, Sun-Sat week filter, week picker UI, all mock data replaced
