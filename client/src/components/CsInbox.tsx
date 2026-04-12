@@ -362,7 +362,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     },
   });
 
-  const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: showResolved || query.trim().length > 0 }, {
+  const { data: csData, isLoading: csDataLoading, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: showResolved || query.trim().length > 0 }, {
     refetchOnWindowFocus: false,
     // Polling fallback: catches any messages missed during SSE reconnect windows
     refetchInterval: 30_000,
@@ -451,7 +451,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     });
   }, [csData, nameMap]);
 
-  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
+  const displayConversations = liveConversations;
 
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
@@ -1512,6 +1512,24 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Client conversation list */}
               <div>
                 <div className="space-y-2">
+                  {csDataLoading && clientConvs.length === 0 && (
+                    <div className="space-y-2">
+                      {[1,2,3].map((i) => (
+                        <div key={i} className="rounded-[20px] border border-slate-100 bg-white p-4 animate-pulse">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-slate-200" />
+                            <div className="flex-1 space-y-2">
+                              <div className="h-3 w-32 rounded bg-slate-200" />
+                              <div className="h-3 w-48 rounded bg-slate-100" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!csDataLoading && clientConvs.length === 0 && (
+                    <div className="py-10 text-center text-sm text-slate-400">No conversations</div>
+                  )}
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
