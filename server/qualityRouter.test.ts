@@ -366,3 +366,47 @@ describe("Reclean Penalty finalPay Recalculation", () => {
     expect(result).toBe(-40);
   });
 });
+
+// ── flagAsComplaint — finalPay recalculation logic ─────────────────────────
+
+/**
+ * Pure function mirroring the flagAsComplaint mutation logic:
+ * deducts $20 from finalPay only if applyCharge=true and no prior charge.
+ */
+function applyComplaintCharge({
+  currentFinalPay,
+  applyCharge,
+  hadCharge,
+}: {
+  currentFinalPay: number;
+  applyCharge: boolean;
+  hadCharge: boolean;
+}): number {
+  let newFinalPay = currentFinalPay;
+  if (applyCharge && !hadCharge) {
+    newFinalPay = Math.round((currentFinalPay - 20) * 100) / 100;
+  }
+  return newFinalPay;
+}
+
+describe("flagAsComplaint — finalPay recalculation", () => {
+  it("deducts $20 when applyCharge=true and no prior charge", () => {
+    expect(applyComplaintCharge({ currentFinalPay: 80, applyCharge: true, hadCharge: false })).toBe(60);
+  });
+
+  it("does NOT deduct again if charge was already applied (idempotent)", () => {
+    expect(applyComplaintCharge({ currentFinalPay: 60, applyCharge: true, hadCharge: true })).toBe(60);
+  });
+
+  it("does NOT deduct when applyCharge=false", () => {
+    expect(applyComplaintCharge({ currentFinalPay: 80, applyCharge: false, hadCharge: false })).toBe(80);
+  });
+
+  it("handles zero finalPay correctly (can go negative)", () => {
+    expect(applyComplaintCharge({ currentFinalPay: 0, applyCharge: true, hadCharge: false })).toBe(-20);
+  });
+
+  it("rounds to 2 decimal places", () => {
+    expect(applyComplaintCharge({ currentFinalPay: 80.005, applyCharge: true, hadCharge: false })).toBe(60.01);
+  });
+});

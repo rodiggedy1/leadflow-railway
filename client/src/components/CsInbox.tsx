@@ -67,6 +67,7 @@ import {
   ChevronDown,
   Calendar,
   CheckCheck,
+  MessageSquareWarning,
 } from "lucide-react";
 import {
   Tooltip,
@@ -247,6 +248,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [sanityApprovedText, setSanityApprovedText] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
+
+  // Flag-as-complaint dialog state
+  const [complaintDialogMsg, setComplaintDialogMsg] = useState<{ text: string; cleanerJobId: number | null } | null>(null);
+  const [complaintApplyCharge, setComplaintApplyCharge] = useState(true);
+  const flagAsComplaintMutation = trpc.quality.flagAsComplaint.useMutation();
 
   // Sync showResolved when filter is driven externally (from sidebar)
   useEffect(() => {
@@ -2348,7 +2354,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                          className={`max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
+                          className={`group max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                         >
                           {(() => {
                             const displayName = message.senderName && message.senderName !== "OpenPhone"
@@ -2395,7 +2401,25 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               ))}
                             </div>
                           )}
-                          <div className="mt-2 text-xs opacity-60">{message.time}</div>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="text-xs opacity-60">{message.time}</div>
+                            {message.sender === "client" && message.text && message.text.trim().length > 0 && (
+                              <button
+                                onClick={() => {
+                                  setComplaintApplyCharge(true);
+                                  setComplaintDialogMsg({
+                                    text: message.text!,
+                                    cleanerJobId: clientProfile?.todayJob?.id ?? null,
+                                  });
+                                }}
+                                className="flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition opacity-0 group-hover:opacity-100"
+                                title="Flag as customer complaint"
+                              >
+                                <MessageSquareWarning className="h-3 w-3" />
+                                Flag complaint
+                              </button>
+                            )}
+                          </div>
                         </motion.div>
                       );
                       return elements;
@@ -3945,6 +3969,98 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       initialView="new"
       initialName={selected?.name ?? ""}
     />
+
+    {/* ─── Flag-as-complaint dialog ─────────────────────── */}
+    {complaintDialogMsg && (
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        onClick={() => setComplaintDialogMsg(null)}
+      >
+        <div
+          className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl mx-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => setComplaintDialogMsg(null)}
+            className="absolute right-4 top-4 rounded-full p-1 hover:bg-slate-100 transition"
+          >
+            <X className="h-4 w-4 text-slate-500" />
+          </button>
+
+          <div className="mb-4 flex items-center gap-2">
+            <MessageSquareWarning className="h-5 w-5 text-rose-600 shrink-0" />
+            <h3 className="text-base font-semibold text-slate-900">Flag as customer complaint</h3>
+          </div>
+
+          {/* Customer name + job context */}
+          <p className="mb-3 text-xs text-slate-500">
+            Customer: <span className="font-medium text-slate-700">{selected?.name ?? "Unknown"}</span>
+            {complaintDialogMsg.cleanerJobId
+              ? ` — linked to today’s job (#${complaintDialogMsg.cleanerJobId})`
+              : " — no job found for today (complaint will be logged without a job link)"}
+          </p>
+
+          {/* Complaint text preview */}
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 leading-5 max-h-32 overflow-y-auto">
+            {complaintDialogMsg.text}
+          </div>
+
+          {/* Apply charge checkbox */}
+          <label className="mb-4 flex items-center gap-2 cursor-pointer select-none">
+            <div
+              onClick={() => setComplaintApplyCharge((v) => !v)}
+              className={`h-5 w-5 rounded border-2 flex items-center justify-center transition shrink-0 cursor-pointer ${
+                complaintApplyCharge
+                  ? "border-rose-600 bg-rose-600"
+                  : "border-slate-300 bg-white hover:border-slate-400"
+              }`}
+            >
+              {complaintApplyCharge && (
+                <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </div>
+            <span className="text-sm text-slate-700">Apply -$20 charge to team pay</span>
+          </label>
+
+          {!complaintDialogMsg.cleanerJobId && (
+            <p className="mb-3 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              No job found for today. You can still log this complaint from Team Pay by selecting the job manually.
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 rounded-2xl"
+              onClick={() => setComplaintDialogMsg(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white"
+              disabled={!complaintDialogMsg.cleanerJobId || flagAsComplaintMutation.isPending}
+              onClick={() => {
+                if (!complaintDialogMsg.cleanerJobId) return;
+                flagAsComplaintMutation.mutate(
+                  {
+                    cleanerJobId: complaintDialogMsg.cleanerJobId,
+                    complaintText: complaintDialogMsg.text,
+                    applyCharge: complaintApplyCharge,
+                  },
+                  { onSuccess: () => setComplaintDialogMsg(null) }
+                );
+              }}
+            >
+              {flagAsComplaintMutation.isPending
+                ? <span className="flex items-center gap-1"><span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" /> Saving...</span>
+                : "Save complaint"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

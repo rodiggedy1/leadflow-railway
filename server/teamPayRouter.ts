@@ -7,7 +7,7 @@
  */
 
 import { z } from "zod";
-import { and, gte, lte, ne, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, ne, isNotNull } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -57,15 +57,19 @@ function computeScore(params: {
   flaggedCount: number;
   lateCount: number;
   badReviewCount: number;
+  noEtaArrivalCount: number;
+  complaintCount: number;
 }): number {
-  const { totalJobs, fiveStarCount, ratedJobs, photoCount, flaggedCount, lateCount, badReviewCount } = params;
+  const { totalJobs, fiveStarCount, ratedJobs, photoCount, flaggedCount, lateCount, badReviewCount, noEtaArrivalCount, complaintCount } = params;
   if (totalJobs === 0) return 100;
 
   let score = 100;
 
   // Deductions
   score -= lateCount * 3;
+  score -= noEtaArrivalCount * 3;  // arrived without sending on-the-way ETA
   score -= badReviewCount * 10;
+  score -= complaintCount * 5;     // customer complaint via SMS or manual
   score -= flaggedCount * 5;
   score -= (totalJobs - photoCount) * 2; // photo misses
 
@@ -167,6 +171,8 @@ export const teamPayRouter = router({
         const lateCount = teamJobs.filter(
           (j) => j.delayMinutes !== null && j.delayMinutes > 0
         ).length;
+        const noEtaArrivalCount = teamJobs.filter((j) => j.noEtaArrival === 1).length;
+        const complaintCount = teamJobs.filter((j) => j.customerComplaint !== null && j.customerComplaint !== "").length;
         const missedCheckins = teamJobs.filter(
           (j) => j.jobStatus === null && j.jobDate < today
         ).length;
@@ -181,6 +187,8 @@ export const teamPayRouter = router({
           flaggedCount,
           lateCount,
           badReviewCount,
+          noEtaArrivalCount,
+          complaintCount,
         });
 
         const nextWeekPayout = computeNextWeekPayout(basePayout, score);
@@ -243,7 +251,9 @@ export const teamPayRouter = router({
         const boosts: Array<{ label: string; value: number; iconKey: string }> = [];
 
         if (lateCount > 0) deductions.push({ label: `${lateCount} late check-in${lateCount > 1 ? "s" : ""}`, value: -(lateCount * 3), iconKey: "Clock3" });
+        if (noEtaArrivalCount > 0) deductions.push({ label: `${noEtaArrivalCount} arrival${noEtaArrivalCount > 1 ? "s" : ""} without ETA`, value: -(noEtaArrivalCount * 3), iconKey: "BellOff" });
         if (badReviewCount > 0) deductions.push({ label: `${badReviewCount} bad review${badReviewCount > 1 ? "s" : ""}`, value: -(badReviewCount * 10), iconKey: "Star" });
+        if (complaintCount > 0) deductions.push({ label: `${complaintCount} customer complaint${complaintCount > 1 ? "s" : ""}`, value: -(complaintCount * 5), iconKey: "MessageSquareWarning" });
         if (flaggedCount > 0) deductions.push({ label: `${flaggedCount} flagged job${flaggedCount > 1 ? "s" : ""}`, value: -(flaggedCount * 5), iconKey: "AlertTriangle" });
         const photoMisses = totalJobs - photoCount;
         if (photoMisses > 0) deductions.push({ label: `${photoMisses} photo miss${photoMisses > 1 ? "es" : ""}`, value: -(photoMisses * 2), iconKey: "Camera" });
@@ -270,6 +280,11 @@ export const teamPayRouter = router({
           if (manualAdj !== 0) items.push({ label: j.manualAdjustmentNote ?? "Manual adjustment", amount: manualAdj, weekly: 0 });
           // Reclean penalty is surfaced via the interactive toggle below the items list — not as a static item
           if (j.delayMinutes !== null && j.delayMinutes > 0) items.push({ label: `Late check-in (${j.delayMinutes} min)`, amount: 0, weekly: -3 });
+          if (j.noEtaArrival === 1) items.push({ label: "Arrived without ETA notification", amount: 0, weekly: -3 });
+          if (j.customerComplaint) {
+            const chargeAmt = j.complaintChargeApplied === 1 ? -20 : 0;
+            items.push({ label: "Customer complaint", amount: chargeAmt, weekly: -5 });
+          }
 
           // Derive status label
           let jobStatus = "Completed";
@@ -314,6 +329,9 @@ export const teamPayRouter = router({
             customerRating: j.customerRating,
             delayMinutes: j.delayMinutes,
             flagged: j.flagged === 1,
+            noEtaArrival: j.noEtaArrival === 1,
+            customerComplaint: j.customerComplaint ?? null,
+            complaintChargeApplied: j.complaintChargeApplied === 1,
             items,
           };
         });
@@ -333,6 +351,8 @@ export const teamPayRouter = router({
           fiveStarRate,
           issues: flaggedCount + badReviewCount,
           lateCheckins: lateCount,
+          noEtaArrivals: noEtaArrivalCount,
+          complaints: complaintCount,
           missedCheckins,
           badReviews: badReviewCount,
           photoMisses: totalJobs - photoCount,
@@ -351,5 +371,51 @@ export const teamPayRouter = router({
       teams.forEach((t, i) => { t.rank = i + 1; });
 
       return { teams, weekStart: input.weekStart, weekEnd };
+    }),
+
+  /**
+   * setComplaint — manually add or clear a customer complaint on a job from Team Pay.
+   * Optionally applies a -$20 charge to finalPay.
+   */
+  setComplaint: agentProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      complaintText: z.string().max(1000).nullable(), // null = clear complaint
+      applyCharge: z.boolean().default(true),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const [job] = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+
+      const clearing = input.complaintText === null || input.complaintText.trim() === "";
+
+      // Recalculate finalPay: add or remove the -$20 complaint charge
+      const currentFinalPay = parseFloat(job.finalPay ?? job.basePay ?? "0");
+      const hadCharge = job.complaintChargeApplied === 1;
+      let newFinalPay = currentFinalPay;
+
+      if (clearing) {
+        // Remove charge if it was applied
+        if (hadCharge) newFinalPay = Math.round((currentFinalPay + 20) * 100) / 100;
+      } else if (input.applyCharge && !hadCharge) {
+        // Apply new -$20 charge
+        newFinalPay = Math.round((currentFinalPay - 20) * 100) / 100;
+      } else if (!input.applyCharge && hadCharge) {
+        // Remove charge (toggled off)
+        newFinalPay = Math.round((currentFinalPay + 20) * 100) / 100;
+      }
+
+      await db.update(cleanerJobs).set({
+        customerComplaint: clearing ? null : input.complaintText!.trim(),
+        complaintChargeApplied: clearing ? 0 : (input.applyCharge ? 1 : 0),
+        flagged: clearing ? job.flagged : 1,
+        finalPay: String(newFinalPay),
+      }).where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      console.log(`[TeamPay] setComplaint cleanerJob=${input.cleanerJobId} clearing=${clearing} charge=${input.applyCharge} newFinalPay=${newFinalPay}`);
+      return { ok: true, newFinalPay };
     }),
 });

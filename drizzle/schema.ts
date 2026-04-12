@@ -1063,6 +1063,12 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   reviewDraftText: text("reviewDraftText"),
   /** Review flow analytics: whether the customer copied the review text */
   reviewCopied: int("reviewCopied").default(0).notNull(),
+  /** 1 if the cleaner tapped "arrived" without first tapping "on the way" — no ETA was sent to the customer */
+  noEtaArrival: int("noEtaArrival").default(0).notNull(),
+  /** Freeform complaint text from a customer (via CS chat SMS or manually entered by ops). Null = no complaint on this job. */
+  customerComplaint: text("customerComplaint"),
+  /** Whether the −$20 complaint charge has been applied to this job's pay (1 = yes) */
+  complaintChargeApplied: int("complaintChargeApplied").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [index("idx_cleaner_jobs_job_date").on(t.jobDate)]);

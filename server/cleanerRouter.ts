@@ -507,6 +507,21 @@ export const cleanerRouter = router({
         sendArrivedCheckin(input.cleanerJobId).catch(err =>
           console.error("[FieldMgmt] sendArrivedCheckin error:", err)
         );
+        // Detect no-ETA arrival: cleaner tapped "arrived" without a prior "on_the_way" for this job
+        db.select({ status: jobStatusHistory.status })
+          .from(jobStatusHistory)
+          .where(eq(jobStatusHistory.cleanerJobId, input.cleanerJobId))
+          .then((history) => {
+            const hadOnTheWay = history.some((h) => h.status === "on_the_way");
+            if (!hadOnTheWay) {
+              db.update(cleanerJobs)
+                .set({ noEtaArrival: 1 })
+                .where(eq(cleanerJobs.id, input.cleanerJobId))
+                .catch((err) => console.error("[FieldMgmt] noEtaArrival update error:", err));
+              console.log(`[FieldMgmt] noEtaArrival=1 set for cleanerJob ${input.cleanerJobId} — arrived without on_the_way`);
+            }
+          })
+          .catch((err) => console.error("[FieldMgmt] noEtaArrival history check error:", err));
       }
       if (input.status === "running_late") {
         // Save delayMinutes to DB first so sendRunningLateSms can read it

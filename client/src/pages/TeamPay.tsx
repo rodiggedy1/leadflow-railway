@@ -3,13 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowUpRight,
+  BellOff,
   Camera,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Clock3,
   Loader2,
+  MessageSquareWarning,
   Phone,
+  Plus,
   ShieldAlert,
   Star,
   Trophy,
@@ -67,6 +71,8 @@ type JobRow = TeamRow['jobs'][number];
 const ICON_MAP: Record<string, React.ElementType> = {
   Clock3,
   AlertTriangle,
+  BellOff,
+  MessageSquareWarning,
   Star,
   Camera,
   ShieldAlert,
@@ -674,6 +680,15 @@ function TeamPayContent() {
   const setRecleanMutation = trpc.quality.setRecleanPenalty.useMutation({
     onSuccess: () => utils.teamPay.getTeams.invalidate(),
   });
+  const setComplaintMutation = trpc.teamPay.setComplaint.useMutation({
+    onSuccess: () => utils.teamPay.getTeams.invalidate(),
+  });
+
+  // Complaint dialog state
+  const [complaintDialogOpen, setComplaintDialogOpen] = useState(false);
+  const [complaintText, setComplaintText] = useState('');
+  const [complaintApplyCharge, setComplaintApplyCharge] = useState(true);
+  const [expandedComplaintJobId, setExpandedComplaintJobId] = useState<string | null>(null);
 
   // When data loads, default-select the first team
   const effectiveSelectedId = selectedId ?? (teams[0]?.id ?? null);
@@ -1361,7 +1376,7 @@ function TeamPayContent() {
                                 ))
                               )}
 
-                              {/* Reclean penalty toggle — ops can flag directly from Team Pay */}
+                              {/* Reclean penalty toggle */}
                               <div className="rounded-3xl border border-slate-200 p-4">
                                 <div className="flex items-center justify-between gap-4">
                                   <div className="flex items-center gap-3">
@@ -1401,6 +1416,156 @@ function TeamPayContent() {
                                   </div>
                                 </div>
                               </div>
+
+                              {/* Customer complaint section */}
+                              <div className="rounded-3xl border border-slate-200 p-4">
+                                {activeJob.customerComplaint ? (
+                                  <div>
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex h-5 w-5 items-center justify-center rounded border-2 border-rose-600 bg-rose-600 shrink-0">
+                                          <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 12 12">
+                                            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                          </svg>
+                                        </div>
+                                        <div>
+                                          <div className="text-sm font-semibold text-slate-900">Customer complaint</div>
+                                          <div className="mt-0.5 text-xs text-slate-500">
+                                            {activeJob.complaintChargeApplied ? 'Applied — -$20 charge included' : 'Logged — no charge applied'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className={cx('text-sm font-semibold', activeJob.complaintChargeApplied ? 'text-rose-700' : 'text-slate-400')}>
+                                          {activeJob.complaintChargeApplied ? '-$20.00' : '$0'}
+                                        </div>
+                                        <button
+                                          onClick={() => setExpandedComplaintJobId(
+                                            expandedComplaintJobId === activeJob.id ? null : activeJob.id
+                                          )}
+                                          className="rounded-full p-1 hover:bg-slate-100 transition"
+                                          aria-label="Toggle complaint text"
+                                        >
+                                          <ChevronDown className={cx('h-4 w-4 text-slate-500 transition-transform', expandedComplaintJobId === activeJob.id ? 'rotate-180' : '')} />
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setComplaintText(activeJob.customerComplaint ?? '');
+                                            setComplaintApplyCharge(activeJob.complaintChargeApplied);
+                                            setComplaintDialogOpen(true);
+                                          }}
+                                          className="rounded-full p-1 hover:bg-slate-100 transition text-xs text-slate-500 hover:text-slate-700"
+                                          aria-label="Edit complaint"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() => setComplaintMutation.mutate({
+                                            cleanerJobId: activeJob.cleanerJobId,
+                                            complaintText: null,
+                                            applyCharge: false,
+                                          })}
+                                          disabled={setComplaintMutation.isPending}
+                                          className="rounded-full p-1 hover:bg-rose-50 transition text-rose-400 hover:text-rose-600"
+                                          aria-label="Remove complaint"
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {expandedComplaintJobId === activeJob.id && (
+                                      <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 px-3 py-2 text-sm text-rose-900 leading-5">
+                                        {activeJob.customerComplaint}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex h-5 w-5 items-center justify-center rounded border-2 border-slate-300 bg-white shrink-0" />
+                                      <div>
+                                        <div className="text-sm font-semibold text-slate-400">Customer complaint</div>
+                                        <div className="mt-0.5 text-xs text-slate-400">Not logged</div>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        setComplaintText('');
+                                        setComplaintApplyCharge(true);
+                                        setComplaintDialogOpen(true);
+                                      }}
+                                      className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition shadow-sm"
+                                    >
+                                      <Plus className="h-3 w-3" /> Add complaint
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Complaint dialog */}
+                              {complaintDialogOpen && activeJob && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setComplaintDialogOpen(false)}>
+                                  <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                                    <button onClick={() => setComplaintDialogOpen(false)} className="absolute right-4 top-4 rounded-full p-1 hover:bg-slate-100">
+                                      <X className="h-4 w-4 text-slate-500" />
+                                    </button>
+                                    <div className="mb-4">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <MessageSquareWarning className="h-4 w-4 text-rose-600" />
+                                        <h3 className="text-base font-semibold text-slate-900">Log customer complaint</h3>
+                                      </div>
+                                      <p className="text-xs text-slate-500">For job: {activeJob.customer} — {activeJob.jobDate}</p>
+                                    </div>
+                                    <textarea
+                                      value={complaintText}
+                                      onChange={(e) => setComplaintText(e.target.value)}
+                                      placeholder="Paste or type the customer's complaint..."
+                                      rows={4}
+                                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none resize-none"
+                                    />
+                                    <label className="mt-3 flex items-center gap-2 cursor-pointer select-none">
+                                      <div
+                                        onClick={() => setComplaintApplyCharge((v) => !v)}
+                                        className={cx(
+                                          'h-5 w-5 rounded border-2 flex items-center justify-center transition shrink-0 cursor-pointer',
+                                          complaintApplyCharge ? 'border-rose-600 bg-rose-600' : 'border-slate-300 bg-white hover:border-slate-400'
+                                        )}
+                                      >
+                                        {complaintApplyCharge && (
+                                          <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 12 12">
+                                            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                      <span className="text-sm text-slate-700">Apply -$20 charge to team pay</span>
+                                    </label>
+                                    <div className="mt-4 flex gap-2">
+                                      <Button
+                                        variant="outline"
+                                        className="flex-1 rounded-2xl"
+                                        onClick={() => setComplaintDialogOpen(false)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        className="flex-1 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white"
+                                        disabled={!complaintText.trim() || setComplaintMutation.isPending}
+                                        onClick={() => {
+                                          setComplaintMutation.mutate({
+                                            cleanerJobId: activeJob.cleanerJobId,
+                                            complaintText: complaintText.trim(),
+                                            applyCharge: complaintApplyCharge,
+                                          }, {
+                                            onSuccess: () => setComplaintDialogOpen(false),
+                                          });
+                                        }}
+                                      >
+                                        {setComplaintMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save complaint'}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </CardContent>
                           </Card>
                         </div>

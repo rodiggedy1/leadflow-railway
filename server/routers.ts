@@ -3214,6 +3214,7 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
         const todayET = nowET.toISOString().slice(0, 10);
         const cleanerJobRows = await db
           .select({
+            id: cleanerJobs.id,
             customerName: cleanerJobs.customerName,
             jobAddress: cleanerJobs.jobAddress,
             serviceDateTime: cleanerJobs.serviceDateTime,

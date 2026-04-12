@@ -2001,4 +2001,41 @@ export const qualityRouter = router({
       }).where(eq(cleanerJobs.id, input.cleanerJobId));
       return { ok: true };
     }),
+
+  /**
+   * flagAsComplaint — called from CS Inbox when an agent clicks "Flag as complaint"
+   * on an inbound customer message. Links the complaint text to a specific cleanerJob,
+   * optionally applies a -$20 charge to finalPay, and flags the job.
+   */
+  flagAsComplaint: agentProcedure
+    .input(z.object({
+      cleanerJobId: z.number().int(),
+      complaintText: z.string().min(1).max(2000),
+      applyCharge: z.boolean().default(true),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const [job] = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+
+      const hadCharge = job.complaintChargeApplied === 1;
+      const currentFinalPay = parseFloat(job.finalPay ?? job.basePay ?? "0");
+      let newFinalPay = currentFinalPay;
+
+      if (input.applyCharge && !hadCharge) {
+        newFinalPay = Math.round((currentFinalPay - 20) * 100) / 100;
+      }
+
+      await db.update(cleanerJobs).set({
+        customerComplaint: input.complaintText.trim(),
+        complaintChargeApplied: input.applyCharge ? 1 : 0,
+        flagged: 1,
+        finalPay: String(newFinalPay),
+      }).where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      console.log(`[Quality] flagAsComplaint cleanerJob=${input.cleanerJobId} charge=${input.applyCharge} newFinalPay=${newFinalPay}`);
+      return { ok: true, newFinalPay };
+    }),
 });

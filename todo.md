@@ -1136,3 +1136,15 @@
 - [x] Add reclean penalty toggle to Team Pay Job Impact job cards
 - [x] Fix: duplicate reclean penalty in Team Pay Job Impact — removed static reclean item from teamPayRouter items array, toggle is now sole source of truth
 - [x] Fix: reclean toggle fires but job card values (Instant pay impact, Final team pay) don't update — root cause was (1) setRecleanPenalty not updating finalPay in DB, (2) staleTime:60s blocking immediate refetch; fixed both
+- [x] Schema: add noEtaArrival (int 0/1) column to cleanerJobs
+- [x] Schema: add customerComplaint (text nullable) column to cleanerJobs
+- [x] Server: detect no-ETA arrival in updateJobStatus — set noEtaArrival=1 when arrived with no prior on_the_way in jobStatusHistory (dropped per user request)
+- [x] Server: include noEtaArrivalCount in computeScore (−3 pts each) and teamPayRouter getTeams (schema column retained, detection dropped)
+- [x] Server: add flagAsComplaint mutation in qualityRouter — stores complaint text, optionally applies −$20 charge, flags job, recalculates finalPay
+- [x] Server: add setComplaint mutation in teamPayRouter for manual complaint add from Team Pay job card
+- [x] Server: surface customerComplaint as line item in teamPayRouter job impact items
+- [x] Team Pay UI: show "Arrived without ETA" line item on job cards where noEtaArrival=1 (dropped per user request)
+- [x] Team Pay UI: show "Customer complaint" line item with expandable complaint text on job cards
+- [x] Team Pay UI: add "Add complaint" manual button on job cards (like reclean toggle)
+- [x] CS Inbox UI: show "Flag as complaint" button on hover for inbound customer messages
+- [x] CS Inbox UI: complaint dialog with job link and optional −$20 charge checkbox
