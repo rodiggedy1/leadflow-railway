@@ -317,9 +317,45 @@ export const cleanerRouter = router({
       }
 
       const now = new Date();
+      const job = jobRows[0]!;
+      const photoAlreadySubmitted = job.photoSubmitted === 1;
+
+      // Apply photo adjustment immediately on completion.
+      // If photo is already uploaded: +photoBonus. If not: -noPhotoPenalty.
+      // This will be corrected if a photo is uploaded later in the same pay period.
+      let payUpdate: Record<string, string | null> = {
+        bookingStatus: "completed",
+        jobStatus: "completed",
+        completedAt: now as any,
+      };
+      if (job.basePay) {
+        try {
+          const { calculatePayAdjustments } = await import("./qualityRouter");
+          const rules = await getPayRules();
+          const adj = calculatePayAdjustments({
+            jobRevenue: parseFloat(job.jobRevenue ?? "0"),
+            payPercent: parseFloat(job.payPercent ?? "0"),
+            customerRating: job.customerRating,
+            missedSomething: job.missedSomething === 1,
+            currentStreakAfterJob: 0,
+            photoSubmitted: photoAlreadySubmitted,
+            rules,
+          });
+          payUpdate.photoAdjustment = String(adj.photoAdjustment);
+          // Only set finalPay here if no rating yet; rating webhook will overwrite with full calc
+          if (job.customerRating === null) {
+            payUpdate.finalPay = String(
+              Math.round((parseFloat(job.basePay) + adj.photoAdjustment) * 100) / 100
+            );
+          }
+        } catch (err) {
+          console.error("[CleanerRouter] Pay calculation on markComplete failed:", err);
+        }
+      }
+
       await db
         .update(cleanerJobs)
-        .set({ bookingStatus: "completed", jobStatus: "completed", completedAt: now })
+        .set(payUpdate as any)
         .where(eq(cleanerJobs.id, input.cleanerJobId));
 
       // ── Field Management: Completion Flow ───────────────────────────────────────
