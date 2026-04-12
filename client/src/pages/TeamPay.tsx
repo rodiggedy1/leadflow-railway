@@ -1159,8 +1159,7 @@ function TeamPayContent() {
                       </CardContent>
                     </Card>
 
-                    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-                      <Card className="rounded-[32px] border-0 bg-white shadow-sm">
+                    <Card className="rounded-[32px] border-0 bg-white shadow-sm">
                         <CardHeader>
                           <CardTitle className="text-xl">What changed on this job</CardTitle>
                         </CardHeader>
@@ -1202,56 +1201,7 @@ function TeamPayContent() {
                             </div>
                           ))}
                         </CardContent>
-                      </Card>
-
-                      <div className="space-y-6">
-                        <Card className="rounded-[32px] border-0 bg-white shadow-sm">
-                          <CardHeader>
-                            <CardTitle className="text-xl">Protocol status</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            {[
-                              { label: 'Check-in', value: activeJob.checkInStatus },
-                              { label: 'Review outcome', value: activeJob.reviewStatus },
-                              { label: 'Photos / QA', value: activeJob.protocolStatus },
-                            ].map((row) => (
-                              <div
-                                key={row.label}
-                                className="rounded-3xl border border-slate-200 p-4"
-                              >
-                                <div className="text-xs text-slate-500">{row.label}</div>
-                                <div className="mt-1 text-sm font-semibold text-slate-900">
-                                  {row.value}
-                                </div>
-                              </div>
-                            ))}
-                          </CardContent>
-                        </Card>
-
-                        <Card className="rounded-[32px] border-0 bg-slate-900 text-white shadow-sm">
-                          <CardHeader>
-                            <CardTitle className="text-xl">Operator actions</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            <Button className="w-full justify-start rounded-2xl bg-white text-slate-900 hover:bg-slate-100">
-                              Review evidence
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              className="w-full justify-start rounded-2xl bg-white/10 text-white hover:bg-white/15"
-                            >
-                              Override job impact
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              className="w-full justify-start rounded-2xl bg-white/10 text-white hover:bg-white/15"
-                            >
-                              Coach team on this event
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    </div>
+                    </Card>
                   </div>
                 ) : null}
               </SimpleTabsContent>
