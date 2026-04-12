@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -13,6 +13,8 @@ import {
   Phone,
   ChevronRight,
   ShieldAlert,
+  X,
+  Eye,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -364,14 +366,313 @@ function KPI({
   );
 }
 
+// ─── Cleaner View Overlay ─────────────────────────────────────────────────────
+
+function CleanerView({
+  team,
+  onClose,
+}: {
+  team: (typeof teams)[number];
+  onClose: () => void;
+}) {
+  const teamJobs = jobsByTeam[team.id] ?? [];
+  const [selectedJobId, setSelectedJobId] = useState(teamJobs[0]?.id ?? '');
+  const activeJob = useMemo(
+    () => teamJobs.find((j) => j.id === selectedJobId) ?? teamJobs[0] ?? null,
+    [selectedJobId, teamJobs]
+  );
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="cleaner-overlay"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 overflow-y-auto bg-[radial-gradient(circle_at_top,_#f8fafc,_#eef2f7_55%,_#e8edf5)]"
+      >
+        <div className="mx-auto max-w-6xl p-6 md:p-8">
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">
+                Cleaner Performance Page
+              </div>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">
+                Show the consequence right after the job.
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
+                Live score movement, payout breakdown, and next best action.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="rounded-2xl px-5">
+                Share preview
+              </Button>
+              <Button className="rounded-2xl px-5">Send to team</Button>
+              <Button
+                variant="outline"
+                className="rounded-2xl px-4"
+                onClick={onClose}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+            {/* Left: job list */}
+            <Card className="rounded-[32px] border-0 bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-xl">Jobs</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {teamJobs.length === 0 ? (
+                  <p className="text-sm text-slate-500">No jobs this week.</p>
+                ) : (
+                  teamJobs.map((job) => (
+                    <button
+                      key={job.id}
+                      onClick={() => setSelectedJobId(job.id)}
+                      className={cx(
+                        'w-full rounded-3xl border px-4 py-4 text-left transition',
+                        activeJob?.id === job.id
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      )}
+                    >
+                      <div className="text-sm font-semibold">{job.customer}</div>
+                      <div
+                        className={cx(
+                          'mt-1 text-xs',
+                          activeJob?.id === job.id ? 'text-slate-300' : 'text-slate-500'
+                        )}
+                      >
+                        {job.area} • {job.time}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <div
+                          className={cx(
+                            'text-sm font-semibold',
+                            job.weeklyImpact >= 0
+                              ? 'text-emerald-600'
+                              : activeJob?.id === job.id
+                              ? 'text-rose-300'
+                              : 'text-rose-600'
+                          )}
+                        >
+                          {job.weeklyImpact > 0 ? '+' : ''}
+                          {job.weeklyImpact}%
+                        </div>
+                        <div
+                          className={cx(
+                            'text-sm font-semibold',
+                            job.instantImpact >= 0
+                              ? 'text-emerald-600'
+                              : activeJob?.id === job.id
+                              ? 'text-rose-300'
+                              : 'text-rose-600'
+                          )}
+                        >
+                          {job.instantImpact > 0 ? '+' : ''}${job.instantImpact}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Right: detail */}
+            {activeJob ? (
+              <div className="space-y-6">
+                {/* Score hero */}
+                <Card className="rounded-[32px] border-0 bg-slate-950 text-white shadow-sm">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-sm text-slate-400">{team.name}</div>
+                        <h2 className="mt-2 text-3xl font-semibold">Your score just updated</h2>
+                        <p className="mt-2 text-sm text-slate-300">
+                          {activeJob.customer} • {activeJob.service}
+                        </p>
+                      </div>
+                      <Badge className="rounded-full bg-white/10 text-white">Job completed</Badge>
+                    </div>
+                    <div className="mt-6 grid grid-cols-3 gap-3">
+                      <div className="rounded-3xl bg-white/10 p-4">
+                        <div className="text-xs text-slate-400">Score</div>
+                        <div className="mt-2 text-3xl font-semibold">{team.currentScore}%</div>
+                        <div
+                          className={cx(
+                            'mt-2 text-xs font-medium',
+                            activeJob.weeklyImpact >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                          )}
+                        >
+                          {activeJob.weeklyImpact > 0 ? '+' : ''}
+                          {activeJob.weeklyImpact}% from this job
+                        </div>
+                      </div>
+                      <div className="rounded-3xl bg-white/10 p-4">
+                        <div className="text-xs text-slate-400">Base pay</div>
+                        <div className="mt-2 text-3xl font-semibold">${activeJob.baseTeamPay}</div>
+                        <div className="mt-2 text-xs text-slate-400">Before adjustments</div>
+                      </div>
+                      <div className="rounded-3xl bg-white/10 p-4">
+                        <div className="text-xs text-slate-400">Final payout</div>
+                        <div className="mt-2 text-3xl font-semibold">${activeJob.finalTeamPay}</div>
+                        <div
+                          className={cx(
+                            'mt-2 text-xs font-medium',
+                            activeJob.instantImpact >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                          )}
+                        >
+                          {activeJob.instantImpact > 0 ? '+' : ''}${activeJob.instantImpact} total adjustment
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Breakdown + Next best action */}
+                <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+                  <Card className="rounded-[32px] border-0 bg-white shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-xl">Payout breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="rounded-3xl bg-slate-50 p-5">
+                        <div className="flex items-end justify-between">
+                          <div>
+                            <div className="text-sm text-slate-500">Base pay</div>
+                            <div className="mt-1 text-3xl font-semibold text-slate-950">
+                              ${activeJob.baseTeamPay}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-slate-500">Final payout</div>
+                            <div className="mt-1 text-4xl font-semibold tracking-tight text-slate-950">
+                              ${activeJob.finalTeamPay}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm text-slate-600">Net adjustment</div>
+                            <div
+                              className={cx(
+                                'text-sm font-semibold',
+                                activeJob.instantImpact >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                              )}
+                            >
+                              {activeJob.instantImpact > 0 ? '+' : ''}${activeJob.instantImpact}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-6 space-y-3">
+                        {activeJob.items.map((item, i) => (
+                          <div
+                            key={i}
+                            className="rounded-3xl border border-slate-200 p-4 flex items-center justify-between gap-4"
+                          >
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">{item.label}</div>
+                              <div className="text-xs text-slate-500">
+                                {item.amount < 0
+                                  ? 'Reduced payout on this job'
+                                  : 'Increased payout on this job'}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div
+                                className={cx(
+                                  'text-sm font-semibold',
+                                  item.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                                )}
+                              >
+                                {item.amount > 0 ? '+' : ''}${item.amount}
+                              </div>
+                              <div
+                                className={cx(
+                                  'text-xs',
+                                  item.weekly >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                )}
+                              >
+                                {item.weekly > 0 ? '+' : ''}
+                                {item.weekly}% weekly
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="rounded-[32px] border-0 bg-white shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-xl">Next best action</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="text-xs text-slate-500">Recovery plan</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {team.recovery[0]}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 p-4">
+                        <div className="text-xs text-slate-500">Check-in status</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {activeJob.checkInStatus}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 p-4">
+                        <div className="text-xs text-slate-500">Review outcome</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {activeJob.reviewStatus}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 p-4">
+                        <div className="text-xs text-slate-500">Photos / QA</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {activeJob.protocolStatus}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="text-xs text-slate-500">Next week payout pace</div>
+                        <div className="mt-2 text-2xl font-semibold text-slate-950">
+                          {team.nextWeekPayout}%
+                        </div>
+                      </div>
+                      <Button className="w-full rounded-2xl">Open my score plan</Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center rounded-[32px] bg-white/60 p-12 text-slate-400">
+                No jobs recorded for this team yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ─── Team Card ────────────────────────────────────────────────────────────────
+
 function TeamCard({
   team,
   selected,
   onSelect,
+  onCleanerView,
 }: {
   team: (typeof teams)[number];
   selected: boolean;
   onSelect: () => void;
+  onCleanerView: () => void;
 }) {
   const payoutDiff = (team.nextWeekPayout - team.basePayout).toFixed(1);
   return (
@@ -474,9 +775,21 @@ function TeamCard({
           {Number(payoutDiff) >= 0 ? '+' : ''}
           {payoutDiff}% vs base payout
         </div>
-        <ChevronRight
-          className={cx('h-4 w-4', selected ? 'text-slate-300' : 'text-slate-400')}
-        />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onCleanerView();
+          }}
+          className={cx(
+            'flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition',
+            selected
+              ? 'bg-white/10 text-white hover:bg-white/20'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          )}
+        >
+          <Eye className="h-3.5 w-3.5" />
+          Cleaner view
+        </button>
       </div>
     </motion.button>
   );
@@ -580,6 +893,11 @@ function SimpleTabsContent({
 function TeamPayContent() {
   const [selectedId, setSelectedId] = useState(teams[0].id);
   const [selectedJob, setSelectedJob] = useState('j1');
+  const [cleanerViewTeamId, setCleanerViewTeamId] = useState<number | null>(null);
+  const cleanerViewTeam = useMemo(
+    () => (cleanerViewTeamId !== null ? teams.find((t) => t.id === cleanerViewTeamId) ?? null : null),
+    [cleanerViewTeamId]
+  );
 
   const selectedTeam = useMemo(
     () => teams.find((t) => t.id === selectedId) ?? teams[0],
@@ -683,6 +1001,7 @@ function TeamPayContent() {
                     team={team}
                     selected={team.id === selectedId}
                     onSelect={() => setSelectedId(team.id)}
+                    onCleanerView={() => setCleanerViewTeamId(team.id)}
                   />
                 ))}
             </CardContent>
@@ -1209,6 +1528,12 @@ function TeamPayContent() {
           </div>
         </div>
       </div>
+      {cleanerViewTeam && (
+        <CleanerView
+          team={cleanerViewTeam}
+          onClose={() => setCleanerViewTeamId(null)}
+        />
+      )}
     </div>
   );
 }

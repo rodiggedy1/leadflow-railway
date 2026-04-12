@@ -1123,3 +1123,4 @@
 - [ ] Fix: resolution note popup missing when marking an issue as resolved in Command Chat
 
 - [x] Add Team Pay page UI under Jobs nav — leaderboard, payout breakdown, risk signals, timeline, recovery, job impact tabs (UI-only, mock data)
+- [x] Add CleanerView modal to TeamPay — cleaner-facing performance view per team, triggered by button on each leaderboard card (UI only, mock data)
