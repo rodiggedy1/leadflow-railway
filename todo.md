@@ -1132,3 +1132,5 @@
 - [x] Fix: Bronia Yearwood Apr 5 job missing photoAdjustment bonus despite photo uploaded — root cause was $0-revenue guard blocking photo adj calc; removed guard in qualityRouter, cleanerRouter, and backfill script; re-ran backfill (208 jobs updated)
 - [x] Add Google review bonus toggle to job detail pay panel in CleanerDashboard (same pattern as reclean penalty toggle)
 - [x] Remove duplicate Google review bonus hardcoded PayRow — already exists as custom pay rule in the system
+- [x] Wire googleReviewBonus column: auto-populate when Google Review custom rule is applied/removed
+- [x] Add reclean penalty toggle to Team Pay Job Impact job cards

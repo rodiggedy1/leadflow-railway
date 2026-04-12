@@ -308,6 +308,8 @@ export const teamPayRouter = router({
             weeklyImpact,
             baseTeamPay: Math.round(basePay * 100) / 100,
             finalTeamPay: Math.round(finalPay * 100) / 100,
+            cleanerJobId: j.id,
+            hasReclean: reclean !== 0,
             photoSubmitted: j.photoSubmitted === 1,
             customerRating: j.customerRating,
             delayMinutes: j.delayMinutes,

@@ -670,6 +670,11 @@ function TeamPayContent() {
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [cleanerViewTeamId, setCleanerViewTeamId] = useState<number | null>(null);
 
+  const utils = trpc.useUtils();
+  const setRecleanMutation = trpc.quality.setRecleanPenalty.useMutation({
+    onSuccess: () => utils.teamPay.getTeams.invalidate(),
+  });
+
   // When data loads, default-select the first team
   const effectiveSelectedId = selectedId ?? (teams[0]?.id ?? null);
 
@@ -1355,6 +1360,47 @@ function TeamPayContent() {
                                   </div>
                                 ))
                               )}
+
+                              {/* Reclean penalty toggle — ops can flag directly from Team Pay */}
+                              <div className="rounded-3xl border border-slate-200 p-4">
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      onClick={() =>
+                                        setRecleanMutation.mutate({
+                                          cleanerJobId: activeJob.cleanerJobId,
+                                          apply: !activeJob.hasReclean,
+                                        })
+                                      }
+                                      disabled={setRecleanMutation.isPending}
+                                      className={cx(
+                                        'h-5 w-5 rounded border-2 flex items-center justify-center transition shrink-0',
+                                        activeJob.hasReclean
+                                          ? 'border-rose-600 bg-rose-600'
+                                          : 'border-slate-300 bg-white hover:border-slate-400'
+                                      )}
+                                      aria-label="Toggle reclean penalty"
+                                    >
+                                      {activeJob.hasReclean && (
+                                        <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 12 12">
+                                          <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                    <div>
+                                      <div className={cx('text-sm font-semibold', activeJob.hasReclean ? 'text-slate-900' : 'text-slate-400')}>
+                                        Reclean penalty
+                                      </div>
+                                      <div className="mt-0.5 text-xs text-slate-500">
+                                        {activeJob.hasReclean ? 'Applied — job requires reclean' : 'Not applied'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className={cx('text-sm font-semibold', activeJob.hasReclean ? 'text-rose-700' : 'text-slate-300')}>
+                                    -$30.00
+                                  </div>
+                                </div>
+                              </div>
                             </CardContent>
                           </Card>
                         </div>

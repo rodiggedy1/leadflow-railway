@@ -1868,6 +1868,13 @@ export const qualityRouter = router({
         appliedLabel: rule.label,
         appliedType: rule.type,
       });
+      // If this is the Google Review bonus rule, also populate the dedicated column
+      if (rule.label === "Google Review bonus") {
+        await db
+          .update(cleanerJobs)
+          .set({ googleReviewBonus: rule.amount })
+          .where(eq(cleanerJobs.id, input.cleanerJobId));
+      }
       return { ok: true, alreadyApplied: false };
     }),
 
@@ -1879,12 +1886,22 @@ export const qualityRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Check if this is the Google Review bonus rule before deleting
+      const rules = await db.select({ label: customPayRules.label }).from(customPayRules).where(eq(customPayRules.id, input.customPayRuleId)).limit(1);
+      const isGoogleReview = rules[0]?.label === "Google Review bonus";
       await db
         .delete(cleanerJobCustomRules)
         .where(and(
           eq(cleanerJobCustomRules.cleanerJobId, input.cleanerJobId),
           eq(cleanerJobCustomRules.customPayRuleId, input.customPayRuleId),
         ));
+      // Clear the dedicated column if Google Review bonus was removed
+      if (isGoogleReview) {
+        await db
+          .update(cleanerJobs)
+          .set({ googleReviewBonus: null })
+          .where(eq(cleanerJobs.id, input.cleanerJobId));
+      }
       return { ok: true };
     }),
 
