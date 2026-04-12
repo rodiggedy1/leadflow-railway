@@ -683,16 +683,6 @@ function PayBreakdownPanel({ job, onRefetch }: { job: JobRow; onRefetch: () => v
               dimmed={!hasReclean}
               onToggle={() => setReclean.mutate({ cleanerJobId: cleanerJobId!, apply: !hasReclean })}
             />
-            {/* Google review bonus — always shown, toggleable */}
-            <PayRow
-              label="Google review bonus"
-              amount={hasGoogleReview ? googleReview : googleReviewBonusAmt}
-              color={hasGoogleReview ? "text-emerald-600" : "text-gray-400"}
-              toggled={hasGoogleReview}
-              pending={setGoogleReview.isPending}
-              dimmed={!hasGoogleReview}
-              onToggle={() => setGoogleReview.mutate({ cleanerJobId: cleanerJobId!, apply: !hasGoogleReview })}
-            />
             {/* Custom rules — each toggleable */}
             {rulesQuery.isLoading && open && (
               <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
