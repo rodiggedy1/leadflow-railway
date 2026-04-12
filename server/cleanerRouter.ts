@@ -328,29 +328,19 @@ export const cleanerRouter = router({
         jobStatus: "completed",
         completedAt: now as any,
       };
-      if (job.basePay) {
-        try {
-          const { calculatePayAdjustments } = await import("./qualityRouter");
-          const rules = await getPayRules();
-          const adj = calculatePayAdjustments({
-            jobRevenue: parseFloat(job.jobRevenue ?? "0"),
-            payPercent: parseFloat(job.payPercent ?? "0"),
-            customerRating: job.customerRating,
-            missedSomething: job.missedSomething === 1,
-            currentStreakAfterJob: 0,
-            photoSubmitted: photoAlreadySubmitted,
-            rules,
-          });
-          payUpdate.photoAdjustment = String(adj.photoAdjustment);
-          // Only set finalPay here if no rating yet; rating webhook will overwrite with full calc
-          if (job.customerRating === null) {
-            payUpdate.finalPay = String(
-              Math.round((parseFloat(job.basePay) + adj.photoAdjustment) * 100) / 100
-            );
-          }
-        } catch (err) {
-          console.error("[CleanerRouter] Pay calculation on markComplete failed:", err);
+      // Photo adjustment is a flat bonus/penalty — independent of revenue or basePay.
+      // Always apply it on completion so finalPay is accurate even for $0-revenue jobs.
+      try {
+        const rules = await getPayRules();
+        const photoAdj = photoAlreadySubmitted ? rules.photoBonus : -rules.noPhotoPenalty;
+        payUpdate.photoAdjustment = String(photoAdj);
+        // Only set finalPay here if no rating yet; rating webhook will overwrite with full calc
+        if (job.customerRating === null) {
+          const basePay = parseFloat(job.basePay ?? "0");
+          payUpdate.finalPay = String(Math.round((basePay + photoAdj) * 100) / 100);
         }
+      } catch (err) {
+        console.error("[CleanerRouter] Pay calculation on markComplete failed:", err);
       }
 
       await db

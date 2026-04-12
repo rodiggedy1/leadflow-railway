@@ -1218,49 +1218,48 @@ export const qualityRouter = router({
       try {
         const cjRow = await db.select().from(cleanerJobs).where(eq(cleanerJobs.id, input.cleanerJobId)).limit(1);
         const cj = cjRow[0];
-        if (cj && cj.cleanerProfileId) {
-          const profileRow = await db.select().from(cleanerProfiles).where(eq(cleanerProfiles.id, cj.cleanerProfileId)).limit(1);
-          const profile = profileRow[0];
-          if (profile) {
-            const payPct = parseFloat(profile.payPercent ?? "0");
-            const revenue = parseFloat(cj.jobRevenue ?? "0");
-            if (payPct > 0 && revenue > 0) {
-              // Get current streak (don't update it — streak only updates when rated)
-              const streakRow = await db.select().from(cleanerStreaks).where(eq(cleanerStreaks.cleanerProfileId, cj.cleanerProfileId)).limit(1);
-              const currentStreak = streakRow[0]?.currentStreak ?? 0;
-              const rules = await getPayRules();
-              const adj = calculatePayAdjustments({
-                jobRevenue: revenue,
-                payPercent: payPct,
-                customerRating: cj.customerRating,   // may still be null — that's fine
-                missedSomething: cj.missedSomething === 1,
-                currentStreakAfterJob: currentStreak, // don't advance streak yet
-                photoSubmitted: true,                 // just uploaded
-                rules,
-              });
-              await db
-                .update(cleanerJobs)
-                .set({
-                  photoAdjustment: String(adj.photoAdjustment),
-                  // Only update ratingAdjustment/streak/finalPay if we already have a rating
-                  ...(cj.customerRating !== null ? {
+        if (cj) {
+          // Photo bonus (+$5) is a flat amount — independent of revenue or basePay.
+          // Apply it to every completed job where a photo is uploaded, even $0-revenue jobs.
+          const rules = await getPayRules();
+          const photoBonus = rules.photoBonus; // e.g. 5
+          const basePay = parseFloat(cj.basePay ?? "0");
+          const existingRatingAdj = parseFloat(cj.ratingAdjustment ?? "0");
+          const existingStreakBonus = parseFloat(cj.streakBonus ?? "0");
+          const newFinalPay = Math.round((basePay + photoBonus + existingRatingAdj + existingStreakBonus) * 100) / 100;
+          await db
+            .update(cleanerJobs)
+            .set({
+              photoAdjustment: String(photoBonus),
+              // Only overwrite ratingAdjustment/streak/finalPay if we already have a rating
+              ...(cj.customerRating !== null ? (() => {
+                // Full recalc with rating
+                const payPct = parseFloat(cj.payPercent ?? "0");
+                const revenue = parseFloat(cj.jobRevenue ?? "0");
+                if (payPct > 0 && revenue > 0) {
+                  const adj = calculatePayAdjustments({
+                    jobRevenue: revenue,
+                    payPercent: payPct,
+                    customerRating: cj.customerRating,
+                    missedSomething: cj.missedSomething === 1,
+                    currentStreakAfterJob: existingStreakBonus > 0 ? 1 : 0,
+                    photoSubmitted: true,
+                    rules,
+                  });
+                  return {
                     ratingAdjustment: String(adj.ratingAdjustment),
                     streakBonus: String(adj.streakBonus),
                     finalPay: String(adj.finalPay),
-                  } : {
-                    // No rating yet — update finalPay with photo adj only
-                    finalPay: String(Math.round((
-                      parseFloat(cj.basePay ?? "0") +
-                      adj.photoAdjustment +
-                      parseFloat(cj.ratingAdjustment ?? "0") +
-                      parseFloat(cj.streakBonus ?? "0")
-                    ) * 100) / 100),
-                  }),
-                })
-                .where(eq(cleanerJobs.id, input.cleanerJobId));
-              console.log(`[Quality] Photo uploaded — photoAdjustment=${adj.photoAdjustment} saved for cleanerJob ${input.cleanerJobId}`);
-            }
-          }
+                  };
+                }
+                return { finalPay: String(newFinalPay) };
+              })() : {
+                // No rating yet — finalPay = basePay + photoBonus + any existing adjustments
+                finalPay: String(newFinalPay),
+              }),
+            })
+            .where(eq(cleanerJobs.id, input.cleanerJobId));
+          console.log(`[Quality] Photo uploaded — photoAdjustment=+${photoBonus} saved for cleanerJob ${input.cleanerJobId}`);
         }
       } catch (err) {
         console.error(`[Quality] Photo pay recalculation failed for cleanerJob ${input.cleanerJobId}:`, err);

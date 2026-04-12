@@ -1129,3 +1129,4 @@
 - [x] Fix photo penalty: apply immediately on job completion (not just on rating), remove if photo uploaded in same pay period
 - [x] Set finalPay=$0 + manualAdjustmentNote for no-show/cancelled jobs (rescheduled excluded per ops decision)
 - [x] Auto-recalculate finalPay on photo upload in cleanerRouter (already handled in qualityRouter photo upload handler)
+- [x] Fix: Bronia Yearwood Apr 5 job missing photoAdjustment bonus despite photo uploaded — root cause was $0-revenue guard blocking photo adj calc; removed guard in qualityRouter, cleanerRouter, and backfill script; re-ran backfill (208 jobs updated)
