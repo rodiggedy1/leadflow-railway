@@ -1151,3 +1151,4 @@
 - [x] Fix: missed check-ins count includes rescheduled/cancelled jobs (jobStatus=null but bookingStatus=rescheduled/cancelled) — exclude non-active bookingStatuses from missedCheckins filter
 - [x] Team Pay: show total finalPay for the period on the team summary card
 - [x] Team Pay: show total finalPay for the period on the cleaner breakdown panel (inside team view)
+- [x] Cleaner view: show finalTeamPay on each job card in the job list

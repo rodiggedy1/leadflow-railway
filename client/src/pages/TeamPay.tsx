@@ -295,6 +295,12 @@ function CleanerView({
                           {job.instantImpact > 0 ? '+' : ''}${job.instantImpact}
                         </div>
                       </div>
+                      <div className={cx('mt-2 flex items-center justify-between border-t pt-2', activeJob?.id === job.id ? 'border-white/10' : 'border-slate-100')}>
+                        <div className={cx('text-[11px]', activeJob?.id === job.id ? 'text-slate-400' : 'text-slate-500')}>Final pay</div>
+                        <div className={cx('text-sm font-semibold', activeJob?.id === job.id ? 'text-white' : 'text-slate-900')}>
+                          ${(job.finalTeamPay ?? job.baseTeamPay ?? 0).toFixed(2)}
+                        </div>
+                      </div>
                     </button>
                   ))
                 )}
