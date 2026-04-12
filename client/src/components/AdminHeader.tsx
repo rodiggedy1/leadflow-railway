@@ -259,7 +259,8 @@ export type AdminTab =
   | "field-management"
   | "reactivation"
   | "review-tracker"
-  | "hiring";
+  | "hiring"
+  | "team-pay";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -341,11 +342,13 @@ const NAV_ENTRIES: NavEntry[] = [
     tabId: "field-management",
   },
   {
-    id: "quality",
+    id: "jobs-group",
     label: "Jobs",
     icon: <ClipboardCheck className="w-3.5 h-3.5" />,
-    href: "/admin/quality",
-    tabId: "quality",
+    children: [
+      { id: "quality",   label: "Jobs",     href: "/admin/quality",    icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+      { id: "team-pay",  label: "Team Pay", href: "/admin/team-pay",   icon: <Trophy className="w-3.5 h-3.5" /> },
+    ],
   },
   {
     id: "tracker-flow",

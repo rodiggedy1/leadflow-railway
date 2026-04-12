@@ -37,6 +37,7 @@ const HiringPipeline = lazy(() => import("./pages/HiringPipeline"));
 const Apply = lazy(() => import("./pages/Apply"));
 const AIInterview = lazy(() => import("./pages/AIInterview"));
 const HiringStatus = lazy(() => import("./pages/HiringStatus"));
+const TeamPay = lazy(() => import("./pages/TeamPay"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -93,6 +94,7 @@ function Router() {
         <Route path={"/apply"} component={Apply} />
         <Route path={"/interview/:candidateId"} component={AIInterview} />
         <Route path={"/hiring-status/:token"} component={HiringStatus} />
+        <Route path={"/admin/team-pay"} component={TeamPay} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

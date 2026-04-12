@@ -1988,6 +1988,7 @@ export default function AgentDashboard() {
             "tracker-flow":      "/admin/tracker-flow",
             "settings":          "/admin/settings",
             "hiring":            "/admin/hiring",
+            "team-pay":          "/admin/team-pay",
           };
           const permittedPages = ADMIN_PAGES.filter(p => (agentMe.pagePermissions as string[]).includes(p.id));
           return (

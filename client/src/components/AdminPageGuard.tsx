@@ -34,6 +34,7 @@ const PAGE_URLS: Record<string, string> = {
   "quality":           "/admin/quality",
   "tracker-flow":      "/admin/tracker-flow",
   "settings":          "/admin/settings",
+  "team-pay":          "/admin/team-pay",
 };
 
 interface AdminPageGuardProps {

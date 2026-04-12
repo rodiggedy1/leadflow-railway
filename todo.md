@@ -1121,3 +1121,5 @@
 - [x] Fix: resolving alert-type issues (Conrad Hipkins-jones) doesn't persist — comes back after refresh
 - [x] Fix: creating issue from comment should include the comment text in the issue
 - [ ] Fix: resolution note popup missing when marking an issue as resolved in Command Chat
+
+- [x] Add Team Pay page UI under Jobs nav — leaderboard, payout breakdown, risk signals, timeline, recovery, job impact tabs (UI-only, mock data)

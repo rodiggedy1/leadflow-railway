@@ -28,6 +28,7 @@ export const ADMIN_PAGES = [
   { id: "tracker-flow",      label: "Journey",       group: "Operations" },
   { id: "settings",          label: "Settings",      group: "Admin" },
   { id: "hiring",            label: "Hiring",        group: "Operations" },
+  { id: "team-pay",           label: "Team Pay",      group: "Operations" },
 ] as const;
 
 export type AdminPageId = typeof ADMIN_PAGES[number]["id"];
