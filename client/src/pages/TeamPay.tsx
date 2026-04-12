@@ -234,7 +234,15 @@ function CleanerView({
             {/* Left: job list */}
             <Card className="rounded-[32px] border-0 bg-white shadow-sm">
               <CardHeader>
-                <CardTitle className="text-xl">Jobs</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">Jobs</CardTitle>
+                  <div className="text-right">
+                    <div className="text-[11px] text-slate-500">Total pay this period</div>
+                    <div className="mt-0.5 text-lg font-semibold text-emerald-700">
+                      ${teamJobs.reduce((s, j) => s + (j.finalTeamPay ?? j.baseTeamPay ?? 0), 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {teamJobs.length === 0 ? (
@@ -573,6 +581,14 @@ function TeamCard({
           >
             {team.issues}
           </div>
+        </div>
+      </div>
+
+      {/* Total period pay */}
+      <div className={cx('mt-3 rounded-2xl p-3 flex items-center justify-between', selected ? 'bg-white/5' : 'bg-slate-50')}>
+        <div className={cx('text-[11px]', selected ? 'text-slate-400' : 'text-slate-500')}>Total pay this period</div>
+        <div className={cx('text-base font-semibold', selected ? 'text-emerald-300' : 'text-emerald-700')}>
+          ${team.totalFinalPay.toFixed(2)}
         </div>
       </div>
 
