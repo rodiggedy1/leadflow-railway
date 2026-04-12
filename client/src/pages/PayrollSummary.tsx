@@ -218,20 +218,6 @@ const COLUMNS: Array<{
     total: () => null,
   },
   {
-    key: "nextWeekPayout",
-    label: "Next Week %",
-    align: "right",
-    render: (r) => {
-      const diff = Math.round((r.nextWeekPayout - r.payoutPct) * 10) / 10;
-      return (
-        <span className={cx("font-medium", diff > 0 ? "text-emerald-700" : diff < 0 ? "text-rose-700" : "text-slate-500")}>
-          {r.nextWeekPayout}%{diff !== 0 && <span className="ml-1 text-xs">({diff > 0 ? "+" : ""}{diff}%)</span>}
-        </span>
-      );
-    },
-    total: () => null,
-  },
-  {
     key: "finalPay",
     label: "Final Pay",
     align: "right",
