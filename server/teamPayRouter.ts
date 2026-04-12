@@ -378,6 +378,105 @@ export const teamPayRouter = router({
     }),
 
   /**
+   * getPayrollSummary — returns one row per team with all adjustment types summed,
+   * ready for the spreadsheet payroll view.
+   */
+  getPayrollSummary: agentProcedure
+    .input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
+
+      const jobs = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          and(
+            gte(cleanerJobs.jobDate, input.weekStart),
+            lte(cleanerJobs.jobDate, weekEnd),
+            ne(cleanerJobs.bookingStatus, "cancelled"),
+            isNotNull(cleanerJobs.teamName)
+          )
+        )
+        .orderBy(cleanerJobs.jobDate);
+
+      // Group by teamName
+      const byTeam = new Map<string, { teamName: string; payPercent: string | null; jobs: typeof jobs }>();
+      for (const job of jobs) {
+        const key = job.teamName!;
+        if (key === "Unassigned") continue;
+        if (!byTeam.has(key)) byTeam.set(key, { teamName: key, payPercent: job.payPercent ?? null, jobs: [] });
+        byTeam.get(key)!.jobs.push(job);
+      }
+
+      const today = getTodayET();
+
+      const rows = Array.from(byTeam.values()).map((team) => {
+        const tj = team.jobs;
+        const basePayout = parseFloat(team.payPercent ?? "50");
+
+        // Summed monetary adjustments
+        const totalBasePay = tj.reduce((s, j) => s + parseFloat(j.basePay ?? "0"), 0);
+        const totalFinalPay = tj.reduce((s, j) => s + parseFloat(j.finalPay ?? j.basePay ?? "0"), 0);
+        const totalRatingAdj = tj.reduce((s, j) => s + parseFloat(j.ratingAdjustment ?? "0"), 0);
+        const totalPhotoAdj = tj.reduce((s, j) => s + parseFloat(j.photoAdjustment ?? "0"), 0);
+        const totalStreakBonus = tj.reduce((s, j) => s + parseFloat(j.streakBonus ?? "0"), 0);
+        const totalManualAdj = tj.reduce((s, j) => s + parseFloat(j.manualAdjustment ?? "0"), 0);
+        const totalReclean = tj.reduce((s, j) => s + parseFloat(j.recleanPenalty ?? "0"), 0);
+        const totalComplaintCharge = tj.filter((j) => j.complaintChargeApplied === 1).length * -20;
+        // Google review bonus: tracked via manualAdjustment with note containing "google"
+        const totalGoogleBonus = tj.reduce((s, j) => {
+          if ((j.manualAdjustmentNote ?? "").toLowerCase().includes("google")) {
+            return s + parseFloat(j.manualAdjustment ?? "0");
+          }
+          return s;
+        }, 0);
+        // Late penalty (score-only, $0 pay impact — shown as count)
+        const lateCount = tj.filter((j) => j.delayMinutes !== null && j.delayMinutes > 0).length;
+
+        // Score
+        const ratedJobs = tj.filter((j) => j.customerRating !== null);
+        const fiveStarCount = ratedJobs.filter((j) => j.customerRating === 5).length;
+        const badReviewCount = ratedJobs.filter((j) => j.customerRating !== null && (j.customerRating <= 3 || j.missedSomething === 1)).length;
+        const photoCount = tj.filter((j) => j.photoSubmitted === 1).length;
+        const flaggedCount = tj.filter((j) => j.flagged === 1).length;
+        const noEtaArrivalCount = tj.filter((j) => j.noEtaArrival === 1).length;
+        const complaintCount = tj.filter((j) => j.customerComplaint !== null && j.customerComplaint !== "").length;
+        const INACTIVE = ["rescheduled", "cancelled", "canceled", "no_show", "noshow"];
+        const missedCheckins = tj.filter((j) => j.jobStatus === null && j.jobDate < today && !INACTIVE.includes((j.bookingStatus ?? "").toLowerCase())).length;
+
+        const score = computeScore({ totalJobs: tj.length, fiveStarCount, ratedJobs: ratedJobs.length, photoCount, flaggedCount, lateCount, badReviewCount, noEtaArrivalCount, complaintCount });
+        const nextWeekPayout = computeNextWeekPayout(basePayout, score);
+
+        return {
+          teamName: team.teamName,
+          jobs: tj.length,
+          basePay: Math.round(totalBasePay * 100) / 100,
+          ratingAdj: Math.round(totalRatingAdj * 100) / 100,
+          photoAdj: Math.round(totalPhotoAdj * 100) / 100,
+          streakBonus: Math.round(totalStreakBonus * 100) / 100,
+          googleBonus: Math.round(totalGoogleBonus * 100) / 100,
+          recleanPenalty: Math.round(totalReclean * 100) / 100,
+          complaintCharge: totalComplaintCharge,
+          manualAdj: Math.round((totalManualAdj - totalGoogleBonus) * 100) / 100, // exclude google (shown separately)
+          lateCount,
+          missedCheckins,
+          score,
+          payoutPct: basePayout,
+          nextWeekPayout,
+          finalPay: Math.round(totalFinalPay * 100) / 100,
+        };
+      });
+
+      // Sort by finalPay descending
+      rows.sort((a, b) => b.finalPay - a.finalPay);
+
+      return { rows, weekStart: input.weekStart, weekEnd };
+    }),
+
+  /**
    * setComplaint — manually add or clear a customer complaint on a job from Team Pay.
    * Optionally applies a -$20 charge to finalPay.
    */

@@ -1152,3 +1152,7 @@
 - [x] Team Pay: show total finalPay for the period on the team summary card
 - [x] Team Pay: show total finalPay for the period on the cleaner breakdown panel (inside team view)
 - [x] Cleaner view: show finalTeamPay on each job card in the job list
+- [x] Server: add getPayrollSummary procedure to teamPayRouter — per-team summed adjustments (reclean, complaints, rating, photo, google review, late, other), score, payout %, base pay, final pay
+- [x] UI: build PayrollSummary page — spreadsheet table, totals row, CSV export button
+- [x] UI: add "Payroll Summary" button on Team Pay page to open the new page
+- [x] UI: register /payroll-summary route in App.tsx

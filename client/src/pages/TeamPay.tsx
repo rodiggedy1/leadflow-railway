@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useContext } from 'react';
+import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
@@ -21,6 +22,7 @@ import {
   Wrench,
   X,
   Eye,
+  LayoutGrid,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -687,6 +689,8 @@ function SimpleTabsContent({
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 function TeamPayContent() {
+  const [, navigate] = useLocation();
+
   // Week navigation state — default to current Sun–Sat pay week
   const [weekStart, setWeekStart] = useState(() => fmtDate(getPayWeekStart(new Date())));
 
@@ -776,6 +780,14 @@ function TeamPayContent() {
             </p>
           </div>
           <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="rounded-2xl px-5 gap-2"
+              onClick={() => navigate("/admin/payroll-summary")}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Payroll Summary
+            </Button>
             <Button className="rounded-2xl px-5">Adjust rules</Button>
             <Button variant="outline" className="rounded-2xl px-5">
               Export weekly report
