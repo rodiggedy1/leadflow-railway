@@ -2111,10 +2111,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          {!selected && (
-            <div className="flex items-center justify-center h-full text-slate-400 text-sm rounded-[28px] border border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] bg-white">Select a conversation</div>
-          )}
-          {selected && (<Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
+          <Card className="rounded-[28px] border-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header: single-row, clean typography hierarchy ── */}
               <div className="border-b border-slate-100 px-5 py-3 md:px-6 bg-white">
@@ -3033,11 +3030,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
             </CardContent>
           </Card>
-          )}
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
           <div className="overflow-y-auto h-full bg-white rounded-[16px] border border-slate-200 shadow-sm [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-            {!selected ? null : selected.queue === "Teams" ? (
+            {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
