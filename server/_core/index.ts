@@ -67,9 +67,6 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Trust proxy so x-forwarded-proto is respected — required for secure cookies through the Manus proxy tunnel
-  app.set("trust proxy", 1);
-
   // CORS — must be before all other middleware so preflight OPTIONS requests are handled
   app.use(corsMiddleware);
   app.options("*", corsMiddleware); // handle preflight for all routes
