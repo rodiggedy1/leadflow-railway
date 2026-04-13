@@ -272,7 +272,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     },
   });
 
-  const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: showResolved || query.trim().length > 0 }, {
+  const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
     refetchOnWindowFocus: false,
     // Polling fallback: catches any messages missed during SSE reconnect windows
     refetchInterval: 30_000,
