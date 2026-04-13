@@ -256,7 +256,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   // Sync showResolved when filter is driven externally (from sidebar)
   useEffect(() => {
-    if (activeFilter === "Resolved") setShowResolved(true);
+    if (activeFilter === "Resolved" || activeFilter === "Teams") setShowResolved(true);
     else setShowResolved(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter]);
