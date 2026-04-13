@@ -2705,13 +2705,23 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Sort: most recent last message first
         augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
-        // Deduplicate by phone number — keep only the most recent session per phone
-        const seenPhones = new Set<string>();
+        // Deduplicate by (phone + conversation-type bucket) — keep only the most recent
+        // session per phone within each bucket. Buckets:
+        //   "team"   → cs-inbound-cleaner (inbound from cleaner/team)
+        //   "client" → cs-inbound (inbound from customer)
+        //   "ops"    → cs_initiated (agent-started outbound thread)
+        // This prevents a newer cs_initiated session from hiding a large cs-inbound-cleaner
+        // history for the same phone number, which was causing incomplete chat history.
+        const seenKeys = new Set<string>();
         const deduped = augmented.filter((s) => {
           const phone = s.leadPhone?.trim();
           if (!phone) return true; // keep sessions without a phone (edge case)
-          if (seenPhones.has(phone)) return false;
-          seenPhones.add(phone);
+          const bucket = s.leadSource === "cs-inbound-cleaner" ? "team"
+            : s.leadSource === "cs-inbound" ? "client"
+            : "ops";
+          const key = `${phone}::${bucket}`;
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
           return true;
         });
 

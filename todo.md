@@ -1157,3 +1157,4 @@
 - [x] UI: add "Payroll Summary" button on Team Pay page to open the new page
 - [x] UI: register /payroll-summary route in App.tsx
 - [x] Fix: "Back to Team Pay" button on PayrollSummary page doesn't navigate — was using /team-pay instead of /admin/team-pay
+- [x] Fix: CS chat not showing full message history — root cause: dedup keyed on phone only, so a newer cs_initiated session (29 msgs) was hiding the cs-inbound-cleaner session (211 msgs) for the same phone. Fixed by keying dedup on phone+bucket (team/client/ops)
