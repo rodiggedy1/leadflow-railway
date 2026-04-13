@@ -9,22 +9,6 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function parseReturnPath(state: string): string {
-  try {
-    const decoded = atob(state);
-    // New format: JSON with { redirectUri, returnPath }
-    const parsed = JSON.parse(decoded);
-    if (parsed.returnPath && typeof parsed.returnPath === "string") {
-      // Only allow relative paths to prevent open redirect
-      const path = parsed.returnPath;
-      if (path.startsWith("/") && !path.startsWith("//")) return path;
-    }
-  } catch {
-    // Old format: plain base64-encoded redirectUri — fall through to default
-  }
-  return "/admin/command-center";
-}
-
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
@@ -58,11 +42,9 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
-      console.log("[OAuth] Cookie options:", cookieOptions, "protocol:", req.protocol, "x-forwarded-proto:", req.headers["x-forwarded-proto"]);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      const returnPath = parseReturnPath(state);
-      res.redirect(302, returnPath);
+      res.redirect(302, "/");
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });

@@ -68,29 +68,11 @@ export const agentProcedure = t.procedure.use(
 
 /**
  * adminAgentProcedure — validates the agent cookie session and requires isAdmin=true.
- * Also accepts the Manus OAuth owner session (ctx.user) as an admin — so the owner
- * can access admin procedures without needing a separate agent cookie.
+ * Use this for all admin-only procedures instead of protectedProcedure (which requires Manus OAuth).
  */
 export const adminAgentProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-
-    // Accept Manus OAuth owner session as admin
-    if (ctx.user) {
-      return next({
-        ctx: {
-          ...ctx,
-          agent: {
-            agentId: 0,
-            agentName: ctx.user.name ?? "Owner",
-            agentEmail: ctx.user.email ?? "",
-            isAdmin: true,
-          },
-        },
-      });
-    }
-
-    // Fallback: agent cookie session
     const agent = await getAgentFromRequest(ctx.req);
     if (!agent) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Agent login required" });
