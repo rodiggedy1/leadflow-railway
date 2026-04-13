@@ -2708,17 +2708,16 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Deduplicate by (phone + conversation-type bucket) — keep only the most recent
         // session per phone within each bucket. Buckets:
         //   "team"   → cs-inbound-cleaner (inbound from cleaner/team)
-        //   "client" → cs-inbound (inbound from customer)
-        //   "ops"    → cs_initiated (agent-started outbound thread)
-        // This prevents a newer cs_initiated session from hiding a large cs-inbound-cleaner
-        // history for the same phone number, which was causing incomplete chat history.
+        //   "client" → cs-inbound OR cs_initiated (both are client-facing conversations)
+        // Both cs-inbound (customer texted in) and cs_initiated (agent started thread)
+        // are client-facing. Treating them as the same bucket prevents two cards for the
+        // same person when both session types exist for the same phone number.
+        // The most recent session (by lastMsgTs, already sorted desc) wins.
         const seenKeys = new Set<string>();
         const deduped = augmented.filter((s) => {
           const phone = s.leadPhone?.trim();
           if (!phone) return true; // keep sessions without a phone (edge case)
-          const bucket = s.leadSource === "cs-inbound-cleaner" ? "team"
-            : s.leadSource === "cs-inbound" ? "client"
-            : "ops";
+          const bucket = s.leadSource === "cs-inbound-cleaner" ? "team" : "client";
           const key = `${phone}::${bucket}`;
           if (seenKeys.has(key)) return false;
           seenKeys.add(key);
