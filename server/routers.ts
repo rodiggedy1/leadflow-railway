@@ -2705,24 +2705,54 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Sort: most recent last message first
         augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
-        // Deduplicate by (phone + conversation-type bucket) — keep only the most recent
-        // session per phone within each bucket. Buckets:
-        //   "team"   → cs-inbound-cleaner (inbound from cleaner/team)
-        //   "client" → cs-inbound OR cs_initiated (both are client-facing conversations)
-        // Both cs-inbound (customer texted in) and cs_initiated (agent started thread)
-        // are client-facing. Treating them as the same bucket prevents two cards for the
-        // same person when both session types exist for the same phone number.
-        // The most recent session (by lastMsgTs, already sorted desc) wins.
-        const seenKeys = new Set<string>();
-        const deduped = augmented.filter((s) => {
-          const phone = s.leadPhone?.trim();
-          if (!phone) return true; // keep sessions without a phone (edge case)
-          const bucket = s.leadSource === "cs-inbound-cleaner" ? "team" : "client";
-          const key = `${phone}::${bucket}`;
-          if (seenKeys.has(key)) return false;
-          seenKeys.add(key);
-          return true;
+        // One phone = one card. Group all sessions by phone, merge their message
+        // histories in chronological order, and keep the most recent session's metadata.
+        type AugmentedSession = typeof augmented[number];
+        const phoneGroups = new Map<string, AugmentedSession[]>();
+        for (const s of augmented) {
+          const phone = s.leadPhone?.trim() || "__no_phone__";
+          if (!phoneGroups.has(phone)) phoneGroups.set(phone, []);
+          phoneGroups.get(phone)!.push(s);
+        }
+        const deduped = Array.from(phoneGroups.values()).map((group) => {
+          // group is already sorted desc by lastMsgTs — first entry is most recent
+          const primary = group[0];
+          if (group.length === 1) return primary;
+          // Merge all message histories across sessions for this phone
+          type MsgEntry = { role: string; content: string; ts?: number; senderName?: string; opMsgId?: string };
+          const allMsgs: MsgEntry[] = [];
+          for (const s of group) {
+            let hist: MsgEntry[] = [];
+            try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
+            allMsgs.push(...hist);
+          }
+          // Deduplicate by opMsgId then by content+ts proximity, sort chronologically
+          const seenMsgIds = new Set<string>();
+          const merged: MsgEntry[] = [];
+          for (const m of allMsgs) {
+            if (m.opMsgId && seenMsgIds.has(m.opMsgId)) continue;
+            if (m.opMsgId) seenMsgIds.add(m.opMsgId);
+            // Content+ts dedup: skip if identical content within 15s already present
+            const isDup = merged.some(
+              (x) => x.role === m.role && x.content === m.content && Math.abs((x.ts ?? 0) - (m.ts ?? 0)) < 15_000
+            );
+            if (isDup) continue;
+            merged.push(m);
+          }
+          merged.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+          const lastMerged = merged[merged.length - 1];
+          const mergedLastMsgTs = lastMerged?.ts ?? primary.lastMsgTs;
+          const lastRealMerged = [...merged].reverse().find((e) => e.role === "user" || e.role === "assistant");
+          return {
+            ...primary,
+            messageHistory: JSON.stringify(merged),
+            lastMsgTs: mergedLastMsgTs,
+            hasUnanswered: !!lastRealMerged && lastRealMerged.role === "user",
+            lastSenderRole: (lastRealMerged?.role === "user" ? "user" : lastRealMerged?.role === "assistant" ? "assistant" : null) as "user" | "assistant" | null,
+          };
         });
+        // Re-sort after merge (lastMsgTs may have changed)
+        deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
         // Batch-augment with jobCount (VIP = 3+) and hasTodayJob (Today badge)
         const phones = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
