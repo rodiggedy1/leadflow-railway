@@ -274,9 +274,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
     refetchOnWindowFocus: false,
-    // Polling fallback: catches any messages missed during SSE reconnect windows.
-    // 5s matches HubSpot/Intercom/Zendesk pattern — SSE push is primary, polling is safety net.
-    refetchInterval: 5_000,
+    // Polling fallback: catches any messages missed during SSE reconnect windows
+    refetchInterval: 30_000,
   });
   const { data: resolvedCountData } = trpc.opsChat.getCsResolvedCount.useQuery(undefined, {
     refetchOnWindowFocus: false,

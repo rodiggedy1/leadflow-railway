@@ -220,7 +220,6 @@ export default defineConfig({
     host: true,
     hmr: {
       clientPort: 443,
-      port: 3000,
       protocol: "wss",
     },
     allowedHosts: [
