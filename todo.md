@@ -1158,3 +1158,6 @@
 - [x] UI: register /payroll-summary route in App.tsx
 - [x] Fix: "Back to Team Pay" button on PayrollSummary page doesn't navigate — was using /team-pay instead of /admin/team-pay
 - [x] Fix: CS chat not showing full message history — root cause: dedup keyed on phone only, so a newer cs_initiated session (29 msgs) was hiding the cs-inbound-cleaner session (211 msgs) for the same phone. Fixed by keying dedup on phone+bucket (team/client/ops)
+- [x] Fix hiring section: applicant SMS replies going to leads drawer instead of hiring section (root cause: handleCsInboundMessage was creating new cs-inbound sessions for hiring applicants who replied to the CS number; fixed by checking for existing hiring_interview session first and routing there instead)
+- [x] Fix getSessionByPhone in hiringRouter to prefer hiring_interview/hiring sessions over cs-inbound sessions
+- [x] Backfill: dedup duplicate messages in all hiring_interview sessions (12 candidates affected)

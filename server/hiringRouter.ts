@@ -334,13 +334,17 @@ export const hiringRouter = router({
         if (!db) return { sessionId: null, messages: [] };
         const rawPhone = input.phone.replace(/[^\d]/g, "");
         const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
-        const sessions = await db
-          .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })
+        // Prefer hiring_interview or hiring sessions — these are the canonical threads for candidates.
+        // Falling back to the most recent session could pick up a cs-inbound thread created when
+        // the applicant replied to the CS number, causing the hiring drawer to show the wrong session.
+        const allSessions = await db
+          .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory, leadSource: conversationSessions.leadSource })
           .from(conversationSessions)
           .where(eq(conversationSessions.leadPhone, e164Phone))
-          .orderBy(desc(conversationSessions.createdAt))
-          .limit(1);
-        const session = sessions[0];
+          .orderBy(desc(conversationSessions.updatedAt));
+        const session =
+          allSessions.find(s => s.leadSource === "hiring_interview" || s.leadSource === "hiring") ??
+          allSessions[0];
         if (!session) return { sessionId: null, messages: [] };
         let messages: { role: string; content: string; ts: number; senderName?: string }[] = [];
         try { messages = JSON.parse(session.messageHistory ?? "[]"); } catch { messages = []; }

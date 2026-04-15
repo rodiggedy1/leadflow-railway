@@ -21,7 +21,7 @@
  */
 
 import type { Express } from "express";
-import { and, desc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
@@ -1508,23 +1508,65 @@ async function handleCsInboundMessage(msg: any) {
 
     console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}${resolvedName && !existingSession.leadName ? ` (backfilled name: ${resolvedName})` : ""}`);
   } else {
-    // Create new cs-inbound session
-    const history = [{ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
-    const [result] = await db
-      .insert(conversationSessions)
-      .values({
-        leadPhone: fromPhone,
-        leadName: resolvedName,
-        leadEmail: null,
-        leadSource: sessionSource,
-        messageHistory: JSON.stringify(history),
-        stage: "OPEN",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as any);
-
-    const sessionId = (result as any).insertId;
-    console.log(`[CS] Created new ${sessionSource} session ${sessionId} for ${fromPhone}${resolvedName ? ` (${resolvedName})` : ""}`);
+    // Before creating a new cs-inbound session, check if there's an active hiring_interview
+    // or hiring session for this phone. If so, append the inbound message there — this prevents
+    // applicant replies (to the CS number) from being split into a separate cs-inbound thread.
+    const [hiringSession] = await db
+      .select()
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, fromPhone),
+          inArray(conversationSessions.leadSource as any, ["hiring_interview", "hiring"] as any[])
+        )
+      )
+      .orderBy(desc(conversationSessions.updatedAt))
+      .limit(1);
+    if (hiringSession) {
+      // Append to the hiring session so the full conversation stays in one place
+      const [freshHiring] = await db
+        .select({ messageHistory: conversationSessions.messageHistory })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, hiringSession.id))
+        .limit(1);
+      let hiringHistory: Array<{ role: string; content: string; ts?: number; opMsgId?: string }> = [];
+      try { hiringHistory = JSON.parse(freshHiring?.messageHistory ?? "[]"); } catch { hiringHistory = []; }
+      // Dedup by messageId
+      if (messageId && hiringHistory.some((h: any) => h.opMsgId === messageId)) {
+        console.log(`[CS→Hiring] messageId dedup: ${messageId} already in hiring session ${hiringSession.id}. Skipping.`);
+        return;
+      }
+      // Content dedup
+      const recentH = hiringHistory.slice(-3);
+      const isDupH = inboundText.trim() !== "" && recentH.some(m => m.role === "user" && m.content === inboundText && now - (m.ts ?? 0) < 10_000);
+      if (isDupH) {
+        console.log(`[CS→Hiring] Content dedup: identical message already in hiring session ${hiringSession.id}. Skipping.`);
+        return;
+      }
+      hiringHistory.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify(hiringHistory), updatedAt: new Date() } as any)
+        .where(eq(conversationSessions.id, hiringSession.id));
+      console.log(`[CS→Hiring] Routed inbound from ${fromPhone} to hiring session ${hiringSession.id} instead of creating new cs-inbound`);
+    } else {
+      // No hiring session — create new cs-inbound session as before
+      const history = [{ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
+      const [result] = await db
+        .insert(conversationSessions)
+        .values({
+          leadPhone: fromPhone,
+          leadName: resolvedName,
+          leadEmail: null,
+          leadSource: sessionSource,
+          messageHistory: JSON.stringify(history),
+          stage: "OPEN",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
+      const sessionId = (result as any).insertId;
+      console.log(`[CS] Created new ${sessionSource} session ${sessionId} for ${fromPhone}${resolvedName ? ` (${resolvedName})` : ""}`);
+    }
   }
 
   // Broadcast SSE so CS inbox updates instantly
