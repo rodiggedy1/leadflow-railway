@@ -37,7 +37,7 @@ import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
-import { opsReminders, opsChatMessages, agents } from "../drizzle/schema";
+import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
 import { and, eq, isNull, lte, lt, isNotNull } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
@@ -454,7 +454,8 @@ export function startInternalCron(): void {
   });
   // ── Stale ETA check: every 5 minutes ──────────────────────────────────────
   // Posts a stale_eta alert card to CommandChat for on_the_way jobs where ETA has passed.
-  // Only fires once per job (checks if a stale_eta card already exists for that job).
+  // Uses job_alerts table with UNIQUE (cleanerJobId, alertType) + INSERT ON DUPLICATE KEY UPDATE
+  // (no-op) to guarantee exactly-once posting regardless of concurrent cron executions.
   cron.schedule("0 */5 * * * *", async () => {
     try {
       const db = await getDb();
@@ -471,20 +472,18 @@ export function startInternalCron(): void {
         ));
       for (const job of staleJobs) {
         if (!job.etaTimestamp) continue;
-        // Check if we already posted a stale_eta card for this job
-        const existing = await db
-          .select({ id: opsChatMessages.id })
-          .from(opsChatMessages)
-          .where(and(
-            eq(opsChatMessages.cleanerJobId, job.id),
-            eq(opsChatMessages.quickAction, "stale_eta")
-          ))
-          .limit(1);
-        if (existing.length > 0) continue;
-        // Post the alert card
         const cleanerFirst = (job.cleanerName ?? "Team").split(" ")[0];
         const etaStr = new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
-        await db.insert(opsChatMessages).values({
+        // Atomic upsert: INSERT ... ON DUPLICATE KEY UPDATE (no-op).
+        // The UNIQUE constraint on (cleanerJobId, alertType) makes this race-proof —
+        // only the first concurrent insert succeeds; all others are silently ignored.
+        const result = await db.insert(jobAlerts)
+          .values({ cleanerJobId: job.id, alertType: "stale_eta" })
+          .onDuplicateKeyUpdate({ set: { cleanerJobId: job.id } }); // no-op update
+        // affectedRows = 1 → first insert (new alert); 0 → duplicate, already posted
+        if ((result[0] as any).affectedRows !== 1) continue;
+        // First time for this job — post the chat message
+        const [msgResult] = await db.insert(opsChatMessages).values({
           channel: "command",
           from: "System",
           authorName: "System",
@@ -494,6 +493,13 @@ export function startInternalCron(): void {
           cleanerJobId: job.id,
           quickAction: "stale_eta",
         } as any);
+        // Back-fill postedMessageId on the job_alerts row for traceability
+        const insertedMsgId = (msgResult as any).insertId;
+        if (insertedMsgId) {
+          await db.update(jobAlerts)
+            .set({ postedMessageId: insertedMsgId })
+            .where(and(eq(jobAlerts.cleanerJobId, job.id), eq(jobAlerts.alertType, "stale_eta")));
+        }
         const { broadcastOpsUpdate } = await import("./sseBroadcast");
         broadcastOpsUpdate("new_message");
         console.log(`[InternalCron] StaleETA — posted alert for job ${job.id} (${cleanerFirst}, ETA was ${etaStr})`);

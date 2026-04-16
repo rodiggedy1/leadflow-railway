@@ -1162,3 +1162,4 @@
 - [x] Fix getSessionByPhone in hiringRouter to prefer hiring_interview/hiring sessions over cs-inbound sessions
 - [x] Backfill: dedup duplicate messages in all hiring_interview sessions (12 candidates affected)
 - [x] Fix daily bookings revenue badge: filter on bookedAt instead of createdAt in stats procedure
+- [x] Fix duplicate stale ETA alerts: add job_alerts state table with atomic upsert (UNIQUE KEY cleanerJobId+alertType + INSERT ON DUPLICATE KEY UPDATE no-op)

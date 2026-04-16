@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts } from "../drizzle/schema";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -483,6 +483,7 @@ export const cleanerRouter = router({
         const dismissActions = input.status === "arrived"
           ? ["noshow_alert", "stale_eta"]
           : ["noshow_alert"];
+        // Delete ops_chat_messages cards (UI dismissal)
         db.delete(opsChatMessages)
           .where(
             and(
@@ -496,6 +497,17 @@ export const cleanerRouter = router({
             });
           })
           .catch(() => {});
+        // Also clear job_alerts rows so the cron can re-fire if the job is re-dispatched
+        if (input.status === "arrived") {
+          db.delete(jobAlerts)
+            .where(
+              and(
+                eq(jobAlerts.cleanerJobId, input.cleanerJobId),
+                inArray(jobAlerts.alertType, dismissActions)
+              )
+            )
+            .catch(() => {});
+        }
       }
 
       if (input.status === "on_the_way") {

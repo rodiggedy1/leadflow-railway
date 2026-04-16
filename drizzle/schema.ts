@@ -1989,3 +1989,26 @@ export const issueComments = mysqlTable("issue_comments", {
   type: varchar("type", { length: 32 }).notNull().default("text"), // "text" | "system"
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
+
+/**
+ * job_alerts — one row per (cleanerJobId, alertType).
+ * Used as an atomic state store for cron-raised alerts (stale_eta, noshow_alert, etc.)
+ * to prevent duplicate ops_chat_messages from SELECT-then-INSERT race conditions.
+ * The UNIQUE constraint on (cleanerJobId, alertType) makes INSERT ... ON DUPLICATE KEY
+ * UPDATE a no-op, guaranteeing exactly-once message posting regardless of concurrency.
+ */
+export const jobAlerts = mysqlTable("job_alerts", {
+  id: int("id").autoincrement().primaryKey(),
+  cleanerJobId: int("cleanerJobId").notNull(),
+  alertType: varchar("alertType", { length: 50 }).notNull(), // 'stale_eta' | 'noshow_alert'
+  /** FK to ops_chat_messages — set after the chat message is posted */
+  postedMessageId: int("postedMessageId"),
+  /** Set when the alert is cleared (cleaner arrived, issue resolved, etc.) */
+  resolvedAt: timestamp("resolvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  uniqJobAlert: uniqueIndex("uniq_job_alert").on(table.cleanerJobId, table.alertType),
+  idxJobId: index("idx_ja_job").on(table.cleanerJobId),
+}));
+export type JobAlert = typeof jobAlerts.$inferSelect;
+export type InsertJobAlert = typeof jobAlerts.$inferInsert;
