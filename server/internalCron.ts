@@ -38,7 +38,7 @@ import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
 import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
-import { and, eq, isNull, lte, lt, isNotNull } from "drizzle-orm";
+import { and, eq, isNull, lte, lt, gte, isNotNull } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -461,13 +461,18 @@ export function startInternalCron(): void {
       const db = await getDb();
       if (!db) return;
       const now = Date.now();
-      // Find on_the_way jobs with a passed ETA
+      // Today-only guard: only alert for jobs whose ETA is from today (ET).
+      // Prior-day on_the_way jobs are zombie data; the nightly auto-close cron handles them.
+      const todayET = new Date(new Date().toLocaleDateString("en-US", { timeZone: "America/New_York" }));
+      const todayStartMs = todayET.getTime();
+      // Find on_the_way jobs with a passed ETA that started today
       const staleJobs = await db
         .select({ id: cleanerJobs.id, cleanerName: cleanerJobs.cleanerName, customerName: cleanerJobs.customerName, etaTimestamp: cleanerJobs.etaTimestamp })
         .from(cleanerJobs)
         .where(and(
           eq(cleanerJobs.jobStatus, "on_the_way"),
           lte(cleanerJobs.etaTimestamp, now),
+          gte(cleanerJobs.etaTimestamp, todayStartMs),
           isNotNull(cleanerJobs.etaTimestamp)
         ));
       for (const job of staleJobs) {
@@ -506,6 +511,50 @@ export function startInternalCron(): void {
       }
     } catch (err) {
       console.error("[InternalCron] StaleETA check failed:", err);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Nightly zombie-job cleanup: 11:30 PM ET daily ───────────────────────────
+  // Auto-closes any on_the_way jobs from prior days that were never resolved.
+  // These are jobs where the cleaner went on_the_way but never marked arrived —
+  // typically caused by reschedules or cancellations in Launch27 that the cleaner
+  // app never received. Marking them completed prevents stale ETA alerts from
+  // firing the next day and keeps field mgmt queries clean.
+  cron.schedule("0 30 23 * * *", async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      // Midnight ET = start of today
+      const todayET = new Date(new Date().toLocaleDateString("en-US", { timeZone: "America/New_York" }));
+      const todayStartMs = todayET.getTime();
+      // Find all on_the_way jobs whose ETA is before today
+      const zombies = await db
+        .select({ id: cleanerJobs.id })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobStatus, "on_the_way"),
+          lt(cleanerJobs.etaTimestamp, todayStartMs),
+          isNotNull(cleanerJobs.etaTimestamp)
+        ));
+      if (zombies.length === 0) {
+        await recordHeartbeat("zombie-job-cleanup", "no zombies found", false);
+        return;
+      }
+      const zombieIds = zombies.map(z => z.id);
+      // Close them to 'completed' (safe default — job date has passed)
+      await db.execute(
+        `UPDATE cleaner_jobs SET jobStatus = 'completed', updatedAt = NOW() WHERE id IN (${zombieIds.join(",")})`
+      );
+      // Clean up any lingering job_alerts and ops_chat_messages for these jobs
+      for (const id of zombieIds) {
+        await db.delete(jobAlerts).where(and(eq(jobAlerts.cleanerJobId, id), eq(jobAlerts.alertType, "stale_eta")));
+        await db.delete(opsChatMessages).where(and(eq(opsChatMessages.cleanerJobId, id), eq(opsChatMessages.quickAction, "stale_eta")));
+      }
+      const summary = `closed ${zombies.length} zombie jobs: [${zombieIds.join(",")}]`;
+      console.log(`[InternalCron] ZombieJobCleanup — ${summary}`);
+      await recordHeartbeat("zombie-job-cleanup", summary, true);
+    } catch (err) {
+      console.error("[InternalCron] ZombieJobCleanup failed:", err);
     }
   }, { timezone: "America/New_York" });
 

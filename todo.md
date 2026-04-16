@@ -1163,3 +1163,7 @@
 - [x] Backfill: dedup duplicate messages in all hiring_interview sessions (12 candidates affected)
 - [x] Fix daily bookings revenue badge: filter on bookedAt instead of createdAt in stats procedure
 - [x] Fix duplicate stale ETA alerts: add job_alerts state table with atomic upsert (UNIQUE KEY cleanerJobId+alertType + INSERT ON DUPLICATE KEY UPDATE no-op)
+- [x] Fix zombie jobs: close 7 prior-day on_the_way jobs (all confirmed completed in DB)
+- [x] Add today-only guard to stale ETA cron (etaTimestamp >= start of today)
+- [x] Add nightly auto-close cron (11:30 PM ET) for any on_the_way jobs from prior days
+- [x] Clean up stale job_alerts and ops_chat_messages rows for now-closed zombie jobs
