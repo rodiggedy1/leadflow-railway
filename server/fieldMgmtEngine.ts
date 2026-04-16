@@ -284,12 +284,63 @@ export function formatTimeET(d: Date): string {
 }
 
 /**
+ * Atomically claim a step for a given job using INSERT ... ON DUPLICATE KEY UPDATE (no-op).
+ *
+ * Returns true  → this is the FIRST fire; proceed with SMS/action.
+ * Returns false → already fired; skip everything.
+ *
+ * Race-proof: the UNIQUE constraint on (cleanerJobId, step) means only one concurrent
+ * insert can succeed. No SELECT-then-INSERT window. Replaces both stepAlreadyFired and
+ * the initial recordStep call at every call site.
+ */
+export async function tryClaimStep(params: {
+  cleanerJobId: number;
+  step: string;
+  smsSent?: string;
+  recipientPhone?: string;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false; // safe default: don't fire if DB is down
+  try {
+    const result = await db.insert(fieldMgmtLog).values({
+      cleanerJobId: params.cleanerJobId,
+      step: params.step as any,
+      success: 1, // optimistic — update to 0 on failure via updateStepOutcome
+      smsSent: params.smsSent ?? null,
+      recipientPhone: params.recipientPhone ?? null,
+      firedAt: new Date(),
+    }).onDuplicateKeyUpdate({ set: { cleanerJobId: params.cleanerJobId } }); // no-op
+    // affectedRows = 1 → first insert (proceed); 0 → duplicate (skip)
+    return (result[0] as any).affectedRows === 1;
+  } catch (err) {
+    console.error(`[FieldMgmt] tryClaimStep failed for step ${params.step} job ${params.cleanerJobId}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Update the outcome of a previously claimed step (e.g., mark as failed after SMS error).
+ * Only call this after tryClaimStep returned true.
+ */
+export async function updateStepOutcome(cleanerJobId: number, step: string, success: boolean, errorDetail?: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.update(fieldMgmtLog)
+      .set({ success: success ? 1 : 0, errorDetail: errorDetail ?? null })
+      .where(and(eq(fieldMgmtLog.cleanerJobId, cleanerJobId), eq(fieldMgmtLog.step, step as any)));
+  } catch (err) {
+    console.error(`[FieldMgmt] updateStepOutcome failed for step ${step} job ${cleanerJobId}:`, err);
+  }
+}
+
+/**
+ * @deprecated Use tryClaimStep instead. Kept for backward compatibility with fieldMgmtRouter.ts.
  * Check if a step has already been fired for a given cleanerJobId.
- * Returns true if a log row exists (regardless of success/failure).
  */
 export async function stepAlreadyFired(cleanerJobId: number, step: string): Promise<boolean> {
   const db = await getDb();
-  if (!db) return true; // safe default: don't double-send if DB is down
+  if (!db) return true;
   const rows = await db
     .select({ id: fieldMgmtLog.id })
     .from(fieldMgmtLog)
@@ -299,8 +350,8 @@ export async function stepAlreadyFired(cleanerJobId: number, step: string): Prom
 }
 
 /**
+ * @deprecated Use tryClaimStep instead. Kept for backward compatibility with fieldMgmtRouter.ts.
  * Record that a step fired for a given job.
- * Call this BEFORE sending SMS so a DB error never blocks the send.
  */
 export async function recordStep(params: {
   cleanerJobId: number;
@@ -418,9 +469,6 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
     const serviceMs = serviceTime.getTime();
     if (serviceMs < windowStart.getTime() || serviceMs > windowEnd.getTime()) continue;
 
-    // Already sent?
-    if (await stepAlreadyFired(job.id, "pre_job_reminder")) continue;
-
     // Get cleaner phone
     const profileRows = await db
       .select({ phone: cleanerProfiles.phone, email: cleanerProfiles.email })
@@ -449,14 +497,8 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
       magicLink,
     ].join("\n");
 
-    // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
-    await recordStep({
-      cleanerJobId: job.id,
-      step: "pre_job_reminder",
-      success: true, // optimistic — will not update on failure (acceptable: rare edge case)
-      smsSent: msg,
-      recipientPhone: profile.phone,
-    });
+    const claimed = await tryClaimStep({ cleanerJobId: job.id, step: "pre_job_reminder", smsSent: msg, recipientPhone: profile.phone });
+    if (!claimed) continue;
 
     const result = await sendSms({ to: profile.phone, content: msg });
 
@@ -467,6 +509,7 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
       // dedicated cron pass with independent timing. No chain call here.
     } else {
       errors++;
+      await updateStepOutcome(job.id, "pre_job_reminder", false, result.error);
       console.error(`[FieldMgmt] Pre-job reminder FAILED for job ${job.id}:`, result.error);
     }
   }
@@ -485,8 +528,6 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
 
   // RULE: Never send client SMS for unassigned jobs
   if (!await isJobAssigned(cleanerJobId)) return;
-
-  if (await stepAlreadyFired(cleanerJobId, "client_on_the_way")) return;
 
   const db = await getDb();
   if (!db) return;
@@ -532,20 +573,15 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
     `If you have any last-minute notes, reply here.`,
   ].join("\n");
 
-  const result = await sendSms({ to: clientPhone, content: msg });
+  const claimed = await tryClaimStep({ cleanerJobId, step: "client_on_the_way", smsSent: msg, recipientPhone: clientPhone });
+  if (!claimed) return;
 
-  await recordStep({
-    cleanerJobId,
-    step: "client_on_the_way",
-    success: result.success,
-    smsSent: msg,
-    recipientPhone: clientPhone,
-    errorDetail: result.success ? undefined : result.error,
-  });
+  const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Client on-the-way SMS sent to ${clientPhone} for job ${cleanerJobId}`);
   } else {
+    await updateStepOutcome(cleanerJobId, "client_on_the_way", false, result.error);
     console.error(`[FieldMgmt] Client on-the-way SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
@@ -558,8 +594,6 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
  */
 export async function sendArrivedCheckin(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
-
-  if (await stepAlreadyFired(cleanerJobId, "arrived_checkin")) return;
 
   const db = await getDb();
   if (!db) return;
@@ -594,20 +628,15 @@ export async function sendArrivedCheckin(cleanerJobId: number): Promise<void> {
     magicLink,
   ].join("\n");
 
-  const result = await sendSms({ to: profile.phone, content: msg });
+  const claimed = await tryClaimStep({ cleanerJobId, step: "arrived_checkin", smsSent: msg, recipientPhone: profile.phone });
+  if (!claimed) return;
 
-  await recordStep({
-    cleanerJobId,
-    step: "arrived_checkin",
-    success: result.success,
-    smsSent: msg,
-    recipientPhone: profile.phone,
-    errorDetail: result.success ? undefined : result.error,
-  });
+  const result = await sendSms({ to: profile.phone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Arrived check-in sent to ${job.cleanerName} (${profile.phone}) for job ${cleanerJobId}`);
   } else {
+    await updateStepOutcome(cleanerJobId, "arrived_checkin", false, result.error);
     console.error(`[FieldMgmt] Arrived check-in FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
@@ -693,7 +722,7 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
   let errors = 0;
 
   for (const candidate of candidates) {
-    if (await stepAlreadyFired(candidate.cleanerJobId, "mid_job_nudge")) continue;
+    // Claim is done below after building the message (or immediately for no-phone case)
 
     // For fallback candidates, also verify no arrived_checkin log exists at all
     // (not just outside the window) — avoids double-nudging edge cases
@@ -741,15 +770,13 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       .limit(1);
     const profile = profileRows[0];
     if (!profile?.phone) {
-      // No phone on file — log as a skipped (failed) step so the timeline shows it
-      await recordStep({
-        cleanerJobId: job.id,
-        step: "mid_job_nudge",
-        success: false,
-        errorDetail: "No phone number on file for this cleaner",
-      });
-      errors++;
-      console.warn(`[FieldMgmt] Mid-job nudge SKIPPED for job ${job.id} — no phone for cleaner profile ${job.cleanerProfileId}`);
+      // No phone on file — still claim the step so it doesn't re-fire, mark as failed
+      const nophoneClaimed = await tryClaimStep({ cleanerJobId: job.id, step: "mid_job_nudge" });
+      if (nophoneClaimed) {
+        await updateStepOutcome(job.id, "mid_job_nudge", false, "No phone number on file for this cleaner");
+        errors++;
+        console.warn(`[FieldMgmt] Mid-job nudge SKIPPED for job ${job.id} — no phone for cleaner profile ${job.cleanerProfileId}`);
+      }
       continue;
     }
 
@@ -768,22 +795,17 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
       `Reply if any issues.`,
     ].join("\n");
 
-    const result = await sendSms({ to: profile.phone, content: msg });
+    const claimed = await tryClaimStep({ cleanerJobId: job.id, step: "mid_job_nudge", smsSent: msg, recipientPhone: profile.phone });
+    if (!claimed) continue;
 
-    await recordStep({
-      cleanerJobId: job.id,
-      step: "mid_job_nudge",
-      success: result.success,
-      smsSent: msg,
-      recipientPhone: profile.phone,
-      errorDetail: result.success ? undefined : result.error,
-    });
+    const result = await sendSms({ to: profile.phone, content: msg });
 
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Mid-job nudge sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
     } else {
       errors++;
+      await updateStepOutcome(job.id, "mid_job_nudge", false, result.error);
       console.error(`[FieldMgmt] Mid-job nudge FAILED for job ${job.id}:`, result.error);
     }
   }
@@ -799,8 +821,6 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
  */
 export async function sendCompletionFlow(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
-
-  if (await stepAlreadyFired(cleanerJobId, "completion_flow")) return;
 
   const db = await getDb();
   if (!db) return;
@@ -841,20 +861,15 @@ export async function sendCompletionFlow(cleanerJobId: number): Promise<void> {
     magicLink,
   ].join("\n");
 
-  const result = await sendSms({ to: profile.phone, content: msg });
+  const claimed = await tryClaimStep({ cleanerJobId, step: "completion_flow", smsSent: msg, recipientPhone: profile.phone });
+  if (!claimed) return;
 
-  await recordStep({
-    cleanerJobId,
-    step: "completion_flow",
-    success: result.success,
-    smsSent: msg,
-    recipientPhone: profile.phone,
-    errorDetail: result.success ? undefined : result.error,
-  });
+  const result = await sendSms({ to: profile.phone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Completion flow sent to ${job.cleanerName} (${profile.phone}) for job ${cleanerJobId}`);
   } else {
+    await updateStepOutcome(cleanerJobId, "completion_flow", false, result.error);
     console.error(`[FieldMgmt] Completion flow FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
@@ -915,8 +930,7 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
       job.jobStatus === "completed"
     ) continue;
 
-    // Skip if exception SMS already sent
-    if (await stepAlreadyFired(job.id, "exception_sms")) continue;
+    // (dedup guard applied atomically below via tryClaimStep)
 
     const profileRows = await db
       .select({ phone: cleanerProfiles.phone })
@@ -929,14 +943,8 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
     const magicLink = await getOrCreateCleanerMagicLink(job.cleanerProfileId);
     const msg = `Hey — we haven't received your check-in. Is everything okay?\n${magicLink}`;
 
-    // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
-    await recordStep({
-      cleanerJobId: job.id,
-      step: "exception_sms",
-      success: true, // optimistic
-      smsSent: msg,
-      recipientPhone: profile.phone,
-    });
+    const claimed = await tryClaimStep({ cleanerJobId: job.id, step: "exception_sms", smsSent: msg, recipientPhone: profile.phone });
+    if (!claimed) continue;
 
     const result = await sendSms({ to: profile.phone, content: msg });
 
@@ -945,6 +953,7 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
       console.log(`[FieldMgmt] Exception SMS sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
     } else {
       errors++;
+      await updateStepOutcome(job.id, "exception_sms", false, result.error);
       console.error(`[FieldMgmt] Exception SMS FAILED for job ${job.id}:`, result.error);
     }
   }
@@ -1015,9 +1024,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       job.jobStatus === "completed"
     ) continue;
 
-    // Skip if alert already sent — record BEFORE sending to prevent race condition
-    // if two cron ticks overlap (both would pass the check before either writes the log)
-    if (await stepAlreadyFired(job.id, "noshow_alert")) continue;
+    // (dedup guard applied atomically below via tryClaimStep)
 
     const timeStr = formatTimeET(serviceTime);
     const msg = [
@@ -1030,14 +1037,8 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       `No "On the Way" or "Arrived" received. Please call the cleaner and notify the client.`,
     ].join("\n");
 
-    // Write log row FIRST to prevent duplicate sends if two cron ticks overlap
-    await recordStep({
-      cleanerJobId: job.id,
-      step: "noshow_alert",
-      success: true, // optimistic — update on failure below
-      smsSent: msg,
-      recipientPhone: CS_ALERT_NUMBER,
-    });
+    const claimed = await tryClaimStep({ cleanerJobId: job.id, step: "noshow_alert", smsSent: msg, recipientPhone: CS_ALERT_NUMBER });
+    if (!claimed) continue;
 
     const result = await sendSms({ to: CS_ALERT_NUMBER, content: msg });
 
@@ -1114,6 +1115,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
         });
     } else {
       errors++;
+      await updateStepOutcome(job.id, "noshow_alert", false, result.error);
       console.error(`[FieldMgmt] No-show alert FAILED for job ${job.id}:`, result.error);
     }
   }
@@ -1170,8 +1172,6 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
   // RULE: Never send client SMS for unassigned jobs
   if (!await isJobAssigned(cleanerJobId)) return;
 
-  if (await stepAlreadyFired(cleanerJobId, "client_pre_job")) return;
-
   const db = await getDb();
   if (!db) return;
 
@@ -1220,20 +1220,15 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
     `We'll update this in real time if anything changes, including arrival timing.`,
   ].join("\n");
 
-  const result = await sendSms({ to: clientPhone, content: msg });
+  const claimed = await tryClaimStep({ cleanerJobId, step: "client_pre_job", smsSent: msg, recipientPhone: clientPhone });
+  if (!claimed) return;
 
-  await recordStep({
-    cleanerJobId,
-    step: "client_pre_job",
-    success: result.success,
-    smsSent: msg,
-    recipientPhone: clientPhone,
-    errorDetail: result.success ? undefined : result.error,
-  });
+  const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${cleanerJobId}`);
   } else {
+    await updateStepOutcome(cleanerJobId, "client_pre_job", false, result.error);
     console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
@@ -1304,9 +1299,6 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
     const windowEnd = sendAt.getTime() + 5 * 60 * 1000;
     if (now < windowStart || now > windowEnd) continue;
 
-    // Already sent?
-    if (await stepAlreadyFired(job.id, "client_pre_job")) continue;
-
     const clientPhone = job.customerPhone;
     if (!clientPhone) {
       console.warn(`[FieldMgmt] Client pre-job: no customer phone for job ${job.id}`);
@@ -1325,22 +1317,17 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
       `We'll update this in real time if anything changes, including arrival timing.`,
     ].join("\n");
 
-    const result = await sendSms({ to: clientPhone, content: msg });
+    const claimed = await tryClaimStep({ cleanerJobId: job.id, step: "client_pre_job", smsSent: msg, recipientPhone: clientPhone });
+    if (!claimed) continue;
 
-    await recordStep({
-      cleanerJobId: job.id,
-      step: "client_pre_job",
-      success: result.success,
-      smsSent: msg,
-      recipientPhone: clientPhone,
-      errorDetail: result.success ? undefined : result.error,
-    });
+    const result = await sendSms({ to: clientPhone, content: msg });
 
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${job.id}`);
     } else {
       errors++;
+      await updateStepOutcome(job.id, "client_pre_job", false, result.error);
       console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${job.id}:`, result.error);
     }
 
@@ -1363,8 +1350,6 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
 
   // RULE: Never send client SMS for unassigned jobs
   if (!await isJobAssigned(cleanerJobId)) return;
-
-  if (await stepAlreadyFired(cleanerJobId, "client_running_late")) return;
 
   const db = await getDb();
   if (!db) return;
@@ -1402,20 +1387,15 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
     `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
   ].join("\n");
 
-  const result = await sendSms({ to: clientPhone, content: msg });
+  const claimed = await tryClaimStep({ cleanerJobId, step: "client_running_late", smsSent: msg, recipientPhone: clientPhone });
+  if (!claimed) return;
 
-  await recordStep({
-    cleanerJobId,
-    step: "client_running_late",
-    success: result.success,
-    smsSent: msg,
-    recipientPhone: clientPhone,
-    errorDetail: result.success ? undefined : result.error,
-  });
+  const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Running late SMS sent to ${clientPhone} for job ${cleanerJobId}`);
   } else {
+    await updateStepOutcome(cleanerJobId, "client_running_late", false, result.error);
     console.error(`[FieldMgmt] Running late SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
@@ -1525,8 +1505,6 @@ export async function maybeTriggerLateAssignmentSms(
 async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
 
-  if (await stepAlreadyFired(cleanerJobId, "assignment_sms")) return;
-
   const db = await getDb();
   if (!db) return;
 
@@ -1580,19 +1558,15 @@ async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
     magicLink,
   ].join("\n");
 
-  await recordStep({
-    cleanerJobId: job.id,
-    step: "assignment_sms",
-    success: true,
-    smsSent: msg,
-    recipientPhone: profile.phone,
-  });
+  const claimed = await tryClaimStep({ cleanerJobId: job.id, step: "assignment_sms", smsSent: msg, recipientPhone: profile.phone });
+  if (!claimed) return;
 
   const result = await sendSms({ to: profile.phone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Assignment SMS sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
   } else {
+    await updateStepOutcome(job.id, "assignment_sms", false, result.error);
     console.error(`[FieldMgmt] Assignment SMS FAILED for job ${job.id}:`, result.error);
   }
 }

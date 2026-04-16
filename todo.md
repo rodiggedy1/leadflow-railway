@@ -1167,3 +1167,4 @@
 - [x] Add today-only guard to stale ETA cron (etaTimestamp >= start of today)
 - [x] Add nightly auto-close cron (11:30 PM ET) for any on_the_way jobs from prior days
 - [x] Clean up stale job_alerts and ops_chat_messages rows for now-closed zombie jobs
+- [x] Fix field_mgmt_log duplicate-fire race: replace stepAlreadyFired (SELECT→INSERT) with atomic INSERT ON DUPLICATE KEY UPDATE (no-op) in all field mgmt steps
