@@ -1161,3 +1161,4 @@
 - [x] Fix hiring section: applicant SMS replies going to leads drawer instead of hiring section (root cause: handleCsInboundMessage was creating new cs-inbound sessions for hiring applicants who replied to the CS number; fixed by checking for existing hiring_interview session first and routing there instead)
 - [x] Fix getSessionByPhone in hiringRouter to prefer hiring_interview/hiring sessions over cs-inbound sessions
 - [x] Backfill: dedup duplicate messages in all hiring_interview sessions (12 candidates affected)
+- [x] Fix daily bookings revenue badge: filter on bookedAt instead of createdAt in stats procedure

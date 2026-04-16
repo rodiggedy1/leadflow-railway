@@ -316,9 +316,9 @@ export const appRouter = router({
           campaign: emptyBreakdown,
         };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
-
+        const bookedConditions = buildBookedDateConditions(input?.dateFrom, input?.dateTo);
         // ── Visibility filters ────────────────────────────────────────────────────
-        // Organic: null source OR non-campaign sources (form, widget, voice, bark…)
+        // Organic: null source OR non-campaign sources (form, widget, voice, bark…))
         const organicFilter = and(
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'review'))`,
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner'))`,
@@ -367,8 +367,8 @@ export const appRouter = router({
 
         // Helper: run booked-revenue query for a given filter
         async function bookedBreakdown(filter: SQL<unknown> | undefined) {
-          const baseWhere = conditions ? and(conditions, filter, eq(conversationSessions.stage, "BOOKED"))
-                                       : and(filter, eq(conversationSessions.stage, "BOOKED"));
+          const baseWhere = bookedConditions ? and(bookedConditions, filter, eq(conversationSessions.stage, "BOOKED"))
+                                             : and(filter, eq(conversationSessions.stage, "BOOKED"));
           const rows = await db!
             .select({
               leadSource: conversationSessions.leadSource,
@@ -5392,9 +5392,25 @@ function buildDateConditions(dateFrom?: string, dateTo?: string) {
   }
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
-
+/** Same as buildDateConditions but filters on bookedAt instead of createdAt.
+ *  Used for booked-revenue queries so "today" means booked today, not created today.
+ */
+function buildBookedDateConditions(dateFrom?: string, dateTo?: string) {
+  const conditions = [];
+  if (dateFrom) {
+    const midnightUtc = new Date(dateFrom + "T00:00:00.000Z");
+    const from = new Date(midnightUtc.getTime() - estOffsetMs(midnightUtc));
+    conditions.push(gte(conversationSessions.bookedAt, from));
+  }
+  if (dateTo) {
+    const endUtc = new Date(dateTo + "T23:59:59.999Z");
+    const to = new Date(endUtc.getTime() - estOffsetMs(endUtc));
+    conditions.push(lte(conversationSessions.bookedAt, to));
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
 /**
- * Extracts and verifies the agent session from the request cookie.
+ * Extracts and verifies the agent session from the request cookie..
  * Throws an error if the agent is not authenticated or inactive.
  */
 async function getAgentSessionFromCtx(ctx: { req: { headers: { cookie?: string } } }) {
