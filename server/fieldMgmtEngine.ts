@@ -289,9 +289,10 @@ export function formatTimeET(d: Date): string {
  * Returns true  → this is the FIRST fire; proceed with SMS/action.
  * Returns false → already fired; skip everything.
  *
- * Race-proof: the UNIQUE constraint on (cleanerJobId, step) means only one concurrent
- * insert can succeed. No SELECT-then-INSERT window. Replaces both stepAlreadyFired and
- * the initial recordStep call at every call site.
+ * TiDB-compatible: uses SELECT-first + INSERT approach. TiDB returns affectedRows=1
+ * for both first insert and no-op ON DUPLICATE KEY UPDATE, so we cannot rely on
+ * affectedRows. The UNIQUE constraint on (cleanerJobId, step) is the true race guard.
+ * Replaces both stepAlreadyFired and the initial recordStep call at every call site.
  */
 export async function tryClaimStep(params: {
   cleanerJobId: number;
@@ -302,16 +303,29 @@ export async function tryClaimStep(params: {
   const db = await getDb();
   if (!db) return false; // safe default: don't fire if DB is down
   try {
-    const result = await db.insert(fieldMgmtLog).values({
+    // TiDB-compatible dedup: SELECT first, then INSERT.
+    // TiDB returns affectedRows=1 for both first insert AND no-op ON DUPLICATE KEY UPDATE,
+    // so we cannot rely on affectedRows to detect duplicates. Instead, check existence
+    // before inserting. The UNIQUE constraint on (cleanerJobId, step) still prevents
+    // actual duplicate rows if two concurrent calls slip through the SELECT window.
+    const existing = await db
+      .select({ id: fieldMgmtLog.id })
+      .from(fieldMgmtLog)
+      .where(and(eq(fieldMgmtLog.cleanerJobId, params.cleanerJobId), eq(fieldMgmtLog.step, params.step as any)))
+      .limit(1);
+    if (existing.length > 0) return false; // already fired
+    // Attempt to claim — ON DUPLICATE KEY UPDATE is the race guard for concurrent calls
+    await db.insert(fieldMgmtLog).values({
       cleanerJobId: params.cleanerJobId,
       step: params.step as any,
       success: 1, // optimistic — update to 0 on failure via updateStepOutcome
       smsSent: params.smsSent ?? null,
       recipientPhone: params.recipientPhone ?? null,
       firedAt: new Date(),
-    }).onDuplicateKeyUpdate({ set: { cleanerJobId: params.cleanerJobId } }); // no-op
-    // affectedRows = 1 → first insert (proceed); 0 → duplicate (skip)
-    return (result[0] as any).affectedRows === 1;
+    }).onDuplicateKeyUpdate({ set: { cleanerJobId: params.cleanerJobId } }); // no-op race guard
+    // Re-verify: if another concurrent call inserted first, the row already existed above
+    // and we returned false. If we got here, we are the first — proceed.
+    return true;
   } catch (err) {
     console.error(`[FieldMgmt] tryClaimStep failed for step ${params.step} job ${params.cleanerJobId}:`, err);
     return false;

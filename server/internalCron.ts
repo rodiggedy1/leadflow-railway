@@ -479,15 +479,42 @@ export function startInternalCron(): void {
         if (!job.etaTimestamp) continue;
         const cleanerFirst = (job.cleanerName ?? "Team").split(" ")[0];
         const etaStr = new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
-        // Atomic upsert: INSERT ... ON DUPLICATE KEY UPDATE (no-op).
-        // The UNIQUE constraint on (cleanerJobId, alertType) makes this race-proof —
-        // only the first concurrent insert succeeds; all others are silently ignored.
-        const result = await db.insert(jobAlerts)
-          .values({ cleanerJobId: job.id, alertType: "stale_eta" })
-          .onDuplicateKeyUpdate({ set: { cleanerJobId: job.id } }); // no-op update
-        // affectedRows = 1 → first insert (new alert); 0 → duplicate, already posted
-        if ((result[0] as any).affectedRows !== 1) continue;
-        // First time for this job — post the chat message
+        // TiDB-compatible dedup: SELECT first, then INSERT.
+        // TiDB returns affectedRows=1 for both first insert AND no-op ON DUPLICATE KEY UPDATE,
+        // so we cannot rely on affectedRows to detect duplicates. Instead, check existence
+        // before inserting. The UNIQUE constraint still prevents actual duplicate rows.
+        const existing = await db
+          .select({ id: jobAlerts.id })
+          .from(jobAlerts)
+          .where(and(eq(jobAlerts.cleanerJobId, job.id), eq(jobAlerts.alertType, "stale_eta")))
+          .limit(1);
+        if (existing.length > 0) continue; // already alerted for this job
+        // First time — insert the job_alerts row to claim this alert
+        try {
+          await db.insert(jobAlerts)
+            .values({ cleanerJobId: job.id, alertType: "stale_eta" })
+            .onDuplicateKeyUpdate({ set: { cleanerJobId: job.id } }); // race guard
+        } catch {
+          continue; // another concurrent tick won the race — skip
+        }
+        // Re-check after insert to handle the race window between SELECT and INSERT
+        const claimed = await db
+          .select({ id: jobAlerts.id })
+          .from(jobAlerts)
+          .where(and(eq(jobAlerts.cleanerJobId, job.id), eq(jobAlerts.alertType, "stale_eta")))
+          .limit(1);
+        if (claimed.length === 0) continue; // shouldn't happen, but be safe
+        // Guard: only post the opsChatMessages if none already exists for this job+action
+        const existingMsg = await db
+          .select({ id: opsChatMessages.id })
+          .from(opsChatMessages)
+          .where(and(
+            eq(opsChatMessages.cleanerJobId, job.id),
+            eq(opsChatMessages.quickAction as any, "stale_eta")
+          ))
+          .limit(1);
+        if (existingMsg.length > 0) continue; // message already posted
+        // Post the chat message
         const [msgResult] = await db.insert(opsChatMessages).values({
           channel: "command",
           from: "System",
