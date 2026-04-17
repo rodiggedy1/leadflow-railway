@@ -2602,6 +2602,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           internalNotes:      input.notes ?? null,
           bookedAmount:       input.amount ?? null,
           isBooked:           isBookedFlag,
+          bookedAt:           isBookedFlag ? new Date() : null,
           assignedAgentId:    agentId,
           assignedAgentName:  agentName,
           quoteLeadId:        leadId,
