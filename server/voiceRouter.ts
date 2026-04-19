@@ -103,6 +103,8 @@ export const voiceRouter = router({
     .input(
       z.object({
         days: z.number().min(1).max(90).default(30),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
       })
     )
     .query(async ({ input }) => {
@@ -117,7 +119,18 @@ export const voiceRouter = router({
         };
       }
 
-      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      // Use explicit dateFrom/dateTo if provided, otherwise fall back to rolling `days` window
+      const since = input.dateFrom
+        ? new Date(input.dateFrom)
+        : new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const until = input.dateTo
+        ? (() => { const d = new Date(input.dateTo!); d.setHours(23, 59, 59, 999); return d; })()
+        : new Date();
+
+      const rangeCondition = and(
+        gte(voiceCalls.createdAt, since),
+        lte(voiceCalls.createdAt, until)
+      );
 
       const [totals] = await db
         .select({
@@ -127,7 +140,7 @@ export const voiceRouter = router({
           quoteGivenCount: sql<number>`SUM(CASE WHEN outcome = 'quote_given' THEN 1 ELSE 0 END)`,
         })
         .from(voiceCalls)
-        .where(gte(voiceCalls.createdAt, since));
+        .where(rangeCondition);
 
       const totalCalls = Number(totals.totalCalls ?? 0);
       const avgDurationSeconds = Math.round(Number(totals.avgDuration ?? 0));

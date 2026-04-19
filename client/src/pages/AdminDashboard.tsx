@@ -3283,7 +3283,7 @@ export default function AdminDashboard() {
     enabled: hasSession,
   });
 
-  const { data: voiceStats } = trpc.voice.stats.useQuery({ days: 30 }, {
+  const { data: voiceStats } = trpc.voice.stats.useQuery({ days: 30, ...dateRange }, {
     refetchInterval: 300_000,
     enabled: hasSession,
   });
