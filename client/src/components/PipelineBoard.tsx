@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -23,205 +23,115 @@ import {
   Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { trpc } from "@/lib/trpc";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 
-// ── Seed data ─────────────────────────────────────────────────────────────────
+// ── Stage grouping ────────────────────────────────────────────────────────────
 
-const leadsSeed = {
-  new: [
-    {
-      id: 1,
-      name: "Izzy A.",
-      service: "Standard Cleaning",
-      price: 149,
-      state: "new",
-      source: "Website Form",
-      beds: 2,
-      baths: 1,
-      lastContact: "Never contacted",
-      age: "1m ago",
-      nextAction: "Reply in under 5 min",
-      phone: "(202) 555-0121",
-      address: "Navy Yard, DC",
-      timeline: ["Lead created", "AI enriched profile", "Ready for first response"],
-      note: "Asked for Friday or Saturday afternoon.",
-    },
-    {
-      id: 2,
-      name: "Audrey M.",
-      service: "Move-In / Move-Out",
-      price: 289,
-      state: "warm",
-      source: "Instant Quote Widget",
-      beds: 3,
-      baths: 2,
-      lastContact: "Quoted 12 min ago",
-      age: "18m ago",
-      nextAction: "Follow up with urgency",
-      phone: "(703) 555-0187",
-      address: "Arlington, VA",
-      timeline: ["Lead created", "Quote generated", "Viewed pricing twice"],
-      note: "Moving out Sunday. Wants supplies included.",
-    },
-    {
-      id: 3,
-      name: "Kevin R.",
-      service: "Deep Cleaning",
-      price: 339,
-      state: "hot",
-      source: "Yelp",
-      beds: 4,
-      baths: 3,
-      lastContact: "Replied 2 min ago",
-      age: "25m ago",
-      nextAction: "Call now to close",
-      phone: "(301) 555-0199",
-      address: "Bethesda, MD",
-      timeline: ["Lead created", "SMS sent", "Customer replied: can you do tomorrow?"],
-      note: "Strong buying intent. Asked about arrival window.",
-    },
-  ],
-  quoted: [
-    {
-      id: 4,
-      name: "John D.",
-      service: "Standard Cleaning",
-      price: 239,
-      state: "hot",
-      source: "Website Form",
-      beds: 3,
-      baths: 2,
-      lastContact: "Quote sent 35 min ago",
-      age: "1h ago",
-      nextAction: "Nudge before quote cools",
-      phone: "(571) 555-0104",
-      address: "Alexandria, VA",
-      timeline: ["Lead created", "Quote sent", "Opened quote page twice"],
-      note: "Mentioned recurring if first clean goes well.",
-    },
-    {
-      id: 5,
-      name: "Sarah L.",
-      service: "Move-Out Cleaning",
-      price: 419,
-      state: "warm",
-      source: "Google LSA",
-      beds: 4,
-      baths: 4,
-      lastContact: "Awaiting response",
-      age: "3h ago",
-      nextAction: "Offer last slot today",
-      phone: "(240) 555-0174",
-      address: "Silver Spring, MD",
-      timeline: ["Lead created", "Called by AI", "Quote text delivered"],
-      note: "Needs receipt for landlord.",
-    },
-  ],
-  follow: [
-    {
-      id: 6,
-      name: "Gregory C.",
-      service: "Deep Cleaning",
-      price: 329,
-      state: "risk",
-      source: "Website Form",
-      beds: 2,
-      baths: 2,
-      lastContact: "No reply for 18h",
-      age: "1d ago",
-      nextAction: "Rescue with discount",
-      phone: "(202) 555-0162",
-      address: "Capitol Hill, DC",
-      timeline: ["Lead created", "Quote sent", "2 follow-ups unanswered"],
-      note: "Mentioned budget concerns.",
-    },
-    {
-      id: 7,
-      name: "Melissa P.",
-      service: "Recurring Cleaning",
-      price: 189,
-      state: "warm",
-      source: "Reactivation SMS",
-      beds: 2,
-      baths: 2,
-      lastContact: "Asked about every-2-weeks",
-      age: "6h ago",
-      nextAction: "Push recurring plan",
-      phone: "(202) 555-0132",
-      address: "Dupont Circle, DC",
-      timeline: ["Old customer reactivated", "Positive reply", "Needs schedule options"],
-      note: "Had 3 prior cleans. Good revival candidate.",
-    },
-  ],
-  booked: [
-    {
-      id: 8,
-      name: "Amy S.",
-      service: "Move-Out Cleaning",
-      price: 329,
-      state: "booked",
-      source: "Yelp",
-      beds: 3,
-      baths: 2,
-      lastContact: "Booked for tomorrow 9:00 AM",
-      age: "Today",
-      nextAction: "Send tracking link",
-      phone: "(703) 555-0118",
-      address: "Falls Church, VA",
-      timeline: ["Lead created", "Quote sent", "Booked", "Confirmation delivered"],
-      note: "Wants inside fridge add-on.",
-    },
-    {
-      id: 9,
-      name: "Danielle F.",
-      service: "Standard Cleaning",
-      price: 169,
-      state: "booked",
-      source: "Website Form",
-      beds: 2,
-      baths: 1,
-      lastContact: "Booked for Friday 1:00 PM",
-      age: "Today",
-      nextAction: "Offer recurring upsell",
-      phone: "(301) 555-0139",
-      address: "Rockville, MD",
-      timeline: ["Lead created", "SMS conversation", "Booked", "Deposit captured"],
-      note: "First-time customer. Good recurring candidate.",
-    },
-  ],
+const NEW_STAGES = new Set([
+  "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "ADDRESS",
+  "CONFIRMATION", "CALL_SCHEDULED", "DONE", "UNHANDLED", "WIDGET_SIZING",
+]);
+const QUOTED_STAGES = new Set(["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE"]);
+const FOLLOW_STAGES = new Set(["FOLLOW_UP_SCHEDULED", "VOICEMAIL"]);
+const BOOKED_STAGES = new Set(["BOOKED"]);
+
+function stageToColumn(stage: string): string {
+  if (BOOKED_STAGES.has(stage)) return "booked";
+  if (FOLLOW_STAGES.has(stage)) return "follow";
+  if (QUOTED_STAGES.has(stage)) return "quoted";
+  if (NEW_STAGES.has(stage)) return "new";
+  return "new";
+}
+
+// Column → valid DB stage for agentUpdateStage mutation
+const COLUMN_TO_STAGE: Record<string, string | null> = {
+  new: null, // mid-conversation stages — cannot write back
+  quoted: null,
+  follow: "FOLLOW_UP_SCHEDULED",
+  booked: "BOOKED",
 };
 
-const dateViews = ["Today", "This Week", "This Month", "Custom"];
-const tabs = [
-  { key: "pipeline", label: "Pipeline View" },
-  { key: "flow", label: "Flow Mode" },
-];
+// ── Data mapping ──────────────────────────────────────────────────────────────
 
-const columnMeta: Record<string, { title: string; subtitle: string; accent: string; hint: string }> = {
-  new: {
-    title: "New Leads",
-    subtitle: "Fastest response wins",
-    accent: "from-blue-500/20 to-cyan-500/10",
-    hint: "3 uncontacted • 1 replied",
-  },
-  quoted: {
-    title: "Quoted",
-    subtitle: "Quotes cooling down",
-    accent: "from-emerald-500/20 to-lime-500/10",
-    hint: "2 viewed pricing recently",
-  },
-  follow: {
-    title: "Follow Up",
-    subtitle: "Revenue at risk",
-    accent: "from-amber-500/20 to-orange-500/10",
-    hint: "1 overdue • 1 warm",
-  },
-  booked: {
-    title: "Booked",
-    subtitle: "Jobs ready to run",
-    accent: "from-violet-500/20 to-fuchsia-500/10",
-    hint: "2 confirmations sent",
-  },
-};
+function timeAgoShort(date: Date | string | null): string {
+  if (!date) return "—";
+  const now = Date.now();
+  const then = new Date(date).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function deriveState(stage: string, lastActivityAt: Date | null): string {
+  if (BOOKED_STAGES.has(stage)) return "booked";
+  const ageMs = lastActivityAt ? Date.now() - new Date(lastActivityAt).getTime() : Infinity;
+  const ageHrs = ageMs / 3600000;
+  if (stage === "UNHANDLED") return "risk";
+  if (ageHrs < 0.5) return "hot";
+  if (ageHrs < 4) return "warm";
+  if (ageHrs > 18) return "risk";
+  return "new";
+}
+
+function deriveNextAction(stage: string): string {
+  const map: Record<string, string> = {
+    QUOTE_SENT: "Reply in under 5 min",
+    AVAILABILITY: "Confirm availability",
+    SLOT_CHOICE: "Lock in a time slot",
+    ADDRESS: "Capture address",
+    CONFIRMATION: "Send confirmation",
+    CALL_SCHEDULED: "Call is scheduled",
+    DONE: "Conversation complete",
+    UNHANDLED: "Needs human review",
+    FOLLOW_UP_SCHEDULED: "Send circle-back SMS",
+    VOICEMAIL: "Wait for callback",
+    BOOKED: "Send tracking link",
+    COLD: "Re-engage manually",
+    WIDGET_SIZING: "Qualify and quote",
+  };
+  return map[stage] ?? "Follow up";
+}
+
+function sessionToLead(s: any): any {
+  const price = s.quotedPrice ? parseInt(s.quotedPrice, 10) || 0 : 0;
+  const lastActivityAt = s.lastActivityAt ?? s.updatedAt ?? null;
+  return {
+    id: s.id,
+    name: s.leadName ?? "Unknown",
+    service: s.serviceType ?? "Cleaning",
+    price,
+    state: deriveState(s.stage, lastActivityAt),
+    source: s.leadSource ?? "Form",
+    beds: s.bedrooms ?? 0,
+    baths: s.bathrooms ?? 0,
+    lastContact: s.lastActivityText ?? timeAgoShort(lastActivityAt),
+    age: timeAgoShort(s.createdAt),
+    nextAction: deriveNextAction(s.stage),
+    phone: s.leadPhone ?? "",
+    address: s.address ?? "",
+    stage: s.stage,
+    timeline: [`Lead created ${timeAgoShort(s.createdAt)}`, `Stage: ${s.stage}`],
+    note: s.notes ?? "",
+  };
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const stateStyles: Record<string, { chip: string; rail: string; dot: string; label: string; icon: React.ElementType }> = {
   new: {
@@ -261,6 +171,39 @@ const stateStyles: Record<string, { chip: string; rail: string; dot: string; lab
   },
 };
 
+const columnMeta: Record<string, { title: string; subtitle: string; accent: string; hint: string }> = {
+  new: {
+    title: "New Leads",
+    subtitle: "Fastest response wins",
+    accent: "from-blue-500/20 to-cyan-500/10",
+    hint: "Respond fast",
+  },
+  quoted: {
+    title: "Quoted",
+    subtitle: "Quotes cooling down",
+    accent: "from-emerald-500/20 to-lime-500/10",
+    hint: "Nurture now",
+  },
+  follow: {
+    title: "Follow Up",
+    subtitle: "Revenue at risk",
+    accent: "from-amber-500/20 to-orange-500/10",
+    hint: "Re-engage",
+  },
+  booked: {
+    title: "Booked",
+    subtitle: "Jobs ready to run",
+    accent: "from-violet-500/20 to-fuchsia-500/10",
+    hint: "Confirm jobs",
+  },
+};
+
+const dateViews = ["Today", "This Week", "This Month", "Custom"];
+const tabs = [
+  { key: "pipeline", label: "Pipeline View" },
+  { key: "flow", label: "Flow Mode" },
+];
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatTile({ label, value, change, icon: Icon }: { label: string; value: string | number; change: string; icon: React.ElementType }) {
@@ -299,95 +242,118 @@ function ControlButton({ children, active = false, icon: Icon, onClick }: { chil
   );
 }
 
-function LeadCard({ lead, isSelected, onSelect, onMove }: { lead: any; isSelected: boolean; onSelect: (l: any) => void; onMove: (l: any, target: string) => void }) {
-  const style = stateStyles[lead.state];
+function DraggableLeadCard({ lead, isSelected, onSelect, onMove, isDragging }: {
+  lead: any;
+  isSelected: boolean;
+  onSelect: (l: any) => void;
+  onMove: (l: any, target: string) => void;
+  isDragging?: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: lead.id });
+  const style = stateStyles[lead.state] ?? stateStyles.new;
   const StateIcon = style.icon;
 
   return (
-    <motion.button
-      layout
-      whileHover={{ y: -3, scale: 1.01 }}
-      whileTap={{ scale: 0.995 }}
-      onClick={() => onSelect(lead)}
-      className={cn(
-        "group relative w-full overflow-hidden rounded-[22px] border bg-white p-0 text-left shadow-[0_1px_2px_rgba(16,24,40,.04),0_10px_28px_rgba(16,24,40,.06)] transition-all",
-        isSelected ? "border-slate-900 ring-2 ring-slate-900/5" : "border-slate-200 hover:border-slate-300"
-      )}
+    <div
+      ref={setNodeRef}
+      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
+      className={cn(isDragging && "opacity-40")}
     >
-      <div className={cn("absolute inset-y-0 left-0 w-1.5", style.rail)} />
-      <div className="p-3 pl-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="text-[13px] font-semibold tracking-tight text-slate-900">{lead.name}</div>
-              <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold", style.chip)}>
-                <StateIcon className="h-3 w-3" />
-                {style.label}
-              </span>
+      <motion.button
+        layout
+        whileHover={{ y: -3, scale: 1.01 }}
+        whileTap={{ scale: 0.995 }}
+        onClick={() => onSelect(lead)}
+        className={cn(
+          "group relative w-full overflow-hidden rounded-[22px] border bg-white p-0 text-left shadow-[0_1px_2px_rgba(16,24,40,.04),0_10px_28px_rgba(16,24,40,.06)] transition-all",
+          isSelected ? "border-slate-900 ring-2 ring-slate-900/5" : "border-slate-200 hover:border-slate-300"
+        )}
+        {...listeners}
+        {...attributes}
+      >
+        <div className={cn("absolute inset-y-0 left-0 w-1.5", style.rail)} />
+        <div className="p-3 pl-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="text-[13px] font-semibold tracking-tight text-slate-900">{lead.name}</div>
+                <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold", style.chip)}>
+                  <StateIcon className="h-3 w-3" />
+                  {style.label}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">{lead.service}</div>
             </div>
-            <div className="mt-1 text-xs text-slate-500">{lead.service}</div>
+            <button className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" onClick={e => e.stopPropagation()}>
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
           </div>
-          <button className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" onClick={e => e.stopPropagation()}>
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-        </div>
 
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <div className="text-[20px] font-semibold tracking-tight text-slate-950">${lead.price}</div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-              <span>{lead.beds} bd</span>
-              <span className="h-1 w-1 rounded-full bg-slate-300" />
-              <span>{lead.source}</span>
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[20px] font-semibold tracking-tight text-slate-950">{lead.price > 0 ? `$${lead.price}` : "—"}</div>
+              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                {lead.beds > 0 && <><span>{lead.beds} bd</span><span className="h-1 w-1 rounded-full bg-slate-300" /></>}
+                <span>{lead.source}</span>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-2 py-1.5 text-right">
+              <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Age</div>
+              <div className="text-sm font-semibold text-slate-700">{lead.age}</div>
             </div>
           </div>
-          <div className="rounded-2xl bg-slate-50 px-2 py-1.5 text-right">
-            <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Age</div>
-            <div className="text-sm font-semibold text-slate-700">{lead.age}</div>
-          </div>
-        </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-2">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Next Best Action</div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-medium text-slate-700">{lead.nextAction}</div>
-            <ChevronRight className="h-4 w-4 text-slate-400" />
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-2">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Next Best Action</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-slate-700">{lead.nextAction}</div>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </div>
           </div>
-        </div>
 
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="text-xs text-slate-500">{lead.lastContact}</div>
-          <div className="flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <button
-              onClick={(e) => { e.stopPropagation(); onMove(lead, "quoted"); }}
-              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Quote
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onMove(lead, "follow"); }}
-              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Follow
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onMove(lead, "booked"); }}
-              className="rounded-xl bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
-            >
-              Book
-            </button>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <div className="text-xs text-slate-500">{lead.lastContact}</div>
+            <div className="flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <button
+                onClick={(e) => { e.stopPropagation(); onMove(lead, "follow"); }}
+                className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Follow
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onMove(lead, "booked"); }}
+                className="rounded-xl bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
+              >
+                Book
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </motion.button>
+      </motion.button>
+    </div>
   );
 }
 
-function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: { type: string; leads: any[]; totalValue: number; selectedLead: any; onSelect: (l: any) => void; onMove: (l: any, target: string) => void }) {
+function DroppableColumn({ type, leads, totalValue, selectedLead, onSelect, onMove, activeId }: {
+  type: string;
+  leads: any[];
+  totalValue: number;
+  selectedLead: any;
+  onSelect: (l: any) => void;
+  onMove: (l: any, target: string) => void;
+  activeId: number | null;
+}) {
   const meta = columnMeta[type];
+  const { setNodeRef, isOver } = useDroppable({ id: type });
 
   return (
-    <div className="min-w-[220px] flex-1 rounded-[28px] border border-slate-200/80 bg-white/70 p-3 shadow-[0_1px_2px_rgba(16,24,40,.03),0_10px_30px_rgba(16,24,40,.04)] backdrop-blur">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "min-w-[220px] flex-1 rounded-[28px] border bg-white/70 p-3 shadow-[0_1px_2px_rgba(16,24,40,.03),0_10px_30px_rgba(16,24,40,.04)] backdrop-blur transition-colors",
+        isOver ? "border-slate-400 bg-slate-50/80" : "border-slate-200/80"
+      )}
+    >
       <div className={cn("mb-3 rounded-[24px] border border-slate-200 bg-gradient-to-br p-3", meta.accent)}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -405,12 +371,13 @@ function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: { t
       <div className="space-y-3">
         <AnimatePresence>
           {leads.map((lead) => (
-            <LeadCard
+            <DraggableLeadCard
               key={lead.id}
               lead={lead}
               isSelected={selectedLead?.id === lead.id}
               onSelect={onSelect}
               onMove={onMove}
+              isDragging={activeId === lead.id}
             />
           ))}
         </AnimatePresence>
@@ -428,7 +395,7 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
     );
   }
 
-  const style = stateStyles[lead.state];
+  const style = stateStyles[lead.state] ?? stateStyles.new;
 
   return (
     <div className="h-full rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,.04),0_18px_40px_rgba(16,24,40,.08)]">
@@ -437,10 +404,10 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
           <div className="flex items-center gap-2">
             <div className="text-xl font-semibold tracking-tight text-slate-950">{lead.name}</div>
             <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold", style.chip)}>
-              {stateStyles[lead.state].label}
+              {style.label}
             </span>
           </div>
-          <div className="mt-1 text-sm text-slate-500">{lead.service} • {lead.address}</div>
+          <div className="mt-1 text-sm text-slate-500">{lead.service}{lead.address ? ` • ${lead.address}` : ""}</div>
         </div>
         <button onClick={onClose} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50">
           <X className="h-4 w-4" />
@@ -450,7 +417,7 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
       <div className="mb-5 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-slate-50 p-4">
           <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Estimated Value</div>
-          <div className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">${lead.price}</div>
+          <div className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">{lead.price > 0 ? `$${lead.price}` : "—"}</div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
           <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Best Move</div>
@@ -488,16 +455,18 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-2xl bg-slate-50 p-3">
             <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Phone</div>
-            <div className="mt-1 font-medium text-slate-700">{lead.phone}</div>
+            <div className="mt-1 font-medium text-slate-700">{lead.phone || "—"}</div>
           </div>
           <div className="rounded-2xl bg-slate-50 p-3">
             <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Property</div>
-            <div className="mt-1 font-medium text-slate-700">{lead.beds} bd / {lead.baths} ba</div>
+            <div className="mt-1 font-medium text-slate-700">{lead.beds > 0 ? `${lead.beds} bd / ${lead.baths} ba` : "—"}</div>
           </div>
-          <div className="col-span-2 rounded-2xl bg-slate-50 p-3">
-            <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Notes</div>
-            <div className="mt-1 font-medium text-slate-700">{lead.note}</div>
-          </div>
+          {lead.note && (
+            <div className="col-span-2 rounded-2xl bg-slate-50 p-3">
+              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Notes</div>
+              <div className="mt-1 font-medium text-slate-700">{lead.note}</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -506,7 +475,7 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
 
 function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onMove: (l: any, target: string) => void }) {
   if (!lead) return null;
-  const style = stateStyles[lead.state];
+  const style = stateStyles[lead.state] ?? stateStyles.new;
 
   return (
     <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,.04),0_18px_40px_rgba(16,24,40,.08)]">
@@ -525,11 +494,11 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <div className="text-3xl font-semibold tracking-tight">{lead.name}</div>
-              <div className="mt-2 text-slate-300">{lead.service} • {lead.address}</div>
+              <div className="mt-2 text-slate-300">{lead.service}{lead.address ? ` • ${lead.address}` : ""}</div>
             </div>
             <div className="text-right">
               <div className="text-sm text-slate-400">Estimated job</div>
-              <div className="text-4xl font-semibold">${lead.price}</div>
+              <div className="text-4xl font-semibold">{lead.price > 0 ? `$${lead.price}` : "—"}</div>
             </div>
           </div>
 
@@ -544,7 +513,7 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
             </div>
             <div className="rounded-2xl bg-white/10 p-4">
               <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Property</div>
-              <div className="mt-2 text-sm font-medium">{lead.beds} bd / {lead.baths} ba</div>
+              <div className="mt-2 text-sm font-medium">{lead.beds > 0 ? `${lead.beds} bd / ${lead.baths} ba` : "—"}</div>
             </div>
           </div>
 
@@ -580,16 +549,44 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function PipelineBoard() {
-  const [data, setData] = useState<any>(leadsSeed);
   const [selectedDate, setSelectedDate] = useState("Today");
   const [view, setView] = useState("pipeline");
-  const [selectedLead, setSelectedLead] = useState<any>(leadsSeed.new[2]);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [flowIndex, setFlowIndex] = useState(0);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState("lead");
+  const [activeId, setActiveId] = useState<number | null>(null);
 
-  const allLeads = useMemo(() => Object.values(data).flat(), [data]);
+  // Optimistic local overrides: sessionId → column key
+  const [columnOverrides, setColumnOverrides] = useState<Record<number, string>>({});
+
+  const { data: sessions, isLoading } = trpc.leads.list.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
+
+  const updateStageMutation = trpc.leads.agentUpdateStage.useMutation();
+
+  // Map sessions → grouped columns
+  const data = useMemo(() => {
+    const groups: Record<string, any[]> = { new: [], quoted: [], follow: [], booked: [] };
+    if (!sessions) return groups;
+    // Exclude COLD, LOST, NOT_INTERESTED, review/hiring/cs stages from pipeline
+    const excluded = new Set([
+      "COLD", "LOST", "NOT_INTERESTED", "REVIEW_REQUESTED", "REVIEW_DONE",
+      "REVIEW_REBOOKING_REQUESTED", "REVIEW_REBOOKING_DONE", "QUALITY_RATING_REQUESTED",
+      "QUALITY_MISSED_FOLLOWUP", "QUALITY_RATING_DONE", "INTERVIEW_LINK_SENT",
+      "INTERVIEW_NUDGE_1", "INTERVIEW_NUDGE_2", "INTERVIEW_LINK_DONE",
+      "OPEN", "HIRING_OUTBOUND", "REACTIVATION", "REACTIVATION_TIME",
+    ]);
+    for (const s of sessions) {
+      if (excluded.has(s.stage)) continue;
+      const lead = sessionToLead(s);
+      const col = columnOverrides[s.id] ?? stageToColumn(s.stage);
+      if (groups[col]) groups[col].push(lead);
+    }
+    return groups;
+  }, [sessions, columnOverrides]);
 
   const filteredData = useMemo(() => {
     if (!search.trim()) return data;
@@ -600,8 +597,8 @@ export default function PipelineBoard() {
         (lead: any) =>
           lead.name.toLowerCase().includes(q) ||
           lead.service.toLowerCase().includes(q) ||
-          lead.source.toLowerCase().includes(q) ||
-          lead.address.toLowerCase().includes(q)
+          (lead.source ?? "").toLowerCase().includes(q) ||
+          (lead.address ?? "").toLowerCase().includes(q)
       );
     });
     return next;
@@ -623,28 +620,52 @@ export default function PipelineBoard() {
     return next;
   }, [filteredData]);
 
-  const priorityQueue = useMemo(() => {
-    return [...allLeads].sort((a: any, b: any) => b.price - a.price);
-  }, [allLeads]);
-
+  const allLeads = useMemo(() => Object.values(data).flat(), [data]);
+  const priorityQueue = useMemo(() => [...allLeads].sort((a: any, b: any) => b.price - a.price), [allLeads]);
   const currentFlowLead = priorityQueue[flowIndex % Math.max(priorityQueue.length, 1)];
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
   const moveLead = (lead: any, target: string) => {
-    setData((prev: any) => {
-      const next: Record<string, any[]> = {};
-      Object.keys(prev).forEach((key) => {
-        next[key] = prev[key].filter((item: any) => item.id !== lead.id);
-      });
-      const updatedLead = {
-        ...lead,
-        state: target === "booked" ? "booked" : target === "follow" ? "risk" : target === "quoted" ? "hot" : "new",
-      };
-      next[target] = [updatedLead, ...next[target]];
-      setSelectedLead(updatedLead);
-      setIsPanelOpen(true);
-      setPanelMode("lead");
-      return next;
-    });
+    // Optimistic update
+    setColumnOverrides(prev => ({ ...prev, [lead.id]: target }));
+    setSelectedLead({ ...lead, state: target === "booked" ? "booked" : target === "follow" ? "risk" : target === "quoted" ? "hot" : "new" });
+    setIsPanelOpen(true);
+    setPanelMode("lead");
+
+    // Write to DB if target has a valid stage
+    const targetStage = COLUMN_TO_STAGE[target];
+    if (targetStage) {
+      updateStageMutation.mutate(
+        { sessionId: lead.id, stage: targetStage as any },
+        {
+          onError: () => {
+            // Rollback on error
+            setColumnOverrides(prev => {
+              const next = { ...prev };
+              delete next[lead.id];
+              return next;
+            });
+          },
+        }
+      );
+    }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as number);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const targetCol = over.id as string;
+    const lead = allLeads.find((l: any) => l.id === active.id);
+    if (!lead) return;
+    const currentCol = columnOverrides[lead.id] ?? stageToColumn(lead.stage);
+    if (currentCol === targetCol) return;
+    moveLead(lead, targetCol);
   };
 
   const openLeadPanel = (lead: any) => {
@@ -666,10 +687,13 @@ export default function PipelineBoard() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const activeLead = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
+
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <div className="mx-auto max-w-[1680px] px-12 py-6">
         <div className="rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(248,250,252,0.88))] p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_24px_60px_rgba(15,23,42,.08)] backdrop-blur-xl">
+          {/* Header */}
           <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200/80 px-2 pb-4">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/10">
@@ -701,19 +725,21 @@ export default function PipelineBoard() {
             </div>
 
             <div className="flex items-center gap-2">
-              <ControlButton active icon={AlertCircle}>Needs Attention (4)</ControlButton>
+              <ControlButton active icon={AlertCircle}>Needs Attention ({totals.leadCount})</ControlButton>
               <ControlButton icon={Phone}>Call Assist</ControlButton>
               <ControlButton icon={PanelRight}>Agent View</ControlButton>
             </div>
           </div>
 
+          {/* Stat tiles */}
           <div className="mb-5 grid grid-cols-4 gap-4">
-            <StatTile label="Lead Volume" value={totals.leadCount} change="+12%" icon={User} />
-            <StatTile label="Pipeline Value" value={`$${totals.pipeline.toLocaleString()}`} change="+18%" icon={DollarSign} />
-            <StatTile label="Booked Revenue" value={`$${totals.booked.toLocaleString()}`} change="+22%" icon={CheckCircle2} />
-            <StatTile label="Quotes Out" value={totals.quoted} change="+9%" icon={MessageSquare} />
+            <StatTile label="Lead Volume" value={isLoading ? "…" : totals.leadCount} change="+12%" icon={User} />
+            <StatTile label="Pipeline Value" value={isLoading ? "…" : `$${totals.pipeline.toLocaleString()}`} change="+18%" icon={DollarSign} />
+            <StatTile label="Booked Revenue" value={isLoading ? "…" : `$${totals.booked.toLocaleString()}`} change="+22%" icon={CheckCircle2} />
+            <StatTile label="Quotes Out" value={isLoading ? "…" : totals.quoted} change="+9%" icon={MessageSquare} />
           </div>
 
+          {/* Date intelligence bar */}
           <div className="mb-5 flex items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/80 p-4 shadow-sm">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Date Intelligence</div>
@@ -738,6 +764,7 @@ export default function PipelineBoard() {
             </div>
           </div>
 
+          {/* View toggle */}
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
               {tabs.map((tab) => (
@@ -773,23 +800,35 @@ export default function PipelineBoard() {
                     className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
                   >
                     <Zap className="h-4 w-4" />
-                    3 Actions Needed
+                    Actions Needed
                   </button>
                 </div>
 
-                <div className="flex gap-4 overflow-x-auto pb-1">
-                  {Object.keys(filteredData).map((key) => (
-                    <Column
-                      key={key}
-                      type={key}
-                      leads={filteredData[key]}
-                      totalValue={columnTotals[key] ?? 0}
-                      selectedLead={selectedLead}
-                      onSelect={openLeadPanel}
-                      onMove={moveLead}
-                    />
-                  ))}
-                </div>
+                <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                  <div className="flex gap-4 overflow-x-auto pb-1">
+                    {(["new", "quoted", "follow", "booked"] as const).map((key) => (
+                      <DroppableColumn
+                        key={key}
+                        type={key}
+                        leads={filteredData[key] ?? []}
+                        totalValue={columnTotals[key] ?? 0}
+                        selectedLead={selectedLead}
+                        onSelect={openLeadPanel}
+                        onMove={moveLead}
+                        activeId={activeId}
+                      />
+                    ))}
+                  </div>
+                  <DragOverlay>
+                    {activeLead ? (
+                      <div className="w-[220px] rounded-[22px] border border-slate-900 bg-white p-3 pl-4 shadow-2xl opacity-95">
+                        <div className="text-[13px] font-semibold text-slate-900">{activeLead.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">{activeLead.service}</div>
+                        <div className="mt-2 text-[20px] font-semibold text-slate-950">{activeLead.price > 0 ? `$${activeLead.price}` : "—"}</div>
+                      </div>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
               </div>
 
               <AnimatePresence>
@@ -822,13 +861,9 @@ export default function PipelineBoard() {
                               </button>
                             </div>
                             <div className="space-y-3">
-                              {[
-                                "Call Kevin R. — highest value hot lead",
-                                "Nudge John D. before quote cools",
-                                "Rescue Gregory C. with last-minute offer",
-                              ].map((item) => (
-                                <button key={item} className="flex w-full items-center justify-between rounded-2xl bg-white/[0.08] px-4 py-3 text-left hover:bg-white/[0.12]">
-                                  <span className="text-sm text-slate-100">{item}</span>
+                              {(filteredData.new ?? []).slice(0, 3).map((lead: any) => (
+                                <button key={lead.id} onClick={() => { setSelectedLead(lead); setPanelMode("lead"); }} className="flex w-full items-center justify-between rounded-2xl bg-white/[0.08] px-4 py-3 text-left hover:bg-white/[0.12]">
+                                  <span className="text-sm text-slate-100">{lead.nextAction} — {lead.name}</span>
                                   <ArrowUpRight className="h-4 w-4 text-slate-400" />
                                 </button>
                               ))}
