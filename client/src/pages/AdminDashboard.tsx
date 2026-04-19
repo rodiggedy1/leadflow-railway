@@ -3292,17 +3292,14 @@ export default function AdminDashboard() {
     refetchInterval: 300_000, // refresh every 5 minutes
     enabled: hasSession,
   });
-  // Agent photo map — name → profilePhotoUrl (reuses existing agents.getStatuses endpoint)
-  const { data: agentStatuses = [] } = trpc.agents.getStatuses.useQuery(undefined, {
-    refetchInterval: 300_000,
+  // Agent photo map — name→photoUrl, mirrors opsChat.getAllAgentPhotoMap
+  // Covers short names, full names, and OAuth aliases so lookups always resolve.
+  const { data: agentPhotoMapData } = trpc.agents.getPhotoMap.useQuery(undefined, {
+    staleTime: 0,
+    refetchInterval: 30_000,
     enabled: hasSession,
   });
-  // ID-based agent photo map — agentId → profilePhotoUrl (unambiguous, no name-matching)
-  const agentPhotoMap = useMemo(() => {
-    const map: Record<number, string | null> = {};
-    for (const a of agentStatuses) map[a.id] = a.profilePhotoUrl ?? null;
-    return map;
-  }, [agentStatuses]);
+  const agentPhotoMap = agentPhotoMapData?.photos ?? {};
 
   const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
     refetchInterval: 60000,
@@ -4292,9 +4289,9 @@ export default function AdminDashboard() {
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="flex items-center gap-2.5 min-w-0">
                                             {session.assignedAgentName ? (
-                                              session.assignedAgentId && agentPhotoMap[session.assignedAgentId] ? (
+                                              agentPhotoMap[session.assignedAgentName] ? (
                                                 <img
-                                                  src={agentPhotoMap[session.assignedAgentId]!}
+                                                  src={agentPhotoMap[session.assignedAgentName]!}
                                                   alt={session.assignedAgentName}
                                                   className="h-9 w-9 shrink-0 rounded-full object-cover"
                                                 />

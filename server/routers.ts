@@ -4567,6 +4567,40 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .orderBy(agents.name);
       return rows;
     }),
+    /**
+     * agents.getPhotoMap — name→photoUrl map covering all known name variants.
+     * Mirrors opsChat.getAllAgentPhotoMap: emits both the short agent name AND any
+     * full-name aliases from the users table so lookups work regardless of how
+     * assignedAgentName was stored (e.g. "Diane" vs "Diane Ruiz", "Rohan G" vs "Rohan Gupta").
+     */
+    getPhotoMap: adminAgentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return { photos: {} as Record<string, string | null> };
+      const { users } = await import("../drizzle/schema");
+      const agentRows = await db
+        .select({ id: agents.id, name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
+        .from(agents);
+      const photos: Record<string, string | null> = {};
+      for (const row of agentRows) {
+        photos[row.name] = row.profilePhotoUrl ?? null;
+      }
+      const userRows = await db
+        .select({ name: users.name, profilePhotoUrl: users.profilePhotoUrl })
+        .from(users);
+      for (const userRow of userRows) {
+        if (!userRow.name) continue;
+        const firstName = userRow.name.split(/\s+/)[0].toLowerCase();
+        const matchingAgent = agentRows.find(
+          r => r.name.toLowerCase().startsWith(firstName) || firstName.startsWith(r.name.toLowerCase())
+        );
+        if (matchingAgent) {
+          const photo = matchingAgent.profilePhotoUrl ?? userRow.profilePhotoUrl ?? null;
+          photos[matchingAgent.name] = photo;
+          photos[userRow.name] = photo;
+        }
+      }
+      return { photos };
+    }),
   }),
 
   /**
