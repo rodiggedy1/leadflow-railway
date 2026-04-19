@@ -1799,19 +1799,19 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden px-1.5 py-1.5 gap-1.5">
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <div className="w-[84px] shrink-0 h-full bg-slate-950 rounded-[30px] border border-white/10 flex flex-col items-center px-3 py-4 gap-3 overflow-visible transition-all shadow-2xl shadow-slate-900/20 mx-1 my-1">
+        <div className="w-[52px] shrink-0 h-full bg-slate-950 rounded-[20px] border border-white/10 flex flex-col items-center px-1.5 py-3 gap-2 overflow-visible transition-all shadow-xl shadow-slate-900/20">
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-lg hover:bg-slate-100 transition"
+            className="mb-1 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-900 shadow-lg hover:bg-slate-100 transition"
             title="Expand sidebar"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
           {activeTab === "cs" ? (
             /* CS filter buttons: A P N A R */
@@ -1826,12 +1826,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 key={f.id}
                 onClick={() => setCsFilter(f.id)}
                 className={cn(
-                  "relative w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
+                  "relative w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold transition",
                   csFilter === f.id ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
                 )}
                 title={f.label}
               >
-                <span className={cn("absolute top-1 right-1 w-1.5 h-1.5 rounded-full", f.dot)} />
+                <span className={cn("absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full", f.dot)} />
                 {f.label.charAt(0)}
               </button>
             ))
@@ -1845,14 +1845,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     key={ch.key}
                     onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
                     className={cn(
-                      "relative w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
+                      "relative w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold transition",
                       activeChannel === ch.key ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
                     )}
                     title={ch.label}
                   >
                     {ch.label.charAt(0)}
                     {count > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] flex items-center justify-center font-bold">
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] flex items-center justify-center font-bold">
                         {count > 9 ? "9+" : count}
                       </span>
                     )}
@@ -1863,12 +1863,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <button
                 onClick={() => { handleSetActiveTab("today"); }}
                 className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
+                  "w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold transition",
                   activeTab === "today" ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
                 )}
                 title="Today Ops"
               >
-                <CalendarDays className="w-4 h-4" />
+                <CalendarDays className="w-3.5 h-3.5" />
               </button>
             </>
           )}
@@ -1877,12 +1877,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             <button
               onClick={() => setAgentStatusOpen(v => !v)}
               className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center transition border",
+                "w-8 h-8 rounded-xl flex items-center justify-center transition border",
                 agentStatusOpen ? "border-white/30 bg-white/20 text-white" : "border-white/15 bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
               )}
               title="Agent status"
             >
-              <Users className="w-4 h-4" />
+              <Users className="w-3.5 h-3.5" />
             </button>
             {/* DM unread badge */}
             {totalDmUnread > 0 && (
