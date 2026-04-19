@@ -3413,7 +3413,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen hj-theme">
+    <div className={"min-h-screen hj-theme" + (activeTab === "leads" ? " bg-[#f6f5f2]" : "")}>
       {/* Daily recap modal — shows once per day after login */}
 
 
