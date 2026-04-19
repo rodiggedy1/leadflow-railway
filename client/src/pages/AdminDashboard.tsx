@@ -836,7 +836,7 @@ function getLanguageBadge(language: string | null): React.ReactElement | null {
  */
 function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (!leadSource || leadSource === "form") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Quote Form</span>;
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Quote</span>;
   }
   if (leadSource === "widget") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>;
@@ -4056,7 +4056,7 @@ export default function AdminDashboard() {
                                 }
                               }
                               function boardSourceLabel(src: string | null): string {
-                                if (!src || src === "form") return "Quote Form";
+                                if (!src || src === "form") return "Quote";
                                 if (src === "widget") return "Widget";
                                 if (src === "email") return "Google Ads Form";
                                 if (src === "voice") return "Phone";
@@ -4202,7 +4202,7 @@ export default function AdminDashboard() {
                                           <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-700 text-center leading-tight">
                                             {(() => {
                                               const src = session.leadSource;
-                                              if (!src || src === "form") return "Quote Form";
+                                              if (!src || src === "form") return "Quote";
                                               if (src === "widget") return "Widget";
                                               if (src === "email") return "Google Ads";
                                               if (src === "voice") return "Voice";
