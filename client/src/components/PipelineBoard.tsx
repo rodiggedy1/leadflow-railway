@@ -539,7 +539,7 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PipelineBoard() {
+export default function PipelineBoard({ onOpenConversation }: { onOpenConversation?: (session: any) => void } = {}) {
   const [selectedDate, setSelectedDate] = useState("All");
 
   // Convert selected period to dateFrom/dateTo ISO strings for leads.list
