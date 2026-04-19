@@ -1169,3 +1169,8 @@
 - [x] Clean up stale job_alerts and ops_chat_messages rows for now-closed zombie jobs
 - [x] Fix field_mgmt_log duplicate-fire race: replace stepAlreadyFired (SELECT→INSERT) with atomic INSERT ON DUPLICATE KEY UPDATE (no-op) in all field mgmt steps
 - [x] Fix TiDB affectedRows=1 bug: TiDB returns affectedRows=1 for both first insert AND no-op ON DUPLICATE KEY UPDATE — switched tryClaimStep and stale_eta cron to SELECT-first pattern; cleaned up all existing duplicate opsChatMessages rows (stale_eta: 11 jobs, noshow_alert: 5 jobs)
+- [x] Leads page: reduce lead list row height (py-5 → py-3, text-[18px] → text-sm, text-[22px] → text-base in quote column)
+- [x] Leads page: fix right panel sizing (text-[26px] → text-xl for name, h-12 → h-9 + rounded-2xl → rounded-xl for action buttons)
+- [x] Leads page: reduce timeline event card padding (p-4 → p-3, rounded-2xl → rounded-xl)
+- [x] Leads page: fix right panel padding (p-6 → p-4)
+- [x] Leads page: auto-select first lead on load (useEffect already added, verify it works)

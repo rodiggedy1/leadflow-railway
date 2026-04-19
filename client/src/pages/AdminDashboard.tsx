@@ -3383,8 +3383,13 @@ export default function AdminDashboard() {
   const [leadsView, setLeadsView] = useState<"split" | "board">("split");
   const [leadsCollapsed, setLeadsCollapsed] = useState(false);
   const [selectedLeadPanel, setSelectedLeadPanel] = useState<typeof sessions[0] | null>(null);
-
-  // ── Auth guards (after ALL hooks) ─────────────────────────────────────────────────────
+  // Auto-select first lead when filtered list loads
+  useEffect(() => {
+    if (filtered.length > 0 && !selectedLeadPanel) {
+      setSelectedLeadPanel(filtered[0]);
+    }
+  }, [filtered]);
+  // ── Auth guards (after ALL hooks)) ─────────────────────────────────────────────────────
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>
@@ -3988,7 +3993,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-2 shrink-0">
                         <Button
                           variant="outline"
-                          className="h-12 rounded-2xl bg-white"
+                          className="h-9 rounded-xl bg-white"
                           onClick={() => setLeadsCollapsed(v => !v)}
                         >
                           {leadsCollapsed ? <PanelLeftOpen className="mr-2 h-4 w-4" /> : <PanelLeftClose className="mr-2 h-4 w-4" />}
@@ -4010,7 +4015,7 @@ export default function AdminDashboard() {
                         </div>
                         <Button
                           size="sm"
-                          className="h-12 rounded-2xl bg-zinc-950 hover:bg-zinc-800 px-5"
+                          className="h-9 rounded-xl bg-zinc-950 hover:bg-zinc-800 px-5"
                           onClick={() => setAddLeadOpen(true)}
                         >
                           <Plus className="mr-2 h-4 w-4" /> Add Lead
@@ -4072,14 +4077,14 @@ export default function AdminDashboard() {
                                           setSelectedLeadPanel(session);
                                           if (leadsCollapsed) setLeadsCollapsed(false);
                                         }}
-                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] gap-3 px-6 py-5 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] gap-3 px-6 py-3 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
                                       >
                                         {/* Lead name + phone + badges */}
                                         <div>
                                           <div className="flex items-start gap-3">
                                             <div className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
                                             <div className="min-w-0">
-                                              <div className="text-[18px] font-semibold tracking-[-0.02em] leading-none truncate">
+                                              <div className="text-sm font-semibold tracking-[-0.02em] leading-none truncate">
                                                 {session.leadName ?? <span className="text-zinc-400 font-normal text-sm">Unknown</span>}
                                               </div>
                                               <div className="mt-1.5 text-sm text-zinc-500">{formatPhone(session.leadPhone)}</div>
@@ -4118,11 +4123,11 @@ export default function AdminDashboard() {
                                           </Badge>
                                         </div>
                                         {/* Service */}
-                                        <div className="flex items-center pr-4 text-[15px] text-zinc-700 truncate">
+                                        <div className="flex items-center pr-4 text-sm text-zinc-700 truncate">
                                           {session.serviceType ?? "—"}
                                         </div>
                                         {/* Quote */}
-                                        <div className="flex items-center text-[22px] font-semibold tracking-[-0.03em]">
+                                        <div className="flex items-center text-base font-semibold tracking-[-0.03em]">
                                           {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
                                         </div>
                                         {/* Stage */}
@@ -4172,7 +4177,7 @@ export default function AdminDashboard() {
                               animate={{ opacity: 1, x: 0 }}
                               exit={{ opacity: 0, x: 20 }}
                               transition={{ duration: 0.18 }}
-                              className="overflow-y-auto p-6 space-y-4 bg-[#fafaf9]"
+                              className="overflow-y-auto p-4 space-y-3 bg-[#fafaf9]"
                             >
                               {/* Header */}
                               <div className="flex items-start justify-between gap-4">
@@ -4184,7 +4189,7 @@ export default function AdminDashboard() {
                                       if (selectedLeadPanel.stage === "UNHANDLED") return "bg-rose-500";
                                       return "bg-zinc-300";
                                     })()}`} />
-                                    <div className="text-[26px] font-semibold tracking-[-0.03em] leading-none">
+                                    <div className="text-xl font-semibold tracking-[-0.03em] leading-none">
                                       {selectedLeadPanel.leadName ?? "Unknown"}
                                     </div>
                                   </div>
@@ -4212,19 +4217,19 @@ export default function AdminDashboard() {
                               <div className="grid grid-cols-2 gap-3">
                                 <a
                                   href={`openphone://call?to=${selectedLeadPanel.leadPhone}`}
-                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
+                                  className="flex h-9 items-center justify-center gap-2 rounded-xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
                                 >
                                   <Phone className="h-4 w-4" /> Call lead
                                 </a>
                                 <button
                                   onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                 >
                                   <MessageSquare className="h-4 w-4" /> Send SMS
                                 </button>
                                 <button
                                   onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                 >
                                   <Calendar className="h-4 w-4" /> Lock time slot
                                 </button>
@@ -4234,14 +4239,14 @@ export default function AdminDashboard() {
                                       setDrawerInitialTab("performance");
                                       setSelectedSession(selectedLeadPanel as unknown as DrawerSession);
                                     }}
-                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                    className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                   >
                                     <FileText className="h-4 w-4" /> View transcript
                                   </button>
                                 ) : (
                                   <button
                                     onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                    className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                   >
                                     <Eye className="h-4 w-4" /> Open full view
                                   </button>
@@ -4253,7 +4258,7 @@ export default function AdminDashboard() {
                                   <div className="flex items-start justify-between gap-4">
                                     <div>
                                       <div className="text-sm font-medium text-zinc-500">Last activity</div>
-                                      <p className="mt-2 text-[15px] leading-7 text-zinc-700">
+                                      <p className="mt-2 text-sm leading-6 text-zinc-700">
                                         {selectedLeadPanel.lastActivityText ?? "No recent activity recorded."}
                                       </p>
                                     </div>
@@ -4261,7 +4266,7 @@ export default function AdminDashboard() {
                                       <Sparkles className="h-5 w-5 text-zinc-900" />
                                     </div>
                                   </div>
-                                  <div className="mt-5 rounded-2xl border border-lime-200 bg-lime-50 p-4">
+                                  <div className="mt-4 rounded-xl border border-lime-200 bg-lime-50 p-3">
                                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Next best action</div>
                                     <div className="mt-2 text-base font-semibold tracking-[-0.02em]">
                                       {(() => {
@@ -4324,7 +4329,7 @@ export default function AdminDashboard() {
                                             <div className={`h-3 w-3 rounded-full ${item.type === "good" ? "bg-emerald-500" : item.type === "warn" ? "bg-amber-500" : item.type === "bad" ? "bg-rose-500" : "bg-zinc-300"}`} />
                                             {i !== events.length - 1 && <div className="mt-2 h-10 w-px bg-zinc-200" />}
                                           </div>
-                                          <div className="flex-1 rounded-2xl bg-zinc-50 p-4">
+                                          <div className="flex-1 rounded-xl bg-zinc-50 p-3">
                                             <div className="flex items-center justify-between gap-4">
                                               <div className="font-medium text-zinc-800">{item.label}</div>
                                               <div className="text-sm text-zinc-500">{item.time}</div>
