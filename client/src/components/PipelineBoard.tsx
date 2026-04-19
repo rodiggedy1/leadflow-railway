@@ -124,8 +124,39 @@ function deriveNextAction(stage: string): string {
   return map[stage] ?? "Follow up";
 }
 
+function calcLeadRevenue(s: any): number {
+  // Mirror server-side calcBookedRevenue logic:
+  // 1. Admin-set bookedAmount override always wins
+  if (s.bookedAmount !== null && s.bookedAmount !== undefined) return Number(s.bookedAmount);
+  // 2. quotedPrice + extras (skip if 0 — campaign placeholder)
+  if (s.quotedPrice !== null && s.quotedPrice !== undefined && s.quotedPrice !== '') {
+    const base = parseFloat(s.quotedPrice);
+    if (!isNaN(base) && base > 0) {
+      let extrasTotal = 0;
+      try {
+        const keys: string[] = JSON.parse(s.extras ?? '[]');
+        extrasTotal = keys.reduce((sum: number, key: string) => {
+          const prices: Record<string, number> = {
+            clean_inside_cabinets: 30, clean_inside_empty_fridge: 25, clean_inside_full_fridge: 40,
+            clean_inside_oven: 30, clean_interior_windows: 40, clean_finished_basement: 60,
+            green_cleaning: 20, move_in_move_out: 60, two_hours_organizing: 80,
+            load_of_laundry: 20, i_have_pets: 15, wipe_walls: 35, sweep_garage: 25,
+            balcony_sweep: 20, home_concierge: 50, same_day_booking: 40,
+            clean_inside_microwave: 15, shed_pool_house: 50, wash_dishes: 20, pool_deck: 45,
+          };
+          return sum + (prices[key] ?? 0);
+        }, 0);
+      } catch { /* ignore */ }
+      return base + extrasTotal;
+    }
+  }
+  // 3. Reactivation leads: use last known price
+  if (s.reactivationLastPrice) return Number(s.reactivationLastPrice);
+  return 0;
+}
+
 function sessionToLead(s: any): any {
-  const price = s.quotedPrice ? parseInt(s.quotedPrice, 10) || 0 : 0;
+  const price = calcLeadRevenue(s);
   const lastActivityAt = s.lastActivityAt ?? s.updatedAt ?? null;
   return {
     id: s.id,
@@ -604,7 +635,11 @@ export default function PipelineBoard() {
 
   const totals = useMemo(() => {
     const leads = Object.values(filteredColumns).flat();
-    const pipeline = leads.reduce((sum: number, l: any) => sum + l.price, 0);
+    // Pipeline Value = potential revenue from non-booked leads only
+    const pipeline = (["new", "quoted", "follow"] as ColumnKey[]).reduce(
+      (sum, col) => sum + (filteredColumns[col] ?? []).reduce((s: number, l: any) => s + l.price, 0),
+      0
+    );
     // bookedRevenue comes from leads.stats (same as Leads page) — accurate across all revenue types
     const booked = statsData?.bookedRevenue ?? (filteredColumns.booked ?? []).reduce((sum: number, l: any) => sum + l.price, 0);
     const quoted = (filteredColumns.quoted ?? []).length;
