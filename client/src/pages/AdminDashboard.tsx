@@ -3240,8 +3240,6 @@ export default function AdminDashboard() {
   });
 
   const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("month");
-  const [pipelineStageFilter, setPipelineStageFilter] = useState<string>("All");
-  const [pipelineSearch, setPipelineSearch] = useState("");
 
   // Compute the active date range to send to the backend
   const dateRange = useMemo(() => {
@@ -3472,193 +3470,86 @@ export default function AdminDashboard() {
             <SmsSimulator />
           </div>
         )}
-        {activeTab === "pipeline" && (() => {
-          // ── Stage → display label mapping ──────────────────────────────────
-          function pipelineStatusLabel(stage: string): string {
-            if (["BOOKED", "COMPLETED"].includes(stage)) return "Booked";
-            if (["QUOTE_SENT", "AVAILABILITY", "CONFIRMATION", "SLOT_CHOICE"].includes(stage)) return "Quoted";
-            if (["FOLLOW_UP_SCHEDULED", "COLD"].includes(stage)) return "Needs Follow-up";
-            if (["WIDGET_SIZING", "TIME_PREF", "ADDRESS"].includes(stage)) return "Sizing";
-            if (["LOST", "REACTIVATION"].includes(stage)) return "At Risk";
-            return "Quoted";
-          }
-          function pipelineStatusTone(status: string): string {
-            switch (status) {
-              case "Booked": return "bg-emerald-100 text-emerald-700 border-emerald-200";
-              case "Quoted": return "bg-sky-100 text-sky-700 border-sky-200";
-              case "Needs Follow-up": return "bg-amber-100 text-amber-800 border-amber-200";
-              case "Sizing": return "bg-violet-100 text-violet-700 border-violet-200";
-              case "At Risk": return "bg-rose-100 text-rose-700 border-rose-200";
-              default: return "bg-zinc-100 text-zinc-700 border-zinc-200";
-            }
-          }
-          function pipelineSourceLabel(leadSource: string | null): string {
-            if (!leadSource || leadSource === "form") return "Quote Form";
-            if (leadSource === "widget") return "Widget";
-            if (leadSource === "email") return "Google Ads Form";
-            if (leadSource === "voice") return "Phone";
-            if (leadSource === "reactivation") return "Campaign";
-            if (leadSource === "yelp") return "Yelp";
-            if (leadSource === "bark") return "Bark";
-            if (leadSource === "thumbtack" || leadSource === "thumbtack-sms") return "Thumbtack";
-            if (leadSource.startsWith("campaign:")) return "Campaign";
-            if (leadSource === "command-center") return "Campaign";
-            if (leadSource.startsWith("always-on:")) return "Referral";
-            return "Referral";
-          }
-          function pipelineLocation(address: string | null | undefined): string {
-            if (!address) return "";
-            // Try to extract "City, ST" from end of address string
-            const parts = address.split(",").map(s => s.trim());
-            if (parts.length >= 2) {
-              const last = parts[parts.length - 1];
-              const secondLast = parts[parts.length - 2];
-              // If last part looks like "MD 20904" or "VA", combine city + state
-              const stateMatch = last.match(/^([A-Z]{2})(\s+\d+)?$/);
-              if (stateMatch) return `${secondLast}, ${stateMatch[1]}`;
-              return last;
-            }
-            return address.length > 30 ? address.slice(0, 30) + "…" : address;
-          }
-
-          const now = Date.now();
-          const allSessions = (sessions ?? []);
-          const dateFiltered = allSessions.filter(l => {
-            if (!l.createdAt) return false;
-            const t = new Date(l.createdAt).getTime();
-            if (pipelineDateFilter === "today") return now - t < 86400000;
-            if (pipelineDateFilter === "week") return now - t < 7 * 86400000;
-            return now - t < 31 * 86400000;
-          });
-          const stageFiltered = pipelineStageFilter === "All"
-            ? dateFiltered
-            : dateFiltered.filter(l => pipelineStatusLabel(l.stage) === pipelineStageFilter);
-          const searchFiltered = pipelineSearch.trim() === ""
-            ? stageFiltered
-            : stageFiltered.filter(l => {
-                const q = pipelineSearch.toLowerCase();
-                return (
-                  (l.leadName ?? "").toLowerCase().includes(q) ||
-                  (l.leadPhone ?? "").toLowerCase().includes(q) ||
-                  (l.serviceType ?? "").toLowerCase().includes(q) ||
-                  (l.leadSource ?? "").toLowerCase().includes(q)
-                );
-              });
-
-          return (
-            <div className="py-4 space-y-4">
-              {/* Header row */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
+        {activeTab === "pipeline" && (
+          <div className="py-4">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-[26px] font-semibold tracking-[-0.03em] text-zinc-900">Lead Board</h2>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-lime-300 text-zinc-900">Live</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {(["today", "week", "month"] as const).map((f) => {
-                    const label = f === "today" ? "Today" : f === "week" ? "This Week" : "This Month";
-                    const isActive = pipelineDateFilter === f;
-                    return (
-                      <button
-                        key={f}
-                        onClick={() => setPipelineDateFilter(f)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                          isActive ? "bg-zinc-950 text-white border-zinc-950" : "bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                  <h2 className="text-lg font-semibold text-gray-900">Lead Pipeline</h2>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: "#a3e635", color: "#000" }}>Live</span>
                 </div>
               </div>
-              {/* Stage filter pills */}
-              <div className="flex flex-wrap items-center gap-2">
-                {["All", "Booked", "Quoted", "Needs Follow-up", "Sizing", "At Risk"].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setPipelineStageFilter(tab)}
-                    className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
-                      pipelineStageFilter === tab
-                        ? "bg-zinc-950 text-white shadow-sm"
-                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
+              <div className="flex items-center gap-1.5">
+                {(["today", "week", "month"] as const).map((f) => {
+                  const label = f === "today" ? "Today" : f === "week" ? "This Week" : "This Month";
+                  const isActive = pipelineDateFilter === f;
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setPipelineDateFilter(f)}
+                      className="px-4 py-1.5 text-xs font-semibold transition-all"
+                      style={isActive
+                        ? { backgroundColor: "#a3e635", color: "#000", border: "1.5px solid #a3e635", borderRadius: "6px" }
+                        : { backgroundColor: "transparent", color: "#6b7280", border: "1.5px solid #d1d5db", borderRadius: "6px" }
+                      }
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-              {/* Search */}
-              <div className="relative max-w-md">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                <Input
-                  value={pipelineSearch}
-                  onChange={(e) => setPipelineSearch(e.target.value)}
-                  placeholder="Search name, phone, service, source…"
-                  className="h-10 rounded-2xl border-zinc-200 bg-zinc-50 pl-11 text-sm"
-                />
-              </div>
-              {/* Card grid */}
-              {searchFiltered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-                  <Users className="h-10 w-10 mb-3 opacity-40" />
-                  <div className="text-sm">No leads match the current filters</div>
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {searchFiltered.map((lead) => {
-                    const status = pipelineStatusLabel(lead.stage);
-                    const tone = pipelineStatusTone(status);
-                    const source = pipelineSourceLabel(lead.leadSource ?? null);
-                    const location = pipelineLocation(lead.address ?? null);
-                    const quote = lead.quotedPrice ? `$${parseInt(lead.quotedPrice, 10).toLocaleString()}` : "—";
-                    const agent = lead.assignedAgentName ?? "Unassigned";
-                    const summary = lead.lastActivityText ?? "";
-                    return (
-                      <motion.button
-                        key={lead.id}
-                        whileHover={{ y: -3 }}
-                        transition={{ duration: 0.15 }}
-                        onClick={() => setSelectedSession(lead as unknown as DrawerSession)}
-                        className="rounded-[28px] border border-black/5 bg-white p-5 text-left shadow-sm transition hover:shadow-md w-full"
-                      >
-                        {/* Name + status badge */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-2xl font-semibold tracking-[-0.03em] truncate">{lead.leadName ?? lead.leadPhone}</div>
-                            <div className="mt-1 text-sm text-zinc-500">{lead.leadPhone}</div>
-                          </div>
-                          <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold ${tone}`}>
-                            {status}
-                          </span>
-                        </div>
-                        {/* Quote + Agent */}
-                        <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                          <div className="rounded-2xl bg-zinc-50 p-3">
-                            <div className="text-zinc-500">Quote</div>
-                            <div className="mt-1 text-xl font-semibold">{quote}</div>
-                          </div>
-                          <div className="rounded-2xl bg-zinc-50 p-3">
-                            <div className="text-zinc-500">Agent</div>
-                            <div className="mt-1 text-xl font-semibold truncate">{agent}</div>
-                          </div>
-                        </div>
-                        {/* Source + Location */}
-                        <div className="mt-4 flex items-center justify-between text-sm text-zinc-500">
-                          <span>{source}</span>
-                          {location && <span>{location}</span>}
-                        </div>
-                        {/* AI summary / last activity */}
-                        {summary && (
-                          <p className="mt-4 line-clamp-3 text-sm leading-6 text-zinc-600">{summary}</p>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
-          );
-        })()}
+            {/* Stats bar */}
+            {(() => {
+              const allLeads = (sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads'];
+              const now = Date.now();
+              const filtered = allLeads.filter(l => {
+                if (!l.createdAt) return false;
+                const t = new Date(l.createdAt).getTime();
+                if (pipelineDateFilter === "today") return now - t < 86400000;
+                if (pipelineDateFilter === "week") return now - t < 7 * 86400000;
+                return now - t < 31 * 86400000;
+              });
+              const totalLeads = filtered.length;
+              const totalPipeline = filtered.reduce((sum, l) => sum + (parseInt(l.quotedPrice ?? "0", 10) || 0), 0);
+              const booked = filtered.filter(l => l.stage === "BOOKED" || l.stage === "COMPLETED");
+              const bookedValue = booked.reduce((sum, l) => sum + (parseInt(l.quotedPrice ?? "0", 10) || 0), 0);
+              const checkingAvail = filtered.filter(l => l.stage === "AVAILABILITY").length;
+              return (
+                <div className="flex items-center gap-5 mb-4 text-sm text-gray-700 flex-wrap">
+                  <span className="flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-gray-400" />
+                    <strong>{totalLeads}</strong>
+                    <span className="text-gray-400">leads</span>
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-gray-400" />
+                    <strong>${totalPipeline.toLocaleString()}</strong>
+                    <span className="text-gray-400">total pipeline</span>
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <strong className="text-emerald-600">${bookedValue.toLocaleString()}</strong>
+                    <span className="text-gray-400">booked</span>
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: "#f97316" }}>{checkingAvail}</span>
+                    <span className="text-gray-400">quoted</span>
+                  </span>
+                </div>
+              );
+            })()}
+            <KanbanBoard
+              leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads']}
+              onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
+              onStageChange={() => { void refetch(); }}
+              dateFilter={pipelineDateFilter}
+            />
+          </div>
+        )}
         {activeTab === "callbacks" && (
           <div className="py-4">
             <div className="mb-5 flex items-center justify-between">
