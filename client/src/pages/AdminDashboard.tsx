@@ -4184,17 +4184,17 @@ export default function AdminDashboard() {
                               <div className="flex items-start justify-between gap-4">
                                 <div>
                                   <div className="flex items-center gap-2.5">
-                                    <div className={`h-3 w-3 rounded-full shrink-0 ${(() => {
+                                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 mt-0.5 ${(() => {
                                       if (selectedLeadPanel.stage === "BOOKED" || selectedLeadPanel.stage === "DONE") return "bg-emerald-500";
                                       if (selectedLeadPanel.stage === "FOLLOW_UP_SCHEDULED" || selectedLeadPanel.stage === "AVAILABILITY" || selectedLeadPanel.stage === "QUOTE_SENT") return "bg-amber-500";
                                       if (selectedLeadPanel.stage === "UNHANDLED") return "bg-rose-500";
                                       return "bg-zinc-300";
                                     })()}`} />
-                                    <h3 className="text-[28px] font-semibold tracking-[-0.03em] leading-none">
+                                    <h3 className="text-[22px] font-bold tracking-[-0.02em] leading-tight">
                                       {selectedLeadPanel.leadName ?? "Unknown"}
                                     </h3>
                                   </div>
-                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[13px] text-zinc-500">
                                     <span>{formatPhone(selectedLeadPanel.leadPhone)}</span>
                                     {selectedLeadPanel.serviceType && (
                                       <>
@@ -4215,22 +4215,22 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               {/* Action buttons */}
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="mt-4 grid grid-cols-2 gap-2.5">
                                 <a
                                   href={`openphone://call?to=${selectedLeadPanel.leadPhone}`}
-                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
+                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
                                 >
                                   <Phone className="h-4 w-4" /> Call lead
                                 </a>
                                 <button
                                   onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                 >
                                   <MessageSquare className="h-4 w-4" /> Send SMS
                                 </button>
                                 <button
                                   onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                 >
                                   <Calendar className="h-4 w-4" /> Lock time slot
                                 </button>
@@ -4240,14 +4240,14 @@ export default function AdminDashboard() {
                                       setDrawerInitialTab("performance");
                                       setSelectedSession(selectedLeadPanel as unknown as DrawerSession);
                                     }}
-                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                    className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                   >
                                     <FileText className="h-4 w-4" /> View transcript
                                   </button>
                                 ) : (
                                   <button
                                     onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                    className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                   >
                                     <Eye className="h-4 w-4" /> Open full view
                                   </button>
@@ -4256,7 +4256,7 @@ export default function AdminDashboard() {
                               </div>{/* end header+actions card */}
                               {/* AI summary */}
                               <Card className="rounded-[28px] border-black/5 bg-white">
-                                <CardContent className="p-6">
+                                <CardContent className="p-5">
                                   <div className="flex items-start justify-between gap-4">
                                     <div>
                                       <div className="text-sm font-medium text-zinc-500">AI summary</div>
@@ -4264,8 +4264,8 @@ export default function AdminDashboard() {
                                         {selectedLeadPanel.lastActivityText ?? "No recent activity recorded."}
                                       </p>
                                     </div>
-                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-100 shrink-0">
-                                      <Sparkles className="h-5 w-5 text-zinc-900" />
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-lime-100 shrink-0">
+                                      <Sparkles className="h-4 w-4 text-zinc-900" />
                                     </div>
                                   </div>
                                   <div className="mt-5 rounded-2xl border border-lime-200 bg-lime-50 p-4">
@@ -4420,7 +4420,7 @@ export default function AdminDashboard() {
                       <DialogTitle>Add Manual Lead</DialogTitle>
                     </DialogHeader>
                     <div className="grid gap-3 py-2">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid grid-cols-2 gap-2.5">
                         <div className="space-y-1">
                           <Label>Name *</Label>
                           <Input value={addLeadForm.name} onChange={e => setAddLeadForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
@@ -4446,7 +4446,7 @@ export default function AdminDashboard() {
                         <Label>Email</Label>
                         <Input value={addLeadForm.email} onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid grid-cols-2 gap-2.5">
                         <div className="space-y-1">
                           <Label>Service Type</Label>
                           <Input value={addLeadForm.serviceType} onChange={e => setAddLeadForm(f => ({ ...f, serviceType: e.target.value }))} placeholder="Standard Cleaning" />
@@ -4456,7 +4456,7 @@ export default function AdminDashboard() {
                           <Input type="number" min={0} value={addLeadForm.amount} onChange={e => setAddLeadForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid grid-cols-2 gap-2.5">
                         <div className="space-y-1">
                           <Label>Source</Label>
                           <Select value={addLeadForm.source} onValueChange={v => setAddLeadForm(f => ({ ...f, source: v as typeof f.source }))}>
@@ -4513,7 +4513,7 @@ export default function AdminDashboard() {
 
                 {/* Traffic Source */}
                 <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
-                  <CardContent className="p-6">
+                  <CardContent className="p-5">
                     <div className="mb-4">
                       <h3 className="text-lg font-semibold tracking-[-0.02em]">Traffic Source</h3>
                       <p className="text-sm text-zinc-500 mt-0.5">Where your leads are coming from</p>
@@ -4527,7 +4527,7 @@ export default function AdminDashboard() {
               <div className="space-y-6">
                 {/* Executive summary */}
                 <Card className="rounded-[30px] border-0 bg-zinc-950 text-white shadow-[0_10px_40px_rgba(0,0,0,0.15)]">
-                  <CardContent className="p-6">
+                  <CardContent className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm text-white/60">Executive summary</div>
