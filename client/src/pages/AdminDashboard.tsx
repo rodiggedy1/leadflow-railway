@@ -3327,6 +3327,14 @@ export default function AdminDashboard() {
 
   // ── Activity feed → open drawer by session ID ────────────────────────────────
   const trpcUtils = trpc.useUtils();
+  const bookLeadMutation = trpc.leads.agentUpdateStage.useMutation({
+    onSuccess: () => {
+      trpcUtils.leads.list.invalidate();
+      trpcUtils.leads.stats.invalidate();
+      toast.success("Lead booked");
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const handleSessionOpen = useCallback(async (sessionId: number) => {
     // First check if the session is already in the loaded list
     const existing = sessions.find(s => s.id === sessionId);
@@ -4323,10 +4331,11 @@ export default function AdminDashboard() {
                                   <MessageSquare className="h-4 w-4" /> Send SMS
                                 </button>
                                 <button
-                                  onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  onClick={() => bookLeadMutation.mutate({ sessionId: selectedLeadPanel.id, stage: "BOOKED" })}
+                                  disabled={bookLeadMutation.isPending}
+                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition disabled:opacity-50"
                                 >
-                                  <Calendar className="h-4 w-4" /> Lock time slot
+                                  <CheckCircle2 className="h-4 w-4" /> Book
                                 </button>
                                 {(recordingMap as Record<number, { hasRecording: boolean; hasTranscript: boolean }>)[selectedLeadPanel.id]?.hasTranscript ? (
                                   <button
