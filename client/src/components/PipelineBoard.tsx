@@ -253,7 +253,7 @@ function LeadCardContent({ lead, isSelected, onSelect, onMove, dragHandleProps }
   onMove: (l: any, target: string) => void;
   dragHandleProps?: Record<string, any>;
 }) {
-  const style = stateStyles[lead.state] ?? stateStyles.new;
+  const style = stateStyles[lead.state as string] ?? stateStyles.new;
   const StateIcon = style.icon;
 
   return (
@@ -337,7 +337,7 @@ function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: {
   selectedLead: any;
   onSelect: (l: any) => void;
   onMove: (l: any, target: string) => void;
-}) {
+})  {
   const meta = columnMeta[type];
   const ids = useMemo(() => leads.map((l) => l.id), [leads]);
 
@@ -693,25 +693,27 @@ export default function PipelineBoard() {
 
   const activeLead = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
 
-  const moveLead = (lead: any, target: ColumnKey) => {
+  const moveLead = (lead: any, target: string) => {
+    const col = target as ColumnKey;
     const targetStage = COLUMN_TO_STAGE[target];
     // Optimistic update
     setLocalColumns((prev) => {
       const base = prev ?? serverColumns;
       const next: Record<ColumnKey, any[]> = { new: [], quoted: [], follow: [], booked: [] };
-      for (const col of COLUMNS) {
-        next[col] = base[col].filter((l: any) => l.id !== lead.id);
+      for (const c of COLUMNS) {
+        next[c] = base[c].filter((l: any) => l.id !== lead.id);
       }
-      next[target] = [lead, ...next[target]];
+      next[col] = [lead, ...next[col]];
       return next;
     });
     setSelectedLead(lead);
     setIsPanelOpen(true);
     setPanelMode("lead");
 
-    if (targetStage) {
+    const targetStage2 = COLUMN_TO_STAGE[col];
+    if (targetStage2) {
       updateStageMutation.mutate(
-        { sessionId: lead.id, stage: targetStage as any },
+        { sessionId: lead.id, stage: targetStage2 as any },
         {
           onError: () => setLocalColumns(null),
           onSuccess: () => setLocalColumns(null),
