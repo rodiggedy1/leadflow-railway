@@ -4019,12 +4019,103 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="p-0">
                     {leadsView === "board" ? (
-                      <div className="p-4">
-                        <KanbanBoard
-                          leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]["leads"]}
-                          onCardClick={(lead) => setSelectedSession(lead as unknown as DrawerSession)}
-                          dateFilter={pipelineDateFilter}
-                        />
+                      <div className="p-6">
+                        {filtered.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
+                            <Users className="h-10 w-10 mb-3 opacity-40" />
+                            <div className="text-sm">No leads match the current filters</div>
+                          </div>
+                        ) : (
+                          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {filtered.map((lead) => {
+                              function boardStatusLabel(stage: string): string {
+                                if (["BOOKED", "COMPLETED"].includes(stage)) return "Booked";
+                                if (["QUOTE_SENT", "AVAILABILITY", "CONFIRMATION", "SLOT_CHOICE"].includes(stage)) return "Quoted";
+                                if (["FOLLOW_UP_SCHEDULED", "COLD"].includes(stage)) return "Needs Follow-up";
+                                if (["WIDGET_SIZING", "TIME_PREF", "ADDRESS"].includes(stage)) return "Sizing";
+                                if (["LOST", "REACTIVATION"].includes(stage)) return "At Risk";
+                                return "Quoted";
+                              }
+                              function boardStatusTone(status: string): string {
+                                switch (status) {
+                                  case "Booked": return "bg-emerald-100 text-emerald-700 border-emerald-200";
+                                  case "Quoted": return "bg-sky-100 text-sky-700 border-sky-200";
+                                  case "Needs Follow-up": return "bg-amber-100 text-amber-800 border-amber-200";
+                                  case "Sizing": return "bg-violet-100 text-violet-700 border-violet-200";
+                                  case "At Risk": return "bg-rose-100 text-rose-700 border-rose-200";
+                                  default: return "bg-zinc-100 text-zinc-700 border-zinc-200";
+                                }
+                              }
+                              function boardSourceLabel(src: string | null): string {
+                                if (!src || src === "form") return "Quote Form";
+                                if (src === "widget") return "Widget";
+                                if (src === "email") return "Google Ads Form";
+                                if (src === "voice") return "Phone";
+                                if (src === "reactivation") return "Campaign";
+                                if (src === "yelp") return "Yelp";
+                                if (src === "bark") return "Bark";
+                                if (src === "thumbtack" || src === "thumbtack-sms") return "Thumbtack";
+                                if (src.startsWith("campaign:")) return "Campaign";
+                                if (src === "command-center") return "Campaign";
+                                if (src.startsWith("always-on:")) return "Referral";
+                                return "Referral";
+                              }
+                              function boardLocation(address: string | null | undefined): string {
+                                if (!address) return "";
+                                const parts = address.split(",").map(s => s.trim());
+                                if (parts.length >= 2) {
+                                  const last = parts[parts.length - 1];
+                                  const secondLast = parts[parts.length - 2];
+                                  const stateMatch = last.match(/^([A-Z]{2})(\s+\d+)?$/);
+                                  if (stateMatch) return `${secondLast}, ${stateMatch[1]}`;
+                                  return last;
+                                }
+                                return address.length > 30 ? address.slice(0, 30) + "\u2026" : address;
+                              }
+                              const status = boardStatusLabel(lead.stage);
+                              const tone = boardStatusTone(status);
+                              const source = boardSourceLabel(lead.leadSource ?? null);
+                              const location = boardLocation(lead.address ?? null);
+                              const quote = lead.quotedPrice ? `$${parseInt(lead.quotedPrice, 10).toLocaleString()}` : "\u2014";
+                              const agent = lead.assignedAgentName ?? "Unassigned";
+                              const summary = lead.lastActivityText ?? "";
+                              return (
+                                <motion.button
+                                  key={lead.id}
+                                  whileHover={{ y: -3 }}
+                                  transition={{ duration: 0.15 }}
+                                  onClick={() => setSelectedSession(lead as unknown as DrawerSession)}
+                                  className="rounded-[28px] border border-black/5 bg-white p-5 text-left shadow-sm transition hover:shadow-md w-full"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="text-2xl font-semibold tracking-[-0.03em] truncate">{lead.leadName ?? lead.leadPhone}</div>
+                                      <div className="mt-1 text-sm text-zinc-500">{lead.leadPhone}</div>
+                                    </div>
+                                    <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold ${tone}`}>{status}</span>
+                                  </div>
+                                  <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-2xl bg-zinc-50 p-3">
+                                      <div className="text-zinc-500">Quote</div>
+                                      <div className="mt-1 text-xl font-semibold">{quote}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-zinc-50 p-3">
+                                      <div className="text-zinc-500">Agent</div>
+                                      <div className="mt-1 text-xl font-semibold truncate">{agent}</div>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 flex items-center justify-between text-sm text-zinc-500">
+                                    <span>{source}</span>
+                                    {location && <span>{location}</span>}
+                                  </div>
+                                  {summary && (
+                                    <p className="mt-4 line-clamp-3 text-sm leading-6 text-zinc-600">{summary}</p>
+                                  )}
+                                </motion.button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1.2fr_360px]"}`}>
