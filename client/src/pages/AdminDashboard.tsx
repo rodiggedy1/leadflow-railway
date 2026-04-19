@@ -3297,26 +3297,12 @@ export default function AdminDashboard() {
     refetchInterval: 300_000,
     enabled: hasSession,
   });
+  // ID-based agent photo map — agentId → profilePhotoUrl (unambiguous, no name-matching)
   const agentPhotoMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    for (const a of agentStatuses) map[a.name] = a.profilePhotoUrl ?? null;
+    const map: Record<number, string | null> = {};
+    for (const a of agentStatuses) map[a.id] = a.profilePhotoUrl ?? null;
     return map;
   }, [agentStatuses]);
-  // Fuzzy photo lookup: exact match first, then first-name prefix match
-  // Handles cases like "Rohan G" (session) vs "Rohan Gupta" (agents table)
-  const getAgentPhoto = useCallback((name: string | null | undefined): string | null => {
-    if (!name) return null;
-    // 1. Exact match
-    if (name in agentPhotoMap) return agentPhotoMap[name];
-    // 2. First-name prefix: find an agent whose name starts with the first word of `name`,
-    //    or whose first word matches the first word of `name`
-    const firstName = name.split(/\s+/)[0].toLowerCase();
-    const match = agentStatuses.find(a => {
-      const aFirst = a.name.split(/\s+/)[0].toLowerCase();
-      return aFirst === firstName || a.name.toLowerCase().startsWith(firstName) || name.toLowerCase().startsWith(aFirst);
-    });
-    return match?.profilePhotoUrl ?? null;
-  }, [agentPhotoMap, agentStatuses]);
 
   const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
     refetchInterval: 60000,
@@ -4306,9 +4292,9 @@ export default function AdminDashboard() {
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="flex items-center gap-2.5 min-w-0">
                                             {session.assignedAgentName ? (
-                                              (() => { const photo = getAgentPhoto(session.assignedAgentName); return photo ? (
+                                              session.assignedAgentId && agentPhotoMap[session.assignedAgentId] ? (
                                                 <img
-                                                  src={photo}
+                                                  src={agentPhotoMap[session.assignedAgentId]!}
                                                   alt={session.assignedAgentName}
                                                   className="h-9 w-9 shrink-0 rounded-full object-cover"
                                                 />
@@ -4316,7 +4302,7 @@ export default function AdminDashboard() {
                                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-300 font-semibold text-zinc-900 text-sm">
                                                   {session.assignedAgentName.charAt(0).toUpperCase()}
                                                 </div>
-                                              ); })()
+                                              )
                                             ) : (
                                               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
                                                 <User className="h-4 w-4" />
