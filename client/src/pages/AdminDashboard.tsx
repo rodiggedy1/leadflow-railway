@@ -6,6 +6,9 @@
  * Supports date range filtering and stage filtering.
  */
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import NotificationBell from "@/components/NotificationBell";
 import { triggerTestChime } from "@/hooks/useNewReplyNotifier";
 import { useLeadReplyNotifier } from "@/hooks/useLeadReplyNotifier";
@@ -85,6 +88,19 @@ import {
   Wand2,
   CheckCheck,
   ExternalLink,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ArrowUpRight,
+  Clock3,
+  BadgeCheck,
+  Wallet,
+  Waypoints,
+  FileText,
+  AlertTriangle,
+  CircleAlert,
+  SlidersHorizontal,
+  Plus,
+  Filter,
 } from "lucide-react";
 import {
   Dialog,
@@ -3364,6 +3380,9 @@ export default function AdminDashboard() {
   }, [sessions, stageFilter, agentFilter, sourceFilter, search]);
 
   const unhandledCount = stats?.byStage?.["UNHANDLED"] ?? 0;
+  const [leadsView, setLeadsView] = useState<"split" | "board">("split");
+  const [leadsCollapsed, setLeadsCollapsed] = useState(false);
+  const [selectedLeadPanel, setSelectedLeadPanel] = useState<typeof sessions[0] | null>(null);
 
   // ── Auth guards (after ALL hooks) ─────────────────────────────────────────────────────
   if (!authChecked) {
@@ -3682,615 +3701,910 @@ export default function AdminDashboard() {
           </div>
         )}
         {activeTab === "leads" && <>
-        <div className="-mx-4 sm:-mx-6 mt-2 px-4 sm:px-6 pt-6 pb-6" style={{ backgroundColor: '#F7F7F7', minHeight: 'calc(100vh - 200px)' }}>
-        {/* Summary + date filter row */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-          <div className="flex items-center gap-3">
-            {/* All / Organic / Campaign toggle */}
-            <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: '#E5E5E5' }}>
-              <button
-                onClick={() => setStatsMode('all')}
-                className="px-3 py-1.5 text-sm font-medium transition-colors"
-                style={statsMode === 'all'
-                  ? { backgroundColor: '#000000', color: '#FFFFFF' }
-                  : { backgroundColor: '#FFFFFF', color: '#666666' }}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setStatsMode('organic')}
-                className="px-3 py-1.5 text-sm font-medium transition-colors"
-                style={statsMode === 'organic'
-                  ? { backgroundColor: '#000000', color: '#FFFFFF' }
-                  : { backgroundColor: '#FFFFFF', color: '#666666' }}
-              >
-                Organic
-              </button>
-              <button
-                onClick={() => setStatsMode('campaign')}
-                className="px-3 py-1.5 text-sm font-medium transition-colors"
-                style={statsMode === 'campaign'
-                  ? { backgroundColor: '#000000', color: '#FFFFFF' }
-                  : { backgroundColor: '#FFFFFF', color: '#666666' }}
-              >
-                Campaign
-              </button>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold" style={{ color: '#0D0D0D', fontFamily: 'Space Grotesk, sans-serif' }}>
-                {statsMode === 'all'
-                  ? (stats?.total ?? 0)
-                  : statsMode === 'organic'
-                    ? (stats?.organic?.total ?? 0)
-                    : (stats?.campaign?.total ?? 0)}
-              </span>
-              <span className="text-sm" style={{ color: '#888888' }}>leads</span>
-            </div>
-          </div>
-          {/* Date preset selector */}
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-            {DATE_PRESETS.map(p => (
-              <button
-                key={p.value}
-                onClick={() => setDatePreset(p.value)}
-                className="hj-date-btn"
-                style={datePreset === p.value ? { backgroundColor: '#000000', borderColor: '#000000', color: '#FFFFFF', fontWeight: 600 } : {}}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* ── New Leads Page Design ─────────────────────────────────────────── */}
+        <div className="bg-[#f6f5f2] text-zinc-900 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-6 pb-24" style={{ minHeight: 'calc(100vh - 200px)' }}>
+          <div className="mx-auto max-w-[1600px]">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.25fr_360px]">
+              {/* ── Left column ─────────────────────────────────────────────── */}
+              <div className="space-y-6">
+                {/* Metric cards */}
+                {stats && (
+                  <section className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                    {/* Qualified Leads */}
+                    <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
+                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-medium text-zinc-500">Qualified leads</div>
+                                <Badge variant="outline" className="rounded-full border-zinc-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-zinc-600">
+                                  {datePreset === "all" ? "All time" : datePreset === "today" ? "Today" : datePreset === "yesterday" ? "Yesterday" : datePreset === "last7" ? "Last 7d" : datePreset === "last30" ? "Last 30d" : "Custom"}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                                {statsMode === "all" ? (stats.total ?? 0) : statsMode === "organic" ? (stats.organic?.total ?? 0) : (stats.campaign?.total ?? 0)}
+                              </div>
+                              <div className="mt-3 flex items-center gap-2 text-sm">
+                                <span className="rounded-full bg-emerald-50 px-2 py-1 font-medium text-emerald-700">
+                                  {statsMode === "organic" ? "organic" : statsMode === "campaign" ? "campaign" : "all channels"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-100 shrink-0">
+                              <Activity className="h-5 w-5 text-zinc-700" />
+                            </div>
+                          </div>
+                          <div className="mt-6 flex items-end gap-2">
+                            {(dailyTrend.length > 0 ? dailyTrend : Array(7).fill({ leads: 0 })).slice(-7).map((d, i) => {
+                              const max = Math.max(...dailyTrend.map(x => x.leads), 1);
+                              const h = Math.round(((d.leads ?? 0) / max) * 100);
+                              return (
+                                <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                  <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                    {/* Booked Revenue */}
+                    <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
+                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-zinc-500">Booked revenue</div>
+                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                                ${(() => {
+                                  const view = statsMode === "all" ? stats : statsMode === "organic" ? stats.organic : stats.campaign;
+                                  return (view?.bookedRevenue ?? 0).toLocaleString();
+                                })()}
+                              </div>
+                              <div className="mt-3 flex items-center gap-2 text-sm">
+                                <span className="rounded-full bg-emerald-50 px-2 py-1 font-medium text-emerald-700">
+                                  from {(() => {
+                                    const view = statsMode === "all" ? stats : statsMode === "organic" ? stats.organic : stats.campaign;
+                                    return view?.bookedCount ?? 0;
+                                  })()} jobs
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-100 shrink-0">
+                              <Wallet className="h-5 w-5 text-zinc-700" />
+                            </div>
+                          </div>
+                          <div className="mt-6 flex items-end gap-2">
+                            {(dailyTrend.length > 0 ? dailyTrend : Array(7).fill({ booked: 0 })).slice(-7).map((d, i) => {
+                              const max = Math.max(...dailyTrend.map(x => x.booked), 1);
+                              const h = Math.round(((d.booked ?? 0) / max) * 100);
+                              return (
+                                <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                  <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                    {/* Conversion Rate */}
+                    <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
+                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-zinc-500">Conversion rate</div>
+                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                                {(() => {
+                                  const view = statsMode === "all" ? stats : statsMode === "organic" ? stats.organic : stats.campaign;
+                                  return view?.conversionRate ?? 0;
+                                })()}%
+                              </div>
+                              <div className="mt-3 flex items-center gap-2 text-sm">
+                                <span className="rounded-full bg-zinc-100 px-2 py-1 font-medium text-zinc-600">lead → booked</span>
+                              </div>
+                            </div>
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-100 shrink-0">
+                              <Waypoints className="h-5 w-5 text-zinc-700" />
+                            </div>
+                          </div>
+                          <div className="mt-6 flex items-end gap-2">
+                            {[28, 58, 42, 66, 51, 74, 49].map((h, i) => (
+                              <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                    {/* AI Voice Assists */}
+                    <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
+                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-zinc-500">AI voice assists</div>
+                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                                {(voiceStats?.totalCalls ?? 0).toLocaleString()}
+                              </div>
+                              <div className="mt-3 flex items-center gap-2 text-sm">
+                                <span className="rounded-full bg-zinc-100 px-2 py-1 font-medium text-zinc-600">
+                                  {voiceStats?.totalCalls ? `${voiceStats.conversionRate}% booked` : "no calls yet"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-100 shrink-0">
+                              <Bot className="h-5 w-5 text-zinc-700" />
+                            </div>
+                          </div>
+                          <div className="mt-6 flex items-end gap-2">
+                            {(voiceStats?.dailyTrend ?? Array(7).fill({ count: 0 })).slice(-7).map((d, i) => {
+                              const arr = (voiceStats?.dailyTrend ?? []).slice(-7);
+                              const max = Math.max(...arr.map(x => x.count), 1);
+                              const h = Math.round(((d.count ?? 0) / max) * 100);
+                              return (
+                                <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                  <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </section>
+                )}
 
-        {/* Custom date range inputs */}
-        {datePreset === "custom" && (
-          <div className="flex items-center gap-3 mb-5 rounded-xl border p-3" style={{ backgroundColor: '#F7F7F7', borderColor: '#E5E5E5' }}>
-            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-            <div className="flex items-center gap-2 flex-wrap">
-              <label className="text-sm text-gray-600">From</label>
-              <input
-                type="date"
-                value={customFrom}
-                onChange={e => setCustomFrom(e.target.value)}
-                className="border rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2"
-                style={{ borderColor: "#e5e7eb" }}
-              />
-              <label className="text-sm text-gray-600">To</label>
-              <input
-                type="date"
-                value={customTo}
-                onChange={e => setCustomTo(e.target.value)}
-                className="border rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2"
-                style={{ borderColor: "#e5e7eb" }}
-              />
-              {(customFrom || customTo) && (
-                <button
-                  onClick={() => { setCustomFrom(""); setCustomTo(""); }}
-                  className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
-                >
-                  <X className="w-3 h-3" /> Clear
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+                {/* Action cards */}
+                <section className="grid grid-cols-1 gap-4 2xl:grid-cols-3">
+                  <button
+                    onClick={() => setStageFilter("BOOKED")}
+                    className="rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-emerald-50 border-emerald-200"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-zinc-500">Hot leads</div>
+                        <div className="mt-1 text-3xl font-semibold tracking-[-0.03em]">{stats?.byStage?.["BOOKED"] ?? 0}</div>
+                        <p className="mt-2 text-sm leading-6 text-zinc-600">Booked and confirmed jobs</p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70">
+                        <Star className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setStageFilter("UNHANDLED")}
+                    className="rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-amber-50 border-amber-200"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-zinc-500">Needs rescue</div>
+                        <div className="mt-1 text-3xl font-semibold tracking-[-0.03em]">{stats?.byStage?.["UNHANDLED"] ?? 0}</div>
+                        <p className="mt-2 text-sm leading-6 text-zinc-600">Unhandled leads requiring review</p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70">
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setStageFilter("COLD")}
+                    className="rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-rose-50 border-rose-200"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-zinc-500">Cold / Lost</div>
+                        <div className="mt-1 text-3xl font-semibold tracking-[-0.03em]">{(stats?.byStage?.["COLD"] ?? 0) + (stats?.byStage?.["LOST"] ?? 0)}</div>
+                        <p className="mt-2 text-sm leading-6 text-zinc-600">Leads that went cold or were lost</p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70">
+                        <CircleAlert className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </button>
+                </section>
 
-        {/* Summary metrics row — Visitors → Leads → Booked → Revenue + Voice */}
-        {stats && (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-            {/* Visitors */}
-            <div className="hj-metric-card">
-              <span className="hj-metric-label">Visitors</span>
-              <span className="hj-metric-value">{(visitorStats?.visitors ?? 0).toLocaleString()}</span>
-              <span className="hj-metric-sub">page views in range</span>
-              <Sparkline data={dailyTrend.map(d => d.visitors)} color="#c8ff00" />
-            </div>
-            {/* Leads — scoped to statsMode */}
-            {(() => {
-              const view = statsMode === 'all'
-                ? { total: stats.total, bookedCount: stats.bookedCount, bookedRevenue: stats.bookedRevenue, conversionRate: stats.conversionRate }
-                : statsMode === 'organic' ? stats.organic : stats.campaign;
-              const leadsTotal = view?.total ?? 0;
-              return (
-                <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
-                  <span className="hj-metric-label">Leads</span>
-                  <span className="hj-metric-value hj-metric-value--accent">{leadsTotal.toLocaleString()}</span>
-                  <span className="hj-metric-sub">
-                    {statsMode === 'all'
-                      ? 'all sources'
-                      : statsMode === 'organic' && visitorStats?.visitors
-                        ? `${((leadsTotal / visitorStats.visitors) * 100).toFixed(1)}% visitor → lead`
-                        : statsMode === 'campaign' ? 'campaign replies' : 'form submissions'}
-                  </span>
-                  <Sparkline data={dailyTrend.map(d => d.leads)} color="#f59e0b" />
-                </div>
-              );
-            })()}
-
-            {/* Jobs Booked — scoped to statsMode */}
-            {(() => {
-              const view = statsMode === 'all'
-                ? { total: stats.total, bookedCount: stats.bookedCount, bookedRevenue: stats.bookedRevenue, conversionRate: stats.conversionRate }
-                : statsMode === 'organic' ? stats.organic : stats.campaign;
-              const bookedCnt = view?.bookedCount ?? 0;
-              const leadsTotal = view?.total ?? 0;
-              const convRate = view?.conversionRate ?? 0;
-              return (
-                <div className="hj-metric-card">
-                  <span className="hj-metric-label">Jobs Booked</span>
-                  <span className="hj-metric-value">{bookedCnt}</span>
-                  <span className="hj-metric-sub">{leadsTotal > 0 ? `${convRate}% lead → booked` : 'no leads yet'}</span>
-                  <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
-                </div>
-              );
-            })()}
-
-            {/* Booked Revenue — scoped to statsMode */}
-            {(() => {
-              const view = statsMode === 'all'
-                ? { total: stats.total, bookedCount: stats.bookedCount, bookedRevenue: stats.bookedRevenue, conversionRate: stats.conversionRate }
-                : statsMode === 'organic' ? stats.organic : stats.campaign;
-              const rev = view?.bookedRevenue ?? 0;
-              const bookedCnt = view?.bookedCount ?? 0;
-              // Source breakdown: for organic mode use revenueBySource; for campaign show single bar
-              const rbs = stats.revenueBySource as Record<string, number> | undefined;
-              const organicSources = [
-                { key: 'form', label: 'Form', color: '#059669' },
-                { key: 'widget', label: 'Widget', color: '#0d9488' },
-              ];
-              return (
-                <div className="hj-metric-card hj-metric-card hj-metric-card--accent">
-                  <span className="hj-metric-label">Booked Revenue</span>
-                  <span className="hj-metric-value hj-metric-value--accent">${rev.toLocaleString()}</span>
-                  {/* Source breakdown bar — organic mode only */}
-                  {statsMode === 'organic' && rbs && rev > 0 && (() => {
-                    return (
-                      <div className="mt-1 space-y-1">
-                        <div className="flex h-2 rounded-full overflow-hidden gap-px">
-                          {organicSources.map(s => {
-                            const pct = rev > 0 ? ((rbs[s.key] ?? 0) / rev) * 100 : 0;
-                            return pct > 0 ? (
-                              <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} />
-                            ) : null;
-                          })}
-                        </div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                          {organicSources.filter(s => (rbs[s.key] ?? 0) > 0).map(s => (
-                            <span key={s.key} className="flex items-center gap-1 text-xs" style={{ color: '#059669', opacity: 0.85 }}>
-                              <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: s.color }} />
-                              {s.label}: ${(rbs[s.key] ?? 0).toLocaleString()}
-                            </span>
-                          ))}
+                {/* Lead command center */}
+                <Card className="overflow-hidden rounded-[30px] border-black/5 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.05)]">
+                  <CardHeader className="border-b border-black/5 px-6 py-5">
+                    <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+                      <div>
+                        <CardTitle className="text-[26px] tracking-[-0.03em]">Lead command center</CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">Cleaner hierarchy, stronger emphasis, faster decision-making.</p>
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-black/5 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {filtered.length} result{filtered.length !== 1 ? "s" : ""}
                         </div>
                       </div>
-                    );
-                  })()}
-                  {!(statsMode === 'organic' && rbs && rev > 0) && (
-                    <span className="hj-metric-sub">from {bookedCnt} job{bookedCnt !== 1 ? 's' : ''}</span>
-                  )}
-                  <Sparkline data={dailyTrend.map(d => d.booked)} color="#c8ff00" />
-                </div>
-              );
-            })()}
-            {/* Voice Calls */}
-            <div className="hj-metric-card">
-              <span className="hj-metric-label">AI Voice Calls</span>
-              <span className="hj-metric-value">{(voiceStats?.totalCalls ?? 0).toLocaleString()}</span>
-              <span className="hj-metric-sub">{voiceStats?.totalCalls ? `${voiceStats.conversionRate}% booked · avg ${Math.floor((voiceStats.avgDurationSeconds ?? 0) / 60)}:${String((voiceStats.avgDurationSeconds ?? 0) % 60).padStart(2, '0')}` : 'no calls yet'}</span>
-              <Sparkline data={voiceStats?.dailyTrend?.map(d => d.count) ?? Array(7).fill(0)} color="#c8ff00" />
-            </div>
-          </div>
-        )}
-
-        {/* Search + stage filter */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#888888' }} />
-            <Input
-              placeholder="Search name, phone, service…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9 hj-input"
-            />
-          </div>
-          <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-44 hj-select">
-              <SelectValue placeholder="All stages" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All stages</SelectItem>
-              {ALL_STAGES.map(stage => (
-                <SelectItem key={stage} value={stage}>
-                  {STAGE_CONFIG[stage].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={agentFilter} onValueChange={setAgentFilter}>
-            <SelectTrigger className="w-44 hj-select">
-              <SelectValue placeholder="All agents" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All agents</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {agentNames.map(name => (
-                <SelectItem key={name} value={name}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-40 hj-select">
-              <SelectValue placeholder="All sources" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sources</SelectItem>
-              <SelectItem value="form">Quote Form</SelectItem>
-              <SelectItem value="widget">Widget</SelectItem>
-              <SelectItem value="email">Google Ads Form</SelectItem>
-              <SelectItem value="voice">Google Ads Call</SelectItem>
-              <SelectItem value="reactivation">Campaign</SelectItem>
-              <SelectItem value="always-on">Always-On</SelectItem>
-              <SelectItem value="bark">Bark</SelectItem>
-              <SelectItem value="yelp">Yelp</SelectItem>
-            </SelectContent>
-          </Select>
-          {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all") && (
-            <button
-              onClick={() => { setStageFilter("all"); setAgentFilter("all"); setSourceFilter("all"); }}
-              className="text-xs flex items-center gap-1 self-center"
-              style={{ color: '#888888' }}
-            >
-              <X className="w-3 h-3" /> Clear filters
-            </button>
-          )}
-          <span className="text-sm self-center" style={{ color: '#888888' }}>
-            {filtered.length} result{filtered.length !== 1 ? 's' : ''}
-          </span>
-          <Button
-            size="sm"
-            className="ml-auto gap-1.5 shrink-0"
-            style={{ background: '#111', color: '#fff' }}
-            onClick={() => setAddLeadOpen(true)}
-          >
-            <UserPlus className="w-3.5 h-3.5" /> Add Lead
-          </Button>
-        </div>
-
-        {/* Add Manual Lead Dialog */}
-        <Dialog open={addLeadOpen} onOpenChange={setAddLeadOpen}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add Manual Lead</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-3 py-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Name *</Label>
-                  <Input value={addLeadForm.name} onChange={e => setAddLeadForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Phone *</Label>
-                  <Input
-                    value={addLeadForm.phone}
-                    onChange={e => setAddLeadForm(f => ({ ...f, phone: e.target.value }))}
-                    onBlur={e => {
-                      const digits = e.target.value.replace(/\D/g, '');
-                      if (digits.length === 10) {
-                        setAddLeadForm(f => ({ ...f, phone: `+1${digits}` }));
-                      } else if (digits.length === 11 && digits.startsWith('1')) {
-                        setAddLeadForm(f => ({ ...f, phone: `+${digits}` }));
-                      }
-                    }}
-                    placeholder="+1 555 000 0000"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Email</Label>
-                <Input value={addLeadForm.email} onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Service Type</Label>
-                  <Input value={addLeadForm.serviceType} onChange={e => setAddLeadForm(f => ({ ...f, serviceType: e.target.value }))} placeholder="Standard Cleaning" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Amount ($)</Label>
-                  <Input type="number" min={0} value={addLeadForm.amount} onChange={e => setAddLeadForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Source</Label>
-                  <Select value={addLeadForm.source} onValueChange={v => setAddLeadForm(f => ({ ...f, source: v as typeof f.source }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="yelp">Yelp</SelectItem>
-                      <SelectItem value="google">Google</SelectItem>
-                      <SelectItem value="thumbtack">Thumbtack</SelectItem>
-                      <SelectItem value="bark">Bark</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Status</Label>
-                  <Select value={addLeadForm.status} onValueChange={v => setAddLeadForm(f => ({ ...f, status: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="QUOTE_SENT">Quote Sent</SelectItem>
-                      <SelectItem value="AVAILABILITY">Availability</SelectItem>
-                      <SelectItem value="BOOKED">Booked</SelectItem>
-                      <SelectItem value="COLD">Cold</SelectItem>
-                      <SelectItem value="DONE">Done</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Notes</Label>
-                <Textarea rows={3} value={addLeadForm.notes} onChange={e => setAddLeadForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any additional notes…" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAddLeadOpen(false)}>Cancel</Button>
-              <Button
-                disabled={!addLeadForm.name.trim() || !addLeadForm.phone.trim() || createManualLeadMutation.isPending}
-                onClick={() => createManualLeadMutation.mutate({
-                  name: addLeadForm.name.trim(),
-                  phone: addLeadForm.phone.trim(),
-                  email: addLeadForm.email.trim() || undefined,
-                  serviceType: addLeadForm.serviceType.trim() || "Standard Cleaning",
-                  notes: addLeadForm.notes.trim() || undefined,
-                  amount: addLeadForm.amount ? parseInt(addLeadForm.amount, 10) : undefined,
-                  status: addLeadForm.status,
-                  source: addLeadForm.source,
-                })}
-              >
-                {createManualLeadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Lead"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Table */}
-        <div className="hj-table-wrap">
-          {sessionsLoading ? (
-            <div className="py-20 text-center" style={{ color: '#888888' }}>
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" style={{ color: '#111111' }} />
-              Loading leads…
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-20 text-center" style={{ color: '#888888' }}>
-              <div className="text-4xl mb-3">📋</div>
-              <p className="font-medium" style={{ color: '#888888' }}>No leads found</p>
-              <p className="text-sm mt-1">
-                {sessions.length === 0
-                  ? "Leads will appear here once the form is submitted."
-                  : "Try adjusting your filters."}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hj-table-header">
-                    <TableHead className="hj-th pl-4 w-48">Lead</TableHead>
-                    <TableHead className="hj-th w-24">Source</TableHead>
-                    <TableHead className="hj-th">Service</TableHead>
-                    <TableHead className="hj-th w-24">Quote</TableHead>
-                    <TableHead className="hj-th w-36">Stage</TableHead>
-                    <TableHead className="hj-th w-32">Agent</TableHead>
-                    <TableHead className="hj-th w-44">Last Activity</TableHead>
-                    <TableHead className="hj-th w-24 pr-4">When</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map(session => {
-                    const isBooked = Number(session.isBooked) === 1;
-                    const rowBg = isBooked ? 'rgba(191,255,0,0.06)' : '';
-                    const accentColor = isBooked ? '#AAFF00' : 'transparent';
-                    const recInfo = (recordingMap as Record<number, { hasRecording: boolean; hasTranscript: boolean; callScore: number | null }>)[session.id];
-                    return (
-                    <TableRow
-                      key={session.id}
-                      className="cursor-pointer transition-all duration-100 group hj-table-row"
-                      style={{ backgroundColor: rowBg, borderLeft: `3px solid ${accentColor}` }}
-                      onClick={() => setSelectedSession(session as unknown as DrawerSession)}
-                      onMouseEnter={e => { if (!isBooked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = rowBg; }}
-                    >
-                      {/* Lead — name + phone + click-to-call */}
-                      <TableCell className="py-2 pl-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <span className="text-sm font-semibold leading-tight" style={{ color: '#111111' }}>
-                              {session.leadName ?? <span style={{ color: '#555555', fontWeight: 400 }}>Unknown</span>}
-                            </span>
-                            <span className="text-xs tabular-nums" style={{ color: '#777' }}>
-                              {formatPhone(session.leadPhone)}
-                            </span>
-                            {/* Call recording / transcript / score badges */}
-                            {recInfo?.hasRecording && (
-                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
-                                  <PhoneIncoming className="w-2.5 h-2.5" /> Call
-                                </span>
-                                {recInfo.hasTranscript && (
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                    📝 Transcript
-                                  </span>
-                                )}
-                                {recInfo.callScore != null && (
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                                    style={{
-                                      background: (recInfo.callScore >= 80 ? '#16a34a' : recInfo.callScore >= 60 ? '#d97706' : '#dc2626') + '18',
-                                      color: recInfo.callScore >= 80 ? '#16a34a' : recInfo.callScore >= 60 ? '#d97706' : '#dc2626',
-                                    }}>
-                                    <BarChart2 className="w-2.5 h-2.5" /> {recInfo.callScore}/100
-                                  </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(["all", "BOOKED", "QUOTE_SENT", "FOLLOW_UP_SCHEDULED", "UNHANDLED", "COLD"] as const).map((stage) => (
+                          <button
+                            key={stage}
+                            onClick={() => setStageFilter(stage)}
+                            className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                              stageFilter === stage
+                                ? "bg-zinc-950 text-white shadow-sm"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                            }`}
+                          >
+                            {stage === "all" ? "All" : STAGE_CONFIG[stage as Stage]?.label ?? stage}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex flex-1 flex-wrap items-center gap-3">
+                        <div className="relative min-w-[280px] flex-1 xl:max-w-md">
+                          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                          <Input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search name, phone, service, source..."
+                            className="h-12 rounded-2xl border-zinc-200 bg-zinc-50 pl-11"
+                          />
+                        </div>
+                        <Select value={agentFilter} onValueChange={setAgentFilter}>
+                          <SelectTrigger className="h-12 w-44 rounded-2xl border-zinc-200 bg-white">
+                            <Filter className="mr-2 h-4 w-4 text-zinc-400" />
+                            <SelectValue placeholder="All agents" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All agents</SelectItem>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {agentNames.map(name => (
+                              <SelectItem key={name} value={name}>{name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                          <SelectTrigger className="h-12 w-44 rounded-2xl border-zinc-200 bg-white">
+                            <SlidersHorizontal className="mr-2 h-4 w-4 text-zinc-400" />
+                            <SelectValue placeholder="All sources" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All sources</SelectItem>
+                            <SelectItem value="form">Quote Form</SelectItem>
+                            <SelectItem value="widget">Widget</SelectItem>
+                            <SelectItem value="email">Google Ads Form</SelectItem>
+                            <SelectItem value="voice">Google Ads Call</SelectItem>
+                            <SelectItem value="reactivation">Campaign</SelectItem>
+                            <SelectItem value="always-on">Always-On</SelectItem>
+                            <SelectItem value="bark">Bark</SelectItem>
+                            <SelectItem value="yelp">Yelp</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all" || search) && (
+                          <button
+                            onClick={() => { setStageFilter("all"); setAgentFilter("all"); setSourceFilter("all"); setSearch(""); }}
+                            className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-700 transition"
+                          >
+                            <X className="h-3.5 w-3.5" /> Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="outline"
+                          className="h-12 rounded-2xl bg-white"
+                          onClick={() => setLeadsCollapsed(v => !v)}
+                        >
+                          {leadsCollapsed ? <PanelLeftOpen className="mr-2 h-4 w-4" /> : <PanelLeftClose className="mr-2 h-4 w-4" />}
+                          {leadsCollapsed ? "Show list" : "Focus mode"}
+                        </Button>
+                        <div className="rounded-2xl bg-zinc-100 p-1">
+                          <button
+                            onClick={() => setLeadsView("split")}
+                            className={`rounded-xl px-3 py-2 text-sm transition ${leadsView === "split" ? "bg-white shadow-sm" : "text-zinc-500"}`}
+                          >
+                            Split
+                          </button>
+                          <button
+                            onClick={() => setLeadsView("board")}
+                            className={`rounded-xl px-3 py-2 text-sm transition ${leadsView === "board" ? "bg-white shadow-sm" : "text-zinc-500"}`}
+                          >
+                            Board
+                          </button>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-12 rounded-2xl bg-zinc-950 hover:bg-zinc-800 px-5"
+                          onClick={() => setAddLeadOpen(true)}
+                        >
+                          <Plus className="mr-2 h-4 w-4" /> Add Lead
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {leadsView === "board" ? (
+                      <div className="p-4">
+                        <KanbanBoard
+                          leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]["leads"]}
+                          onCardClick={(lead) => setSelectedSession(lead as unknown as DrawerSession)}
+                          dateFilter={pipelineDateFilter}
+                        />
+                      </div>
+                    ) : (
+                      <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1.2fr_420px]"}`}>
+                        {/* Lead list */}
+                        {!leadsCollapsed && (
+                          <div className="border-r border-black/5">
+                            {sessionsLoading ? (
+                              <div className="py-20 text-center text-zinc-400">
+                                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
+                                Loading leads…
+                              </div>
+                            ) : filtered.length === 0 ? (
+                              <div className="py-20 text-center text-zinc-400">
+                                <Search className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                                <p className="text-sm">No leads match your filters.</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] gap-3 border-b border-black/5 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                                  <div>Lead</div>
+                                  <div>Source</div>
+                                  <div>Service</div>
+                                  <div>Quote</div>
+                                  <div>Stage</div>
+                                  <div>Agent / activity</div>
+                                </div>
+                                <div className="divide-y divide-black/5">
+                                  {filtered.map((session) => {
+                                    const isBooked = Number(session.isBooked) === 1;
+                                    const recInfo = (recordingMap as Record<number, { hasRecording: boolean; hasTranscript: boolean; callScore: number | null }>)[session.id];
+                                    // Sentiment dot derived from stage
+                                    const sentimentColor = (() => {
+                                      if (session.stage === "BOOKED" || session.stage === "DONE") return "bg-emerald-500";
+                                      if (session.stage === "FOLLOW_UP_SCHEDULED" || session.stage === "AVAILABILITY" || session.stage === "QUOTE_SENT") return "bg-amber-500";
+                                      if (session.stage === "UNHANDLED") return "bg-rose-500";
+                                      return "bg-zinc-300";
+                                    })();
+                                    const total = computeTotalQuote(session.quotedPrice ?? null, session.extras ?? null);
+                                    const isSelected = selectedLeadPanel?.id === session.id;
+                                    return (
+                                      <button
+                                        key={session.id}
+                                        onClick={() => {
+                                          setSelectedLeadPanel(session);
+                                          if (leadsCollapsed) setLeadsCollapsed(false);
+                                        }}
+                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] gap-3 px-6 py-5 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                      >
+                                        {/* Lead name + phone + badges */}
+                                        <div>
+                                          <div className="flex items-start gap-3">
+                                            <div className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
+                                            <div className="min-w-0">
+                                              <div className="text-[18px] font-semibold tracking-[-0.02em] leading-none truncate">
+                                                {session.leadName ?? <span className="text-zinc-400 font-normal text-sm">Unknown</span>}
+                                              </div>
+                                              <div className="mt-1.5 text-sm text-zinc-500">{formatPhone(session.leadPhone)}</div>
+                                              {recInfo?.hasRecording && (
+                                                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                                                  <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
+                                                    <Phone className="mr-1 h-3 w-3" /> Call
+                                                  </Badge>
+                                                  {recInfo.hasTranscript && (
+                                                    <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
+                                                      <FileText className="mr-1 h-3 w-3" /> Transcript
+                                                    </Badge>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {/* Source */}
+                                        <div className="flex items-center">
+                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-3 py-1 text-sm font-medium text-zinc-700 truncate max-w-[120px]">
+                                            {(() => {
+                                              const src = session.leadSource;
+                                              if (!src || src === "form") return "Quote Form";
+                                              if (src === "widget") return "Widget";
+                                              if (src === "email") return "Google Ads";
+                                              if (src === "voice") return "Voice";
+                                              if (src === "reactivation" || src === "command-center") return "Campaign";
+                                              if (src === "yelp") return "Yelp";
+                                              if (src === "bark") return "Bark";
+                                              if (src === "thumbtack" || src === "thumbtack-sms") return "Thumbtack";
+                                              if (src.startsWith("always-on:")) return "Always-On";
+                                              if (src.startsWith("campaign:")) return "Campaign";
+                                              return src;
+                                            })()}
+                                          </Badge>
+                                        </div>
+                                        {/* Service */}
+                                        <div className="flex items-center pr-4 text-[15px] text-zinc-700 truncate">
+                                          {session.serviceType ?? "—"}
+                                        </div>
+                                        {/* Quote */}
+                                        <div className="flex items-center text-[22px] font-semibold tracking-[-0.03em]">
+                                          {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
+                                        </div>
+                                        {/* Stage */}
+                                        <div className="flex items-center">
+                                          <StageBadge stage={session.stage} />
+                                        </div>
+                                        {/* Agent + last activity */}
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            {session.assignedAgentName ? (
+                                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-300 font-semibold text-zinc-900 text-sm">
+                                                {session.assignedAgentName.charAt(0).toUpperCase()}
+                                              </div>
+                                            ) : (
+                                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
+                                                <User className="h-4 w-4" />
+                                              </div>
+                                            )}
+                                            <div className="min-w-0">
+                                              <div className="font-medium text-zinc-800 text-sm truncate">{session.assignedAgentName ?? "Unassigned"}</div>
+                                              <div className="text-xs text-zinc-500 truncate max-w-[120px]">{session.lastActivityText ?? "—"}</div>
+                                            </div>
+                                          </div>
+                                          <div className="text-xs text-zinc-400 whitespace-nowrap shrink-0">
+                                            {(() => {
+                                              const actAt = session.lastActivityAt ? new Date(session.lastActivityAt) : null;
+                                              const updAt = session.updatedAt ? new Date(session.updatedAt) : null;
+                                              const display = actAt && updAt && actAt > updAt ? updAt : (actAt ?? updAt);
+                                              return display ? timeAgo(display) : "—";
+                                            })()}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {/* Right detail panel */}
+                        <AnimatePresence mode="wait">
+                          {selectedLeadPanel ? (
+                            <motion.div
+                              key={selectedLeadPanel.id}
+                              initial={{ opacity: 0, x: 20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 20 }}
+                              transition={{ duration: 0.18 }}
+                              className="overflow-y-auto p-6 space-y-4 bg-[#fafaf9]"
+                            >
+                              {/* Header */}
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={`h-3 w-3 rounded-full shrink-0 ${(() => {
+                                      if (selectedLeadPanel.stage === "BOOKED" || selectedLeadPanel.stage === "DONE") return "bg-emerald-500";
+                                      if (selectedLeadPanel.stage === "FOLLOW_UP_SCHEDULED" || selectedLeadPanel.stage === "AVAILABILITY" || selectedLeadPanel.stage === "QUOTE_SENT") return "bg-amber-500";
+                                      if (selectedLeadPanel.stage === "UNHANDLED") return "bg-rose-500";
+                                      return "bg-zinc-300";
+                                    })()}`} />
+                                    <div className="text-[26px] font-semibold tracking-[-0.03em] leading-none">
+                                      {selectedLeadPanel.leadName ?? "Unknown"}
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
+                                    <span>{formatPhone(selectedLeadPanel.leadPhone)}</span>
+                                    {selectedLeadPanel.serviceType && (
+                                      <>
+                                        <span className="h-1 w-1 rounded-full bg-zinc-300" />
+                                        <span>{selectedLeadPanel.serviceType}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <StageBadge stage={selectedLeadPanel.stage} />
+                                  <button
+                                    onClick={() => setSelectedLeadPanel(null)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Action buttons */}
+                              <div className="grid grid-cols-2 gap-3">
+                                <a
+                                  href={`openphone://call?to=${selectedLeadPanel.leadPhone}`}
+                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
+                                >
+                                  <Phone className="h-4 w-4" /> Call lead
+                                </a>
+                                <button
+                                  onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
+                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                >
+                                  <MessageSquare className="h-4 w-4" /> Send SMS
+                                </button>
+                                <button
+                                  onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
+                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                >
+                                  <Calendar className="h-4 w-4" /> Lock time slot
+                                </button>
+                                {(recordingMap as Record<number, { hasRecording: boolean; hasTranscript: boolean }>)[selectedLeadPanel.id]?.hasTranscript ? (
+                                  <button
+                                    onClick={() => {
+                                      setDrawerInitialTab("performance");
+                                      setSelectedSession(selectedLeadPanel as unknown as DrawerSession);
+                                    }}
+                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  >
+                                    <FileText className="h-4 w-4" /> View transcript
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
+                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  >
+                                    <Eye className="h-4 w-4" /> Open full view
+                                  </button>
                                 )}
                               </div>
-                            )}
-                          </div>
-                          {/* Click-to-call + Call Assist — always visible */}
-                          <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <a
-                              href={`openphone://call?to=${session.leadPhone}`}
-                              onClick={e => e.stopPropagation()}
-                              title={`Call ${formatPhone(session.leadPhone)}`}
-                              className="flex-shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                              {/* AI summary */}
+                              <Card className="rounded-[28px] border-black/5 bg-white">
+                                <CardContent className="p-6">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                      <div className="text-sm font-medium text-zinc-500">Last activity</div>
+                                      <p className="mt-2 text-[15px] leading-7 text-zinc-700">
+                                        {selectedLeadPanel.lastActivityText ?? "No recent activity recorded."}
+                                      </p>
+                                    </div>
+                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-100 shrink-0">
+                                      <Sparkles className="h-5 w-5 text-zinc-900" />
+                                    </div>
+                                  </div>
+                                  <div className="mt-5 rounded-2xl border border-lime-200 bg-lime-50 p-4">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Next best action</div>
+                                    <div className="mt-2 text-base font-semibold tracking-[-0.02em]">
+                                      {(() => {
+                                        const s = selectedLeadPanel.stage;
+                                        if (s === "UNHANDLED") return "Review and respond immediately — lead is waiting.";
+                                        if (s === "QUOTE_SENT") return "Follow up on the quote — ask if they have questions.";
+                                        if (s === "AVAILABILITY") return "Confirm availability and lock in a time slot.";
+                                        if (s === "FOLLOW_UP_SCHEDULED") return "Follow-up is scheduled — prepare your talking points.";
+                                        if (s === "BOOKED") return "Job is booked — confirm details with the client.";
+                                        if (s === "COLD") return "Send a re-engagement SMS with a limited-time offer.";
+                                        if (s === "LOST") return "Send a win-back message — offer a discount or referral.";
+                                        return "Open the full conversation to see the latest context.";
+                                      })()}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                              {/* Conversion timeline */}
+                              <Card className="rounded-[28px] border-black/5 bg-white">
+                                <CardContent className="p-6">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="text-sm font-medium text-zinc-500">Conversion timeline</div>
+                                      <div className="mt-1 text-xl font-semibold tracking-[-0.02em]">Critical moments</div>
+                                    </div>
+                                    {computeTotalQuote(selectedLeadPanel.quotedPrice ?? null, selectedLeadPanel.extras ?? null) && (
+                                      <Badge variant="outline" className="rounded-full bg-white px-3 py-1">
+                                        ${computeTotalQuote(selectedLeadPanel.quotedPrice ?? null, selectedLeadPanel.extras ?? null)} quoted
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="mt-5 space-y-4">
+                                    {(() => {
+                                      // Build timeline from session data
+                                      const events: { label: string; time: string; type: "good" | "warn" | "bad" | "neutral" }[] = [];
+                                      if (selectedLeadPanel.createdAt) {
+                                        events.push({ label: "Lead created", time: timeAgo(new Date(selectedLeadPanel.createdAt)), type: "good" });
+                                      }
+                                      if (selectedLeadPanel.quotedPrice || selectedLeadPanel.extras) {
+                                        events.push({ label: "Quote sent", time: timeAgo(new Date(selectedLeadPanel.updatedAt ?? selectedLeadPanel.createdAt)), type: "neutral" });
+                                      }
+                                      if (selectedLeadPanel.stage === "FOLLOW_UP_SCHEDULED") {
+                                        events.push({ label: "Follow-up scheduled", time: "Upcoming", type: "warn" });
+                                      }
+                                      if (selectedLeadPanel.stage === "BOOKED") {
+                                        events.push({ label: "Job booked!", time: selectedLeadPanel.bookedAt ? timeAgo(new Date(selectedLeadPanel.bookedAt)) : "Recently", type: "good" });
+                                      }
+                                      if (selectedLeadPanel.stage === "UNHANDLED") {
+                                        events.push({ label: "Awaiting response", time: "Now", type: "bad" });
+                                      }
+                                      if (selectedLeadPanel.stage === "COLD" || selectedLeadPanel.stage === "LOST") {
+                                        events.push({ label: selectedLeadPanel.stage === "LOST" ? "Marked lost" : "Gone cold", time: timeAgo(new Date(selectedLeadPanel.updatedAt ?? selectedLeadPanel.createdAt)), type: "bad" });
+                                      }
+                                      if (events.length === 0) {
+                                        events.push({ label: "Lead created", time: timeAgo(new Date(selectedLeadPanel.createdAt)), type: "neutral" });
+                                      }
+                                      return events.map((item, i) => (
+                                        <div key={i} className="flex gap-4">
+                                          <div className="flex flex-col items-center">
+                                            <div className={`h-3 w-3 rounded-full ${item.type === "good" ? "bg-emerald-500" : item.type === "warn" ? "bg-amber-500" : item.type === "bad" ? "bg-rose-500" : "bg-zinc-300"}`} />
+                                            {i !== events.length - 1 && <div className="mt-2 h-10 w-px bg-zinc-200" />}
+                                          </div>
+                                          <div className="flex-1 rounded-2xl bg-zinc-50 p-4">
+                                            <div className="flex items-center justify-between gap-4">
+                                              <div className="font-medium text-zinc-800">{item.label}</div>
+                                              <div className="text-sm text-zinc-500">{item.time}</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                              {/* Mini cards */}
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                <Card className="rounded-[24px] border-black/5 bg-white">
+                                  <CardContent className="p-5">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 shrink-0">
+                                        <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm text-zinc-500">Source</div>
+                                        <div className="font-semibold text-sm">{getSourceBadge(selectedLeadPanel.leadSource ?? null)}</div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                                <Card className="rounded-[24px] border-black/5 bg-white">
+                                  <CardContent className="p-5">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 shrink-0">
+                                        <Clock3 className="h-5 w-5 text-amber-700" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm text-zinc-500">Created</div>
+                                        <div className="font-semibold text-sm">{timeAgo(new Date(selectedLeadPanel.createdAt))}</div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                                <Card className="rounded-[24px] border-black/5 bg-white">
+                                  <CardContent className="p-5">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 shrink-0">
+                                        <User className="h-5 w-5 text-sky-700" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm text-zinc-500">Agent</div>
+                                        <div className="font-semibold text-sm">{selectedLeadPanel.assignedAgentName ?? "Unassigned"}</div>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </div>
+                              {/* Open full drawer CTA */}
+                              <button
+                                onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
+                                className="w-full flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition"
+                              >
+                                <ExternalLink className="h-4 w-4" /> Open full conversation
+                              </button>
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="empty"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="flex flex-col items-center justify-center p-12 text-center bg-[#fafaf9]"
                             >
-                              <PhoneCall className="w-3.5 h-3.5" />
-                            </a>
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                const params = new URLSearchParams();
-                                if (session.id) params.set('sessionId', String(session.id));
-                                if (session.leadName) params.set('name', session.leadName);
-                                if (session.leadPhone) params.set('phone', session.leadPhone);
-                                if (session.bedrooms) params.set('bedrooms', String(session.bedrooms));
-                                if (session.bathrooms) params.set('bathrooms', String(session.bathrooms));
-                                if (session.serviceType) params.set('serviceType', session.serviceType);
-                                if (session.address) params.set('address', session.address);
-                                window.open(`/call-assist?${params.toString()}`, '_blank');
-                              }}
-                              title="Open Call Assist for this lead"
-                              className="flex-shrink-0 p-1.5 rounded-full text-violet-400 hover:text-violet-700 hover:bg-violet-50 transition-colors"
-                            >
-                              <Headphones className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Source */}
-                      <TableCell className="py-2">
-                        <div className="flex flex-col gap-1">
-                          {getSourceBadge(session.leadSource)}
-                          {getLanguageBadge(session.language)}
-                        </div>
-                      </TableCell>
-
-                      {/* Service — type/frequency */}
-                      <TableCell className="py-2">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm leading-tight" style={{ color: '#555555' }}>
-                            {session.serviceType ?? <span style={{ color: '#555555' }}>—</span>}
-                          </span>
-                          {session.serviceType && session.bedrooms && (
-                            <span className="text-xs" style={{ color: '#777' }}>
-                              {session.serviceType === "Office Cleaning"
-                                ? `${session.bedrooms} sqft`
-                                : `${String(session.bedrooms).replace(/ Bedrooms?/i, '')} bd${session.bathrooms ? ` · ${String(session.bathrooms).replace(/ Bathrooms?/i, '')} ba` : ''}`
-                              }
-                            </span>
+                              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-zinc-100 mb-4">
+                                <Users className="h-8 w-8 text-zinc-400" />
+                              </div>
+                              <div className="text-lg font-semibold text-zinc-700">Select a lead</div>
+                              <p className="mt-2 text-sm text-zinc-400 max-w-[200px]">Click any row to see the lead detail panel here.</p>
+                            </motion.div>
                           )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Add Manual Lead Dialog */}
+                <Dialog open={addLeadOpen} onOpenChange={setAddLeadOpen}>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Add Manual Lead</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-3 py-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>Name *</Label>
+                          <Input value={addLeadForm.name} onChange={e => setAddLeadForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
                         </div>
-                      </TableCell>
-
-                      {/* Quote — quotedPrice for form leads, bookedAmount for manual leads, reactivationLastPrice for campaigns */}
-                      <TableCell className="py-2">
-                        {/* Priority: bookedAmount (manual override) > quotedPrice > reactivationLastPrice */}
-                        {(session.bookedAmount !== null && session.bookedAmount !== undefined && session.bookedAmount > 0) ? (
-                          <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
-                            ${session.bookedAmount}
-                          </span>
-                        ) : (session.quotedPrice && parseInt(session.quotedPrice, 10) > 0) ? (() => {
-                          const total = computeTotalQuote(session.quotedPrice, session.extras);
-                          return (
-                            <span className="text-sm font-bold tabular-nums" style={{ color: '#111111' }}>
-                              ${total}
-                            </span>
-                          );
-                        })() : session.reactivationLastPrice ? (
-                          <span className="text-sm font-bold tabular-nums" style={{ color: '#7c3aed' }}>
-                            ${session.reactivationLastPrice}
-                          </span>
-                        ) : (
-                          <span className="text-sm" style={{ color: '#555555' }}>—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Stage */}
-                      <TableCell className="py-2">
-                        <StageBadge stage={session.stage} />
-                      </TableCell>
-
-                      {/* Agent — avatar initial + name */}
-                      <TableCell className="py-2">
-                        {session.assignedAgentName ? (
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                              style={{ backgroundColor: '#AAFF00', color: '#000000' }}
-                            >
-                              {session.assignedAgentName.charAt(0).toUpperCase()}
-                            </span>
-                            <span className="text-xs leading-tight" style={{ color: '#666666' }}>{session.assignedAgentName}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs" style={{ color: '#555555' }}>—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Last Activity — message preview primary, call note secondary */}
-                      <TableCell className="py-2">
-                        {session.lastActivityText ? (
-                          <div className="flex items-start gap-1.5 max-w-[180px]">
-                            {session.lastActivityType === "call" ? (
-                              <PhoneCall className="w-3 h-3 text-blue-400 shrink-0 mt-0.5" />
-                            ) : (
-                              <MessageSquare className="w-3 h-3 shrink-0 mt-0.5" style={{ color: '#888888', opacity: 1 }} />
-                            )}
-                            <span className="text-xs truncate leading-tight" style={{ color: '#666666' }}>{session.lastActivityText}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs" style={{ color: '#555555' }}>—</span>
-                        )}
-                      </TableCell>
-
-                      {/* When — single relative timestamp + Call Assist hover button */}
-                      <TableCell className="py-2 pr-4">
-                        <div className="flex items-center gap-2 justify-between">
-                          <span className="text-xs tabular-nums whitespace-nowrap" style={{ color: '#777' }}>
-                            {(() => {
-                              // Prefer lastActivityAt but cap at session.updatedAt to avoid stale timestamps
-                              const actAt = session.lastActivityAt ? new Date(session.lastActivityAt) : null;
-                              const updAt = session.updatedAt ? new Date(session.updatedAt) : null;
-                              const display = actAt && updAt && actAt > updAt ? updAt : (actAt ?? updAt);
-                              return display ? timeAgo(display) : '—';
-                            })()}
-                          </span>
-
+                        <div className="space-y-1">
+                          <Label>Phone *</Label>
+                          <Input
+                            value={addLeadForm.phone}
+                            onChange={e => setAddLeadForm(f => ({ ...f, phone: e.target.value }))}
+                            onBlur={e => {
+                              const digits = e.target.value.replace(/\D/g, "");
+                              if (digits.length === 10) {
+                                setAddLeadForm(f => ({ ...f, phone: `+1${digits}` }));
+                              } else if (digits.length === 11 && digits.startsWith("1")) {
+                                setAddLeadForm(f => ({ ...f, phone: `+${digits}` }));
+                              }
+                            }}
+                            placeholder="+1 555 000 0000"
+                          />
                         </div>
-                      </TableCell>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Email</Label>
+                        <Input value={addLeadForm.email} onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>Service Type</Label>
+                          <Input value={addLeadForm.serviceType} onChange={e => setAddLeadForm(f => ({ ...f, serviceType: e.target.value }))} placeholder="Standard Cleaning" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Amount ($)</Label>
+                          <Input type="number" min={0} value={addLeadForm.amount} onChange={e => setAddLeadForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>Source</Label>
+                          <Select value={addLeadForm.source} onValueChange={v => setAddLeadForm(f => ({ ...f, source: v as typeof f.source }))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="yelp">Yelp</SelectItem>
+                              <SelectItem value="google">Google</SelectItem>
+                              <SelectItem value="thumbtack">Thumbtack</SelectItem>
+                              <SelectItem value="bark">Bark</SelectItem>
+                              <SelectItem value="phone">Phone</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Status</Label>
+                          <Select value={addLeadForm.status} onValueChange={v => setAddLeadForm(f => ({ ...f, status: v }))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="QUOTE_SENT">Quote Sent</SelectItem>
+                              <SelectItem value="AVAILABILITY">Availability</SelectItem>
+                              <SelectItem value="BOOKED">Booked</SelectItem>
+                              <SelectItem value="COLD">Cold</SelectItem>
+                              <SelectItem value="DONE">Done</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Notes</Label>
+                        <Textarea rows={3} value={addLeadForm.notes} onChange={e => setAddLeadForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any additional notes…" />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setAddLeadOpen(false)}>Cancel</Button>
+                      <Button
+                        disabled={!addLeadForm.name.trim() || !addLeadForm.phone.trim() || createManualLeadMutation.isPending}
+                        onClick={() => createManualLeadMutation.mutate({
+                          name: addLeadForm.name.trim(),
+                          phone: addLeadForm.phone.trim(),
+                          email: addLeadForm.email.trim() || undefined,
+                          serviceType: addLeadForm.serviceType.trim() || "Standard Cleaning",
+                          notes: addLeadForm.notes.trim() || undefined,
+                          amount: addLeadForm.amount ? parseInt(addLeadForm.amount, 10) : undefined,
+                          status: addLeadForm.status,
+                          source: addLeadForm.source,
+                        })}
+                      >
+                        {createManualLeadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Lead"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
-                    </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
+                {/* Traffic Source */}
+                <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+                  <CardContent className="p-6">
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold tracking-[-0.02em]">Traffic Source</h3>
+                      <p className="text-sm text-zinc-500 mt-0.5">Where your leads are coming from</p>
+                    </div>
+                    <SourceBreakdownChart data={sourceBreakdown} isLoading={sourceBreakdownLoading} />
+                  </CardContent>
+                </Card>
+              </div>
 
-        {/* Traffic Source Breakdown */}
-        <div className="hj-card mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold" style={{ color: '#111111' }}>Traffic Source</h3>
-              <p className="text-xs mt-0.5" style={{ color: '#888888' }}>Where your leads are coming from</p>
+              {/* ── Right sidebar ──────────────────────────────────────────── */}
+              <div className="space-y-6">
+                {/* Executive summary */}
+                <Card className="rounded-[30px] border-0 bg-zinc-950 text-white shadow-[0_10px_40px_rgba(0,0,0,0.15)]">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-white/60">Executive summary</div>
+                        <div className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">What needs attention now</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/10 p-3">
+                        <Sparkles className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <div className="mt-6 space-y-3">
+                      <div className="rounded-2xl bg-white/6 p-4">
+                        <div className="text-xs uppercase tracking-[0.18em] text-white/45">Best opportunity</div>
+                        <div className="mt-2 font-medium text-sm leading-6">
+                          {filtered.filter(s => s.stage === "QUOTE_SENT").length > 0
+                            ? `${filtered.filter(s => s.stage === "QUOTE_SENT").length} leads have received quotes and are waiting for follow-up.`
+                            : "No active quote-sent leads right now."}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-white/6 p-4">
+                        <div className="text-xs uppercase tracking-[0.18em] text-white/45">Biggest risk</div>
+                        <div className="mt-2 font-medium text-sm leading-6">
+                          {(stats?.byStage?.["UNHANDLED"] ?? 0) > 0
+                            ? `${stats?.byStage?.["UNHANDLED"]} unhandled lead${(stats?.byStage?.["UNHANDLED"] ?? 0) !== 1 ? "s" : ""} need immediate attention.`
+                            : "No unhandled leads — great work!"}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-white/6 p-4">
+                        <div className="text-xs uppercase tracking-[0.18em] text-white/45">Fastest win</div>
+                        <div className="mt-2 font-medium text-sm leading-6">
+                          {filtered.filter(s => s.stage === "FOLLOW_UP_SCHEDULED").length > 0
+                            ? `${filtered.filter(s => s.stage === "FOLLOW_UP_SCHEDULED").length} follow-up${filtered.filter(s => s.stage === "FOLLOW_UP_SCHEDULED").length !== 1 ? "s" : ""} scheduled — reach out before they go cold.`
+                            : "No follow-ups scheduled — consider booking some."}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Today's operational pulse */}
+                <Card className="rounded-[30px] border-black/5 bg-white">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xl tracking-[-0.02em]">Today's operational pulse</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {[
+                      {
+                        label: "Calls answered by AI",
+                        value: voiceStats?.totalCalls ? `${voiceStats.conversionRate}%` : "—",
+                        icon: Bot,
+                      },
+                      {
+                        label: "AI voice calls",
+                        value: (voiceStats?.totalCalls ?? 0).toLocaleString(),
+                        icon: Mic,
+                      },
+                      {
+                        label: "Quote-to-booked",
+                        value: stats ? `${stats.conversionRate}%` : "—",
+                        icon: BadgeCheck,
+                      },
+                      {
+                        label: "Unhandled leads",
+                        value: (stats?.byStage?.["UNHANDLED"] ?? 0).toString(),
+                        icon: XCircle,
+                      },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <div key={item.label} className="flex items-center justify-between rounded-2xl bg-zinc-50 px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm">
+                              <Icon className="h-5 w-5 text-zinc-700" />
+                            </div>
+                            <div className="text-sm text-zinc-600">{item.label}</div>
+                          </div>
+                          <div className="text-lg font-semibold tracking-[-0.02em]">{item.value}</div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
-          <SourceBreakdownChart data={sourceBreakdown} isLoading={sourceBreakdownLoading} />
-        </div>
-
-        <p className="text-xs mt-4 text-center" style={{ color: '#555555' }}>
-          Auto-refreshes every 30 seconds · Click any row or stage card to filter · Click a stage card again to clear
-        </p>
         </div>
         </>}
       </main>
