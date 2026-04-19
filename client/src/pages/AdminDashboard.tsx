@@ -3455,8 +3455,8 @@ export default function AdminDashboard() {
        />
       {/* ── Date filter bar — Leads page only, pixel-perfect match to reference ── */}
       {activeTab === "leads" && (
-        <div className="border-b border-zinc-200 bg-white px-4 sm:px-6">
-          <div className="mx-auto max-w-7xl py-2.5">
+        <div className="border-b border-zinc-200 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
             {/* Pill group container — single rounded border wrapping all pills */}
             <div className="inline-flex items-center rounded-2xl border border-zinc-200 bg-white px-1 py-1 gap-0.5">
               {DATE_PRESETS.filter(p => p.value !== "custom").map((p) => (
