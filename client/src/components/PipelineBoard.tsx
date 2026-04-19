@@ -593,8 +593,16 @@ export default function PipelineBoard() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  // Reads from the drag snapshot ref — never from live state — to avoid infinite loops
-  function findColumn(id: number): ColumnKey | null {
+  // Find column in a given state object (used during drag-over to track current position)
+  function findColumnInState(id: number, state: Record<ColumnKey, any[]>): ColumnKey | null {
+    for (const col of COLUMNS) {
+      if (state[col].some((l: any) => l.id === id)) return col;
+    }
+    return null;
+  }
+
+  // Find column in the drag snapshot (used in drag-end to know the origin)
+  function findColumnInSnapshot(id: number): ColumnKey | null {
     const source = dragSnapshotRef.current ?? serverColumns;
     for (const col of COLUMNS) {
       if (source[col].some((l: any) => l.id === id)) return col;
@@ -617,25 +625,24 @@ export default function PipelineBoard() {
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
     if (!over) return;
-
     const activeLeadId = active.id as number;
     const overId = over.id;
 
-    const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
-      ? (overId as ColumnKey)
-      : findColumn(overId as number);
-
-    const activeCol = findColumn(activeLeadId);
-    if (!activeCol || !overCol) return;
-
     setLocalColumns((prev) => {
       if (!prev) return prev;
+
+      // Read activeCol from prev — tracks current position through multi-column drags
+      const activeCol = findColumnInState(activeLeadId, prev);
+      const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
+        ? (overId as ColumnKey)
+        : findColumnInState(overId as number, prev);
+
+      if (!activeCol || !overCol) return prev;
+
       const sourceCopy = [...prev[activeCol]];
       const destCopy = activeCol === overCol ? sourceCopy : [...prev[overCol]];
-
       const activeIdx = sourceCopy.findIndex((l: any) => l.id === activeLeadId);
       if (activeIdx === -1) return prev;
-
       const activeLead = sourceCopy[activeIdx];
 
       if (activeCol === overCol) {
@@ -669,15 +676,8 @@ export default function PipelineBoard() {
     const overId = over.id;
 
     // Determine origin column from snapshot (stable)
-    let originCol: ColumnKey | null = null;
-    if (snapshot) {
-      for (const col of COLUMNS) {
-        if (snapshot[col].some((l: any) => l.id === activeLeadId)) {
-          originCol = col;
-          break;
-        }
-      }
-    }
+    // Origin from snapshot — stable, not affected by intermediate drag-over moves
+    const originCol = findColumnInSnapshot(activeLeadId);
 
     const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
       ? (overId as ColumnKey)
