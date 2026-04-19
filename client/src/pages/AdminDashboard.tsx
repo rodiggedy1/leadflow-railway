@@ -3913,7 +3913,7 @@ export default function AdminDashboard() {
                 </section>
 
                 {/* Lead command center */}
-                  <Card className="overflow-hidden rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                  <Card className="overflow-hidden rounded-[30px] border-black/5 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.05)]">
                   <CardHeader className="border-b border-black/5 px-4 py-3">
                     <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
                       <div>
@@ -4077,17 +4077,17 @@ export default function AdminDashboard() {
                                           setSelectedLeadPanel(session);
                                           if (leadsCollapsed) setLeadsCollapsed(false);
                                         }}
-                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] gap-3 px-6 py-3 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] items-start gap-3 px-6 py-4 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
                                       >
                                         {/* Lead name + phone + badges */}
                                         <div>
                                           <div className="flex items-start gap-3">
                                             <div className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
                                             <div className="min-w-0">
-                                              <div className="text-sm font-semibold tracking-[-0.02em] leading-none truncate">
+                                              <div className="text-[15px] font-semibold tracking-[-0.02em] leading-snug truncate">
                                                 {session.leadName ?? <span className="text-zinc-400 font-normal text-sm">Unknown</span>}
                                               </div>
-                                              <div className="mt-1.5 text-sm text-zinc-500">{formatPhone(session.leadPhone)}</div>
+                                              <div className="mt-1 text-xs text-zinc-500">{formatPhone(session.leadPhone)}</div>
                                               {recInfo?.hasRecording && (
                                                 <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                                                   <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
@@ -4105,7 +4105,7 @@ export default function AdminDashboard() {
                                         </div>
                                         {/* Source */}
                                         <div className="flex items-center">
-                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-3 py-1 text-sm font-medium text-zinc-700 truncate max-w-[120px]">
+                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700 truncate max-w-full">
                                             {(() => {
                                               const src = session.leadSource;
                                               if (!src || src === "form") return "Quote Form";
@@ -4123,11 +4123,11 @@ export default function AdminDashboard() {
                                           </Badge>
                                         </div>
                                         {/* Service */}
-                                        <div className="flex items-center pr-4 text-sm text-zinc-700 truncate">
-                                          {session.serviceType ?? "—"}
+                                        <div className="flex items-center min-w-0 pr-2 text-xs text-zinc-600">
+                                          <span className="truncate">{session.serviceType ?? "—"}</span>
                                         </div>
                                         {/* Quote */}
-                                        <div className="flex items-center text-base font-semibold tracking-[-0.03em]">
+                                        <div className="flex items-center text-[18px] font-semibold tracking-[-0.03em]">
                                           {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
                                         </div>
                                         {/* Stage */}
@@ -4147,8 +4147,8 @@ export default function AdminDashboard() {
                                               </div>
                                             )}
                                             <div className="min-w-0">
-                                              <div className="font-medium text-zinc-800 text-sm truncate">{session.assignedAgentName ?? "Unassigned"}</div>
-                                              <div className="text-xs text-zinc-500 truncate max-w-[120px]">{session.lastActivityText ?? "—"}</div>
+                                              <div className="font-medium text-zinc-800 text-xs truncate">{session.assignedAgentName ?? "Unassigned"}</div>
+                                              <div className="text-[11px] text-zinc-400 truncate max-w-[100px] leading-tight">{session.lastActivityText ?? "—"}</div>
                                             </div>
                                           </div>
                                           <div className="text-xs text-zinc-400 whitespace-nowrap shrink-0">
@@ -4177,9 +4177,10 @@ export default function AdminDashboard() {
                               animate={{ opacity: 1, x: 0 }}
                               exit={{ opacity: 0, x: 20 }}
                               transition={{ duration: 0.18 }}
-                              className="overflow-y-auto p-4 space-y-3 bg-[#fafaf9]"
+                              className="overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(200,255,111,0.16),_transparent_34%)] p-6 space-y-5"
                             >
-                              {/* Header */}
+                              {/* Header + Action buttons card */}
+                              <div className="rounded-[28px] border border-black/5 bg-white p-6 shadow-sm">
                               <div className="flex items-start justify-between gap-4">
                                 <div>
                                   <div className="flex items-center gap-2.5">
@@ -4189,9 +4190,9 @@ export default function AdminDashboard() {
                                       if (selectedLeadPanel.stage === "UNHANDLED") return "bg-rose-500";
                                       return "bg-zinc-300";
                                     })()}`} />
-                                    <div className="text-xl font-semibold tracking-[-0.03em] leading-none">
+                                    <h3 className="text-[28px] font-semibold tracking-[-0.03em] leading-none">
                                       {selectedLeadPanel.leadName ?? "Unknown"}
-                                    </div>
+                                    </h3>
                                   </div>
                                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
                                     <span>{formatPhone(selectedLeadPanel.leadPhone)}</span>
@@ -4214,22 +4215,22 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               {/* Action buttons */}
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="mt-5 grid grid-cols-2 gap-3">
                                 <a
                                   href={`openphone://call?to=${selectedLeadPanel.leadPhone}`}
-                                  className="flex h-9 items-center justify-center gap-2 rounded-xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
+                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
                                 >
                                   <Phone className="h-4 w-4" /> Call lead
                                 </a>
                                 <button
                                   onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                 >
                                   <MessageSquare className="h-4 w-4" /> Send SMS
                                 </button>
                                 <button
                                   onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                  className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                 >
                                   <Calendar className="h-4 w-4" /> Lock time slot
                                 </button>
@@ -4239,25 +4240,26 @@ export default function AdminDashboard() {
                                       setDrawerInitialTab("performance");
                                       setSelectedSession(selectedLeadPanel as unknown as DrawerSession);
                                     }}
-                                    className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                   >
                                     <FileText className="h-4 w-4" /> View transcript
                                   </button>
                                 ) : (
                                   <button
                                     onClick={() => setSelectedSession(selectedLeadPanel as unknown as DrawerSession)}
-                                    className="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
+                                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-medium hover:bg-zinc-50 transition"
                                   >
                                     <Eye className="h-4 w-4" /> Open full view
                                   </button>
                                 )}
                               </div>
+                              </div>{/* end header+actions card */}
                               {/* AI summary */}
                               <Card className="rounded-[28px] border-black/5 bg-white">
-                                <CardContent className="p-4">
+                                <CardContent className="p-6">
                                   <div className="flex items-start justify-between gap-4">
                                     <div>
-                                      <div className="text-sm font-medium text-zinc-500">Last activity</div>
+                                      <div className="text-sm font-medium text-zinc-500">AI summary</div>
                                       <p className="mt-2 text-sm leading-6 text-zinc-700">
                                         {selectedLeadPanel.lastActivityText ?? "No recent activity recorded."}
                                       </p>
@@ -4266,7 +4268,7 @@ export default function AdminDashboard() {
                                       <Sparkles className="h-5 w-5 text-zinc-900" />
                                     </div>
                                   </div>
-                                  <div className="mt-4 rounded-xl border border-lime-200 bg-lime-50 p-3">
+                                  <div className="mt-5 rounded-2xl border border-lime-200 bg-lime-50 p-4">
                                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Next best action</div>
                                     <div className="mt-2 text-base font-semibold tracking-[-0.02em]">
                                       {(() => {
@@ -4396,7 +4398,7 @@ export default function AdminDashboard() {
                               key="empty"
                               initial={{ opacity: 0 }}
                               animate={{ opacity: 1 }}
-                              className="flex flex-col items-center justify-center p-12 text-center bg-[#fafaf9]"
+                              className="flex flex-col items-center justify-center p-12 text-center bg-[radial-gradient(circle_at_top,_rgba(200,255,111,0.10),_transparent_50%)]"
                             >
                               <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-zinc-100 mb-4">
                                 <Users className="h-8 w-8 text-zinc-400" />
