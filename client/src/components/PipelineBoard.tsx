@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -524,6 +524,8 @@ export default function PipelineBoard() {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState("lead");
   const [activeId, setActiveId] = useState<number | null>(null);
+  // Stable snapshot of columns at drag-start — used by findColumn to avoid infinite loops
+  const dragSnapshotRef = useRef<Record<ColumnKey, any[]> | null>(null);
 
   // Local column state for optimistic DnD — keyed by column, array of leads
   const [localColumns, setLocalColumns] = useState<Record<ColumnKey, any[]> | null>(null);
@@ -588,18 +590,20 @@ export default function PipelineBoard() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  // Find which column a lead belongs to
+  // Find which column a lead belongs to — reads from drag snapshot to avoid infinite loops
   function findColumn(id: number): ColumnKey | null {
+    const source = dragSnapshotRef.current ?? serverColumns;
     for (const col of COLUMNS) {
-      if (columns[col].some((l: any) => l.id === id)) return col;
+      if (source[col].some((l: any) => l.id === id)) return col;
     }
     return null;
   }
 
   function handleDragStart(event: DragStartEvent) {
+    const snapshot = { ...serverColumns };
+    dragSnapshotRef.current = snapshot;
     setActiveId(event.active.id as number);
-    // Snapshot current columns into local state for optimistic manipulation
-    setLocalColumns({ ...serverColumns });
+    setLocalColumns(snapshot);
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -645,10 +649,10 @@ export default function PipelineBoard() {
     });
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveId(null);
-
+    dragSnapshotRef.current = null;
     if (!over || !localColumns) {
       setLocalColumns(null);
       return;
