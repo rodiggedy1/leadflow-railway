@@ -3292,6 +3292,16 @@ export default function AdminDashboard() {
     refetchInterval: 300_000, // refresh every 5 minutes
     enabled: hasSession,
   });
+  // Agent photo map — name → profilePhotoUrl (reuses existing agents.getStatuses endpoint)
+  const { data: agentStatuses = [] } = trpc.agents.getStatuses.useQuery(undefined, {
+    refetchInterval: 300_000,
+    enabled: hasSession,
+  });
+  const agentPhotoMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const a of agentStatuses) map[a.name] = a.profilePhotoUrl ?? null;
+    return map;
+  }, [agentStatuses]);
 
   const { data: sourceBreakdown = [], isLoading: sourceBreakdownLoading } = trpc.leads.sourceBreakdown.useQuery(dateRange, {
     refetchInterval: 60000,
@@ -4281,9 +4291,17 @@ export default function AdminDashboard() {
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="flex items-center gap-2.5 min-w-0">
                                             {session.assignedAgentName ? (
-                                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-300 font-semibold text-zinc-900 text-sm">
-                                                {session.assignedAgentName.charAt(0).toUpperCase()}
-                                              </div>
+                                              agentPhotoMap[session.assignedAgentName] ? (
+                                                <img
+                                                  src={agentPhotoMap[session.assignedAgentName]!}
+                                                  alt={session.assignedAgentName}
+                                                  className="h-9 w-9 shrink-0 rounded-full object-cover"
+                                                />
+                                              ) : (
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-300 font-semibold text-zinc-900 text-sm">
+                                                  {session.assignedAgentName.charAt(0).toUpperCase()}
+                                                </div>
+                                              )
                                             ) : (
                                               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
                                                 <User className="h-4 w-4" />
