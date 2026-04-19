@@ -3707,9 +3707,9 @@ export default function AdminDashboard() {
         )}
         {activeTab === "leads" && <>
         {/* ── New Leads Page Design ─────────────────────────────────────────── */}
-        <div className="bg-[#f6f5f2] text-zinc-900 px-4 sm:px-6 pt-6 pb-24" style={{ minHeight: "calc(100vh - 200px)" }}>
-          <div className="mx-auto max-w-[1600px]">
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.25fr_360px]">
+        <div className="bg-[#f6f5f2] text-zinc-900" style={{ minHeight: "calc(100vh - 200px)" }}>
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_280px]">
               {/* ── Left column ─────────────────────────────────────────────── */}
               <div className="space-y-6">
                 {/* Metric cards */}
@@ -3722,7 +3722,7 @@ export default function AdminDashboard() {
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center justify-between gap-3">
-                                <div className="text-sm font-medium text-zinc-500">Qualified leads</div>
+                                <div className="text-sm font-medium text-zinc-500">Leads</div>
                                 <Badge variant="outline" className="rounded-full border-zinc-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-zinc-600">
                                   {datePreset === "all" ? "All time" : datePreset === "today" ? "Today" : datePreset === "yesterday" ? "Yesterday" : datePreset === "last7" ? "Last 7d" : datePreset === "last30" ? "Last 30d" : "Custom"}
                                 </Badge>
@@ -3915,21 +3915,17 @@ export default function AdminDashboard() {
                 {/* Lead command center */}
                   <Card className="overflow-hidden rounded-[30px] border-black/5 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.05)]">
                   <CardHeader className="border-b border-black/5 px-4 py-3">
-                    <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-8">
                       <div>
-                        <CardTitle className="text-lg font-semibold tracking-tight">Lead command center</CardTitle>
+                        <CardTitle className="text-[26px] tracking-[-0.03em]">Lead command center</CardTitle>
                         <p className="mt-1 text-sm text-zinc-500">Cleaner hierarchy, stronger emphasis, faster decision-making.</p>
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-black/5 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-nowrap items-center gap-1.5">
                         {(["all", "BOOKED", "QUOTE_SENT", "FOLLOW_UP_SCHEDULED", "UNHANDLED", "COLD"] as const).map((stage) => (
                           <button
                             key={stage}
                             onClick={() => setStageFilter(stage)}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                            className={`rounded-xl px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
                               stageFilter === stage
                                 ? "bg-zinc-950 text-white shadow-sm"
                                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
@@ -3942,18 +3938,17 @@ export default function AdminDashboard() {
                     </div>
                     <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                       <div className="flex flex-1 flex-wrap items-center gap-3">
-                        <div className="relative min-w-[280px] flex-1 xl:max-w-md">
+                        <div className="relative min-w-[160px] flex-1 xl:max-w-sm">
                           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                           <Input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search name, phone, service, source..."
-                            className="h-9 rounded-xl border-zinc-200 bg-zinc-50 pl-11"
+                            className="h-9 rounded-2xl border-zinc-200 bg-zinc-50 pl-10 text-sm"
                           />
                         </div>
                         <Select value={agentFilter} onValueChange={setAgentFilter}>
-                          <SelectTrigger className="h-9 w-40 rounded-xl border-zinc-200 bg-white">
-                            <Filter className="mr-2 h-4 w-4 text-zinc-400" />
+                          <SelectTrigger className="h-9 w-32 rounded-2xl border-zinc-200 bg-white text-sm">
                             <SelectValue placeholder="All agents" />
                           </SelectTrigger>
                           <SelectContent>
@@ -3965,8 +3960,7 @@ export default function AdminDashboard() {
                           </SelectContent>
                         </Select>
                         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                          <SelectTrigger className="h-9 w-40 rounded-xl border-zinc-200 bg-white">
-                            <SlidersHorizontal className="mr-2 h-4 w-4 text-zinc-400" />
+                          <SelectTrigger className="h-9 w-32 rounded-2xl border-zinc-200 bg-white text-sm">
                             <SelectValue placeholder="All sources" />
                           </SelectTrigger>
                           <SelectContent>
@@ -3981,9 +3975,9 @@ export default function AdminDashboard() {
                             <SelectItem value="yelp">Yelp</SelectItem>
                           </SelectContent>
                         </Select>
-                        {(stageFilter !== "all" || agentFilter !== "all" || sourceFilter !== "all" || search) && (
+                        {(agentFilter !== "all" || sourceFilter !== "all" || search) && (
                           <button
-                            onClick={() => { setStageFilter("all"); setAgentFilter("all"); setSourceFilter("all"); setSearch(""); }}
+                            onClick={() => { setAgentFilter("all"); setSourceFilter("all"); setSearch(""); }}
                             className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-700 transition"
                           >
                             <X className="h-3.5 w-3.5" /> Clear
@@ -3993,7 +3987,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-2 shrink-0">
                         <Button
                           variant="outline"
-                          className="h-9 rounded-xl bg-white"
+                          className="h-9 rounded-2xl bg-white text-sm"
                           onClick={() => setLeadsCollapsed(v => !v)}
                         >
                           {leadsCollapsed ? <PanelLeftOpen className="mr-2 h-4 w-4" /> : <PanelLeftClose className="mr-2 h-4 w-4" />}
@@ -4015,7 +4009,7 @@ export default function AdminDashboard() {
                         </div>
                         <Button
                           size="sm"
-                          className="h-9 rounded-xl bg-zinc-950 hover:bg-zinc-800 px-5"
+                          className="h-9 rounded-2xl bg-zinc-950 hover:bg-zinc-800 px-4 text-sm"
                           onClick={() => setAddLeadOpen(true)}
                         >
                           <Plus className="mr-2 h-4 w-4" /> Add Lead
@@ -4033,7 +4027,7 @@ export default function AdminDashboard() {
                         />
                       </div>
                     ) : (
-                      <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1.2fr_420px]"}`}>
+                      <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1.2fr_360px]"}`}>
                         {/* Lead list */}
                         {!leadsCollapsed && (
                           <div className="border-r border-black/5">
@@ -4049,7 +4043,7 @@ export default function AdminDashboard() {
                               </div>
                             ) : (
                               <>
-                                <div className="grid grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] gap-3 border-b border-black/5 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                                <div className="grid grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] gap-3 border-b border-black/5 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
                                   <div>Lead</div>
                                   <div>Source</div>
                                   <div>Service</div>
@@ -4077,35 +4071,35 @@ export default function AdminDashboard() {
                                           setSelectedLeadPanel(session);
                                           if (leadsCollapsed) setLeadsCollapsed(false);
                                         }}
-                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] items-start gap-3 px-6 py-4 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        className={`grid w-full grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] items-center gap-3 px-6 py-4 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
                                       >
                                         {/* Lead name + phone + badges */}
                                         <div className="min-w-0">
-                                          <div className="flex items-start gap-3">
-                                            <div className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
+                                          <div className="flex items-center gap-3">
+                                            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
                                             <div className="min-w-0">
-                                              <div className="text-[15px] font-semibold tracking-[-0.02em] leading-snug truncate">
+                                              <div className="text-[15px] font-semibold tracking-[-0.02em] leading-none">
                                                 {session.leadName ?? <span className="text-zinc-400 font-normal text-sm">Unknown</span>}
                                               </div>
-                                              <div className="mt-1 text-xs text-zinc-500">{formatPhone(session.leadPhone)}</div>
-                                              {recInfo?.hasRecording && (
-                                                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                                <span className="text-xs text-zinc-500">{formatPhone(session.leadPhone)}</span>
+                                                {recInfo?.hasRecording && (
                                                   <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
                                                     <Phone className="mr-1 h-3 w-3" /> Call
                                                   </Badge>
-                                                  {recInfo.hasTranscript && (
-                                                    <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
-                                                      <FileText className="mr-1 h-3 w-3" /> Transcript
-                                                    </Badge>
-                                                  )}
-                                                </div>
-                                              )}
+                                                )}
+                                                {recInfo?.hasTranscript && (
+                                                  <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
+                                                    <FileText className="mr-1 h-3 w-3" /> Transcript
+                                                  </Badge>
+                                                )}
+                                              </div>
                                             </div>
                                           </div>
                                         </div>
                                         {/* Source */}
-                                        <div className="flex items-center min-w-0">
-                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700 truncate max-w-[80px] block">
+                                        <div className="flex items-center">
+                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-700 text-center leading-tight">
                                             {(() => {
                                               const src = session.leadSource;
                                               if (!src || src === "form") return "Quote Form";
@@ -4123,11 +4117,11 @@ export default function AdminDashboard() {
                                           </Badge>
                                         </div>
                                         {/* Service */}
-                                        <div className="flex items-center min-w-0 pr-2 text-xs text-zinc-600">
+                                        <div className="flex items-center min-w-0 pr-4 text-sm text-zinc-700">
                                           <span className="truncate">{session.serviceType ?? "—"}</span>
                                         </div>
                                         {/* Quote */}
-                                        <div className="flex items-center min-w-0 text-[18px] font-semibold tracking-[-0.03em]">
+                                        <div className="flex items-center min-w-0 text-[22px] font-semibold tracking-[-0.04em]">
                                           {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
                                         </div>
                                         {/* Stage */}
@@ -4344,44 +4338,32 @@ export default function AdminDashboard() {
                                 </CardContent>
                               </Card>
                               {/* Mini cards */}
-                              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                <Card className="rounded-[24px] border-black/5 bg-white">
-                                  <CardContent className="p-5">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 shrink-0">
-                                        <CheckCircle2 className="h-5 w-5 text-emerald-700" />
-                                      </div>
-                                      <div>
-                                        <div className="text-sm text-zinc-500">Source</div>
-                                        <div className="font-semibold text-sm">{getSourceBadge(selectedLeadPanel.leadSource ?? null)}</div>
-                                      </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <Card className="rounded-[20px] border-black/5 bg-white">
+                                  <CardContent className="p-3 flex flex-col items-center text-center gap-1.5">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100">
+                                      <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                                     </div>
+                                    <div className="text-[10px] text-zinc-500">Source</div>
+                                    <div className="text-xs font-semibold text-zinc-800 leading-tight text-center">{getSourceBadge(selectedLeadPanel.leadSource ?? null)}</div>
                                   </CardContent>
                                 </Card>
-                                <Card className="rounded-[24px] border-black/5 bg-white">
-                                  <CardContent className="p-5">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 shrink-0">
-                                        <Clock3 className="h-5 w-5 text-amber-700" />
-                                      </div>
-                                      <div>
-                                        <div className="text-sm text-zinc-500">Created</div>
-                                        <div className="font-semibold text-sm">{timeAgo(new Date(selectedLeadPanel.createdAt))}</div>
-                                      </div>
+                                <Card className="rounded-[20px] border-black/5 bg-white">
+                                  <CardContent className="p-3 flex flex-col items-center text-center gap-1.5">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100">
+                                      <Clock3 className="h-4 w-4 text-amber-700" />
                                     </div>
+                                    <div className="text-[10px] text-zinc-500">Created</div>
+                                    <div className="text-xs font-semibold text-zinc-800 leading-tight">{timeAgo(new Date(selectedLeadPanel.createdAt))}</div>
                                   </CardContent>
                                 </Card>
-                                <Card className="rounded-[24px] border-black/5 bg-white">
-                                  <CardContent className="p-5">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 shrink-0">
-                                        <User className="h-5 w-5 text-sky-700" />
-                                      </div>
-                                      <div>
-                                        <div className="text-sm text-zinc-500">Agent</div>
-                                        <div className="font-semibold text-sm">{selectedLeadPanel.assignedAgentName ?? "Unassigned"}</div>
-                                      </div>
+                                <Card className="rounded-[20px] border-black/5 bg-white">
+                                  <CardContent className="p-3 flex flex-col items-center text-center gap-1.5">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-100">
+                                      <User className="h-4 w-4 text-sky-700" />
                                     </div>
+                                    <div className="text-[10px] text-zinc-500">Agent</div>
+                                    <div className="text-xs font-semibold text-zinc-800 leading-tight">{selectedLeadPanel.assignedAgentName ?? "Unassigned"}</div>
                                   </CardContent>
                                 </Card>
                               </div>
