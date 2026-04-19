@@ -477,12 +477,13 @@ function DetailPanel({ lead, onClose, onMove, onOpenConversation }: { lead: any;
   );
 }
 
-function FlowMode({ lead, onNext, onMove, queue, onSelectLead }: {
+function FlowMode({ lead, onNext, onMove, queue, onSelectLead, onOpenConversation }: {
   lead: any;
   onNext: () => void;
   onMove: (l: any, target: string) => void;
   queue: any[];
   onSelectLead: (lead: any) => void;
+  onOpenConversation?: (session: any) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -569,7 +570,7 @@ function FlowMode({ lead, onNext, onMove, queue, onSelectLead }: {
         </div>
 
         <div className="space-y-3 rounded-[28px] border border-slate-200 bg-slate-50 p-4">
-          <button className="w-full rounded-2xl bg-slate-900 px-4 py-4 text-left text-white transition hover:bg-slate-800">
+          <button onClick={() => onOpenConversation?.(lead._raw)} className="w-full rounded-2xl bg-slate-900 px-4 py-4 text-left text-white transition hover:bg-slate-800">
             <div className="text-sm font-semibold">Reply + lock appointment</div>
             <div className="mt-1 text-sm text-slate-300">Send confident SMS and ask 9am or 1pm.</div>
           </button>
@@ -1033,6 +1034,7 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
                   const idx = priorityQueue.findIndex((x: any) => x.id === l.id);
                   if (idx !== -1) setFlowIndex(idx);
                 }}
+                onOpenConversation={onOpenConversation}
               />
             )}
           </div>
