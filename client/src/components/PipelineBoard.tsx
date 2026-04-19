@@ -27,22 +27,31 @@ import { trpc } from "@/lib/trpc";
 import {
   DndContext,
   DragEndEvent,
+  DragOverEvent,
   DragOverlay,
   DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
-  useDroppable,
+  closestCorners,
+  defaultDropAnimationSideEffects,
+  type DropAnimation,
 } from "@dnd-kit/core";
-import { useDraggable } from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ── Stage grouping ────────────────────────────────────────────────────────────
 
+const QUOTED_STAGES = new Set(["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE"]);
 const NEW_STAGES = new Set([
   "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "ADDRESS",
   "CONFIRMATION", "CALL_SCHEDULED", "DONE", "UNHANDLED", "WIDGET_SIZING",
 ]);
-const QUOTED_STAGES = new Set(["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE"]);
 const FOLLOW_STAGES = new Set(["FOLLOW_UP_SCHEDULED", "VOICEMAIL"]);
 const BOOKED_STAGES = new Set(["BOOKED"]);
 
@@ -54,13 +63,20 @@ function stageToColumn(stage: string): string {
   return "new";
 }
 
-// Column → valid DB stage for agentUpdateStage mutation
 const COLUMN_TO_STAGE: Record<string, string | null> = {
-  new: null, // mid-conversation stages — cannot write back
+  new: null,
   quoted: null,
   follow: "FOLLOW_UP_SCHEDULED",
   booked: "BOOKED",
 };
+
+const EXCLUDED_STAGES = new Set([
+  "COLD", "LOST", "NOT_INTERESTED", "REVIEW_REQUESTED", "REVIEW_DONE",
+  "REVIEW_REBOOKING_REQUESTED", "REVIEW_REBOOKING_DONE", "QUALITY_RATING_REQUESTED",
+  "QUALITY_MISSED_FOLLOWUP", "QUALITY_RATING_DONE", "INTERVIEW_LINK_SENT",
+  "INTERVIEW_NUDGE_1", "INTERVIEW_NUDGE_2", "INTERVIEW_LINK_DONE",
+  "OPEN", "HIRING_OUTBOUND", "REACTIVATION", "REACTIVATION_TIME",
+]);
 
 // ── Data mapping ──────────────────────────────────────────────────────────────
 
@@ -134,75 +150,32 @@ function sessionToLead(s: any): any {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const stateStyles: Record<string, { chip: string; rail: string; dot: string; label: string; icon: React.ElementType }> = {
-  new: {
-    chip: "bg-blue-50 text-blue-700 border-blue-200",
-    rail: "bg-blue-500",
-    dot: "bg-blue-500",
-    label: "New",
-    icon: Inbox,
-  },
-  warm: {
-    chip: "bg-amber-50 text-amber-700 border-amber-200",
-    rail: "bg-amber-500",
-    dot: "bg-amber-500",
-    label: "Warm",
-    icon: Clock3,
-  },
-  hot: {
-    chip: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    rail: "bg-emerald-500",
-    dot: "bg-emerald-500",
-    label: "Hot",
-    icon: Flame,
-  },
-  risk: {
-    chip: "bg-rose-50 text-rose-700 border-rose-200",
-    rail: "bg-rose-500",
-    dot: "bg-rose-500",
-    label: "At Risk",
-    icon: AlertCircle,
-  },
-  booked: {
-    chip: "bg-violet-50 text-violet-700 border-violet-200",
-    rail: "bg-violet-500",
-    dot: "bg-violet-500",
-    label: "Booked",
-    icon: CheckCircle2,
-  },
+  new: { chip: "bg-blue-50 text-blue-700 border-blue-200", rail: "bg-blue-500", dot: "bg-blue-500", label: "New", icon: Inbox },
+  warm: { chip: "bg-amber-50 text-amber-700 border-amber-200", rail: "bg-amber-500", dot: "bg-amber-500", label: "Warm", icon: Clock3 },
+  hot: { chip: "bg-emerald-50 text-emerald-700 border-emerald-200", rail: "bg-emerald-500", dot: "bg-emerald-500", label: "Hot", icon: Flame },
+  risk: { chip: "bg-rose-50 text-rose-700 border-rose-200", rail: "bg-rose-500", dot: "bg-rose-500", label: "At Risk", icon: AlertCircle },
+  booked: { chip: "bg-violet-50 text-violet-700 border-violet-200", rail: "bg-violet-500", dot: "bg-violet-500", label: "Booked", icon: CheckCircle2 },
 };
 
 const columnMeta: Record<string, { title: string; subtitle: string; accent: string; hint: string }> = {
-  new: {
-    title: "New Leads",
-    subtitle: "Fastest response wins",
-    accent: "from-blue-500/20 to-cyan-500/10",
-    hint: "Respond fast",
-  },
-  quoted: {
-    title: "Quoted",
-    subtitle: "Quotes cooling down",
-    accent: "from-emerald-500/20 to-lime-500/10",
-    hint: "Nurture now",
-  },
-  follow: {
-    title: "Follow Up",
-    subtitle: "Revenue at risk",
-    accent: "from-amber-500/20 to-orange-500/10",
-    hint: "Re-engage",
-  },
-  booked: {
-    title: "Booked",
-    subtitle: "Jobs ready to run",
-    accent: "from-violet-500/20 to-fuchsia-500/10",
-    hint: "Confirm jobs",
-  },
+  new: { title: "New Leads", subtitle: "Fastest response wins", accent: "from-blue-500/20 to-cyan-500/10", hint: "Respond fast" },
+  quoted: { title: "Quoted", subtitle: "Quotes cooling down", accent: "from-emerald-500/20 to-lime-500/10", hint: "Nurture now" },
+  follow: { title: "Follow Up", subtitle: "Revenue at risk", accent: "from-amber-500/20 to-orange-500/10", hint: "Re-engage" },
+  booked: { title: "Booked", subtitle: "Jobs ready to run", accent: "from-violet-500/20 to-fuchsia-500/10", hint: "Confirm jobs" },
 };
+
+const COLUMNS = ["new", "quoted", "follow", "booked"] as const;
+type ColumnKey = typeof COLUMNS[number];
 
 const dateViews = ["Today", "This Week", "This Month", "Custom"];
 const tabs = [
   { key: "pipeline", label: "Pipeline View" },
   { key: "flow", label: "Flow Mode" },
 ];
+
+const dropAnimation: DropAnimation = {
+  sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.4" } } }),
+};
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -211,15 +184,11 @@ function StatTile({ label, value, change, icon: Icon }: { label: string; value: 
     <div className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_12px_32px_rgba(16,24,40,.06)] backdrop-blur">
       <div className="mb-3 flex items-center justify-between text-slate-500">
         <span className="text-xs font-medium uppercase tracking-[0.14em]">{label}</span>
-        <div className="rounded-xl bg-slate-100 p-2">
-          <Icon className="h-4 w-4" />
-        </div>
+        <div className="rounded-xl bg-slate-100 p-2"><Icon className="h-4 w-4" /></div>
       </div>
       <div className="flex items-end justify-between gap-3">
         <div className="text-2xl font-semibold tracking-tight text-slate-900">{value}</div>
-        <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-          {change}
-        </div>
+        <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{change}</div>
       </div>
     </div>
   );
@@ -231,9 +200,7 @@ function ControlButton({ children, active = false, icon: Icon, onClick }: { chil
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-all",
-        active
-          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+        active ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
       )}
     >
       {Icon ? <Icon className="h-4 w-4" /> : null}
@@ -242,118 +209,140 @@ function ControlButton({ children, active = false, icon: Icon, onClick }: { chil
   );
 }
 
-function DraggableLeadCard({ lead, isSelected, onSelect, onMove, isDragging }: {
+// Sortable card — renders a ghost placeholder in original position while dragging
+function SortableLeadCard({ lead, isSelected, onSelect, onMove }: {
   lead: any;
   isSelected: boolean;
   onSelect: (l: any) => void;
   onMove: (l: any, target: string) => void;
-  isDragging?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: lead.id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: lead.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0 : 1,
+    // Placeholder height is preserved by keeping the element in DOM with opacity 0
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <LeadCardContent
+        lead={lead}
+        isSelected={isSelected}
+        onSelect={onSelect}
+        onMove={onMove}
+        dragHandleProps={{ ...listeners, ...attributes }}
+      />
+    </div>
+  );
+}
+
+// Pure card UI — used by both SortableLeadCard and DragOverlay
+function LeadCardContent({ lead, isSelected, onSelect, onMove, dragHandleProps }: {
+  lead: any;
+  isSelected: boolean;
+  onSelect: (l: any) => void;
+  onMove: (l: any, target: string) => void;
+  dragHandleProps?: Record<string, any>;
+}) {
   const style = stateStyles[lead.state] ?? stateStyles.new;
   const StateIcon = style.icon;
 
   return (
     <div
-      ref={setNodeRef}
-      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
-      className={cn(isDragging && "opacity-40")}
+      className={cn(
+        "group relative w-full overflow-hidden rounded-[22px] border bg-white text-left shadow-[0_1px_2px_rgba(16,24,40,.04),0_10px_28px_rgba(16,24,40,.06)] transition-all cursor-grab active:cursor-grabbing select-none",
+        isSelected ? "border-slate-900 ring-2 ring-slate-900/5" : "border-slate-200 hover:border-slate-300 hover:-translate-y-0.5"
+      )}
+      onClick={() => onSelect(lead)}
+      {...dragHandleProps}
     >
-      <motion.button
-        layout
-        whileHover={{ y: -3, scale: 1.01 }}
-        whileTap={{ scale: 0.995 }}
-        onClick={() => onSelect(lead)}
-        className={cn(
-          "group relative w-full overflow-hidden rounded-[22px] border bg-white p-0 text-left shadow-[0_1px_2px_rgba(16,24,40,.04),0_10px_28px_rgba(16,24,40,.06)] transition-all",
-          isSelected ? "border-slate-900 ring-2 ring-slate-900/5" : "border-slate-200 hover:border-slate-300"
-        )}
-        {...listeners}
-        {...attributes}
-      >
-        <div className={cn("absolute inset-y-0 left-0 w-1.5", style.rail)} />
-        <div className="p-3 pl-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="text-[13px] font-semibold tracking-tight text-slate-900">{lead.name}</div>
-                <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold", style.chip)}>
-                  <StateIcon className="h-3 w-3" />
-                  {style.label}
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-slate-500">{lead.service}</div>
+      <div className={cn("absolute inset-y-0 left-0 w-1.5", style.rail)} />
+      <div className="p-3 pl-4">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="text-[13px] font-semibold tracking-tight text-slate-900">{lead.name}</div>
+              <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold", style.chip)}>
+                <StateIcon className="h-3 w-3" />
+                {style.label}
+              </span>
             </div>
-            <button className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" onClick={e => e.stopPropagation()}>
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
+            <div className="mt-1 text-xs text-slate-500">{lead.service}</div>
           </div>
+          <button
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            onClick={e => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        </div>
 
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <div className="text-[20px] font-semibold tracking-tight text-slate-950">{lead.price > 0 ? `$${lead.price}` : "—"}</div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                {lead.beds > 0 && <><span>{lead.beds} bd</span><span className="h-1 w-1 rounded-full bg-slate-300" /></>}
-                <span>{lead.source}</span>
-              </div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 px-2 py-1.5 text-right">
-              <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Age</div>
-              <div className="text-sm font-semibold text-slate-700">{lead.age}</div>
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[20px] font-semibold tracking-tight text-slate-950">{lead.price > 0 ? `$${lead.price}` : "—"}</div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+              {lead.beds > 0 && <><span>{lead.beds} bd</span><span className="h-1 w-1 rounded-full bg-slate-300" /></>}
+              <span>{lead.source}</span>
             </div>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-2">
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Next Best Action</div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-slate-700">{lead.nextAction}</div>
-              <ChevronRight className="h-4 w-4 text-slate-400" />
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <div className="text-xs text-slate-500">{lead.lastContact}</div>
-            <div className="flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <button
-                onClick={(e) => { e.stopPropagation(); onMove(lead, "follow"); }}
-                className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Follow
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onMove(lead, "booked"); }}
-                className="rounded-xl bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
-              >
-                Book
-              </button>
-            </div>
+          <div className="rounded-2xl bg-slate-50 px-2 py-1.5 text-right">
+            <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Age</div>
+            <div className="text-sm font-semibold text-slate-700">{lead.age}</div>
           </div>
         </div>
-      </motion.button>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-2">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Next Best Action</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium text-slate-700">{lead.nextAction}</div>
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="text-xs text-slate-500">{lead.lastContact}</div>
+          <div className="flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <button
+              onClick={(e) => { e.stopPropagation(); onMove(lead, "follow"); }}
+              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Follow
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMove(lead, "booked"); }}
+              className="rounded-xl bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
+            >
+              Book
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function DroppableColumn({ type, leads, totalValue, selectedLead, onSelect, onMove, activeId }: {
+function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: {
   type: string;
   leads: any[];
   totalValue: number;
   selectedLead: any;
   onSelect: (l: any) => void;
   onMove: (l: any, target: string) => void;
-  activeId: number | null;
 }) {
   const meta = columnMeta[type];
-  const { setNodeRef, isOver } = useDroppable({ id: type });
+  const ids = useMemo(() => leads.map((l) => l.id), [leads]);
 
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "min-w-[220px] flex-1 rounded-[28px] border bg-white/70 p-3 shadow-[0_1px_2px_rgba(16,24,40,.03),0_10px_30px_rgba(16,24,40,.04)] backdrop-blur transition-colors",
-        isOver ? "border-slate-400 bg-slate-50/80" : "border-slate-200/80"
-      )}
-    >
+    <div className="min-w-[220px] flex-1 rounded-[28px] border border-slate-200/80 bg-white/70 p-3 shadow-[0_1px_2px_rgba(16,24,40,.03),0_10px_30px_rgba(16,24,40,.04)] backdrop-blur">
       <div className={cn("mb-3 rounded-[24px] border border-slate-200 bg-gradient-to-br p-3", meta.accent)}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -368,20 +357,19 @@ function DroppableColumn({ type, leads, totalValue, selectedLead, onSelect, onMo
         </div>
       </div>
 
-      <div className="space-y-3">
-        <AnimatePresence>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <div className="space-y-3 min-h-[60px]">
           {leads.map((lead) => (
-            <DraggableLeadCard
+            <SortableLeadCard
               key={lead.id}
               lead={lead}
               isSelected={selectedLead?.id === lead.id}
               onSelect={onSelect}
               onMove={onMove}
-              isDragging={activeId === lead.id}
             />
           ))}
-        </AnimatePresence>
-      </div>
+        </div>
+      </SortableContext>
     </div>
   );
 }
@@ -394,7 +382,6 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
       </div>
     );
   }
-
   const style = stateStyles[lead.state] ?? stateStyles.new;
 
   return (
@@ -403,15 +390,11 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
         <div>
           <div className="flex items-center gap-2">
             <div className="text-xl font-semibold tracking-tight text-slate-950">{lead.name}</div>
-            <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold", style.chip)}>
-              {style.label}
-            </span>
+            <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold", style.chip)}>{style.label}</span>
           </div>
           <div className="mt-1 text-sm text-slate-500">{lead.service}{lead.address ? ` • ${lead.address}` : ""}</div>
         </div>
-        <button onClick={onClose} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50">
-          <X className="h-4 w-4" />
-        </button>
+        <button onClick={onClose} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><X className="h-4 w-4" /></button>
       </div>
 
       <div className="mb-5 grid grid-cols-2 gap-3">
@@ -426,10 +409,7 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
       </div>
 
       <div className="mb-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-          <Zap className="h-4 w-4" />
-          Recommended Actions
-        </div>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800"><Zap className="h-4 w-4" />Recommended Actions</div>
         <div className="grid grid-cols-2 gap-2">
           <button className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800">Reply Now</button>
           <button className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Call Lead</button>
@@ -484,9 +464,7 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Flow Mode</div>
           <div className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">One lead. One decision.</div>
         </div>
-        <span className={cn("inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold", style.chip)}>
-          {style.label}
-        </span>
+        <span className={cn("inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold", style.chip)}>{style.label}</span>
       </div>
 
       <div className="grid grid-cols-[1.3fr_.7fr] gap-5">
@@ -501,22 +479,11 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
               <div className="text-4xl font-semibold">{lead.price > 0 ? `$${lead.price}` : "—"}</div>
             </div>
           </div>
-
           <div className="mb-5 grid grid-cols-3 gap-3">
-            <div className="rounded-2xl bg-white/10 p-4">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Last Contact</div>
-              <div className="mt-2 text-sm font-medium">{lead.lastContact}</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 p-4">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Source</div>
-              <div className="mt-2 text-sm font-medium">{lead.source}</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 p-4">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Property</div>
-              <div className="mt-2 text-sm font-medium">{lead.beds > 0 ? `${lead.beds} bd / ${lead.baths} ba` : "—"}</div>
-            </div>
+            <div className="rounded-2xl bg-white/10 p-4"><div className="text-xs uppercase tracking-[0.12em] text-slate-400">Last Contact</div><div className="mt-2 text-sm font-medium">{lead.lastContact}</div></div>
+            <div className="rounded-2xl bg-white/10 p-4"><div className="text-xs uppercase tracking-[0.12em] text-slate-400">Source</div><div className="mt-2 text-sm font-medium">{lead.source}</div></div>
+            <div className="rounded-2xl bg-white/10 p-4"><div className="text-xs uppercase tracking-[0.12em] text-slate-400">Property</div><div className="mt-2 text-sm font-medium">{lead.beds > 0 ? `${lead.beds} bd / ${lead.baths} ba` : "—"}</div></div>
           </div>
-
           <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
             <div className="mb-2 text-xs uppercase tracking-[0.12em] text-slate-400">Recommended move</div>
             <div className="text-xl font-medium">{lead.nextAction}</div>
@@ -558,8 +525,8 @@ export default function PipelineBoard() {
   const [panelMode, setPanelMode] = useState("lead");
   const [activeId, setActiveId] = useState<number | null>(null);
 
-  // Optimistic local overrides: sessionId → column key
-  const [columnOverrides, setColumnOverrides] = useState<Record<number, string>>({});
+  // Local column state for optimistic DnD — keyed by column, array of leads
+  const [localColumns, setLocalColumns] = useState<Record<ColumnKey, any[]> | null>(null);
 
   const { data: sessions, isLoading } = trpc.leads.list.useQuery(undefined, {
     refetchInterval: 30000,
@@ -567,33 +534,28 @@ export default function PipelineBoard() {
 
   const updateStageMutation = trpc.leads.agentUpdateStage.useMutation();
 
-  // Map sessions → grouped columns
-  const data = useMemo(() => {
-    const groups: Record<string, any[]> = { new: [], quoted: [], follow: [], booked: [] };
+  // Derive columns from server data (only when not mid-drag)
+  const serverColumns = useMemo(() => {
+    const groups: Record<ColumnKey, any[]> = { new: [], quoted: [], follow: [], booked: [] };
     if (!sessions) return groups;
-    // Exclude COLD, LOST, NOT_INTERESTED, review/hiring/cs stages from pipeline
-    const excluded = new Set([
-      "COLD", "LOST", "NOT_INTERESTED", "REVIEW_REQUESTED", "REVIEW_DONE",
-      "REVIEW_REBOOKING_REQUESTED", "REVIEW_REBOOKING_DONE", "QUALITY_RATING_REQUESTED",
-      "QUALITY_MISSED_FOLLOWUP", "QUALITY_RATING_DONE", "INTERVIEW_LINK_SENT",
-      "INTERVIEW_NUDGE_1", "INTERVIEW_NUDGE_2", "INTERVIEW_LINK_DONE",
-      "OPEN", "HIRING_OUTBOUND", "REACTIVATION", "REACTIVATION_TIME",
-    ]);
     for (const s of sessions) {
-      if (excluded.has(s.stage)) continue;
+      if (EXCLUDED_STAGES.has(s.stage)) continue;
       const lead = sessionToLead(s);
-      const col = columnOverrides[s.id] ?? stageToColumn(s.stage);
-      if (groups[col]) groups[col].push(lead);
+      const col = stageToColumn(s.stage) as ColumnKey;
+      groups[col].push(lead);
     }
     return groups;
-  }, [sessions, columnOverrides]);
+  }, [sessions]);
 
-  const filteredData = useMemo(() => {
-    if (!search.trim()) return data;
+  // Use localColumns during drag, serverColumns otherwise
+  const columns: Record<ColumnKey, any[]> = localColumns ?? serverColumns;
+
+  const filteredColumns = useMemo(() => {
+    if (!search.trim()) return columns;
     const q = search.toLowerCase();
-    const next: Record<string, any[]> = {};
-    (Object.entries(data) as [string, any[]][]).forEach(([key, leads]) => {
-      next[key] = leads.filter(
+    const next: Record<ColumnKey, any[]> = { new: [], quoted: [], follow: [], booked: [] };
+    (Object.keys(columns) as ColumnKey[]).forEach((key) => {
+      next[key] = columns[key].filter(
         (lead: any) =>
           lead.name.toLowerCase().includes(q) ||
           lead.service.toLowerCase().includes(q) ||
@@ -602,97 +564,176 @@ export default function PipelineBoard() {
       );
     });
     return next;
-  }, [data, search]);
+  }, [columns, search]);
 
   const totals = useMemo(() => {
-    const leads = Object.values(filteredData).flat();
-    const pipeline = leads.reduce((sum: number, lead: any) => sum + lead.price, 0);
-    const booked = (filteredData.booked ?? []).reduce((sum: number, lead: any) => sum + lead.price, 0);
-    const quoted = (filteredData.quoted ?? []).length;
+    const leads = Object.values(filteredColumns).flat();
+    const pipeline = leads.reduce((sum: number, l: any) => sum + l.price, 0);
+    const booked = (filteredColumns.booked ?? []).reduce((sum: number, l: any) => sum + l.price, 0);
+    const quoted = (filteredColumns.quoted ?? []).length;
     return { leadCount: leads.length, pipeline, booked, quoted };
-  }, [filteredData]);
+  }, [filteredColumns]);
 
   const columnTotals = useMemo(() => {
     const next: Record<string, number> = {};
-    Object.entries(filteredData).forEach(([key, leads]: [string, any]) => {
-      next[key] = (leads as any[]).reduce((sum: number, lead: any) => sum + lead.price, 0);
+    (Object.keys(filteredColumns) as ColumnKey[]).forEach((key) => {
+      next[key] = filteredColumns[key].reduce((sum: number, l: any) => sum + l.price, 0);
     });
     return next;
-  }, [filteredData]);
+  }, [filteredColumns]);
 
-  const allLeads = useMemo(() => Object.values(data).flat(), [data]);
+  const allLeads = useMemo(() => Object.values(columns).flat(), [columns]);
   const priorityQueue = useMemo(() => [...allLeads].sort((a: any, b: any) => b.price - a.price), [allLeads]);
   const currentFlowLead = priorityQueue[flowIndex % Math.max(priorityQueue.length, 1)];
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  const moveLead = (lead: any, target: string) => {
+  // Find which column a lead belongs to
+  function findColumn(id: number): ColumnKey | null {
+    for (const col of COLUMNS) {
+      if (columns[col].some((l: any) => l.id === id)) return col;
+    }
+    return null;
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as number);
+    // Snapshot current columns into local state for optimistic manipulation
+    setLocalColumns({ ...serverColumns });
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeLeadId = active.id as number;
+    const overId = over.id;
+
+    // overId is either a column key (string) or a lead id (number)
+    const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
+      ? (overId as ColumnKey)
+      : findColumn(overId as number);
+
+    const activeCol = findColumn(activeLeadId);
+    if (!activeCol || !overCol) return;
+
+    setLocalColumns((prev) => {
+      if (!prev) return prev;
+      const sourceCopy = [...prev[activeCol]];
+      const destCopy = activeCol === overCol ? sourceCopy : [...prev[overCol]];
+
+      const activeIdx = sourceCopy.findIndex((l: any) => l.id === activeLeadId);
+      if (activeIdx === -1) return prev;
+
+      const activeLead = sourceCopy[activeIdx];
+
+      if (activeCol === overCol) {
+        // Reorder within same column
+        const overIdx = destCopy.findIndex((l: any) => l.id === overId);
+        if (overIdx === -1) return prev;
+        const reordered = arrayMove(destCopy, activeIdx, overIdx);
+        return { ...prev, [activeCol]: reordered };
+      } else {
+        // Move to different column — insert at over position
+        const newSource = sourceCopy.filter((l: any) => l.id !== activeLeadId);
+        const overIdx = destCopy.findIndex((l: any) => l.id === overId);
+        const insertAt = overIdx === -1 ? destCopy.length : overIdx;
+        const newDest = [...destCopy];
+        newDest.splice(insertAt, 0, activeLead);
+        return { ...prev, [activeCol]: newSource, [overCol]: newDest };
+      }
+    });
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over || !localColumns) {
+      setLocalColumns(null);
+      return;
+    }
+
+    const activeLeadId = active.id as number;
+    const overId = over.id;
+
+    const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
+      ? (overId as ColumnKey)
+      : findColumn(overId as number);
+
+    const originCol = findColumn(activeLeadId);
+
+    // Commit localColumns as the new truth (don't revert)
+    // localColumns already has the final state from handleDragOver
+    // Keep localColumns set so UI doesn't flash back to server state
+
+    if (originCol && overCol && originCol !== overCol) {
+      // Write to DB
+      const targetStage = COLUMN_TO_STAGE[overCol];
+      if (targetStage) {
+        updateStageMutation.mutate(
+          { sessionId: activeLeadId, stage: targetStage as any },
+          {
+            onError: () => {
+              // Rollback to server state on error
+              setLocalColumns(null);
+            },
+            onSuccess: () => {
+              // Clear local override — server data will match now
+              setLocalColumns(null);
+            },
+          }
+        );
+      }
+    } else {
+      // Same column reorder — no DB write needed, clear local state
+      setLocalColumns(null);
+    }
+  }
+
+  const activeLead = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
+
+  const moveLead = (lead: any, target: ColumnKey) => {
+    const targetStage = COLUMN_TO_STAGE[target];
     // Optimistic update
-    setColumnOverrides(prev => ({ ...prev, [lead.id]: target }));
-    setSelectedLead({ ...lead, state: target === "booked" ? "booked" : target === "follow" ? "risk" : target === "quoted" ? "hot" : "new" });
+    setLocalColumns((prev) => {
+      const base = prev ?? serverColumns;
+      const next: Record<ColumnKey, any[]> = { new: [], quoted: [], follow: [], booked: [] };
+      for (const col of COLUMNS) {
+        next[col] = base[col].filter((l: any) => l.id !== lead.id);
+      }
+      next[target] = [lead, ...next[target]];
+      return next;
+    });
+    setSelectedLead(lead);
     setIsPanelOpen(true);
     setPanelMode("lead");
 
-    // Write to DB if target has a valid stage
-    const targetStage = COLUMN_TO_STAGE[target];
     if (targetStage) {
       updateStageMutation.mutate(
         { sessionId: lead.id, stage: targetStage as any },
         {
-          onError: () => {
-            // Rollback on error
-            setColumnOverrides(prev => {
-              const next = { ...prev };
-              delete next[lead.id];
-              return next;
-            });
-          },
+          onError: () => setLocalColumns(null),
+          onSuccess: () => setLocalColumns(null),
         }
       );
     }
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as number);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveId(null);
-    const { active, over } = event;
-    if (!over) return;
-    const targetCol = over.id as string;
-    const lead = allLeads.find((l: any) => l.id === active.id);
-    if (!lead) return;
-    const currentCol = columnOverrides[lead.id] ?? stageToColumn(lead.stage);
-    if (currentCol === targetCol) return;
-    moveLead(lead, targetCol);
-  };
-
-  const openLeadPanel = (lead: any) => {
-    setSelectedLead(lead);
-    setPanelMode("lead");
-    setIsPanelOpen(true);
-  };
-
-  const openActionsPanel = () => {
-    setPanelMode("actions");
-    setIsPanelOpen(true);
-  };
+  const openLeadPanel = (lead: any) => { setSelectedLead(lead); setPanelMode("lead"); setIsPanelOpen(true); };
+  const openActionsPanel = () => { setPanelMode("actions"); setIsPanelOpen(true); };
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsPanelOpen(false);
-    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setIsPanelOpen(false); };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-
-  const activeLead = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <div className="mx-auto max-w-[1680px] px-12 py-6">
         <div className="rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(248,250,252,0.88))] p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_24px_60px_rgba(15,23,42,.08)] backdrop-blur-xl">
+
           {/* Header */}
           <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200/80 px-2 pb-4">
             <div className="flex items-center gap-4">
@@ -703,8 +744,7 @@ export default function PipelineBoard() {
                 <div className="flex items-center gap-2">
                   <div className="text-lg font-semibold tracking-tight">Pipeline</div>
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Live
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />Live
                   </span>
                 </div>
                 <div className="text-sm text-slate-500">Revenue command center for leads, follow-up, and booking.</div>
@@ -747,20 +787,9 @@ export default function PipelineBoard() {
             </div>
             <div className="flex items-center gap-2">
               {dateViews.map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setSelectedDate(item)}
-                  className={cn(
-                    "rounded-2xl px-4 py-2.5 text-sm font-medium transition-all",
-                    selectedDate === item ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  )}
-                >
-                  {item}
-                </button>
+                <button key={item} onClick={() => setSelectedDate(item)} className={cn("rounded-2xl px-4 py-2.5 text-sm font-medium transition-all", selectedDate === item ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{item}</button>
               ))}
-              <button className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50">
-                <CalendarDays className="h-4 w-4" />
-              </button>
+              <button className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50"><CalendarDays className="h-4 w-4" /></button>
             </div>
           </div>
 
@@ -768,19 +797,9 @@ export default function PipelineBoard() {
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
               {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setView(tab.key)}
-                  className={cn(
-                    "rounded-xl px-4 py-2 text-sm font-medium transition-all",
-                    view === tab.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"
-                  )}
-                >
-                  {tab.label}
-                </button>
+                <button key={tab.key} onClick={() => setView(tab.key)} className={cn("rounded-xl px-4 py-2 text-sm font-medium transition-all", view === tab.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}>{tab.label}</button>
               ))}
             </div>
-
             <div className="flex items-center gap-2">
               <ControlButton icon={Filter}>Advanced Filters</ControlButton>
               <ControlButton icon={Wand2}>Smart Sort</ControlButton>
@@ -795,36 +814,41 @@ export default function PipelineBoard() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pipeline Board</div>
                     <div className="mt-1 text-sm text-slate-600">Full-width operator view. Click any lead for deep context.</div>
                   </div>
-                  <button
-                    onClick={openActionsPanel}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
-                  >
-                    <Zap className="h-4 w-4" />
-                    Actions Needed
+                  <button onClick={openActionsPanel} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800">
+                    <Zap className="h-4 w-4" />Actions Needed
                   </button>
                 </div>
 
-                <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCorners}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                >
                   <div className="flex gap-4 overflow-x-auto pb-1">
-                    {(["new", "quoted", "follow", "booked"] as const).map((key) => (
-                      <DroppableColumn
+                    {COLUMNS.map((key) => (
+                      <Column
                         key={key}
                         type={key}
-                        leads={filteredData[key] ?? []}
+                        leads={filteredColumns[key] ?? []}
                         totalValue={columnTotals[key] ?? 0}
                         selectedLead={selectedLead}
                         onSelect={openLeadPanel}
                         onMove={moveLead}
-                        activeId={activeId}
                       />
                     ))}
                   </div>
-                  <DragOverlay>
+
+                  <DragOverlay dropAnimation={dropAnimation}>
                     {activeLead ? (
-                      <div className="w-[220px] rounded-[22px] border border-slate-900 bg-white p-3 pl-4 shadow-2xl opacity-95">
-                        <div className="text-[13px] font-semibold text-slate-900">{activeLead.name}</div>
-                        <div className="mt-1 text-xs text-slate-500">{activeLead.service}</div>
-                        <div className="mt-2 text-[20px] font-semibold text-slate-950">{activeLead.price > 0 ? `$${activeLead.price}` : "—"}</div>
+                      <div className="w-[220px] rotate-1 scale-105 cursor-grabbing shadow-2xl">
+                        <LeadCardContent
+                          lead={activeLead}
+                          isSelected={false}
+                          onSelect={() => {}}
+                          onMove={() => {}}
+                        />
                       </div>
                     ) : null}
                   </DragOverlay>
@@ -834,20 +858,8 @@ export default function PipelineBoard() {
               <AnimatePresence>
                 {isPanelOpen ? (
                   <>
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      onClick={() => setIsPanelOpen(false)}
-                      className="absolute inset-0 z-20 rounded-[32px] bg-slate-950/[0.18] backdrop-blur-[2px]"
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, x: 40 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 40 }}
-                      transition={{ type: "spring", stiffness: 320, damping: 30 }}
-                      className="absolute right-4 top-4 z-30 w-[420px] max-w-[calc(100%-2rem)]"
-                    >
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPanelOpen(false)} className="absolute inset-0 z-20 rounded-[32px] bg-slate-950/[0.18] backdrop-blur-[2px]" />
+                    <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} transition={{ type: "spring", stiffness: 320, damping: 30 }} className="absolute right-4 top-4 z-30 w-[420px] max-w-[calc(100%-2rem)]">
                       {panelMode === "actions" ? (
                         <div className="space-y-4">
                           <div className="rounded-[28px] border border-slate-200 bg-slate-950 p-5 text-white shadow-[0_1px_2px_rgba(16,24,40,.04),0_18px_40px_rgba(16,24,40,.12)]">
@@ -856,12 +868,10 @@ export default function PipelineBoard() {
                                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Next Actions</div>
                                 <div className="mt-1 text-xl font-semibold tracking-tight">What should happen now</div>
                               </div>
-                              <button onClick={() => setIsPanelOpen(false)} className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10">
-                                <X className="h-4 w-4" />
-                              </button>
+                              <button onClick={() => setIsPanelOpen(false)} className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
                             </div>
                             <div className="space-y-3">
-                              {(filteredData.new ?? []).slice(0, 3).map((lead: any) => (
+                              {(filteredColumns.new ?? []).slice(0, 3).map((lead: any) => (
                                 <button key={lead.id} onClick={() => { setSelectedLead(lead); setPanelMode("lead"); }} className="flex w-full items-center justify-between rounded-2xl bg-white/[0.08] px-4 py-3 text-left hover:bg-white/[0.12]">
                                   <span className="text-sm text-slate-100">{lead.nextAction} — {lead.name}</span>
                                   <ArrowUpRight className="h-4 w-4 text-slate-400" />
