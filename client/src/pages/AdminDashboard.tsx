@@ -3409,6 +3409,7 @@ export default function AdminDashboard() {
   }
 
   const DATE_PRESETS: { value: DatePreset; label: string }[] = [
+    { value: "all", label: "All" },
     { value: "today", label: "Today" },
     { value: "yesterday", label: "Yesterday" },
     { value: "last7", label: "Last 7 days" },
