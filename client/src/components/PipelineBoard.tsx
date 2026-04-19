@@ -524,6 +524,8 @@ export default function PipelineBoard() {
   // Local column state for optimistic DnD
   const [localColumns, setLocalColumns] = useState<Record<ColumnKey, any[]> | null>(null);
 
+  const utils = trpc.useUtils();
+
   const { data: sessions, isLoading } = trpc.leads.list.useQuery(undefined, {
     refetchInterval: 30000,
   });
@@ -541,6 +543,15 @@ export default function PipelineBoard() {
     }
     return groups;
   }, [sessions]);
+
+  // When serverColumns updates after a successful mutation, clear localColumns
+  // so the UI seamlessly transitions to server truth without any snap-back
+  useEffect(() => {
+    if (localColumns !== null) {
+      setLocalColumns(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverColumns]);
 
   const columns: Record<ColumnKey, any[]> = localColumns ?? serverColumns;
 
@@ -680,18 +691,20 @@ export default function PipelineBoard() {
     if (originCol && overCol && originCol !== overCol) {
       const targetStage = COLUMN_TO_STAGE[overCol];
       if (targetStage) {
+        // Keep localColumns alive — don't clear on success.
+        // The useEffect on serverColumns will clear it once the query refetches,
+        // ensuring zero snap-back.
         updateStageMutation.mutate(
           { sessionId: activeLeadId, stage: targetStage as any },
           {
             onError: () => setLocalColumns(null),
-            onSuccess: () => setLocalColumns(null),
+            onSuccess: () => utils.leads.list.invalidate(),
           }
         );
-      } else {
-        setLocalColumns(null);
       }
-    } else {
-      setLocalColumns(null);
+      // For columns with no DB write (new/quoted), localColumns already has
+      // the correct optimistic state — leave it; serverColumns won't change
+      // so we keep the visual position as-is.
     }
   }
 
@@ -718,7 +731,7 @@ export default function PipelineBoard() {
         { sessionId: lead.id, stage: targetStage as any },
         {
           onError: () => setLocalColumns(null),
-          onSuccess: () => setLocalColumns(null),
+          onSuccess: () => utils.leads.list.invalidate(),
         }
       );
     }
