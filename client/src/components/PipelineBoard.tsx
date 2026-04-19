@@ -167,7 +167,7 @@ const columnMeta: Record<string, { title: string; subtitle: string; accent: stri
 const COLUMNS = ["new", "quoted", "follow", "booked"] as const;
 type ColumnKey = typeof COLUMNS[number];
 
-const dateViews = ["Today", "This Week", "This Month", "Custom"];
+const dateViews = ["All", "Today", "This Week", "This Month", "Custom"];
 const tabs = [
   { key: "pipeline", label: "Pipeline View" },
   { key: "flow", label: "Flow Mode" },
@@ -508,7 +508,7 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function PipelineBoard() {
-  const [selectedDate, setSelectedDate] = useState("Today");
+  const [selectedDate, setSelectedDate] = useState("All");
 
   // Convert selected period to dateFrom/dateTo ISO strings for leads.list
   const { dateFrom, dateTo } = useMemo(() => {
