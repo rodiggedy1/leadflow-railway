@@ -554,6 +554,13 @@ export default function PipelineBoard() {
     { refetchInterval: 30000 }
   );
 
+  // Use leads.stats for booked revenue — same source as the Leads page,
+  // so the numbers always match (includes extras, bookedAmount override, reactivationLastPrice)
+  const { data: statsData } = trpc.leads.stats.useQuery(
+    { dateFrom, dateTo },
+    { refetchInterval: 30000 }
+  );
+
   const updateStageMutation = trpc.leads.agentUpdateStage.useMutation();
 
   const serverColumns = useMemo(() => {
@@ -598,7 +605,8 @@ export default function PipelineBoard() {
   const totals = useMemo(() => {
     const leads = Object.values(filteredColumns).flat();
     const pipeline = leads.reduce((sum: number, l: any) => sum + l.price, 0);
-    const booked = (filteredColumns.booked ?? []).reduce((sum: number, l: any) => sum + l.price, 0);
+    // bookedRevenue comes from leads.stats (same as Leads page) — accurate across all revenue types
+    const booked = statsData?.bookedRevenue ?? (filteredColumns.booked ?? []).reduce((sum: number, l: any) => sum + l.price, 0);
     const quoted = (filteredColumns.quoted ?? []).length;
     const now = Date.now();
     const SIXTY_MIN = 60 * 60 * 1000;
@@ -607,7 +615,7 @@ export default function PipelineBoard() {
       return !last || (now - last) > SIXTY_MIN;
     }).length;
     return { leadCount: leads.length, pipeline, booked, quoted, needsAttention };
-  }, [filteredColumns, sessions]);
+  }, [filteredColumns, sessions, statsData]);
 
   const columnTotals = useMemo(() => {
     const next: Record<string, number> = {};
