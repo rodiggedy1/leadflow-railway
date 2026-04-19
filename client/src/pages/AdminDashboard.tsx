@@ -3882,13 +3882,13 @@ export default function AdminDashboard() {
                         </CardContent>
                       </Card>
                     </motion.div>
-                    {/* AI Voice Assists */}
+                    {/* Incoming AI Calls */}
                     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
                       <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <div className="text-sm font-medium text-zinc-500">AI voice assists</div>
+                              <div className="text-sm font-medium text-zinc-500">Incoming AI calls</div>
                               <div className="mt-2 text-3xl font-semibold tracking-[-0.03em] leading-none">
                                 {(voiceStats?.totalCalls ?? 0).toLocaleString()}
                               </div>
