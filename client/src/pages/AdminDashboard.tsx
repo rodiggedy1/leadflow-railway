@@ -3449,7 +3449,7 @@ export default function AdminDashboard() {
         }
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <main className={activeTab === "leads" ? "py-0" : "max-w-7xl mx-auto px-4 sm:px-6 py-6"}>
         {activeTab === "agents" && <AgentManagement />}
         {activeTab === "leaderboard" && <AgentLeaderboard dateRange={dateRange} />}
         {showSimulator && (
@@ -3707,7 +3707,7 @@ export default function AdminDashboard() {
         )}
         {activeTab === "leads" && <>
         {/* ── New Leads Page Design ─────────────────────────────────────────── */}
-        <div className="bg-[#f6f5f2] text-zinc-900 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-6 pb-24" style={{ minHeight: 'calc(100vh - 200px)' }}>
+        <div className="bg-[#f6f5f2] text-zinc-900 px-4 sm:px-6 pt-6 pb-24" style={{ minHeight: "calc(100vh - 200px)" }}>
           <div className="mx-auto max-w-[1600px]">
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.25fr_360px]">
               {/* ── Left column ─────────────────────────────────────────────── */}
@@ -4080,7 +4080,7 @@ export default function AdminDashboard() {
                                         className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] items-start gap-3 px-6 py-4 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
                                       >
                                         {/* Lead name + phone + badges */}
-                                        <div>
+                                        <div className="min-w-0">
                                           <div className="flex items-start gap-3">
                                             <div className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
                                             <div className="min-w-0">
@@ -4104,8 +4104,8 @@ export default function AdminDashboard() {
                                           </div>
                                         </div>
                                         {/* Source */}
-                                        <div className="flex items-center">
-                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700 truncate max-w-full">
+                                        <div className="flex items-center min-w-0">
+                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700 truncate max-w-[80px] block">
                                             {(() => {
                                               const src = session.leadSource;
                                               if (!src || src === "form") return "Quote Form";
@@ -4127,11 +4127,11 @@ export default function AdminDashboard() {
                                           <span className="truncate">{session.serviceType ?? "—"}</span>
                                         </div>
                                         {/* Quote */}
-                                        <div className="flex items-center text-[18px] font-semibold tracking-[-0.03em]">
+                                        <div className="flex items-center min-w-0 text-[18px] font-semibold tracking-[-0.03em]">
                                           {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
                                         </div>
                                         {/* Stage */}
-                                        <div className="flex items-center">
+                                        <div className="flex items-center min-w-0">
                                           <StageBadge stage={session.stage} />
                                         </div>
                                         {/* Agent + last activity */}
@@ -4179,8 +4179,7 @@ export default function AdminDashboard() {
                               transition={{ duration: 0.18 }}
                               className="overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(200,255,111,0.16),_transparent_34%)] p-6 space-y-5"
                             >
-                              {/* Header + Action buttons card */}
-                              <div className="rounded-[28px] border border-black/5 bg-white p-6 shadow-sm">
+                              {/* Header */}
                               <div className="flex items-start justify-between gap-4">
                                 <div>
                                   <div className="flex items-center gap-2.5">
@@ -4215,7 +4214,7 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               {/* Action buttons */}
-                              <div className="mt-5 grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-2 gap-3">
                                 <a
                                   href={`openphone://call?to=${selectedLeadPanel.leadPhone}`}
                                   className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-white text-sm font-medium hover:bg-zinc-800 transition"
@@ -4253,7 +4252,6 @@ export default function AdminDashboard() {
                                   </button>
                                 )}
                               </div>
-                              </div>{/* end header+actions card */}
                               {/* AI summary */}
                               <Card className="rounded-[28px] border-black/5 bg-white">
                                 <CardContent className="p-6">
