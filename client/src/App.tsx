@@ -156,8 +156,8 @@ function GlobalOpsChat() {
            prevMsgCountRef so position/sounds don't reset on page navigation. */}
       {shouldRenderOpsChat && (
         <div
-          className="fixed inset-0 z-50 bg-slate-50 overflow-hidden"
-          style={{ display: state === "open" ? "flex" : "none" }}
+          className="fixed inset-0 z-50 overflow-hidden"
+          style={{ background: '#eef3f8', display: state === "open" ? "flex" : "none" }}
         >
           <OpsChat onMinimize={minimize} onClose={close} />
         </div>

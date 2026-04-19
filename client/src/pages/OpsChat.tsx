@@ -1805,7 +1805,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <div className="w-[52px] shrink-0 h-full bg-slate-950 rounded-[20px] border border-white/10 flex flex-col items-center px-1.5 py-3 gap-2 overflow-visible transition-all shadow-xl shadow-slate-900/20">
+        <div className="w-[52px] shrink-0 self-stretch bg-slate-950 rounded-[20px] border border-white/10 flex flex-col items-center px-1.5 py-3 gap-2 overflow-visible transition-all shadow-xl shadow-slate-900/20">
           <button
             onClick={() => setSidebarCollapsed(false)}
             className="mb-1 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-900 shadow-lg hover:bg-slate-100 transition"
