@@ -509,6 +509,29 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
 
 export default function PipelineBoard() {
   const [selectedDate, setSelectedDate] = useState("Today");
+
+  // Convert selected period to dateFrom/dateTo ISO strings for leads.list
+  const { dateFrom, dateTo } = useMemo(() => {
+    const now = new Date();
+    const pad = (d: Date) => d.toISOString().split("T")[0];
+    if (selectedDate === "Today") {
+      const f = pad(now);
+      return { dateFrom: f, dateTo: f };
+    }
+    if (selectedDate === "This Week") {
+      const day = now.getDay(); // 0=Sun
+      const mon = new Date(now); mon.setDate(now.getDate() - ((day + 6) % 7));
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return { dateFrom: pad(mon), dateTo: pad(sun) };
+    }
+    if (selectedDate === "This Month") {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      return { dateFrom: pad(first), dateTo: pad(last) };
+    }
+    // Custom — no filter
+    return { dateFrom: undefined, dateTo: undefined };
+  }, [selectedDate]);
   const [view, setView] = useState("pipeline");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [search, setSearch] = useState("");
@@ -526,9 +549,10 @@ export default function PipelineBoard() {
 
   const utils = trpc.useUtils();
 
-  const { data: sessions, isLoading } = trpc.leads.list.useQuery(undefined, {
-    refetchInterval: 30000,
-  });
+  const { data: sessions, isLoading } = trpc.leads.list.useQuery(
+    { dateFrom, dateTo },
+    { refetchInterval: 30000 }
+  );
 
   const updateStageMutation = trpc.leads.agentUpdateStage.useMutation();
 
@@ -576,8 +600,14 @@ export default function PipelineBoard() {
     const pipeline = leads.reduce((sum: number, l: any) => sum + l.price, 0);
     const booked = (filteredColumns.booked ?? []).reduce((sum: number, l: any) => sum + l.price, 0);
     const quoted = (filteredColumns.quoted ?? []).length;
-    return { leadCount: leads.length, pipeline, booked, quoted };
-  }, [filteredColumns]);
+    const now = Date.now();
+    const SIXTY_MIN = 60 * 60 * 1000;
+    const needsAttention = (sessions ?? []).filter((s: any) => {
+      const last = s.lastActivityAt ? new Date(s.lastActivityAt).getTime() : null;
+      return !last || (now - last) > SIXTY_MIN;
+    }).length;
+    return { leadCount: leads.length, pipeline, booked, quoted, needsAttention };
+  }, [filteredColumns, sessions]);
 
   const columnTotals = useMemo(() => {
     const next: Record<string, number> = {};
@@ -792,7 +822,7 @@ export default function PipelineBoard() {
               </div>
 
               <div className="flex items-center gap-2">
-                <ControlButton active icon={AlertCircle}>Needs Attention ({totals.leadCount})</ControlButton>
+                <ControlButton active icon={AlertCircle}>Needs Attention ({totals.needsAttention})</ControlButton>
                 <ControlButton icon={Phone}>Call Assist</ControlButton>
                 <ControlButton icon={PanelRight}>Agent View</ControlButton>
               </div>
