@@ -101,6 +101,12 @@ import {
   SlidersHorizontal,
   Plus,
   Filter,
+  CalendarDays,
+  MoreHorizontal,
+  AlertCircle,
+  Flame,
+  PanelRight,
+  Inbox,
 } from "lucide-react";
 import {
   Dialog,
@@ -133,6 +139,7 @@ import KanbanBoard from "@/components/KanbanBoard";
 import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
 import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
 import CallGuide from "@/components/CallGuide";
+import PipelineBoard from "@/components/PipelineBoard";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
 /**
  * Slide-in toast stack that appears from the bottom-right when leads have
@@ -3245,6 +3252,13 @@ export default function AdminDashboard() {
   });
 
   const [pipelineDateFilter, setPipelineDateFilter] = useState<"today" | "week" | "month">("month");
+  const [pipelineView, setPipelineView] = useState<"pipeline" | "flow">("pipeline");
+  const [pipelineSelectedLead, setPipelineSelectedLead] = useState<null>(null);
+  const [pipelineIsPanelOpen, setPipelineIsPanelOpen] = useState(false);
+  const [pipelinePanelMode, setPipelinePanelMode] = useState<"lead" | "actions">("lead");
+  const [pipelineFlowIndex, setPipelineFlowIndex] = useState(0);
+  const [pipelineSearch, setPipelineSearch] = useState("");
+  const [pipelineSelectedDate, setPipelineSelectedDate] = useState("Today");
 
   // Compute the active date range to send to the backend
   const dateRange = useMemo(() => {
@@ -3538,82 +3552,7 @@ export default function AdminDashboard() {
         )}
         {activeTab === "pipeline" && (
           <div className="py-4">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-gray-900">Lead Pipeline</h2>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: "#a3e635", color: "#000" }}>Live</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {(["today", "week", "month"] as const).map((f) => {
-                  const label = f === "today" ? "Today" : f === "week" ? "This Week" : "This Month";
-                  const isActive = pipelineDateFilter === f;
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setPipelineDateFilter(f)}
-                      className="px-4 py-1.5 text-xs font-semibold transition-all"
-                      style={isActive
-                        ? { backgroundColor: "#a3e635", color: "#000", border: "1.5px solid #a3e635", borderRadius: "6px" }
-                        : { backgroundColor: "transparent", color: "#6b7280", border: "1.5px solid #d1d5db", borderRadius: "6px" }
-                      }
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {/* Stats bar */}
-            {(() => {
-              const allLeads = (sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads'];
-              const now = Date.now();
-              const filtered = allLeads.filter(l => {
-                if (!l.createdAt) return false;
-                const t = new Date(l.createdAt).getTime();
-                if (pipelineDateFilter === "today") return now - t < 86400000;
-                if (pipelineDateFilter === "week") return now - t < 7 * 86400000;
-                return now - t < 31 * 86400000;
-              });
-              const totalLeads = filtered.length;
-              const totalPipeline = filtered.reduce((sum, l) => sum + (parseInt(l.quotedPrice ?? "0", 10) || 0), 0);
-              const booked = filtered.filter(l => l.stage === "BOOKED" || l.stage === "COMPLETED");
-              const bookedValue = booked.reduce((sum, l) => sum + (parseInt(l.quotedPrice ?? "0", 10) || 0), 0);
-              const checkingAvail = filtered.filter(l => l.stage === "AVAILABILITY").length;
-              return (
-                <div className="flex items-center gap-5 mb-4 text-sm text-gray-700 flex-wrap">
-                  <span className="flex items-center gap-1.5">
-                    <TrendingUp className="w-4 h-4 text-gray-400" />
-                    <strong>{totalLeads}</strong>
-                    <span className="text-gray-400">leads</span>
-                  </span>
-                  <span className="text-gray-300">·</span>
-                  <span className="flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4 text-gray-400" />
-                    <strong>${totalPipeline.toLocaleString()}</strong>
-                    <span className="text-gray-400">total pipeline</span>
-                  </span>
-                  <span className="text-gray-300">·</span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    <strong className="text-emerald-600">${bookedValue.toLocaleString()}</strong>
-                    <span className="text-gray-400">booked</span>
-                  </span>
-                  <span className="text-gray-300">·</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: "#f97316" }}>{checkingAvail}</span>
-                    <span className="text-gray-400">quoted</span>
-                  </span>
-                </div>
-              );
-            })()}
-            <KanbanBoard
-              leads={(sessions ?? []) as Parameters<typeof KanbanBoard>[0]['leads']}
-              onCardClick={lead => setSelectedSession(lead as unknown as DrawerSession)}
-              onStageChange={() => { void refetch(); }}
-              dateFilter={pipelineDateFilter}
-            />
+            <PipelineBoard />
           </div>
         )}
         {activeTab === "callbacks" && (
