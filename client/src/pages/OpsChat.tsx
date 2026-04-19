@@ -1774,7 +1774,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden" style={{background: '#eef3f8'}}>
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
@@ -1799,7 +1799,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className="flex flex-1 min-h-0 overflow-hidden px-1.5 py-1.5 gap-1.5">
+      <div className="flex flex-1 min-h-0 overflow-hidden px-2 py-2 gap-2">
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
