@@ -3453,47 +3453,56 @@ export default function AdminDashboard() {
           </>
         }
        />
-      {/* ── Date filter bar — Leads page only, sits between nav and content ── */}
+      {/* ── Date filter bar — Leads page only, pixel-perfect match to reference ── */}
       {activeTab === "leads" && (
-        <div className="sticky top-[var(--header-h,113px)] z-30 border-b border-zinc-200 bg-white px-4 sm:px-6">
-          <div className="mx-auto max-w-7xl">
-            <div className="flex flex-wrap items-center gap-1 py-2">
-              {DATE_PRESETS.map((p) => (
+        <div className="border-b border-zinc-200 bg-white px-4 sm:px-6">
+          <div className="mx-auto max-w-7xl py-2.5">
+            {/* Pill group container — single rounded border wrapping all pills */}
+            <div className="inline-flex items-center rounded-2xl border border-zinc-200 bg-white px-1 py-1 gap-0.5">
+              {DATE_PRESETS.filter(p => p.value !== "custom").map((p) => (
                 <button
                   key={p.value}
-                  onClick={() => { setDatePreset(p.value); if (p.value !== "custom") { setCustomFrom(""); setCustomTo(""); } }}
-                  className={`rounded-xl px-4 py-2 text-sm transition ${
+                  onClick={() => { setDatePreset(p.value); setCustomFrom(""); setCustomTo(""); }}
+                  className={`rounded-xl px-4 py-1.5 text-sm transition-all ${
                     datePreset === p.value
-                      ? "bg-zinc-950 text-white font-semibold"
-                      : "text-zinc-600 hover:bg-zinc-100 font-normal"
+                      ? "bg-zinc-950 text-white font-semibold shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 font-normal"
                   }`}
                 >
-                  {p.value === "custom" ? (
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {p.label}
-                    </span>
-                  ) : p.label}
+                  {p.label}
                 </button>
               ))}
-              {datePreset === "custom" && (
-                <div className="flex items-center gap-2 ml-2">
-                  <input
-                    type="date"
-                    value={customFrom}
-                    onChange={e => setCustomFrom(e.target.value)}
-                    className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-700"
-                  />
-                  <span className="text-zinc-400 text-sm">–</span>
-                  <input
-                    type="date"
-                    value={customTo}
-                    onChange={e => setCustomTo(e.target.value)}
-                    className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-700"
-                  />
-                </div>
-              )}
+              {/* Custom range — standalone calendar icon button */}
+              <button
+                onClick={() => setDatePreset("custom")}
+                className={`ml-0.5 flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+                  datePreset === "custom"
+                    ? "border-zinc-950 bg-zinc-950 text-white"
+                    : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-400 hover:text-zinc-800"
+                }`}
+                title="Custom range"
+              >
+                <Calendar className="h-4 w-4" />
+              </button>
             </div>
+            {/* Custom date inputs — shown inline when custom is selected */}
+            {datePreset === "custom" && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  className="h-8 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-300"
+                />
+                <span className="text-zinc-400 text-sm">–</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  className="h-8 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-300"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
