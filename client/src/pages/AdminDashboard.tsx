@@ -3550,7 +3550,7 @@ export default function AdminDashboard() {
             <SmsSimulator />
           </div>
         )}
-        {activeTab === "pipeline" && <PipelineBoard />}
+        {activeTab === "pipeline" && <PipelineBoard onOpenConversation={(session) => setSelectedSession(session as DrawerSession)} />}
         {activeTab === "callbacks" && (
           <div className="py-4">
             <div className="mb-5 flex items-center justify-between">

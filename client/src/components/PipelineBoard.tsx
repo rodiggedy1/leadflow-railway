@@ -175,6 +175,7 @@ function sessionToLead(s: any): any {
     stage: s.stage,
     timeline: [`Lead created ${timeAgoShort(s.createdAt)}`, `Stage: ${s.stage}`],
     note: s.notes ?? "",
+    _raw: s, // raw session for opening the conversation drawer
   };
 }
 
@@ -397,7 +398,7 @@ function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: {
   );
 }
 
-function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void; onMove: (l: any, target: string) => void }) {
+function DetailPanel({ lead, onClose, onMove, onOpenConversation }: { lead: any; onClose: () => void; onMove: (l: any, target: string) => void; onOpenConversation?: (session: any) => void }) {
   if (!lead) {
     return (
       <div className="flex h-full items-center justify-center rounded-[28px] border border-dashed border-slate-300 bg-white/60 p-8 text-center text-slate-500">
@@ -434,7 +435,7 @@ function DetailPanel({ lead, onClose, onMove }: { lead: any; onClose: () => void
       <div className="mb-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800"><Zap className="h-4 w-4" />Recommended Actions</div>
         <div className="grid grid-cols-2 gap-2">
-          <button className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800">Reply Now</button>
+          <button onClick={() => { onClose(); onOpenConversation?.(lead._raw); }} className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800">Reply Now</button>
           <button className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Call Lead</button>
           <button onClick={() => onMove(lead, "follow")} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Move to Follow Up</button>
           <button onClick={() => onMove(lead, "booked")} className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 hover:bg-emerald-100">Book Job</button>
@@ -958,10 +959,10 @@ export default function PipelineBoard() {
                                 ))}
                               </div>
                             </div>
-                            <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} />
+                            <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} onOpenConversation={onOpenConversation} />
                           </div>
                         ) : (
-                          <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} />
+                          <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} onOpenConversation={onOpenConversation} />
                         )}
                       </motion.div>
                     </>
