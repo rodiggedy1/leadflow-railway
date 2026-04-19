@@ -622,6 +622,8 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
   const [view, setView] = useState("pipeline");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [search, setSearch] = useState("");
+  const [headerSearchOpen, setHeaderSearchOpen] = useState(false);
+  const headerSearchRef = useRef<HTMLInputElement>(null);
   const [flowIndex, setFlowIndex] = useState(0);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState("lead");
@@ -717,6 +719,15 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
   }, [filteredColumns]);
 
   const allLeads = useMemo(() => Object.values(columns).flat(), [columns]);
+  const headerSuggestions = useMemo(() => {
+    if (!search.trim()) return [];
+    const q = search.toLowerCase();
+    return allLeads.filter((l: any) =>
+      (l.name ?? "").toLowerCase().includes(q) ||
+      (l.phone ?? "").includes(q) ||
+      (l.address ?? "").toLowerCase().includes(q)
+    ).slice(0, 6);
+  }, [search, allLeads]);
   const priorityQueue = useMemo(() => [...allLeads].sort((a: any, b: any) => b.price - a.price), [allLeads]);
   const currentFlowLead = priorityQueue[flowIndex % Math.max(priorityQueue.length, 1)];
 
@@ -908,15 +919,49 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
               </div>
 
               <div className="flex min-w-[420px] flex-1 items-center justify-center px-6">
-                <div className="flex w-full max-w-[620px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <Search className="h-4 w-4 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search leads, jump to customer, find address..."
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-                  />
-                  <div className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-400">⌘K</div>
+                <div className="relative w-full max-w-[620px]">
+                  <div className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    <Search className="h-4 w-4 text-slate-400" />
+                    <input
+                      ref={headerSearchRef}
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setHeaderSearchOpen(true); }}
+                      onFocus={() => setHeaderSearchOpen(true)}
+                      onBlur={() => setTimeout(() => setHeaderSearchOpen(false), 150)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && headerSuggestions.length > 0) {
+                          setSearch(headerSuggestions[0].name);
+                          setHeaderSearchOpen(false);
+                        }
+                        if (e.key === "Escape") { setSearch(""); setHeaderSearchOpen(false); }
+                      }}
+                      placeholder="Search leads, jump to customer, find address..."
+                      className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                    />
+                    {search && (
+                      <button onClick={() => { setSearch(""); setHeaderSearchOpen(false); }} className="text-slate-400 hover:text-slate-600">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {!search && <div className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-400">⌘K</div>}
+                  </div>
+                  {headerSearchOpen && headerSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                      {headerSuggestions.map((l: any) => (
+                        <button
+                          key={l.id}
+                          onMouseDown={() => { setSearch(l.name); setHeaderSearchOpen(false); }}
+                          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-50"
+                        >
+                          <div>
+                            <span className="font-medium text-slate-900">{l.name}</span>
+                            {l.address && <span className="ml-2 text-xs text-slate-400">{l.address}</span>}
+                          </div>
+                          <span className="text-xs text-slate-400">{l.price > 0 ? `$${l.price}` : "—"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
