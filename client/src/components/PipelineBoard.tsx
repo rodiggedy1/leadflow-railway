@@ -477,7 +477,32 @@ function DetailPanel({ lead, onClose, onMove, onOpenConversation }: { lead: any;
   );
 }
 
-function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onMove: (l: any, target: string) => void }) {
+function FlowMode({ lead, onNext, onMove, queue, onSelectLead }: {
+  lead: any;
+  onNext: () => void;
+  onMove: (l: any, target: string) => void;
+  queue: any[];
+  onSelectLead: (lead: any) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const suggestions = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return queue.filter((l: any) =>
+      (l.name ?? "").toLowerCase().includes(q) ||
+      (l.phone ?? "").includes(q)
+    ).slice(0, 6);
+  }, [searchQuery, queue]);
+
+  function handleSelect(l: any) {
+    onSelectLead(l);
+    setSearchQuery("");
+    setShowDropdown(false);
+  }
+
   if (!lead) return null;
   const style = stateStyles[lead.state] ?? stateStyles.new;
 
@@ -488,7 +513,36 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Flow Mode</div>
           <div className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">One lead. One decision.</div>
         </div>
-        <span className={cn("inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold", style.chip)}>{style.label}</span>
+        <div className="flex items-center gap-3">
+          {/* Lead search */}
+          <div className="relative">
+            <input
+              ref={inputRef}
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setShowDropdown(true); }}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              onKeyDown={(e) => { if (e.key === "Enter" && suggestions.length > 0) handleSelect(suggestions[0]); if (e.key === "Escape") { setSearchQuery(""); setShowDropdown(false); } }}
+              placeholder="Jump to lead…"
+              className="h-9 w-48 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:outline-none"
+            />
+            {showDropdown && suggestions.length > 0 && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                {suggestions.map((l: any) => (
+                  <button
+                    key={l.id}
+                    onMouseDown={() => handleSelect(l)}
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-50"
+                  >
+                    <span className="font-medium text-slate-900">{l.name}</span>
+                    <span className="text-xs text-slate-400">{l.price > 0 ? `$${l.price}` : "—"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className={cn("inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold", style.chip)}>{style.label}</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-[1.3fr_.7fr] gap-5">
@@ -974,6 +1028,11 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
                 lead={currentFlowLead}
                 onNext={() => setFlowIndex((i) => (i + 1) % Math.max(priorityQueue.length, 1))}
                 onMove={moveLead}
+                queue={priorityQueue}
+                onSelectLead={(l) => {
+                  const idx = priorityQueue.findIndex((x: any) => x.id === l.id);
+                  if (idx !== -1) setFlowIndex(idx);
+                }}
               />
             )}
           </div>
