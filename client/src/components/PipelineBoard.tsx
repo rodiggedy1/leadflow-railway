@@ -580,7 +580,7 @@ function FlowMode({ lead, onNext, onMove }: { lead: any; onNext: () => void; onM
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function PipelineBoard() {
-  const [data, setData] = useState(leadsSeed);
+  const [data, setData] = useState<any>(leadsSeed);
   const [selectedDate, setSelectedDate] = useState("Today");
   const [view, setView] = useState("pipeline");
   const [selectedLead, setSelectedLead] = useState<any>(leadsSeed.new[2]);
@@ -595,9 +595,9 @@ export default function PipelineBoard() {
     if (!search.trim()) return data;
     const q = search.toLowerCase();
     const next: Record<string, any[]> = {};
-    Object.entries(data).forEach(([key, leads]) => {
+    (Object.entries(data) as [string, any[]][]).forEach(([key, leads]) => {
       next[key] = leads.filter(
-        (lead) =>
+        (lead: any) =>
           lead.name.toLowerCase().includes(q) ||
           lead.service.toLowerCase().includes(q) ||
           lead.source.toLowerCase().includes(q) ||
@@ -617,7 +617,7 @@ export default function PipelineBoard() {
 
   const columnTotals = useMemo(() => {
     const next: Record<string, number> = {};
-    Object.entries(filteredData).forEach(([key, leads]) => {
+    Object.entries(filteredData).forEach(([key, leads]: [string, any]) => {
       next[key] = (leads as any[]).reduce((sum: number, lead: any) => sum + lead.price, 0);
     });
     return next;
