@@ -211,7 +211,12 @@ const dropAnimation: DropAnimation = {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatTile({ label, value, change, icon: Icon }: { label: string; value: string | number; change: string; icon: React.ElementType }) {
+function StatTile({ label, value, change, icon: Icon }: { label: string; value: string | number; change: number | null; icon: React.ElementType }) {
+  const badge =
+    change === null ? null :
+    change === 0 ? <div className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">&mdash;</div> :
+    change > 0 ? <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">&uarr; {change}%</div> :
+    <div className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">&darr; {Math.abs(change)}%</div>;
   return (
     <div className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_12px_32px_rgba(16,24,40,.06)] backdrop-blur">
       <div className="mb-3 flex items-center justify-between text-slate-500">
@@ -220,7 +225,7 @@ function StatTile({ label, value, change, icon: Icon }: { label: string; value: 
       </div>
       <div className="flex items-end justify-between gap-3">
         <div className="text-2xl font-semibold tracking-tight text-slate-900">{value}</div>
-        <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{change}</div>
+        {badge}
       </div>
     </div>
   );
@@ -650,6 +655,23 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
     { refetchInterval: 30000 }
   );
 
+  // Previous period window — shifted back by the same duration as the current window
+  const { prevDateFrom, prevDateTo } = useMemo(() => {
+    const pad = (d: Date) => d.toISOString().split("T")[0];
+    if (!dateFrom || !dateTo) return { prevDateFrom: undefined, prevDateTo: undefined };
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo);
+    const durationMs = to.getTime() - from.getTime() + 86400000; // inclusive days in ms
+    const prevTo = new Date(from.getTime() - 86400000);
+    const prevFrom = new Date(prevTo.getTime() - durationMs + 86400000);
+    return { prevDateFrom: pad(prevFrom), prevDateTo: pad(prevTo) };
+  }, [dateFrom, dateTo]);
+
+  const { data: prevStatsData } = trpc.leads.stats.useQuery(
+    { dateFrom: prevDateFrom, dateTo: prevDateTo },
+    { enabled: !!(prevDateFrom && prevDateTo), refetchInterval: 30000 }
+  );
+
   const updateStageMutation = trpc.leads.agentUpdateStage.useMutation();
 
   const serverColumns = useMemo(() => {
@@ -707,8 +729,22 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
       const last = s.lastActivityAt ? new Date(s.lastActivityAt).getTime() : null;
       return !last || (now - last) > SIXTY_MIN;
     }).length;
-    return { leadCount: leads.length, pipeline, booked, quoted, needsAttention };
-  }, [filteredColumns, sessions, statsData]);
+    // % change helpers — null when no comparison period available (e.g. "All" filter)
+    const pct = (curr: number, prev: number | undefined): number | null => {
+      if (prev === undefined || prev === 0) return null;
+      return Math.round(((curr - prev) / prev) * 100);
+    };
+    const prevTotal = prevStatsData ? ((prevStatsData.organic?.total ?? 0) + (prevStatsData.campaign?.total ?? 0)) : undefined;
+    const prevBooked = prevStatsData?.bookedRevenue;
+    const prevQuoted = prevStatsData ? (prevStatsData.byStage?.QUOTE_SENT ?? 0) : undefined;
+    const changes = {
+      leadCount: pct(leads.length, prevTotal),
+      pipeline: null as number | null, // no prev pipeline value without a second list query
+      booked: pct(booked, prevBooked),
+      quoted: pct(quoted, prevQuoted),
+    };
+    return { leadCount: leads.length, pipeline, booked, quoted, needsAttention, changes };
+  }, [filteredColumns, sessions, statsData, prevStatsData]);
 
   const columnTotals = useMemo(() => {
     const next: Record<string, number> = {};
@@ -974,17 +1010,27 @@ export default function PipelineBoard({ onOpenConversation }: { onOpenConversati
 
             {/* Stat tiles */}
             <div className="mb-5 grid grid-cols-4 gap-4">
-              <StatTile label="Lead Volume" value={isLoading ? "…" : totals.leadCount} change="+12%" icon={User} />
-              <StatTile label="Pipeline Value" value={isLoading ? "…" : `$${totals.pipeline.toLocaleString()}`} change="+18%" icon={DollarSign} />
-              <StatTile label="Booked Revenue" value={isLoading ? "…" : `$${totals.booked.toLocaleString()}`} change="+22%" icon={CheckCircle2} />
-              <StatTile label="Quotes Out" value={isLoading ? "…" : totals.quoted} change="+9%" icon={MessageSquare} />
+              <StatTile label="Lead Volume" value={isLoading ? "…" : totals.leadCount} change={totals.changes.leadCount} icon={User} />
+              <StatTile label="Pipeline Value" value={isLoading ? "…" : `$${totals.pipeline.toLocaleString()}`} change={totals.changes.pipeline} icon={DollarSign} />
+              <StatTile label="Booked Revenue" value={isLoading ? "…" : `$${totals.booked.toLocaleString()}`} change={totals.changes.booked} icon={CheckCircle2} />
+              <StatTile label="Quotes Out" value={isLoading ? "…" : totals.quoted} change={totals.changes.quoted} icon={MessageSquare} />
             </div>
 
             {/* Date intelligence bar */}
             <div className="mb-5 flex items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/80 p-4 shadow-sm">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Date Intelligence</div>
-                <div className="mt-1 text-sm text-slate-600">Pipeline <span className="font-semibold text-emerald-600">↑ 12%</span> vs last period • Booked <span className="font-semibold text-emerald-600">↑ 22%</span> • Leads <span className="font-semibold text-rose-600">↓ 8%</span></div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {totals.changes.booked !== null && (
+                    <span>Booked <span className={`font-semibold ${totals.changes.booked >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{totals.changes.booked >= 0 ? '↑' : '↓'} {Math.abs(totals.changes.booked)}%</span> vs last period{totals.changes.leadCount !== null ? ' • ' : ''}</span>
+                  )}
+                  {totals.changes.leadCount !== null && (
+                    <span>Leads <span className={`font-semibold ${totals.changes.leadCount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{totals.changes.leadCount >= 0 ? '↑' : '↓'} {Math.abs(totals.changes.leadCount)}%</span> vs last period</span>
+                  )}
+                  {totals.changes.booked === null && totals.changes.leadCount === null && (
+                    <span className="text-slate-400">Select a date range to see period comparison</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {dateViews.map((item) => (
