@@ -1805,10 +1805,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <div className="w-14 shrink-0 h-full border-r border-slate-200 bg-white flex flex-col items-center py-3 gap-3 overflow-visible transition-all">
+        <div className="w-[84px] shrink-0 h-full bg-slate-950 rounded-[30px] border border-white/10 flex flex-col items-center px-3 py-4 gap-3 overflow-visible transition-all shadow-2xl shadow-slate-900/20 mx-1 my-1">
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="w-10 h-10 rounded-xl bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-700 transition shadow-sm"
+            className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-lg hover:bg-slate-100 transition"
             title="Expand sidebar"
           >
             <ChevronRight className="w-5 h-5" />
@@ -1826,8 +1826,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 key={f.id}
                 onClick={() => setCsFilter(f.id)}
                 className={cn(
-                  "relative w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
-                  csFilter === f.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  "relative w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
+                  csFilter === f.id ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
                 )}
                 title={f.label}
               >
@@ -1845,14 +1845,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     key={ch.key}
                     onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
                     className={cn(
-                      "relative w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
-                      activeChannel === ch.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      "relative w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
+                      activeChannel === ch.key ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
                     )}
                     title={ch.label}
                   >
                     {ch.label.charAt(0)}
                     {count > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] flex items-center justify-center font-bold">
                         {count > 9 ? "9+" : count}
                       </span>
                     )}
@@ -1863,8 +1863,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <button
                 onClick={() => { handleSetActiveTab("today"); }}
                 className={cn(
-                  "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition",
-                  activeTab === "today" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  "w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
+                  activeTab === "today" ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
                 )}
                 title="Today Ops"
               >
@@ -1873,12 +1873,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             </>
           )}
           {/* Agent status icon */}
-          <div className="relative">
+          <div className="relative mt-auto">
             <button
               onClick={() => setAgentStatusOpen(v => !v)}
               className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center transition",
-                agentStatusOpen ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                "w-12 h-12 rounded-2xl flex items-center justify-center transition border",
+                agentStatusOpen ? "border-white/30 bg-white/20 text-white" : "border-white/15 bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
               )}
               title="Agent status"
             >
