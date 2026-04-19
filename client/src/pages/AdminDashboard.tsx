@@ -3529,7 +3529,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-      <main className={activeTab === "leads" ? "py-0" : "max-w-7xl mx-auto px-4 sm:px-6 py-6"}>
+      <main className={(activeTab === "leads" || activeTab === "pipeline") ? "py-0" : "max-w-7xl mx-auto px-4 sm:px-6 py-6"}>
         {activeTab === "agents" && <AgentManagement />}
         {activeTab === "leaderboard" && <AgentLeaderboard dateRange={dateRange} />}
         {showSimulator && (
@@ -3550,11 +3550,7 @@ export default function AdminDashboard() {
             <SmsSimulator />
           </div>
         )}
-        {activeTab === "pipeline" && (
-          <div className="py-4">
-            <PipelineBoard />
-          </div>
-        )}
+        {activeTab === "pipeline" && <PipelineBoard />}
         {activeTab === "callbacks" && (
           <div className="py-4">
             <div className="mb-5 flex items-center justify-between">
