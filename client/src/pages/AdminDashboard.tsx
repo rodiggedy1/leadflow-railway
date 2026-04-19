@@ -3709,11 +3709,11 @@ export default function AdminDashboard() {
               <div className="space-y-6">
                 {/* Metric cards */}
                 {stats && (
-                  <section className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                  <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                     {/* Qualified Leads */}
                     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
-                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-                        <CardContent className="p-6">
+                      <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                        <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center justify-between gap-3">
@@ -3722,7 +3722,7 @@ export default function AdminDashboard() {
                                   {datePreset === "all" ? "All time" : datePreset === "today" ? "Today" : datePreset === "yesterday" ? "Yesterday" : datePreset === "last7" ? "Last 7d" : datePreset === "last30" ? "Last 30d" : "Custom"}
                                 </Badge>
                               </div>
-                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                              <div className="mt-2 text-3xl font-semibold tracking-[-0.03em] leading-none">
                                 {statsMode === "all" ? (stats.total ?? 0) : statsMode === "organic" ? (stats.organic?.total ?? 0) : (stats.campaign?.total ?? 0)}
                               </div>
                               <div className="mt-3 flex items-center gap-2 text-sm">
@@ -3735,12 +3735,12 @@ export default function AdminDashboard() {
                               <Activity className="h-5 w-5 text-zinc-700" />
                             </div>
                           </div>
-                          <div className="mt-6 flex items-end gap-2">
+                          <div className="mt-3 flex items-end gap-2">
                             {(dailyTrend.length > 0 ? dailyTrend : Array(7).fill({ leads: 0 })).slice(-7).map((d, i) => {
                               const max = Math.max(...dailyTrend.map(x => x.leads), 1);
                               const h = Math.round(((d.leads ?? 0) / max) * 100);
                               return (
-                                <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                <div key={i} className="h-12 flex-1 rounded-full bg-zinc-100 p-1">
                                   <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
                                 </div>
                               );
@@ -3751,12 +3751,12 @@ export default function AdminDashboard() {
                     </motion.div>
                     {/* Booked Revenue */}
                     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
-                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-                        <CardContent className="p-6">
+                      <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                        <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="text-sm font-medium text-zinc-500">Booked revenue</div>
-                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                              <div className="mt-2 text-3xl font-semibold tracking-[-0.03em] leading-none">
                                 ${(() => {
                                   const view = statsMode === "all" ? stats : statsMode === "organic" ? stats.organic : stats.campaign;
                                   return (view?.bookedRevenue ?? 0).toLocaleString();
@@ -3775,12 +3775,12 @@ export default function AdminDashboard() {
                               <Wallet className="h-5 w-5 text-zinc-700" />
                             </div>
                           </div>
-                          <div className="mt-6 flex items-end gap-2">
+                          <div className="mt-3 flex items-end gap-2">
                             {(dailyTrend.length > 0 ? dailyTrend : Array(7).fill({ booked: 0 })).slice(-7).map((d, i) => {
                               const max = Math.max(...dailyTrend.map(x => x.booked), 1);
                               const h = Math.round(((d.booked ?? 0) / max) * 100);
                               return (
-                                <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                <div key={i} className="h-12 flex-1 rounded-full bg-zinc-100 p-1">
                                   <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
                                 </div>
                               );
@@ -3791,12 +3791,12 @@ export default function AdminDashboard() {
                     </motion.div>
                     {/* Conversion Rate */}
                     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
-                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-                        <CardContent className="p-6">
+                      <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                        <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="text-sm font-medium text-zinc-500">Conversion rate</div>
-                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                              <div className="mt-2 text-3xl font-semibold tracking-[-0.03em] leading-none">
                                 {(() => {
                                   const view = statsMode === "all" ? stats : statsMode === "organic" ? stats.organic : stats.campaign;
                                   return view?.conversionRate ?? 0;
@@ -3810,9 +3810,9 @@ export default function AdminDashboard() {
                               <Waypoints className="h-5 w-5 text-zinc-700" />
                             </div>
                           </div>
-                          <div className="mt-6 flex items-end gap-2">
+                          <div className="mt-3 flex items-end gap-2">
                             {[28, 58, 42, 66, 51, 74, 49].map((h, i) => (
-                              <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                              <div key={i} className="h-12 flex-1 rounded-full bg-zinc-100 p-1">
                                 <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
                               </div>
                             ))}
@@ -3822,12 +3822,12 @@ export default function AdminDashboard() {
                     </motion.div>
                     {/* AI Voice Assists */}
                     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
-                      <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-                        <CardContent className="p-6">
+                      <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                        <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="text-sm font-medium text-zinc-500">AI voice assists</div>
-                              <div className="mt-2 text-[42px] font-semibold tracking-[-0.04em] leading-none">
+                              <div className="mt-2 text-3xl font-semibold tracking-[-0.03em] leading-none">
                                 {(voiceStats?.totalCalls ?? 0).toLocaleString()}
                               </div>
                               <div className="mt-3 flex items-center gap-2 text-sm">
@@ -3840,13 +3840,13 @@ export default function AdminDashboard() {
                               <Bot className="h-5 w-5 text-zinc-700" />
                             </div>
                           </div>
-                          <div className="mt-6 flex items-end gap-2">
+                          <div className="mt-3 flex items-end gap-2">
                             {(voiceStats?.dailyTrend ?? Array(7).fill({ count: 0 })).slice(-7).map((d, i) => {
                               const arr = (voiceStats?.dailyTrend ?? []).slice(-7);
                               const max = Math.max(...arr.map(x => x.count), 1);
                               const h = Math.round(((d.count ?? 0) / max) * 100);
                               return (
-                                <div key={i} className="h-20 flex-1 rounded-full bg-zinc-100 p-1">
+                                <div key={i} className="h-12 flex-1 rounded-full bg-zinc-100 p-1">
                                   <div className="w-full rounded-full bg-lime-300/80" style={{ height: `${h}%` }} />
                                 </div>
                               );
@@ -3859,10 +3859,10 @@ export default function AdminDashboard() {
                 )}
 
                 {/* Action cards */}
-                <section className="grid grid-cols-1 gap-4 2xl:grid-cols-3">
+                <section className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => setStageFilter("BOOKED")}
-                    className="rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-emerald-50 border-emerald-200"
+                    className="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-emerald-50 border-emerald-200"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -3877,7 +3877,7 @@ export default function AdminDashboard() {
                   </button>
                   <button
                     onClick={() => setStageFilter("UNHANDLED")}
-                    className="rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-amber-50 border-amber-200"
+                    className="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-amber-50 border-amber-200"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -3892,7 +3892,7 @@ export default function AdminDashboard() {
                   </button>
                   <button
                     onClick={() => setStageFilter("COLD")}
-                    className="rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-rose-50 border-rose-200"
+                    className="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md bg-rose-50 border-rose-200"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -3908,11 +3908,11 @@ export default function AdminDashboard() {
                 </section>
 
                 {/* Lead command center */}
-                <Card className="overflow-hidden rounded-[30px] border-black/5 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.05)]">
-                  <CardHeader className="border-b border-black/5 px-6 py-5">
+                  <Card className="overflow-hidden rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                  <CardHeader className="border-b border-black/5 px-4 py-3">
                     <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
                       <div>
-                        <CardTitle className="text-[26px] tracking-[-0.03em]">Lead command center</CardTitle>
+                        <CardTitle className="text-lg font-semibold tracking-tight">Lead command center</CardTitle>
                         <p className="mt-1 text-sm text-zinc-500">Cleaner hierarchy, stronger emphasis, faster decision-making.</p>
                         <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-black/5 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
                           <Calendar className="h-3.5 w-3.5" />
@@ -3924,7 +3924,7 @@ export default function AdminDashboard() {
                           <button
                             key={stage}
                             onClick={() => setStageFilter(stage)}
-                            className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
                               stageFilter === stage
                                 ? "bg-zinc-950 text-white shadow-sm"
                                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
@@ -3943,11 +3943,11 @@ export default function AdminDashboard() {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search name, phone, service, source..."
-                            className="h-12 rounded-2xl border-zinc-200 bg-zinc-50 pl-11"
+                            className="h-9 rounded-xl border-zinc-200 bg-zinc-50 pl-11"
                           />
                         </div>
                         <Select value={agentFilter} onValueChange={setAgentFilter}>
-                          <SelectTrigger className="h-12 w-44 rounded-2xl border-zinc-200 bg-white">
+                          <SelectTrigger className="h-9 w-40 rounded-xl border-zinc-200 bg-white">
                             <Filter className="mr-2 h-4 w-4 text-zinc-400" />
                             <SelectValue placeholder="All agents" />
                           </SelectTrigger>
@@ -3960,7 +3960,7 @@ export default function AdminDashboard() {
                           </SelectContent>
                         </Select>
                         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                          <SelectTrigger className="h-12 w-44 rounded-2xl border-zinc-200 bg-white">
+                          <SelectTrigger className="h-9 w-40 rounded-xl border-zinc-200 bg-white">
                             <SlidersHorizontal className="mr-2 h-4 w-4 text-zinc-400" />
                             <SelectValue placeholder="All sources" />
                           </SelectTrigger>
@@ -4249,7 +4249,7 @@ export default function AdminDashboard() {
                               </div>
                               {/* AI summary */}
                               <Card className="rounded-[28px] border-black/5 bg-white">
-                                <CardContent className="p-6">
+                                <CardContent className="p-4">
                                   <div className="flex items-start justify-between gap-4">
                                     <div>
                                       <div className="text-sm font-medium text-zinc-500">Last activity</div>
@@ -4281,7 +4281,7 @@ export default function AdminDashboard() {
                               </Card>
                               {/* Conversion timeline */}
                               <Card className="rounded-[28px] border-black/5 bg-white">
-                                <CardContent className="p-6">
+                                <CardContent className="p-4">
                                   <div className="flex items-center justify-between">
                                     <div>
                                       <div className="text-sm font-medium text-zinc-500">Conversion timeline</div>
@@ -4505,7 +4505,7 @@ export default function AdminDashboard() {
                 </Dialog>
 
                 {/* Traffic Source */}
-                <Card className="rounded-[28px] border-black/5 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+                <Card className="rounded-2xl border-black/5 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
                   <CardContent className="p-6">
                     <div className="mb-4">
                       <h3 className="text-lg font-semibold tracking-[-0.02em]">Traffic Source</h3>
