@@ -2604,7 +2604,7 @@ function ConversationDrawer({
 
 // ── Date filter bar ───────────────────────────────────────────────────────────
 
-type DatePreset = "today" | "yesterday" | "last7" | "last30" | "custom" | "all";
+type DatePreset = "today" | "yesterday" | "last7" | "last30" | "quarter" | "custom" | "all";
 
 function getPresetDates(preset: DatePreset): { from: string; to: string } | null {
   const today = new Date();
@@ -2626,6 +2626,11 @@ function getPresetDates(preset: DatePreset): { from: string; to: string } | null
   if (preset === "last30") {
     const from = new Date(today);
     from.setDate(from.getDate() - 29);
+    return { from: toLocalDateInput(from), to: toLocalDateInput(today) };
+  }
+  if (preset === "quarter") {
+    const q = Math.floor(today.getMonth() / 3);
+    const from = new Date(today.getFullYear(), q * 3, 1);
     return { from: toLocalDateInput(from), to: toLocalDateInput(today) };
   }
   return null;
@@ -3404,11 +3409,11 @@ export default function AdminDashboard() {
   }
 
   const DATE_PRESETS: { value: DatePreset; label: string }[] = [
-    { value: "all", label: "All time" },
     { value: "today", label: "Today" },
     { value: "yesterday", label: "Yesterday" },
     { value: "last7", label: "Last 7 days" },
     { value: "last30", label: "Last 30 days" },
+    { value: "quarter", label: "This quarter" },
     { value: "custom", label: "Custom range" },
   ];
 
@@ -3447,8 +3452,51 @@ export default function AdminDashboard() {
             )}
           </>
         }
-      />
-
+       />
+      {/* ── Date filter bar — Leads page only, sits between nav and content ── */}
+      {activeTab === "leads" && (
+        <div className="sticky top-[var(--header-h,113px)] z-30 border-b border-zinc-200 bg-white px-4 sm:px-6">
+          <div className="mx-auto max-w-7xl">
+            <div className="flex flex-wrap items-center gap-1 py-2">
+              {DATE_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => { setDatePreset(p.value); if (p.value !== "custom") { setCustomFrom(""); setCustomTo(""); } }}
+                  className={`rounded-xl px-4 py-2 text-sm transition ${
+                    datePreset === p.value
+                      ? "bg-zinc-950 text-white font-semibold"
+                      : "text-zinc-600 hover:bg-zinc-100 font-normal"
+                  }`}
+                >
+                  {p.value === "custom" ? (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {p.label}
+                    </span>
+                  ) : p.label}
+                </button>
+              ))}
+              {datePreset === "custom" && (
+                <div className="flex items-center gap-2 ml-2">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={e => setCustomFrom(e.target.value)}
+                    className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-700"
+                  />
+                  <span className="text-zinc-400 text-sm">–</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={e => setCustomTo(e.target.value)}
+                    className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-700"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <main className={activeTab === "leads" ? "py-0" : "max-w-7xl mx-auto px-4 sm:px-6 py-6"}>
         {activeTab === "agents" && <AgentManagement />}
         {activeTab === "leaderboard" && <AgentLeaderboard dateRange={dateRange} />}
