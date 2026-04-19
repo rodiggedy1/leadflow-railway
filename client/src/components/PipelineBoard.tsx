@@ -209,27 +209,19 @@ function ControlButton({ children, active = false, icon: Icon, onClick }: { chil
   );
 }
 
-// Sortable card — renders a ghost placeholder in original position while dragging
+// Sortable card — ghost placeholder stays in original slot while dragging
 function SortableLeadCard({ lead, isSelected, onSelect, onMove }: {
   lead: any;
   isSelected: boolean;
   onSelect: (l: any) => void;
   onMove: (l: any, target: string) => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: lead.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0 : 1,
-    // Placeholder height is preserved by keeping the element in DOM with opacity 0
   };
 
   return (
@@ -337,7 +329,7 @@ function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: {
   selectedLead: any;
   onSelect: (l: any) => void;
   onMove: (l: any, target: string) => void;
-})  {
+}) {
   const meta = columnMeta[type];
   const ids = useMemo(() => leads.map((l) => l.id), [leads]);
 
@@ -358,7 +350,7 @@ function Column({ type, leads, totalValue, selectedLead, onSelect, onMove }: {
       </div>
 
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <div className="space-y-3 min-h-[60px]">
+        <div className="min-h-[60px] space-y-3">
           {leads.map((lead) => (
             <SortableLeadCard
               key={lead.id}
@@ -524,10 +516,12 @@ export default function PipelineBoard() {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState("lead");
   const [activeId, setActiveId] = useState<number | null>(null);
-  // Stable snapshot of columns at drag-start — used by findColumn to avoid infinite loops
+
+  // Stable snapshot of columns at drag-start — prevents findColumn from reading
+  // live state and causing infinite setState loops during drag
   const dragSnapshotRef = useRef<Record<ColumnKey, any[]> | null>(null);
 
-  // Local column state for optimistic DnD — keyed by column, array of leads
+  // Local column state for optimistic DnD
   const [localColumns, setLocalColumns] = useState<Record<ColumnKey, any[]> | null>(null);
 
   const { data: sessions, isLoading } = trpc.leads.list.useQuery(undefined, {
@@ -536,7 +530,6 @@ export default function PipelineBoard() {
 
   const updateStageMutation = trpc.leads.agentUpdateStage.useMutation();
 
-  // Derive columns from server data (only when not mid-drag)
   const serverColumns = useMemo(() => {
     const groups: Record<ColumnKey, any[]> = { new: [], quoted: [], follow: [], booked: [] };
     if (!sessions) return groups;
@@ -549,7 +542,6 @@ export default function PipelineBoard() {
     return groups;
   }, [sessions]);
 
-  // Use localColumns during drag, serverColumns otherwise
   const columns: Record<ColumnKey, any[]> = localColumns ?? serverColumns;
 
   const filteredColumns = useMemo(() => {
@@ -590,7 +582,7 @@ export default function PipelineBoard() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  // Find which column a lead belongs to — reads from drag snapshot to avoid infinite loops
+  // Reads from the drag snapshot ref — never from live state — to avoid infinite loops
   function findColumn(id: number): ColumnKey | null {
     const source = dragSnapshotRef.current ?? serverColumns;
     for (const col of COLUMNS) {
@@ -600,7 +592,12 @@ export default function PipelineBoard() {
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const snapshot = { ...serverColumns };
+    const snapshot: Record<ColumnKey, any[]> = {
+      new: [...serverColumns.new],
+      quoted: [...serverColumns.quoted],
+      follow: [...serverColumns.follow],
+      booked: [...serverColumns.booked],
+    };
     dragSnapshotRef.current = snapshot;
     setActiveId(event.active.id as number);
     setLocalColumns(snapshot);
@@ -613,7 +610,6 @@ export default function PipelineBoard() {
     const activeLeadId = active.id as number;
     const overId = over.id;
 
-    // overId is either a column key (string) or a lead id (number)
     const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
       ? (overId as ColumnKey)
       : findColumn(overId as number);
@@ -632,13 +628,11 @@ export default function PipelineBoard() {
       const activeLead = sourceCopy[activeIdx];
 
       if (activeCol === overCol) {
-        // Reorder within same column
         const overIdx = destCopy.findIndex((l: any) => l.id === overId);
         if (overIdx === -1) return prev;
         const reordered = arrayMove(destCopy, activeIdx, overIdx);
         return { ...prev, [activeCol]: reordered };
       } else {
-        // Move to different column — insert at over position
         const newSource = sourceCopy.filter((l: any) => l.id !== activeLeadId);
         const overIdx = destCopy.findIndex((l: any) => l.id === overId);
         const insertAt = overIdx === -1 ? destCopy.length : overIdx;
@@ -649,10 +643,12 @@ export default function PipelineBoard() {
     });
   }
 
-   function handleDragEnd(event: DragEndEvent) {
+  function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    const snapshot = dragSnapshotRef.current;
     setActiveId(null);
     dragSnapshotRef.current = null;
+
     if (!over || !localColumns) {
       setLocalColumns(null);
       return;
@@ -661,36 +657,40 @@ export default function PipelineBoard() {
     const activeLeadId = active.id as number;
     const overId = over.id;
 
+    // Determine origin column from snapshot (stable)
+    let originCol: ColumnKey | null = null;
+    if (snapshot) {
+      for (const col of COLUMNS) {
+        if (snapshot[col].some((l: any) => l.id === activeLeadId)) {
+          originCol = col;
+          break;
+        }
+      }
+    }
+
     const overCol = (typeof overId === "string" && COLUMNS.includes(overId as ColumnKey))
       ? (overId as ColumnKey)
-      : findColumn(overId as number);
-
-    const originCol = findColumn(activeLeadId);
-
-    // Commit localColumns as the new truth (don't revert)
-    // localColumns already has the final state from handleDragOver
-    // Keep localColumns set so UI doesn't flash back to server state
+      : (() => {
+          for (const col of COLUMNS) {
+            if (localColumns[col].some((l: any) => l.id === overId)) return col;
+          }
+          return null;
+        })();
 
     if (originCol && overCol && originCol !== overCol) {
-      // Write to DB
       const targetStage = COLUMN_TO_STAGE[overCol];
       if (targetStage) {
         updateStageMutation.mutate(
           { sessionId: activeLeadId, stage: targetStage as any },
           {
-            onError: () => {
-              // Rollback to server state on error
-              setLocalColumns(null);
-            },
-            onSuccess: () => {
-              // Clear local override — server data will match now
-              setLocalColumns(null);
-            },
+            onError: () => setLocalColumns(null),
+            onSuccess: () => setLocalColumns(null),
           }
         );
+      } else {
+        setLocalColumns(null);
       }
     } else {
-      // Same column reorder — no DB write needed, clear local state
       setLocalColumns(null);
     }
   }
@@ -699,8 +699,6 @@ export default function PipelineBoard() {
 
   const moveLead = (lead: any, target: string) => {
     const col = target as ColumnKey;
-    const targetStage = COLUMN_TO_STAGE[target];
-    // Optimistic update
     setLocalColumns((prev) => {
       const base = prev ?? serverColumns;
       const next: Record<ColumnKey, any[]> = { new: [], quoted: [], follow: [], booked: [] };
@@ -714,10 +712,10 @@ export default function PipelineBoard() {
     setIsPanelOpen(true);
     setPanelMode("lead");
 
-    const targetStage2 = COLUMN_TO_STAGE[col];
-    if (targetStage2) {
+    const targetStage = COLUMN_TO_STAGE[col];
+    if (targetStage) {
       updateStageMutation.mutate(
-        { sessionId: lead.id, stage: targetStage2 as any },
+        { sessionId: lead.id, stage: targetStage as any },
         {
           onError: () => setLocalColumns(null),
           onSuccess: () => setLocalColumns(null),
@@ -735,103 +733,106 @@ export default function PipelineBoard() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // DndContext is at the outermost level so DragOverlay renders in the root
+  // coordinate space — this prevents the overlay from jumping when the page
+  // or any ancestor container is scrolled or transformed.
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
-      <div className="mx-auto max-w-[1680px] px-12 py-6">
-        <div className="rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(248,250,252,0.88))] p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_24px_60px_rgba(15,23,42,.08)] backdrop-blur-xl">
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
+        <div className="mx-auto max-w-[1680px] px-12 py-6">
+          <div className="rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(248,250,252,0.88))] p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_24px_60px_rgba(15,23,42,.08)] backdrop-blur-xl">
 
-          {/* Header */}
-          <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200/80 px-2 pb-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/10">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="text-lg font-semibold tracking-tight">Pipeline</div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />Live
-                  </span>
+            {/* Header */}
+            <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200/80 px-2 pb-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/10">
+                  <Sparkles className="h-5 w-5" />
                 </div>
-                <div className="text-sm text-slate-500">Revenue command center for leads, follow-up, and booking.</div>
-              </div>
-            </div>
-
-            <div className="flex min-w-[420px] flex-1 items-center justify-center px-6">
-              <div className="flex w-full max-w-[620px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <Search className="h-4 w-4 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search leads, jump to customer, find address..."
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-                />
-                <div className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-400">⌘K</div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <ControlButton active icon={AlertCircle}>Needs Attention ({totals.leadCount})</ControlButton>
-              <ControlButton icon={Phone}>Call Assist</ControlButton>
-              <ControlButton icon={PanelRight}>Agent View</ControlButton>
-            </div>
-          </div>
-
-          {/* Stat tiles */}
-          <div className="mb-5 grid grid-cols-4 gap-4">
-            <StatTile label="Lead Volume" value={isLoading ? "…" : totals.leadCount} change="+12%" icon={User} />
-            <StatTile label="Pipeline Value" value={isLoading ? "…" : `$${totals.pipeline.toLocaleString()}`} change="+18%" icon={DollarSign} />
-            <StatTile label="Booked Revenue" value={isLoading ? "…" : `$${totals.booked.toLocaleString()}`} change="+22%" icon={CheckCircle2} />
-            <StatTile label="Quotes Out" value={isLoading ? "…" : totals.quoted} change="+9%" icon={MessageSquare} />
-          </div>
-
-          {/* Date intelligence bar */}
-          <div className="mb-5 flex items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/80 p-4 shadow-sm">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Date Intelligence</div>
-              <div className="mt-1 text-sm text-slate-600">Pipeline <span className="font-semibold text-emerald-600">↑ 12%</span> vs last period • Booked <span className="font-semibold text-emerald-600">↑ 22%</span> • Leads <span className="font-semibold text-rose-600">↓ 8%</span></div>
-            </div>
-            <div className="flex items-center gap-2">
-              {dateViews.map((item) => (
-                <button key={item} onClick={() => setSelectedDate(item)} className={cn("rounded-2xl px-4 py-2.5 text-sm font-medium transition-all", selectedDate === item ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{item}</button>
-              ))}
-              <button className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50"><CalendarDays className="h-4 w-4" /></button>
-            </div>
-          </div>
-
-          {/* View toggle */}
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
-              {tabs.map((tab) => (
-                <button key={tab.key} onClick={() => setView(tab.key)} className={cn("rounded-xl px-4 py-2 text-sm font-medium transition-all", view === tab.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}>{tab.label}</button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <ControlButton icon={Filter}>Advanced Filters</ControlButton>
-              <ControlButton icon={Wand2}>Smart Sort</ControlButton>
-            </div>
-          </div>
-
-          {view === "pipeline" ? (
-            <div className="relative">
-              <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-[#fbfcfe] p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pipeline Board</div>
-                    <div className="mt-1 text-sm text-slate-600">Full-width operator view. Click any lead for deep context.</div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-lg font-semibold tracking-tight">Pipeline</div>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />Live
+                    </span>
                   </div>
-                  <button onClick={openActionsPanel} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800">
-                    <Zap className="h-4 w-4" />Actions Needed
-                  </button>
+                  <div className="text-sm text-slate-500">Revenue command center for leads, follow-up, and booking.</div>
                 </div>
+              </div>
 
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCorners}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                >
+              <div className="flex min-w-[420px] flex-1 items-center justify-center px-6">
+                <div className="flex w-full max-w-[620px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search leads, jump to customer, find address..."
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  />
+                  <div className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-400">⌘K</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <ControlButton active icon={AlertCircle}>Needs Attention ({totals.leadCount})</ControlButton>
+                <ControlButton icon={Phone}>Call Assist</ControlButton>
+                <ControlButton icon={PanelRight}>Agent View</ControlButton>
+              </div>
+            </div>
+
+            {/* Stat tiles */}
+            <div className="mb-5 grid grid-cols-4 gap-4">
+              <StatTile label="Lead Volume" value={isLoading ? "…" : totals.leadCount} change="+12%" icon={User} />
+              <StatTile label="Pipeline Value" value={isLoading ? "…" : `$${totals.pipeline.toLocaleString()}`} change="+18%" icon={DollarSign} />
+              <StatTile label="Booked Revenue" value={isLoading ? "…" : `$${totals.booked.toLocaleString()}`} change="+22%" icon={CheckCircle2} />
+              <StatTile label="Quotes Out" value={isLoading ? "…" : totals.quoted} change="+9%" icon={MessageSquare} />
+            </div>
+
+            {/* Date intelligence bar */}
+            <div className="mb-5 flex items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/80 p-4 shadow-sm">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Date Intelligence</div>
+                <div className="mt-1 text-sm text-slate-600">Pipeline <span className="font-semibold text-emerald-600">↑ 12%</span> vs last period • Booked <span className="font-semibold text-emerald-600">↑ 22%</span> • Leads <span className="font-semibold text-rose-600">↓ 8%</span></div>
+              </div>
+              <div className="flex items-center gap-2">
+                {dateViews.map((item) => (
+                  <button key={item} onClick={() => setSelectedDate(item)} className={cn("rounded-2xl px-4 py-2.5 text-sm font-medium transition-all", selectedDate === item ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{item}</button>
+                ))}
+                <button className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50"><CalendarDays className="h-4 w-4" /></button>
+              </div>
+            </div>
+
+            {/* View toggle */}
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+                {tabs.map((tab) => (
+                  <button key={tab.key} onClick={() => setView(tab.key)} className={cn("rounded-xl px-4 py-2 text-sm font-medium transition-all", view === tab.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}>{tab.label}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <ControlButton icon={Filter}>Advanced Filters</ControlButton>
+                <ControlButton icon={Wand2}>Smart Sort</ControlButton>
+              </div>
+            </div>
+
+            {view === "pipeline" ? (
+              <div className="relative">
+                <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-[#fbfcfe] p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Pipeline Board</div>
+                      <div className="mt-1 text-sm text-slate-600">Full-width operator view. Click any lead for deep context.</div>
+                    </div>
+                    <button onClick={openActionsPanel} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800">
+                      <Zap className="h-4 w-4" />Actions Needed
+                    </button>
+                  </div>
+
                   <div className="flex gap-4 overflow-x-auto pb-1">
                     {COLUMNS.map((key) => (
                       <Column
@@ -845,65 +846,66 @@ export default function PipelineBoard() {
                       />
                     ))}
                   </div>
+                </div>
 
-                  <DragOverlay dropAnimation={dropAnimation}>
-                    {activeLead ? (
-                      <div className="w-[220px] rotate-1 scale-105 cursor-grabbing shadow-2xl">
-                        <LeadCardContent
-                          lead={activeLead}
-                          isSelected={false}
-                          onSelect={() => {}}
-                          onMove={() => {}}
-                        />
-                      </div>
-                    ) : null}
-                  </DragOverlay>
-                </DndContext>
-              </div>
-
-              <AnimatePresence>
-                {isPanelOpen ? (
-                  <>
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPanelOpen(false)} className="absolute inset-0 z-20 rounded-[32px] bg-slate-950/[0.18] backdrop-blur-[2px]" />
-                    <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} transition={{ type: "spring", stiffness: 320, damping: 30 }} className="absolute right-4 top-4 z-30 w-[420px] max-w-[calc(100%-2rem)]">
-                      {panelMode === "actions" ? (
-                        <div className="space-y-4">
-                          <div className="rounded-[28px] border border-slate-200 bg-slate-950 p-5 text-white shadow-[0_1px_2px_rgba(16,24,40,.04),0_18px_40px_rgba(16,24,40,.12)]">
-                            <div className="mb-4 flex items-center justify-between">
-                              <div>
-                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Next Actions</div>
-                                <div className="mt-1 text-xl font-semibold tracking-tight">What should happen now</div>
+                <AnimatePresence>
+                  {isPanelOpen ? (
+                    <>
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPanelOpen(false)} className="absolute inset-0 z-20 rounded-[32px] bg-slate-950/[0.18] backdrop-blur-[2px]" />
+                      <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} transition={{ type: "spring", stiffness: 320, damping: 30 }} className="absolute right-4 top-4 z-30 w-[420px] max-w-[calc(100%-2rem)]">
+                        {panelMode === "actions" ? (
+                          <div className="space-y-4">
+                            <div className="rounded-[28px] border border-slate-200 bg-slate-950 p-5 text-white shadow-[0_1px_2px_rgba(16,24,40,.04),0_18px_40px_rgba(16,24,40,.12)]">
+                              <div className="mb-4 flex items-center justify-between">
+                                <div>
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Next Actions</div>
+                                  <div className="mt-1 text-xl font-semibold tracking-tight">What should happen now</div>
+                                </div>
+                                <button onClick={() => setIsPanelOpen(false)} className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
                               </div>
-                              <button onClick={() => setIsPanelOpen(false)} className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
+                              <div className="space-y-3">
+                                {(filteredColumns.new ?? []).slice(0, 3).map((lead: any) => (
+                                  <button key={lead.id} onClick={() => { setSelectedLead(lead); setPanelMode("lead"); }} className="flex w-full items-center justify-between rounded-2xl bg-white/[0.08] px-4 py-3 text-left hover:bg-white/[0.12]">
+                                    <span className="text-sm text-slate-100">{lead.nextAction} — {lead.name}</span>
+                                    <ArrowUpRight className="h-4 w-4 text-slate-400" />
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                            <div className="space-y-3">
-                              {(filteredColumns.new ?? []).slice(0, 3).map((lead: any) => (
-                                <button key={lead.id} onClick={() => { setSelectedLead(lead); setPanelMode("lead"); }} className="flex w-full items-center justify-between rounded-2xl bg-white/[0.08] px-4 py-3 text-left hover:bg-white/[0.12]">
-                                  <span className="text-sm text-slate-100">{lead.nextAction} — {lead.name}</span>
-                                  <ArrowUpRight className="h-4 w-4 text-slate-400" />
-                                </button>
-                              ))}
-                            </div>
+                            <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} />
                           </div>
+                        ) : (
                           <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} />
-                        </div>
-                      ) : (
-                        <DetailPanel lead={selectedLead} onClose={() => setIsPanelOpen(false)} onMove={moveLead} />
-                      )}
-                    </motion.div>
-                  </>
-                ) : null}
-              </AnimatePresence>
-            </div>
-          ) : (
-            <FlowMode
-              lead={currentFlowLead}
-              onNext={() => setFlowIndex((i) => (i + 1) % Math.max(priorityQueue.length, 1))}
-              onMove={moveLead}
-            />
-          )}
+                        )}
+                      </motion.div>
+                    </>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <FlowMode
+                lead={currentFlowLead}
+                onNext={() => setFlowIndex((i) => (i + 1) % Math.max(priorityQueue.length, 1))}
+                onMove={moveLead}
+              />
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* DragOverlay renders in root coordinate space — no scroll/transform offset */}
+      <DragOverlay dropAnimation={dropAnimation}>
+        {activeLead ? (
+          <div className="w-[220px] rotate-1 scale-105 cursor-grabbing shadow-2xl">
+            <LeadCardContent
+              lead={activeLead}
+              isSelected={false}
+              onSelect={() => {}}
+              onMove={() => {}}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
