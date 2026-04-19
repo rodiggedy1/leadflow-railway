@@ -4033,7 +4033,7 @@ export default function AdminDashboard() {
                         />
                       </div>
                     ) : (
-                      <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1fr_360px]"}`}>
+                      <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1.2fr_420px]"}`}>
                         {/* Lead list */}
                         {!leadsCollapsed && (
                           <div className="border-r border-black/5">
@@ -4077,20 +4077,26 @@ export default function AdminDashboard() {
                                           setSelectedLeadPanel(session);
                                           if (leadsCollapsed) setLeadsCollapsed(false);
                                         }}
-                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] items-start gap-3 px-6 py-5 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        className={`grid w-full grid-cols-[1.4fr_0.8fr_1fr_0.8fr_0.9fr_1fr] items-start gap-3 px-6 py-4 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
                                       >
                                         {/* Lead name + phone + badges */}
-                                        <div>
+                                        <div className="min-w-0">
                                           <div className="flex items-start gap-3">
-                                            <div className={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
-                                            <div>
-                                              <div className="text-[15px] font-semibold tracking-[-0.02em] leading-none">{session.leadName ?? "Unknown"}</div>
-                                              <div className="mt-2 text-sm text-zinc-500">{formatPhone(session.leadPhone)}</div>
+                                            <div className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${sentimentColor}`} />
+                                            <div className="min-w-0">
+                                              <div className="text-[15px] font-semibold tracking-[-0.02em] leading-snug truncate">
+                                                {session.leadName ?? <span className="text-zinc-400 font-normal text-sm">Unknown</span>}
+                                              </div>
+                                              <div className="mt-1 text-xs text-zinc-500">{formatPhone(session.leadPhone)}</div>
                                               {recInfo?.hasRecording && (
-                                                <div className="mt-3 flex items-center gap-2">
-                                                  <Badge variant="outline" className="rounded-full bg-white"><Phone className="mr-1 h-3 w-3" /> Call</Badge>
+                                                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                                                  <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
+                                                    <Phone className="mr-1 h-3 w-3" /> Call
+                                                  </Badge>
                                                   {recInfo.hasTranscript && (
-                                                    <Badge variant="outline" className="rounded-full bg-white"><FileText className="mr-1 h-3 w-3" /> Transcript</Badge>
+                                                    <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
+                                                      <FileText className="mr-1 h-3 w-3" /> Transcript
+                                                    </Badge>
                                                   )}
                                                 </div>
                                               )}
@@ -4098,8 +4104,8 @@ export default function AdminDashboard() {
                                           </div>
                                         </div>
                                         {/* Source */}
-                                        <div className="flex items-center">
-                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-xs font-medium text-zinc-700">
+                                        <div className="flex items-center min-w-0">
+                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700 truncate max-w-[80px] block">
                                             {(() => {
                                               const src = session.leadSource;
                                               if (!src || src === "form") return "Quote Form";
@@ -4117,30 +4123,32 @@ export default function AdminDashboard() {
                                           </Badge>
                                         </div>
                                         {/* Service */}
-                                        <div className="flex items-center pr-2 text-sm text-zinc-700">{session.serviceType ?? "—"}</div>
+                                        <div className="flex items-center min-w-0 pr-2 text-xs text-zinc-600">
+                                          <span className="truncate">{session.serviceType ?? "—"}</span>
+                                        </div>
                                         {/* Quote */}
-                                        <div className="flex items-center text-[17px] font-semibold tracking-[-0.03em]">
-                                          {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300">—</span>}
+                                        <div className="flex items-center min-w-0 text-[18px] font-semibold tracking-[-0.03em]">
+                                          {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
                                         </div>
                                         {/* Stage */}
-                                        <div className="flex items-center">
+                                        <div className="flex items-center min-w-0">
                                           <StageBadge stage={session.stage} />
                                         </div>
                                         {/* Agent + last activity */}
                                         <div className="flex items-center justify-between gap-3">
-                                          <div className="flex items-center gap-3">
+                                          <div className="flex items-center gap-2.5 min-w-0">
                                             {session.assignedAgentName ? (
-                                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-lime-300 font-semibold text-zinc-900">
+                                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-300 font-semibold text-zinc-900 text-sm">
                                                 {session.assignedAgentName.charAt(0).toUpperCase()}
                                               </div>
                                             ) : (
-                                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
+                                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
                                                 <User className="h-4 w-4" />
                                               </div>
                                             )}
-                                            <div>
-                                              <div className="font-medium text-zinc-800">{session.assignedAgentName ?? "Unassigned"}</div>
-                                              <div className="text-sm text-zinc-500">{session.lastActivityText ?? "—"}</div>
+                                            <div className="min-w-0">
+                                              <div className="font-medium text-zinc-800 text-xs truncate">{session.assignedAgentName ?? "Unassigned"}</div>
+                                              <div className="text-[11px] text-zinc-400 truncate max-w-[100px] leading-tight">{session.lastActivityText ?? "—"}</div>
                                             </div>
                                           </div>
                                           <div className="text-xs text-zinc-400 whitespace-nowrap shrink-0">
@@ -4182,7 +4190,7 @@ export default function AdminDashboard() {
                                       if (selectedLeadPanel.stage === "UNHANDLED") return "bg-rose-500";
                                       return "bg-zinc-300";
                                     })()}`} />
-                                    <h3 className="text-[26px] font-semibold tracking-[-0.03em] leading-none">
+                                    <h3 className="text-[22px] font-bold tracking-[-0.02em] leading-tight">
                                       {selectedLeadPanel.leadName ?? "Unknown"}
                                     </h3>
                                   </div>
@@ -4252,17 +4260,17 @@ export default function AdminDashboard() {
                                   <div className="flex items-start justify-between gap-4">
                                     <div>
                                       <div className="text-sm font-medium text-zinc-500">AI summary</div>
-                                      <p className="mt-2 text-[15px] leading-7 text-zinc-700">
+                                      <p className="mt-2 text-sm leading-6 text-zinc-700">
                                         {selectedLeadPanel.lastActivityText ?? "No recent activity recorded."}
                                       </p>
                                     </div>
-                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-100 shrink-0">
-                                      <Sparkles className="h-5 w-5 text-zinc-900" />
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-lime-100 shrink-0">
+                                      <Sparkles className="h-4 w-4 text-zinc-900" />
                                     </div>
                                   </div>
                                   <div className="mt-5 rounded-2xl border border-lime-200 bg-lime-50 p-4">
                                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Next best action</div>
-                                    <div className="mt-2 text-lg font-semibold tracking-[-0.02em]">
+                                    <div className="mt-2 text-base font-semibold tracking-[-0.02em]">
                                       {(() => {
                                         const s = selectedLeadPanel.stage;
                                         if (s === "UNHANDLED") return "Review and respond immediately — lead is waiting.";
@@ -4325,8 +4333,8 @@ export default function AdminDashboard() {
                                           </div>
                                           <div className="flex-1 rounded-xl bg-zinc-50 p-3">
                                             <div className="flex items-center justify-between gap-4">
-                                              <div className="font-medium text-zinc-800 text-xs">{item.label}</div>
-                                              <div className="text-[11px] text-zinc-400 leading-tight">{item.time}</div>
+                                              <div className="font-medium text-zinc-800">{item.label}</div>
+                                              <div className="text-sm text-zinc-500">{item.time}</div>
                                             </div>
                                           </div>
                                         </div>
@@ -4344,7 +4352,7 @@ export default function AdminDashboard() {
                                         <CheckCircle2 className="h-5 w-5 text-emerald-700" />
                                       </div>
                                       <div>
-                                        <div className="text-[11px] text-zinc-400 leading-tight">Source</div>
+                                        <div className="text-sm text-zinc-500">Source</div>
                                         <div className="font-semibold text-sm">{getSourceBadge(selectedLeadPanel.leadSource ?? null)}</div>
                                       </div>
                                     </div>
@@ -4357,7 +4365,7 @@ export default function AdminDashboard() {
                                         <Clock3 className="h-5 w-5 text-amber-700" />
                                       </div>
                                       <div>
-                                        <div className="text-[11px] text-zinc-400 leading-tight">Created</div>
+                                        <div className="text-sm text-zinc-500">Created</div>
                                         <div className="font-semibold text-sm">{timeAgo(new Date(selectedLeadPanel.createdAt))}</div>
                                       </div>
                                     </div>
@@ -4370,7 +4378,7 @@ export default function AdminDashboard() {
                                         <User className="h-5 w-5 text-sky-700" />
                                       </div>
                                       <div>
-                                        <div className="text-[11px] text-zinc-400 leading-tight">Agent</div>
+                                        <div className="text-sm text-zinc-500">Agent</div>
                                         <div className="font-semibold text-sm">{selectedLeadPanel.assignedAgentName ?? "Unassigned"}</div>
                                       </div>
                                     </div>
