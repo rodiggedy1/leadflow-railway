@@ -4179,7 +4179,8 @@ export default function AdminDashboard() {
                               transition={{ duration: 0.18 }}
                               className="overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(200,255,111,0.16),_transparent_34%)] p-6 space-y-5"
                             >
-                              {/* Header */}
+                              {/* Header + actions card */}
+                              <div className="rounded-[28px] border border-black/5 bg-white p-6 shadow-sm">
                               <div className="flex items-start justify-between gap-4">
                                 <div>
                                   <div className="flex items-center gap-2.5">
@@ -4252,6 +4253,7 @@ export default function AdminDashboard() {
                                   </button>
                                 )}
                               </div>
+                              </div>{/* end header+actions card */}
                               {/* AI summary */}
                               <Card className="rounded-[28px] border-black/5 bg-white">
                                 <CardContent className="p-6">
