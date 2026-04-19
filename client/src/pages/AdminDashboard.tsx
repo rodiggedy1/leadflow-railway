@@ -4333,7 +4333,7 @@ export default function AdminDashboard() {
                                 <button
                                   onClick={() => bookLeadMutation.mutate({ sessionId: selectedLeadPanel.id, stage: "BOOKED" })}
                                   disabled={bookLeadMutation.isPending}
-                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition disabled:opacity-50"
+                                  className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#7EE8A2] text-slate-800 text-sm font-medium hover:bg-[#6EDB92] transition disabled:opacity-50"
                                 >
                                   <CheckCircle2 className="h-4 w-4" /> Book
                                 </button>
