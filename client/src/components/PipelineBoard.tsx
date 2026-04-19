@@ -476,11 +476,10 @@ export default function PipelineBoard() {
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900 -mx-4 sm:-mx-6 px-4 sm:px-6 py-6">
-      <div className="mx-auto max-w-[1680px]">
-        <div className="rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(248,250,252,0.88))] p-4 shadow-[0_1px_2px_rgba(16,24,40,.04),0_24px_60px_rgba(15,23,42,.08)] backdrop-blur-xl">
+      <div className="mx-auto max-w-[1680px] space-y-5">
 
           {/* ── Top header row ── */}
-          <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200/80 px-2 pb-4">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/10">
                 <Sparkles className="h-5 w-5" />
@@ -518,7 +517,7 @@ export default function PipelineBoard() {
           </div>
 
           {/* ── Stat tiles ── */}
-          <div className="mb-5 grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <StatTile label="Lead Volume"     value={totals.leadCount}                         change="+12%" icon={User} />
             <StatTile label="Pipeline Value"  value={`$${totals.pipeline.toLocaleString()}`}   change="+18%" icon={DollarSign} />
             <StatTile label="Booked Revenue"  value={`$${totals.booked.toLocaleString()}`}     change="+22%" icon={CheckCircle2} />
@@ -526,7 +525,7 @@ export default function PipelineBoard() {
           </div>
 
           {/* ── Date Intelligence bar ── */}
-          <div className="mb-5 flex items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/80 p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/80 p-4 shadow-sm">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Date Intelligence</div>
               <div className="mt-1 text-sm text-slate-600">
@@ -555,7 +554,7 @@ export default function PipelineBoard() {
           </div>
 
           {/* ── View toggle + filters row ── */}
-          <div className="mb-5 flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
               {(["pipeline", "flow"] as const).map(key => (
                 <button
@@ -578,7 +577,7 @@ export default function PipelineBoard() {
           </div>
 
           {/* ── Pipeline Board / Flow Mode ── */}
-          {view === "pipeline" ? (
+          <div>{view === "pipeline" ? (
             <div className="relative">
               <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-[#fbfcfe] p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -668,9 +667,8 @@ export default function PipelineBoard() {
               onNext={() => setFlowIndex(i => (i + 1) % Math.max(priorityQueue.length, 1))}
               onMove={moveLead}
             />
-          )}
+          )}</div>
 
-        </div>
       </div>
     </div>
   );
