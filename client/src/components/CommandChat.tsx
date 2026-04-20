@@ -701,16 +701,29 @@ function HotLeadsTray({
   claimLeadMutation,
   onCollapse,
   onOpenFirstMsg,
+  searchQuery = "",
 }: {
   channelMsgs: LeadMsg[];
   claimLeadMutation: ClaimMutation;
   onCollapse: () => void;
   onOpenFirstMsg?: (details: string) => void;
+  searchQuery?: string;
 }) {
   // Derive lead cards from channelMsgs — only new_lead quickAction, last 8h
   const cutoff = Date.now() - 8 * 60 * 60 * 1000;
+  const q = searchQuery.toLowerCase().trim();
   const leads = channelMsgs
-    .filter((m) => m.quickAction === "new_lead" && m.createdAt.getTime() > cutoff)
+    .filter((m) => {
+      if (m.quickAction !== "new_lead" || m.createdAt.getTime() <= cutoff) return false;
+      if (!q) return true;
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(m.metadata ?? "{}"); } catch {}
+      const name = ((meta.leadName as string) ?? m.from ?? "").toLowerCase();
+      const phone = ((meta.leadPhone as string) ?? "").toLowerCase();
+      const service = ((meta.serviceType as string) ?? "").toLowerCase();
+      const source = ((meta.utmSource as string) ?? (meta.source as string) ?? "").toLowerCase();
+      return name.includes(q) || phone.includes(q) || service.includes(q) || source.includes(q);
+    })
     .slice()
     .reverse(); // newest first
 
@@ -811,6 +824,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
+  const [rightTab, setRightTab] = useState<"leads" | "followups">("leads");
+  const [rightSearch, setRightSearch] = useState("");
   const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
@@ -1722,7 +1737,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden bg-slate-100 p-3">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── Lightbox ── */}
@@ -1768,83 +1783,87 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
       <div
-        className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200 bg-slate-100"
+        className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200"
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Single scrollable area — header + content all scroll together */}
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-          {/* White content card with grey page bg showing on sides */}
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 pt-5 pb-4">
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5 whitespace-nowrap">General Command Chat</p>
-            <h2 className="text-[28px] font-bold text-slate-900 whitespace-nowrap leading-tight mb-4">Ship Control</h2>
+          {/* Design card: rounded-[32px] border backdrop-blur */}
+          <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur overflow-hidden">
+          <div className="px-6 pt-6 pb-5">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">General Command Chat</p>
+                <h2 className="text-[28px] font-semibold leading-tight tracking-tight text-slate-900">Ship Control</h2>
+              </div>
+            </div>
 
             {/* 4 Stat Tiles */}
             {cmdLoading ? (
               <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
             ) : (
               <div className="grid grid-cols-2 gap-2.5 mb-4">
-                {/* Needs attention */}
-                <div className="rounded-2xl bg-red-50 p-4">
-                  <p className="text-sm font-semibold text-red-600 leading-snug">Needs<br/>attention</p>
-                  <p className="text-4xl font-bold text-red-600 mt-2 leading-none">{snapshot.issue}</p>
+                {/* Needs action */}
+                <div className="rounded-2xl border bg-gradient-to-br from-rose-500/15 to-rose-500/5 border-rose-200 p-3.5">
+                  <p className="text-xs font-semibold text-rose-700">Needs action</p>
+                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-rose-700">{snapshot.issue}</p>
                 </div>
                 {/* In progress */}
-                <div className="rounded-2xl bg-sky-50 p-4">
-                  <p className="text-sm font-semibold text-sky-600 leading-snug">In progress</p>
-                  <p className="text-4xl font-bold text-sky-600 mt-2 leading-none">{snapshot.progress}</p>
+                <div className="rounded-2xl border bg-gradient-to-br from-sky-500/15 to-sky-500/5 border-sky-200 p-3.5">
+                  <p className="text-xs font-semibold text-sky-700">In progress</p>
+                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-sky-700">{snapshot.progress}</p>
                 </div>
                 {/* Starting soon */}
-                <div className="rounded-2xl bg-amber-50 p-4">
-                  <p className="text-sm font-semibold text-amber-600 leading-snug">Starting soon</p>
-                  <p className="text-4xl font-bold text-amber-600 mt-2 leading-none">{snapshot.soon}</p>
+                <div className="rounded-2xl border bg-gradient-to-br from-amber-500/15 to-amber-500/5 border-amber-200 p-3.5">
+                  <p className="text-xs font-semibold text-amber-700">Starting soon</p>
+                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-amber-700">{snapshot.soon}</p>
                 </div>
                 {/* Completed */}
-                <div className="rounded-2xl bg-emerald-50 p-4">
-                  <p className="text-sm font-semibold text-emerald-600 leading-snug">Completed</p>
-                  <p className="text-4xl font-bold text-emerald-600 mt-2 leading-none">{snapshot.complete}</p>
+                <div className="rounded-2xl border bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 border-emerald-200 p-3.5">
+                  <p className="text-xs font-semibold text-emerald-700">Completed</p>
+                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-emerald-700">{snapshot.complete}</p>
                 </div>
               </div>
             )}
 
             {/* Command priority info card */}
-            <div className="rounded-2xl bg-indigo-50 p-4 mb-4 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                <Sparkles className="w-4 h-4 text-white" />
+            <div className="mb-4 rounded-2xl border border-indigo-100 bg-[linear-gradient(135deg,rgba(99,102,241,0.08),rgba(255,255,255,0.7))] p-3.5">
+              <div className="mb-1.5 flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div className="text-sm font-semibold">Command priority</div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900 mb-1">Command priority</p>
-                <p className="text-sm text-slate-600 leading-snug">General team chat stays lightweight. Any message can be converted into a structured issue when action is needed.</p>
-              </div>
+              <p className="text-xs leading-5 text-slate-600">General chat stays lightweight. The system only creates an issue when risk, money, or schedule confidence drops.</p>
             </div>
 
             {/* Chat / Issues tab switcher */}
-            <div className="flex bg-white rounded-2xl p-1 gap-1 shadow-sm">
-              <button
-                onClick={() => { setLeftTab("chat"); setCenterView("chat"); }}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold rounded-xl py-2.5 transition-all",
-                  leftTab === "chat" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                )}
-              >
-                <MessageCircle className="w-4 h-4" />
-                Chat
-              </button>
-              <button
-                onClick={() => { setLeftTab("issues"); setCenterView("issues"); }}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium rounded-xl py-2.5 transition-all relative",
-                  leftTab === "issues" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                )}
-              >
-                <span className="text-base leading-none">🚨</span>
-                Issues
-                {unresolvedIssueCount > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1 leading-none bg-red-500 text-white">
-                    {unresolvedIssueCount}
-                  </span>
-                )}
-              </button>
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => { setLeftTab("chat"); setCenterView("chat"); }}
+                  className={cn(
+                    "rounded-[18px] px-4 py-3 text-sm font-semibold transition",
+                    leftTab === "chat" ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10" : "text-slate-500"
+                  )}
+                >
+                  Command chat
+                </button>
+                <button
+                  onClick={() => { setLeftTab("issues"); setCenterView("issues"); }}
+                  className={cn(
+                    "rounded-[18px] px-4 py-3 text-sm font-semibold transition relative",
+                    leftTab === "issues" ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10" : "text-slate-500"
+                  )}
+                >
+                  Issues
+                  {unresolvedIssueCount > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1 leading-none bg-red-500 text-white">
+                      {unresolvedIssueCount}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2089,9 +2108,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* White card wrapper with grey showing on sides */}
         <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
-          {/* Top row: labels + icon buttons */}
-          <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="px-5 pt-3 pb-3 border-b border-slate-100 shrink-0">
+          {/* Compact single-row header */}
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               {searchOpen ? (
                 <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
@@ -2131,9 +2150,41 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">General Chat</p>
-                  <span className="text-slate-300">·</span>
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Discussion first, issues only when needed</p>
+                  <h2 className="text-base font-semibold text-slate-900 leading-none">MIB Command Chat</h2>
+                  {agentList && agentList.length > 0 && (() => {
+                    const MAX_SHOW = 6;
+                    const visible = agentList.slice(0, MAX_SHOW);
+                    const overflow = agentList.length - MAX_SHOW;
+                    return (
+                      <div className="flex items-center" style={{ gap: 0 }}>
+                        {visible.map((ag, idx) => {
+                          const status = senderStatusMap?.[ag.name] ?? "offline";
+                          const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
+                          const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                          const hue = (ag.name.charCodeAt(0) * 37) % 360;
+                          const isOnCall = Boolean(ag.onCallSince);
+                          return (
+                            <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 6 : -4, zIndex: visible.length - idx }}>
+                              {ag.photoUrl ? (
+                                <img src={ag.photoUrl} alt={ag.name} className={cn("w-5 h-5 rounded-full object-cover border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} />
+                              ) : (
+                                <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px] font-bold border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+                              )}
+                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
+                            </div>
+                          );
+                        })}
+                        {overflow > 0 && (
+                          <div className="w-5 h-5 rounded-full bg-slate-100 border border-white flex items-center justify-center text-[8px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -4 }}>+{overflow}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {todayRevenue > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                      ${todayRevenue.toLocaleString()} today
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -2177,71 +2228,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
             </div>
           </div>
-          {/* Title + subtitle row */}
-          {!searchOpen && (
-            <div className="mb-3">
-              <h2 className="text-[28px] font-bold text-slate-900 leading-tight">MIB Command Chat</h2>
-              <div className="flex items-center gap-1.5 mt-1">
-                <p className="text-sm text-slate-500">Office staff + dispatch</p>
-                <span className="text-slate-300">·</span>
-                <p className="text-sm text-slate-500">Not tied to one issue</p>
-                {/* Agent presence */}
-                {agentList && agentList.length > 0 && (() => {
-                  const MAX_SHOW = 6;
-                  const visible = agentList.slice(0, MAX_SHOW);
-                  const overflow = agentList.length - MAX_SHOW;
-                  return (
-                    <div className="flex items-center ml-2" style={{ gap: 0 }}>
-                      {visible.map((ag, idx) => {
-                        const status = senderStatusMap?.[ag.name] ?? "offline";
-                        const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
-                        const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                        const hue = (ag.name.charCodeAt(0) * 37) % 360;
-                        const isOnCall = Boolean(ag.onCallSince);
-                        const titleText = isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`;
-                        return (
-                          <div key={ag.id} className="relative" title={titleText} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
-                            {ag.photoUrl ? (
-                              <img src={ag.photoUrl} alt={ag.name} className={cn("w-7 h-7 rounded-full object-cover border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400 ring-offset-1")} />
-                            ) : (
-                              <div
-                                className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400 ring-offset-1")}
-                                style={{ background: `hsl(${hue}, 55%, 52%)` }}
-                              >
-                                {initials}
-                              </div>
-                            )}
-                            {isOnCall ? (
-                              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white bg-green-500 flex items-center justify-center">
-                                <Phone className="w-1.5 h-1.5 text-white" />
-                              </span>
-                            ) : (
-                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white", dotColor)} />
-                            )}
-                          </div>
-                        );
-                      })}
-                      {overflow > 0 && (
-                        <div className="w-7 h-7 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[9px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -6 }}>
-                          +{overflow}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                {/* Live revenue ticker */}
-                {todayRevenue > 0 && (
-                  <span
-                    title={`${todayBookingCount} booking${todayBookingCount !== 1 ? "s" : ""} confirmed today`}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 whitespace-nowrap animate-in fade-in duration-500 ml-1"
-                  >
-                    <span className="text-emerald-500">&#x1F4B0;</span>
-                    ${todayRevenue.toLocaleString()} today
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Issues center view — shown when centerView === 'issues' */}
@@ -2749,110 +2735,94 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const claimedAt = (meta.claimedAt as number | null) ?? null;
 
                   const isThumbSms = utmSource === "thumbtack-sms";
+                  // Build body line: size · serviceType · source
+                  const bodyParts = [size, serviceType, utmSource].filter(Boolean);
+                  const subParts = [
+                    price ? `Quoted at $${price}` : null,
+                    claimedBy ? `Claimed by ${claimedBy}` : "no one has claimed yet",
+                  ].filter(Boolean);
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
-                        {/* Header band */}
-                        <div className={cn("flex items-center gap-2 px-3 py-1.5", isThumbSms ? "bg-sky-700" : "bg-emerald-700")}>
-                          {isThumbSms ? <span className="text-emerald-100 text-xs shrink-0">📌</span> : <Zap className="h-3 w-3 text-emerald-200" />}
-                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">{isThumbSms ? "New Thumbtack Opportunity" : "New Lead"}</span>
-                          <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="w-full">
+                      <div className={cn(
+                        "w-full rounded-2xl px-5 py-4",
+                        isThumbSms ? "bg-sky-50" : "bg-[#f0fdf4]"
+                      )}>
+                        {/* Top row: label + time */}
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-slate-500">{leadName}</span>
+                          <span className="text-xs text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        {/* Lead info */}
-                        <div className="px-3 py-2.5 bg-white">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-base font-bold text-slate-900 leading-tight">{leadName}</p>
-                              {leadPhone && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-lg font-bold text-emerald-700">${price}</p>
-                              <p className="text-[10px] text-slate-400">{serviceType}</p>
-                            </div>
-                          </div>
-                          {size && (
-                            isThumbSms
-                              ? <p className="text-xs text-slate-500 mt-1.5">📍 {size} &nbsp;·&nbsp; {serviceType}</p>
-                              : <p className="text-xs text-slate-500 mt-1.5">🛏️ {size} &nbsp;·&nbsp; {serviceType}</p>
-                          )}
-                          {extras.length > 0 && (
-                            <p className="text-xs text-slate-400 mt-0.5">📦 {extras.join(", ")}</p>
-                          )}
-                          {utmSource && (
-                            <p className="text-xs text-slate-400 mt-0.5">📍 {utmSource}</p>
-                          )}
-                          {/* Elapsed timer */}
-                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-2.5 pt-2 border-t border-slate-100">
-                            <Clock className="h-3 w-3" />
-                            <ElapsedTimer arrivedAt={arrivedAt} />
-                          </div>
-
-                          {/* Action icons row */}
-                          <div className="flex items-center gap-3 mt-3">
-                            {/* Call icon — dial lead directly */}
-                            {leadPhone && (
-                              <a
-                                href={`openphone://call?to=${leadPhone}`}
-                                title={`Call ${leadName}`}
-                                className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors shrink-0"
-                              >
-                                <Phone className="h-4 w-4" />
-                              </a>
-                            )}
-                            {/* SMS icon — open SMS conversation drawer */}
-                            {sessionId && (
-                              <a
-                                href={`/admin/leads?session=${sessionId}&tab=sms`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Open SMS conversation"
-                                className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-900 transition-colors shrink-0"
-                              >
-                                <MessageCircle className="h-4 w-4" />
-                              </a>
-                            )}
-                            {/* First Message Generator icon */}
-                            <button
-                              title="Generate first outreach message for this lead"
-                              onClick={() => {
-                                const parts: string[] = [];
-                                if (leadName)    parts.push(`Name: ${leadName}`);
-                                if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
-                                if (serviceType) parts.push(`Service: ${serviceType}`);
-                                if (size)        parts.push(`Home size: ${size}`);
-                                if (price)       parts.push(`Estimated price: $${price}`);
-                                if (extras.length > 0) parts.push(`Extras: ${extras.join(", ")}`);
-                                setFirstMsgDetails(parts.join("\n"));
-                                setFirstMsgResult("");
-                                setFirstMsgCopied(false);
-                                setFirstMsgOpen(true);
-                              }}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors shrink-0"
+                        {/* Large body */}
+                        <p className="text-lg font-bold text-slate-900 leading-snug mb-1">
+                          {bodyParts.join(" · ")}
+                        </p>
+                        {/* Subtext */}
+                        <p className="text-sm text-slate-500 mb-3">{subParts.join(" · ")}</p>
+                        {/* Elapsed timer */}
+                        <div className="flex items-center gap-1 text-xs text-slate-400 mb-3">
+                          <Clock className="h-3 w-3" />
+                          <ElapsedTimer arrivedAt={arrivedAt} />
+                        </div>
+                        {/* Action icons row */}
+                        <div className="flex items-center gap-3">
+                          {leadPhone && (
+                            <a
+                              href={`openphone://call?to=${leadPhone}`}
+                              title={`Call ${leadName}`}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/80 hover:bg-white text-slate-600 hover:text-slate-900 transition-colors shrink-0 shadow-sm"
                             >
-                              <Wand2 className="h-4 w-4" />
-                            </button>
-                            {/* Spacer then Claim */}
-                            <div className="flex-1" />
-                            {/* Claim button / claimed state */}
-                            {claimedBy ? (
-                              <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-                                <UserCheck className="h-3.5 w-3.5" />
-                                <span>Claimed by {claimedBy}</span>
-                                {claimedAt && (
-                                  <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
-                                )}
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                className="h-8 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-4"
-                                disabled={claimLeadMutation.isPending}
-                                onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
-                              >
-                                {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
-                              </Button>
-                            )}
-                          </div>
+                              <Phone className="h-4 w-4" />
+                            </a>
+                          )}
+                          {sessionId && (
+                            <a
+                              href={`/admin/leads?session=${sessionId}&tab=sms`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open SMS conversation"
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 hover:text-emerald-900 transition-colors shrink-0 shadow-sm"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </a>
+                          )}
+                          <button
+                            title="Generate first outreach message for this lead"
+                            onClick={() => {
+                              const parts: string[] = [];
+                              if (leadName)    parts.push(`Name: ${leadName}`);
+                              if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
+                              if (serviceType) parts.push(`Service: ${serviceType}`);
+                              if (size)        parts.push(`Home size: ${size}`);
+                              if (price)       parts.push(`Estimated price: $${price}`);
+                              if (extras.length > 0) parts.push(`Extras: ${extras.join(", ")}`);
+                              setFirstMsgDetails(parts.join("\n"));
+                              setFirstMsgResult("");
+                              setFirstMsgCopied(false);
+                              setFirstMsgOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors shrink-0 shadow-sm"
+                          >
+                            <Wand2 className="h-4 w-4" />
+                          </button>
+                          <div className="flex-1" />
+                          {claimedBy ? (
+                            <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                              <UserCheck className="h-3.5 w-3.5" />
+                              <span>Claimed by {claimedBy}</span>
+                              {claimedAt && (
+                                <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-8 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-4"
+                              disabled={claimLeadMutation.isPending}
+                              onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+                            >
+                              {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3333,62 +3303,35 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       key={msg.id}
                       ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
                       className={cn(
-                        "flex group transition-colors duration-300",
-                        isMine ? "justify-end" : "justify-start",
-                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-xl" : "",
-                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-xl" : ""
+                        "w-full group transition-colors duration-300",
+                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
+                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : ""
                       )}
                     >
-                      {/* Avatar circle for other people's messages */}
-                      {!isMine && !isAlert && (
-                        <div className="relative w-8 h-8 shrink-0 mt-0.5 mr-2">
-                          <div
-                            className="w-full h-full rounded-full overflow-hidden shadow-sm"
-                            title={msg.from}
-                          >
-                            {authorPhoto ? (
-                              <img src={authorPhoto} alt={msg.from ?? ""} className="w-full h-full object-cover" />
-                            ) : (
-                              <div
-                                className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white"
-                                style={{ backgroundColor: authorColor }}
-                              >
-                                {authorInitial}
-                              </div>
-                            )}
-                          </div>
-                          {/* Status dot overlay — green = online, amber = away */}
-                          {senderStatusMap && (() => {
-                            const st = senderStatusMap[msg.from ?? ""];
-                            if (!st || st === "offline") return null;
-                            return (
-                              <span
-                                className={cn(
-                                  "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white",
-                                  st === "online" ? "bg-green-500" : "bg-amber-400"
-                                )}
-                                title={st === "online" ? "Online" : "Away"}
-                              />
-                            );
-                          })()}
-                        </div>
-                      )}
-
-                      {/* Bubble + WhatsApp-style hover actions */}
-                      <div className="relative flex items-start" style={{ flexDirection: isMine ? "row-reverse" : "row" }}>
+                      {/* Bubble + hover actions */}
+                      <div className="relative flex items-start w-full">
                         <div className={cn(
-                          "max-w-[75%] rounded-2xl px-4 py-3",
-                          isAlert ? "bg-slate-900 text-white w-full max-w-full" :
-                          isMine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"
+                          "w-full rounded-2xl px-5 py-4",
+                          isAlert ? "bg-[#0f172a] text-white" :
+                          isMine ? "bg-[#0f172a] text-white" : "bg-[#f1f5f9] text-slate-900"
                         )}>
-                          {!isMine && (
-                            <p className="text-[11px] font-bold mb-1.5 leading-none" style={{ color: isAlert ? "#94a3b8" : authorColor }}>
-                              {msg.from}
-                              <span className="font-normal text-slate-400 ml-1">
-                                · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
-                              </span>
-                            </p>
-                          )}
+                          {/* Top row: sender label + role + time */}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={cn(
+                              "text-xs font-semibold",
+                              isAlert || isMine ? "text-slate-400" : ""
+                            )} style={{ color: isAlert || isMine ? undefined : authorColor }}>
+                              {isMine ? "You" : msg.from}
+                              {!isMine && (
+                                <span className="font-normal text-slate-400 ml-1">
+                                  · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                                </span>
+                              )}
+                            </span>
+                            <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
+                              {fmtMsgTime(msg.createdAt)}
+                            </span>
+                          </div>
                           {/* WhatsApp-style quoted block with vivid sender accent */}
                           {msg.replyToId && msg.replyToBody && (
                             <button
@@ -3570,35 +3513,35 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
         <div className="px-5 py-4 bg-white">
           {/* Quick-action chips */}
-          <div className="flex gap-2 mb-4 items-center flex-wrap">
+          <div className="flex gap-1.5 mb-3 items-center flex-nowrap overflow-x-auto">
             <button
               onClick={() => setBroadcastOpen(true)}
-              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
+              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <Radio className="h-3 w-3" /> Broadcast
             </button>
 
             <button
               onClick={() => setReminderOpen(true)}
-              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
+              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <Bell className="h-3 w-3" /> Reminder
             </button>
             <button
               onClick={() => setPinOpen(true)}
-              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
+              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <Pin className="h-3 w-3" /> Pin
             </button>
             <button
               onClick={() => setFollowUpsOpen(true)}
-              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
+              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <ClipboardList className="h-3 w-3" /> Follow-ups
             </button>
             <button
               onClick={() => setFaqOpen(true)}
-              className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0"
+              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <BookOpen className="h-3 w-3" /> FAQ
             </button>
@@ -3606,7 +3549,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             {awayStatus ? (
               // Currently away — show "I'm Back" button to clear status
               <button
-                className="text-sm font-medium rounded-full px-4 py-2 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 shadow-sm shrink-0"
+                className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm shrink-0"
                 onClick={() => {
                   if (imBackFiredRef.current) return;
                   imBackFiredRef.current = true;
@@ -3621,7 +3564,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               // Not away — show Away picker
               <Popover open={awayOpen} onOpenChange={setAwayOpen}>
                 <PopoverTrigger asChild>
-                  <button className="text-sm font-medium rounded-full px-4 py-2 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm shrink-0">
+                  <button className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0">
                     <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
                     Away
                   </button>
@@ -3945,16 +3888,51 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
       <div
-        className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200 bg-slate-100"
+        className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <div className="bg-white rounded-2xl shadow-sm">
-        <div className="px-5 py-4 space-y-5">
+        <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="px-5 py-4 space-y-4">
 
-          {/* ── Hot Leads Tray ── */}
+          {/* ── Search bar ── */}
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <input
+              type="text"
+              value={rightSearch}
+              onChange={(e) => setRightSearch(e.target.value)}
+              placeholder="Search leads, issues, people"
+              className="flex-1 bg-transparent text-xs text-slate-700 placeholder:text-slate-400 outline-none"
+            />
+            {rightSearch && (
+              <button onClick={() => setRightSearch("")} className="text-slate-400 hover:text-slate-600">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {/* ── Hot leads / Follow-ups tab toggle ── */}
+          <div className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1 gap-1">
+            <button
+              onClick={() => setRightTab("leads")}
+              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "leads" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
+            >
+              Hot leads
+            </button>
+            <button
+              onClick={() => setRightTab("followups")}
+              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "followups" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
+            >
+              Follow-ups
+            </button>
+          </div>
+
+          {/* ── Hot Leads Tray (shown when rightTab === "leads") ── */}
+          {rightTab === "leads" && (
           <HotLeadsTray
             channelMsgs={channelMsgs}
             claimLeadMutation={claimLeadMutation}
+            searchQuery={rightSearch}
             onCollapse={() => {/* right column is always visible */}}
             onOpenFirstMsg={(details) => {
               setFirstMsgDetails(details);
@@ -3963,10 +3941,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               setFirstMsgOpen(true);
             }}
           />
+          )}
 
+          {rightTab === "leads" && (
+          <>
           <div className="border-t border-slate-200" />
 
-          {/* Auto-Raised Issues */}
+          {/* Auto-Raised Issues — only under leads tab */}
           <div>
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Auto-Raised Issues</p>
             {cmdLoading ? (
@@ -4035,102 +4016,105 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             )}
           </div>
+          </>
+          )}
 
-          <div className="border-t border-slate-200" />
+          {/* Follow-ups + Manual Issues — only under followups tab */}
+          {rightTab === "followups" && (
+          <>
+            <div>
+              <button
+                onClick={() => setFuPanelExpanded((v) => !v)}
+                className="w-full flex items-center justify-between mb-3 group"
+              >
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5 text-violet-500" />
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Follow-ups</p>
+                  {fuPanelItems.length > 0 && (
+                    <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">{fuPanelItems.length}</span>
+                  )}
+                </div>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fuPanelExpanded && "rotate-180")} />
+              </button>
+              {fuPanelExpanded && (
+                fuPanelItems.length === 0 ? (
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
+                    <p className="text-xs text-slate-400">No active follow-ups</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(fuPanelItems as any[]).filter((fu) => !rightSearch.trim() || fu.name?.toLowerCase().includes(rightSearch.toLowerCase()) || fu.nextStep?.toLowerCase().includes(rightSearch.toLowerCase()) || fu.owner?.toLowerCase().includes(rightSearch.toLowerCase())).map((fu) => {
+                      const isOverdue = fu.dueAt < Date.now();
+                      const d = new Date(fu.dueAt);
+                      const dueStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                      return (
+                        <button
+                          key={fu.id}
+                          onClick={() => { setFollowUpsInitialId(fu.id); setFollowUpsOpen(true); }}
+                          className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:shadow-sm transition"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="text-sm font-semibold text-slate-900 leading-tight truncate">{fu.name}</span>
+                            {fu.priority === "High" && (
+                              <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">High</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mb-1.5 line-clamp-2 leading-relaxed">{fu.nextStep}</p>
+                          <div className="flex flex-wrap gap-1">
+                            <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", isOverdue ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600")}>{dueStr}</span>
+                            <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{fu.owner}</span>
+                            <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">{fu.type}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </div>
 
-          {/* ── Follow-ups Panel ── */}
-          <div>
-            <button
-              onClick={() => setFuPanelExpanded((v) => !v)}
-              className="w-full flex items-center justify-between mb-3 group"
-            >
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-3.5 w-3.5 text-violet-500" />
-                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Follow-ups</p>
-                {fuPanelItems.length > 0 && (
-                  <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">{fuPanelItems.length}</span>
-                )}
-              </div>
-              <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fuPanelExpanded && "rotate-180")} />
-            </button>
-            {fuPanelExpanded && (
-              fuPanelItems.length === 0 ? (
+            <div className="border-t border-slate-200" />
+
+            <div>
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
+              {cmdLoading ? (
+                <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+              ) : manualIssues.length === 0 ? (
                 <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
-                  <p className="text-xs text-slate-400">No active follow-ups</p>
+                  <p className="text-xs text-slate-400">No open manual issues</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {(fuPanelItems as any[]).map((fu) => {
-                    const isOverdue = fu.dueAt < Date.now();
-                    const d = new Date(fu.dueAt);
-                    const dueStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-                    return (
-                      <button
-                        key={fu.id}
-                        onClick={() => { setFollowUpsInitialId(fu.id); setFollowUpsOpen(true); }}
-                        className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:shadow-sm transition"
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <span className="text-sm font-semibold text-slate-900 leading-tight truncate">{fu.name}</span>
-                          {fu.priority === "High" && (
-                            <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">High</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mb-1.5 line-clamp-2 leading-relaxed">{fu.nextStep}</p>
-                        <div className="flex flex-wrap gap-1">
-                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", isOverdue ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600")}>{dueStr}</span>
-                          <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{fu.owner}</span>
-                          <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">{fu.type}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {manualIssues.map((issue) => (
+                    <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
+                      <div className="flex items-start justify-between gap-1">
+                        <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
+                        <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
+                      </div>
+                      {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
+                      {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
+                        <button
+                          onClick={() => {
+                            setResolveIssueMessageId(issue.messageId);
+                            setResolveIssueTitle(issue.title);
+                            setResolveIssueNote(issue.note ?? "");
+                            setResolveIssueNoteText("");
+                            setResolveIssueOpen(true);
+                          }}
+                          className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
+                        >
+                          Resolve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )
-            )}
-          </div>
-
-          <div className="border-t border-slate-200" />
-
-          {/* Manual Issues */}
-          <div>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
-            {cmdLoading ? (
-              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-            ) : manualIssues.length === 0 ? (
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
-                <p className="text-xs text-slate-400">No open manual issues</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {manualIssues.map((issue) => (
-                  <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
-                    <div className="flex items-start justify-between gap-1">
-                      <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
-                      <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
-                    </div>
-                    {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
-                    {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
-                      <button
-                        onClick={() => {
-                          setResolveIssueMessageId(issue.messageId);
-                          setResolveIssueTitle(issue.title);
-                          setResolveIssueNote(issue.note ?? "");
-                          setResolveIssueNoteText("");
-                          setResolveIssueOpen(true);
-                        }}
-                        className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
-                      >
-                        Resolve
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </>
+          )}
 
         </div>
         </div>{/* end white card */}

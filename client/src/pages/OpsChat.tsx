@@ -1775,6 +1775,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background: '#eef3f8'}}>
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.10),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.08),transparent_24%)]" />
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
