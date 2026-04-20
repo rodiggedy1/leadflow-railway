@@ -1449,14 +1449,23 @@ async function handleCsInboundMessage(msg: any) {
 
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
-  // Find the most recent matching session for this phone
+  // Find the most recent matching session for this phone.
+  // For cleaners (isCleaner=true), also match cs_initiated sessions — a cleaner texting in
+  // should always land in the Teams column (cs-inbound-cleaner). We update the leadSource
+  // in the same write so the session is correctly typed permanently.
+  const sourceMatch = isCleaner
+    ? or(
+        eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+        eq(conversationSessions.leadSource, "cs_initiated")
+      )
+    : eq(conversationSessions.leadSource, sessionSource);
   const [existingSession] = await db
     .select()
     .from(conversationSessions)
     .where(
       and(
         eq(conversationSessions.leadPhone, fromPhone),
-        eq(conversationSessions.leadSource, sessionSource)
+        sourceMatch
       )
     )
     .orderBy(desc(conversationSessions.updatedAt))
@@ -1491,10 +1500,16 @@ async function handleCsInboundMessage(msg: any) {
     history.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
 
 
-    // Also backfill leadName if it was previously null and we now resolved one
+    // Also backfill leadName if it was previously null and we now resolved one.
+    // If this is a cleaner texting into a cs_initiated session, permanently upgrade
+    // the leadSource to cs-inbound-cleaner so it always appears in the Teams column.
     const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date() };
     if (resolvedName && !existingSession.leadName) {
       updatePayload.leadName = resolvedName;
+    }
+    if (isCleaner && existingSession.leadSource !== "cs-inbound-cleaner") {
+      updatePayload.leadSource = "cs-inbound-cleaner";
+      console.log(`[CS] Upgraded session ${existingSession.id} leadSource from ${existingSession.leadSource} → cs-inbound-cleaner (cleaner texted in)`);
     }
     // Auto-unresolve: if this session was resolved, a new inbound message reopens it
     if ((existingSession as any).csResolvedAt) {
