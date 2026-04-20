@@ -2751,8 +2751,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
                   const isThumbSms = utmSource === "thumbtack-sms";
                   // Build written-out headline
+                  const isWidget = utmSource?.toLowerCase() === "widget" || utmSource?.toLowerCase() === "widget form" || (!utmSource && serviceType?.toLowerCase() === "widget");
                   const sourceLabel = utmSource
-                    ? utmSource.toLowerCase() === "widget" || utmSource.toLowerCase() === "widget form"
+                    ? isWidget
                       ? "Widget Form"
                       : utmSource.toLowerCase() === "google"
                         ? "Google"
@@ -2763,12 +2764,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const headlineParts: string[] = [];
                   if (size) headlineParts.push(size);
                   if (serviceType) headlineParts.push(serviceType);
-                  const headline = sourceLabel
-                    ? `New Lead Alert: ${sourceLabel}`
-                    : headlineParts.length > 0
-                      ? headlineParts.join(" / ")
-                      : "New Lead";
-                  const detailLine = headlineParts.length > 0 ? headlineParts.join(" / ") : "";
+                  const headline = isWidget
+                    ? "New Lead: Home Cleaning: Widget Form"
+                    : sourceLabel
+                      ? `New Lead: ${sourceLabel}`
+                      : headlineParts.length > 0
+                        ? headlineParts.join(" · ")
+                        : "New Lead";
+                  const detailLine = headlineParts.length > 0 ? headlineParts.join(" · ") : "";
                   const subParts = [
                     price ? `Quoted at $${price}` : null,
                     claimedBy ? `Claimed by ${claimedBy}` : "no one has claimed yet",
@@ -2787,7 +2790,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           <span className="text-xs text-slate-400 shrink-0">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Headline: written-out, bold, full width */}
-                        <p className="text-lg font-bold text-slate-900 leading-snug mb-1 w-full">
+                        <p className="text-[30px] font-semibold leading-tight text-slate-900 mb-1 w-full">
                           {headline}
                         </p>
                         {/* Detail line: size / service if source-based headline */}
@@ -3385,8 +3388,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               </div>
                             </button>
                           )}
-                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
+                          <p className="text-[30px] font-semibold leading-tight whitespace-pre-wrap break-words">
                             {(() => {
+                              // Strip leading emoji (e.g. ⚠️) from body before rendering
+                              const displayBody = msg.body.replace(/^(\u26a0\ufe0f|\u26a0|\ud83d[\udc00-\udfff]|\ud83c[\udf00-\udfff]|\ud83e[\udd00-\uddff]|[\u2600-\u27ff]|\ufe0f|\u20e3)+\s*/g, "");
                               // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
                               const tokens: React.ReactNode[] = [];
                               // Combined regex: markdown links OR bare URLs (not already inside a markdown link)
@@ -3408,8 +3413,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 return parts;
                               };
                               combinedRe.lastIndex = 0;
-                              while ((match = combinedRe.exec(msg.body)) !== null) {
-                                if (match.index > lastIdx) tokens.push(...renderBold(msg.body.slice(lastIdx, match.index), `pre-${match.index}`));
+                              while ((match = combinedRe.exec(displayBody)) !== null) {
+                                if (match.index > lastIdx) tokens.push(...renderBold(displayBody.slice(lastIdx, match.index), `pre-${match.index}`));
                                 if (match[1] !== undefined) {
                                   // Markdown [text](url)
                                   tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">{match[1]}</a>);
@@ -3420,7 +3425,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 }
                                 lastIdx = match.index + match[0].length;
                               }
-                              if (lastIdx < msg.body.length) tokens.push(...renderBold(msg.body.slice(lastIdx), `tail`));
+                              if (lastIdx < displayBody.length) tokens.push(...renderBold(displayBody.slice(lastIdx), `tail`));
                               return tokens;
                             })()}
                           </p>
