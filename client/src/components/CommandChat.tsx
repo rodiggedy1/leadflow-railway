@@ -1224,7 +1224,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Celebration polling kept at 3s because it drives the glitter animation
   // and is a lightweight single-row query. SSE also invalidates it via onNewMessage.
   const { data: latestCelebration } = trpc.opsChat.getLatestCelebration.useQuery(undefined, {
-    refetchInterval: 3000,
+    refetchInterval: 10000,
     refetchIntervalInBackground: true,
   });
   useEffect(() => {
@@ -3473,7 +3473,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <div
                           className={cn(
                             "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
-                            isMine ? "mr-1.5" : "ml-1.5"
+                            isMine ? "order-first mr-1.5" : "ml-1.5"
                           )}
                         >
                           {!isAlert && (
