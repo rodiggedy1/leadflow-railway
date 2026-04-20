@@ -537,165 +537,175 @@ function HotLeadCard({
 
   const [bandBg, borderColor] = urgencyBand.split(" ");
 
+  // Derive pill badge label and colors for the new design
+  const pillLabel = isBooked
+    ? `Booked${sessionStatus?.bookedByAgentName ? ` · ${sessionStatus.bookedByAgentName}` : ""}`
+    : isLost
+    ? `Lost${sessionStatus?.lostReason ? ` · ${sessionStatus.lostReason.replace(/_/g, " ")}` : ""}`
+    : isCold    ? "Cold · No reply"
+    : isVoicemail ? "Voicemail"
+    : isFollowUp  ? "Follow-up set"
+    : isClaimed   ? `Claimed · ${claimedBy}`
+    : "Needs claim";
+
+  const pillColors = isBooked
+    ? "bg-blue-50 text-blue-700 border border-blue-200"
+    : isLost
+    ? "bg-slate-100 text-slate-500 border border-slate-200"
+    : isCold
+    ? "bg-sky-50 text-sky-700 border border-sky-200"
+    : isVoicemail
+    ? "bg-cyan-50 text-cyan-700 border border-cyan-200"
+    : isFollowUp
+    ? "bg-purple-50 text-purple-700 border border-purple-200"
+    : isClaimed
+    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+    : "bg-red-50 text-red-600 border border-red-200";
+
+  const cardBg = isBooked
+    ? "bg-blue-50/60 border-blue-200"
+    : isLost || isCold
+    ? "bg-slate-50 border-slate-200"
+    : isClaimed
+    ? "bg-emerald-50/40 border-emerald-200"
+    : isResolved
+    ? "bg-slate-50 border-slate-200"
+    : "bg-[#f0fdf4] border-emerald-200";
+
+  const waitLabel = mins < 1
+    ? `Waiting ${secs}s`
+    : mins < 60
+    ? `Waiting ${mins}m`
+    : `Waiting ${Math.floor(mins / 60)}h ${mins % 60}m`;
+
   return (
     <div
       onAnimationEnd={() => setShaking(false)}
       className={cn(
-        "relative rounded-xl border overflow-hidden transition-all",
+        "relative rounded-2xl border overflow-hidden transition-all",
         !isClaimed && shaking && "animate-lead-shake",
-        isClaimed ? "border-emerald-200 bg-white shadow-sm" : cn("bg-white shadow-md", borderColor),
+        cardBg,
       )}
     >
-      {/* Pulsing glow ring for unclaimed — color shifts with urgency */}
+      {/* Pulsing glow ring for unclaimed */}
       {!isClaimed && !isResolved && (
-        <span className={cn("absolute inset-0 rounded-xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
+        <span className={cn("absolute inset-0 rounded-2xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
       )}
 
-      {/* Status band */}
-      <div className={cn("flex items-center gap-1.5 px-3 py-1.5", bandBg)}>
-        {isBooked ? (
-          <>
-            <span className="text-white text-xs shrink-0">$</span>
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
-              Booked{sessionStatus?.bookedByAgentName ? ` · ${sessionStatus.bookedByAgentName}` : ""}
-            </span>
-            {sessionStatus?.bookedAmount && (
-              <span className="ml-auto text-[10px] text-blue-100 shrink-0 font-bold">
-                ${sessionStatus.bookedAmount}
-              </span>
-            )}
-          </>
-        ) : isLost ? (
-          <>
-            <span className="text-white text-xs shrink-0">😞</span>
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
-              Lost{sessionStatus?.lostReason ? ` · ${sessionStatus.lostReason.replace(/_/g, " ")}` : ""}
-            </span>
-          </>
-        ) : isCold ? (
-          <>
-            <span className="text-white text-xs shrink-0">❄️</span>
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">Cold · No reply</span>
-          </>
-        ) : isVoicemail ? (
-          <>
-            <span className="text-white text-xs shrink-0">📞</span>
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">Voicemail · Call back</span>
-          </>
-        ) : isFollowUp ? (
-          <>
-            <span className="text-white text-xs shrink-0">🔔</span>
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">Follow-up Set</span>
-          </>
-        ) : isClaimed ? (
-          <>
-            <UserCheck className="h-3 w-3 text-white shrink-0" />
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate">
-              Claimed · {claimedBy}
-            </span>
-            {claimedAt && (
-              <span className="ml-auto text-[10px] text-emerald-100 shrink-0">
-                {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
-              </span>
-            )}
-          </>
-        ) : (
-          <>
-            <Zap className="h-3 w-3 text-white shrink-0" />
-            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Unclaimed</span>
-            <span className={cn("ml-auto font-mono font-bold tabular-nums text-[10px]", timerColor)}>
-              {timerLabel}
-            </span>
-          </>
-        )}
-      </div>
-
-      {/* Thumbtack Opportunity label row */}
+      {/* Thumbtack label */}
       {isThumbSms && (
-        <div className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 border-b border-sky-100">
+        <div className="flex items-center gap-1.5 px-3 pt-2.5">
           <span className="text-sky-600 text-[10px]">📌</span>
           <span className="text-[10px] font-semibold text-sky-700 uppercase tracking-widest">New Thumbtack Opportunity</span>
         </div>
       )}
 
-      {/* Lead info — clickable to open SMS conversation */}
-      <div className="px-3 py-2.5">
-        <div
-          className={cn("cursor-default", sessionId && "cursor-pointer hover:bg-slate-50 -mx-3 px-3 -mt-2.5 pt-2.5 rounded-b-none transition-colors")}
-          onClick={() => { if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); }}
-        >
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-bold text-slate-900 leading-tight truncate">{leadName}</p>
-          {price && <p className="text-sm font-bold text-emerald-700 shrink-0">${price}</p>}
+      {/* Card body — clickable to open SMS */}
+      <div
+        className={cn("px-3.5 pt-3 pb-2", sessionId && "cursor-pointer")}
+        onClick={() => { if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); }}
+      >
+        {/* Top row: pill badge + price */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 shrink-0", pillColors)}>
+            {pillLabel}
+          </span>
+          {price && (
+            <span className="text-xl font-bold text-emerald-700 shrink-0 leading-none">${price}</span>
+          )}
         </div>
-        {leadPhone   && <p className="text-xs text-slate-400 mt-0.5">{leadPhone}</p>}
-        {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
-        {sourceDisplay && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{sourceDisplay}</p>}
-        {isThumbSms && size && <p className="text-[10px] text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
+
+        {/* Name */}
+        <p className="text-base font-bold text-slate-900 leading-tight">{leadName}</p>
+
+        {/* Phone */}
+        {leadPhone && <p className="text-sm text-slate-400 mt-0.5">{leadPhone}</p>}
+
+        {/* Service details */}
+        {serviceType && <p className="text-sm text-slate-500 mt-1">{serviceType}</p>}
+        {isThumbSms && size && <p className="text-xs text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
+
+        {/* Bottom row: source + wait time */}
+        <div className="flex items-center justify-between mt-2.5">
+          <span className="text-sm text-slate-400">{sourceDisplay ?? ""}</span>
+          {!isResolved && !isClaimed && (
+            <span className="text-sm font-semibold text-slate-600">{waitLabel}</span>
+          )}
+          {isClaimed && claimedAt && (
+            <span className="text-xs text-emerald-600 font-semibold">
+              {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+            </span>
+          )}
+          {isBooked && sessionStatus?.bookedAmount && (
+            <span className="text-xs text-blue-600 font-bold">${sessionStatus.bookedAmount} booked</span>
+          )}
         </div>
+      </div>
+
+      {/* Action row */}
+      <div className="flex items-center gap-2 px-3.5 pb-3">
         {thumbtackUrl && (
           <a
             href={thumbtackUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[10px] text-sky-600 hover:text-sky-800 font-semibold mt-1"
+            className="inline-flex items-center gap-1 text-[10px] text-sky-600 hover:text-sky-800 font-semibold"
             onClick={e => e.stopPropagation()}
           >
-            <ExternalLink className="h-3 w-3" /> View on Thumbtack
+            <ExternalLink className="h-3 w-3" /> Thumbtack
           </a>
         )}
-
-        {/* Action row */}
-        <div className="flex items-center gap-2 mt-2.5">
-          {leadPhone && (
-            <a
-              href={`openphone://call?to=${leadPhone}`}
-              title={`Call ${leadName}`}
-              className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors shrink-0"
-            >
-              <Phone className="h-3.5 w-3.5" />
-            </a>
-          )}
-          {sessionId && (
-            <a
-              href={`/admin/leads?session=${sessionId}&tab=sms`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Open SMS conversation"
-              className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors shrink-0"
-            >
-              <MessageCircle className="h-3.5 w-3.5" />
-            </a>
-          )}
-          <button
-            title="Generate first outreach message for this lead"
-            onClick={() => {
-              const parts: string[] = [];
-              if (leadName)    parts.push(`Name: ${leadName}`);
-              if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
-              if (serviceType) parts.push(`Service: ${serviceType}`);
-              if (price)       parts.push(`Estimated price: $${price}`);
-              onOpenFirstMsg?.(parts.join("\n"));
-            }}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors shrink-0"
+        {leadPhone && (
+          <a
+            href={`openphone://call?to=${leadPhone}`}
+            title={`Call ${leadName}`}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-white/70 hover:bg-white text-slate-600 transition-colors shrink-0"
+            onClick={e => e.stopPropagation()}
           >
-            <Wand2 className="h-3.5 w-3.5" />
+            <Phone className="h-3.5 w-3.5" />
+          </a>
+        )}
+        {sessionId && (
+          <a
+            href={`/admin/leads?session=${sessionId}&tab=sms`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open SMS conversation"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-white/70 hover:bg-white text-emerald-700 transition-colors shrink-0"
+            onClick={e => e.stopPropagation()}
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+          </a>
+        )}
+        <button
+          title="Generate first outreach message"
+          onClick={e => {
+            e.stopPropagation();
+            const parts: string[] = [];
+            if (leadName)    parts.push(`Name: ${leadName}`);
+            if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
+            if (serviceType) parts.push(`Service: ${serviceType}`);
+            if (price)       parts.push(`Estimated price: $${price}`);
+            onOpenFirstMsg?.(parts.join("\n"));
+          }}
+          className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-white/70 hover:bg-white text-violet-700 transition-colors shrink-0"
+        >
+          <Wand2 className="h-3.5 w-3.5" />
+        </button>
+        <div className="flex-1" />
+        {isClaimed ? (
+          <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
+        ) : (
+          <button
+            onClick={e => { e.stopPropagation(); claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined }); }}
+            disabled={claimLeadMutation.isPending}
+            className="h-7 px-4 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+          >
+            {claimLeadMutation.isPending
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <>⚡ Claim</>}
           </button>
-          <div className="flex-1" />
-          {isClaimed ? (
-            <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
-          ) : (
-            <button
-              onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
-              disabled={claimLeadMutation.isPending}
-              className="h-7 px-3 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
-            >
-              {claimLeadMutation.isPending
-                ? <Loader2 className="h-3 w-3 animate-spin" />
-                : <>⚡ Claim</>}
-            </button>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -2752,22 +2762,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         "w-full rounded-2xl px-5 py-4",
                         isThumbSms ? "bg-sky-50" : "bg-[#f0fdf4]"
                       )}>
-                        {/* Top row: label + time */}
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-slate-500">{leadName}</span>
-                          <span className="text-xs text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
+                        {/* Top row: name left, time right */}
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          {/* Left: name + phone */}
+                          <div className="min-w-0">
+                            <span className="text-xs text-slate-500 block mb-0.5">{leadName}</span>
+                            {leadPhone && <span className="text-xs text-slate-400">{leadPhone}</span>}
+                          </div>
+                          {/* Right: price + time */}
+                          <div className="text-right shrink-0">
+                            {price && <p className="text-base font-bold text-emerald-700 leading-none">${price}</p>}
+                            <span className="text-xs text-slate-400 mt-0.5 block">{fmtMsgTime(msg.createdAt)}</span>
+                          </div>
                         </div>
-                        {/* Large body */}
+                        {/* Large body — service details */}
                         <p className="text-lg font-bold text-slate-900 leading-snug mb-1">
                           {bodyParts.join(" · ")}
                         </p>
-                        {/* Subtext */}
+                        {/* Subtext: claim status */}
                         <p className="text-sm text-slate-500 mb-3">{subParts.join(" · ")}</p>
-                        {/* Elapsed timer */}
-                        <div className="flex items-center gap-1 text-xs text-slate-400 mb-3">
-                          <Clock className="h-3 w-3" />
-                          <ElapsedTimer arrivedAt={arrivedAt} />
-                        </div>
                         {/* Action icons row */}
                         <div className="flex items-center gap-3">
                           {leadPhone && (
