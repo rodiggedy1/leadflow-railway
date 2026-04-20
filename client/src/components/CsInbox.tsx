@@ -1334,7 +1334,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
         <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_260px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] border-0 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
+          <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
 
@@ -1722,7 +1722,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] border-0 shadow-[0_20px_60px_rgba(15,23,42,0.08)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white/90 backdrop-blur">
+          <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
               {/* Operations Lane header */}
@@ -2003,7 +2003,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-0 shadow-[0_20px_60px_rgba(15,23,42,0.08)] flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
+          <Card className="rounded-[28px] border-0 shadow-none flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header: single-row, clean typography hierarchy ── */}
               <div className="border-b border-slate-100 px-5 py-3 md:px-6 bg-white">
@@ -2942,7 +2942,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="overflow-y-auto h-full bg-white rounded-[16px] border-0 shadow-sm [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+          <div className="overflow-y-auto h-full bg-white rounded-[28px] border-0 shadow-none [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
