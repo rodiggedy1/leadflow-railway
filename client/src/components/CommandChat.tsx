@@ -3342,12 +3342,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       )}
                     >
                       {/* Bubble + hover actions */}
-                      <div className="relative flex items-start w-full">
-                        <div className={cn(
-                          "w-full rounded-2xl px-5 py-4",
-                          isAlert ? "bg-[#0f172a] text-white" :
-                          isMine ? "bg-[#0f172a] text-white" : "bg-[#f1f5f9] text-slate-900"
-                        )}>
+                      <div className={"relative flex items-start w-full" + (isMine && !isAlert ? " justify-end" : "")}>
+                        <div className={"rounded-2xl px-5 py-4 " + (isAlert ? "w-full bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900")}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
                             <span className={cn(
@@ -3493,7 +3489,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <div
                           className={cn(
                             "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
-                            isMine ? "mr-1.5" : "ml-1.5"
+                            isMine ? "order-first mr-1.5" : "ml-1.5"
                           )}
                         >
                           {!isAlert && (
