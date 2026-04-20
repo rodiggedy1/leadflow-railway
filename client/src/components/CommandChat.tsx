@@ -3322,11 +3322,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       )}
                     >
                       {/* Bubble + hover actions */}
-                      <div className="relative flex items-start w-full">
+                      <div className={cn("relative flex items-start w-full", isMine && !isAlert ? "justify-end" : "")}>
                         <div className={cn(
-                          "w-full rounded-2xl px-5 py-4",
-                          isAlert ? "bg-[#0f172a] text-white" :
-                          isMine ? "bg-[#0f172a] text-white" : "bg-[#f1f5f9] text-slate-900"
+                          "rounded-2xl px-5 py-4",
+                          isAlert ? "w-full bg-[#0f172a] text-white" :
+                          isMine ? "max-w-[75%] bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900"
                         )}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
