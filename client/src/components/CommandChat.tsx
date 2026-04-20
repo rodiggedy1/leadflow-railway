@@ -1224,7 +1224,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Celebration polling kept at 3s because it drives the glitter animation
   // and is a lightweight single-row query. SSE also invalidates it via onNewMessage.
   const { data: latestCelebration } = trpc.opsChat.getLatestCelebration.useQuery(undefined, {
-    refetchInterval: 10000,
+    refetchInterval: 3000,
     refetchIntervalInBackground: true,
   });
   useEffect(() => {
@@ -1664,7 +1664,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       toast.error("Please wait for photos to finish uploading");
       return;
     }
-    doSend();
+    // If already checked and warning acknowledged (or no text), send directly
+    // Also skip quality check for quote-replies — the quoted text belongs to the original sender, not this agent
+    if (qualityChecked || !hasText || replyTo) { doSend(); return; }
+    // Run quality check first
+    checkQualityMutation.mutate(
+      { message: composer.trim() },
+      {
+        onSuccess: (result) => {
+          if (result.ok) {
+            doSend();
+          } else {
+            setQualityWarning({ feedback: result.feedback, suggestion: result.suggestion, issues: result.issues });
+            setQualityChecked(true);
+          }
+        },
+        onError: () => {
+          // AI check failed — send anyway
+          doSend();
+        },
+      }
+    );
   }
 
   // ── Panel resize & collapse ──────────────────────────────────────────────
@@ -3322,11 +3342,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       )}
                     >
                       {/* Bubble + hover actions */}
-                      <div className={cn("relative flex items-start w-full", isMine && !isAlert ? "justify-end" : "")}>
+                      <div className="relative flex items-start w-full">
                         <div className={cn(
-                          "rounded-2xl px-5 py-4",
-                          isAlert ? "w-full bg-[#0f172a] text-white" :
-                          isMine ? "max-w-[75%] ml-auto bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900"
+                          "w-full rounded-2xl px-5 py-4",
+                          isAlert ? "bg-[#0f172a] text-white" :
+                          isMine ? "bg-[#0f172a] text-white" : "bg-[#f1f5f9] text-slate-900"
                         )}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
@@ -3365,7 +3385,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               </div>
                             </button>
                           )}
-                          <p className={cn("whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-sm leading-relaxed")}>
+                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
                             {(() => {
                               // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
                               const tokens: React.ReactNode[] = [];
@@ -3473,7 +3493,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <div
                           className={cn(
                             "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
-                            isMine ? "order-first mr-1.5" : "ml-1.5"
+                            isMine ? "mr-1.5" : "ml-1.5"
                           )}
                         >
                           {!isAlert && (
@@ -3791,7 +3811,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               }}
               onBlur={onCmdBlur}
             />
-
+            {/* Quality check warning banner */}
+            {checkQualityMutation.isPending && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                Checking message quality…
+              </div>
+            )}
+            {qualityWarning && !checkQualityMutation.isPending && (
+              <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-800">
+                    <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                    {qualityWarning.issues.includes("PRONOUN") && <span className="bg-amber-200 text-amber-900 rounded px-1">Use name</span>}
+                    {qualityWarning.issues.includes("ASSUMPTION") && <span className="bg-orange-200 text-orange-900 rounded px-1">Verify first</span>}
+                    {qualityWarning.issues.includes("UNCLEAR") && <span className="bg-red-100 text-red-800 rounded px-1">Unclear</span>}
+                  </div>
+                  <button onClick={() => { setQualityWarning(null); setQualityChecked(false); }} className="text-amber-400 hover:text-amber-600 shrink-0"><X className="h-3.5 w-3.5" /></button>
+                </div>
+                <p className="text-amber-700">{qualityWarning.feedback}</p>
+                {qualityWarning.suggestion && (
+                  <div className="flex items-start gap-2">
+                    <p className="text-slate-700 italic flex-1">"{qualityWarning.suggestion}"</p>
+                    <button
+                      onClick={() => { setComposer(qualityWarning.suggestion); setQualityWarning(null); setQualityChecked(false); }}
+                      className="shrink-0 text-[10px] font-semibold text-amber-700 border border-amber-300 rounded px-1.5 py-0.5 hover:bg-amber-100"
+                    >Use</button>
+                  </div>
+                )}
+                <p className="text-amber-500 text-[10px]">Fix above or <button onClick={doSend} className="underline font-semibold">send anyway</button></p>
+              </div>
+            )}
             <div className="flex items-center justify-between mt-2">
               <div className="flex items-center gap-1 relative">
                 {/* Photo */}
