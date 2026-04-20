@@ -33,6 +33,7 @@ import { opsChatRouter } from "./opsChatRouter";
 import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { invokeLLM } from "./_core/llm";
+import { createHash } from "crypto";
 import { sendPushToAgent, sendPushToAll } from "./webPush";
 import { pushSubscriptions } from "../drizzle/schema";
 import { hiringRouter } from "./hiringRouter";
@@ -296,6 +297,58 @@ export const appRouter = router({
             jobFrequency: info.frequency,
           };
         });
+
+        // ── Batch AI summary generation ────────────────────────────────────────
+        // Compute a hash for each lead based on stage + lastActivityText.
+        // Only call the LLM for leads whose hash has changed (stale or new).
+        const summaryInputs = enriched.map(s => ({
+          id: s.id,
+          hash: createHash('sha256').update(`${s.stage ?? ''}|${s.lastActivityText ?? ''}`).digest('hex'),
+          stage: s.stage ?? '',
+          lastActivityText: s.lastActivityText ?? '',
+          cachedHash: s.aiSummaryHash ?? null,
+          cachedSummary: s.aiSummary ?? null,
+        }));
+
+        const stale = summaryInputs.filter(x => x.hash !== x.cachedHash);
+
+        if (stale.length > 0) {
+          try {
+            const prompt = stale.map((x, i) =>
+              `${i + 1}. Stage: ${x.stage}. Last message: ${x.lastActivityText || 'none'}`
+            ).join('\n');
+            const llmResult = await invokeLLM({
+              messages: [
+                { role: 'system', content: 'You are a CRM assistant. For each lead below, write a 4-5 word status phrase that summarizes what is happening. Be specific and actionable. Examples: "Quote sent, awaiting reply", "New lead, respond fast", "Called twice, no answer", "Interested, needs follow-up". Return a JSON array of strings, one per lead, in the same order. No punctuation at the end.' },
+                { role: 'user', content: prompt },
+              ],
+              response_format: { type: 'json_schema', json_schema: { name: 'summaries', strict: true, schema: { type: 'object', properties: { summaries: { type: 'array', items: { type: 'string' } } }, required: ['summaries'], additionalProperties: false } } },
+            });
+            const parsed = JSON.parse(llmResult.choices[0].message.content as string) as { summaries: string[] };
+            const summaries = parsed.summaries;
+
+            // Write back to DB in parallel
+            const db2 = await getDb();
+            if (db2) {
+              await Promise.all(stale.map((x, i) => {
+                const summary = summaries[i] ?? x.cachedSummary ?? '';
+                return db2.update(conversationSessions)
+                  .set({ aiSummary: summary, aiSummaryHash: x.hash })
+                  .where(eq(conversationSessions.id, x.id));
+              }));
+            }
+
+            // Merge summaries into enriched
+            const summaryMap = new Map(stale.map((x, i) => [x.id, summaries[i] ?? x.cachedSummary ?? '']));
+            const withSummaries = enriched.map(s => ({
+              ...s,
+              aiSummary: summaryMap.has(s.id) ? summaryMap.get(s.id) : s.aiSummary,
+            }));
+            return withSummaries;
+          } catch {
+            // LLM failed — return enriched without summaries, they'll retry next load
+          }
+        }
 
         return enriched;
       }),

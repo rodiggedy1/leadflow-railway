@@ -333,6 +333,16 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   csStatusTieredAt: bigint("csStatusTieredAt", { mode: "number" }),
   /** Message count at time csStatusTier was computed — used for staleness check */
   csStatusMsgLen: int("csStatusMsgLen"),
+  /**
+   * AI-generated 4-5 word status phrase shown on pipeline cards.
+   * Cached to avoid re-calling the LLM on every load.
+   */
+  aiSummary: varchar("aiSummary", { length: 100 }),
+  /**
+   * SHA-256 hash of (stage + lastActivityText) at the time aiSummary was generated.
+   * Used to detect staleness — if the hash changes, the summary is regenerated.
+   */
+  aiSummaryHash: varchar("aiSummaryHash", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

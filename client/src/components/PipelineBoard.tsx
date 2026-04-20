@@ -167,7 +167,7 @@ function sessionToLead(s: any): any {
     source: s.leadSource ?? "Form",
     beds: s.bedrooms ?? 0,
     baths: s.bathrooms ?? 0,
-    lastContact: s.lastActivityText ?? timeAgoShort(lastActivityAt),
+    lastContact: s.aiSummary ?? (s.lastActivityText ? s.lastActivityText.split(' ').slice(0, 5).join(' ') : timeAgoShort(lastActivityAt)),
     age: timeAgoShort(s.createdAt),
     nextAction: deriveNextAction(s.stage),
     phone: s.leadPhone ?? "",
