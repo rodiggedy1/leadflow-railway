@@ -1591,7 +1591,17 @@ const MessageList = memo(function MessageList({
                       )}
                     >
                       {/* Bubble + hover actions */}
-                      <div className={"relative flex items-start w-full" + (isMine && !isAlert ? " justify-end" : "")}>
+                      <div className={"relative flex items-end gap-2 w-full" + (isMine && !isAlert ? " justify-end" : "")}>
+                        {/* Avatar — left for others, right for isMine */}
+                        {!isAlert && !isMine && (
+                          <div className="shrink-0 self-end mb-0.5">
+                            {authorPhoto ? (
+                              <img src={authorPhoto} alt={msg.from} className="w-7 h-7 rounded-full object-cover border border-white shadow-sm" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border border-white shadow-sm" style={{ background: authorColor }}>{authorInitial}</div>
+                            )}
+                          </div>
+                        )}
                         <div className={"rounded-2xl px-5 py-4 " + (isAlert ? "w-full bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900")}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
@@ -3121,16 +3131,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           return (
                             <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 6 : -4, zIndex: visible.length - idx }}>
                               {ag.photoUrl ? (
-                                <img src={ag.photoUrl} alt={ag.name} className={cn("w-5 h-5 rounded-full object-cover border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} />
+                                <img src={ag.photoUrl} alt={ag.name} className={cn("w-7 h-7 rounded-full object-cover border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} />
                               ) : (
-                                <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px] font-bold border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+                                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
                               )}
-                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
+                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
                             </div>
                           );
                         })}
                         {overflow > 0 && (
-                          <div className="w-5 h-5 rounded-full bg-slate-100 border border-white flex items-center justify-center text-[8px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -4 }}>+{overflow}</div>
+                          <div className="w-7 h-7 rounded-full bg-slate-100 border border-white flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -4 }}>+{overflow}</div>
                         )}
                       </div>
                     );
