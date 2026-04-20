@@ -618,8 +618,12 @@ function HotLeadCard({
         </div>
       )}
 
-      {/* Lead info */}
+      {/* Lead info — clickable to open SMS conversation */}
       <div className="px-3 py-2.5">
+        <div
+          className={cn("cursor-default", sessionId && "cursor-pointer hover:bg-slate-50 -mx-3 px-3 -mt-2.5 pt-2.5 rounded-b-none transition-colors")}
+          onClick={() => { if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); }}
+        >
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-bold text-slate-900 leading-tight truncate">{leadName}</p>
           {price && <p className="text-sm font-bold text-emerald-700 shrink-0">${price}</p>}
@@ -628,6 +632,7 @@ function HotLeadCard({
         {serviceType && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{serviceType}</p>}
         {sourceDisplay && <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">{sourceDisplay}</p>}
         {isThumbSms && size && <p className="text-[10px] text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
+        </div>
         {thumbtackUrl && (
           <a
             href={thumbtackUrl}
