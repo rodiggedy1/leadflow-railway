@@ -3326,7 +3326,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <div className={cn(
                           "rounded-2xl px-5 py-4",
                           isAlert ? "w-full bg-[#0f172a] text-white" :
-                          isMine ? "max-w-[75%] bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900"
+                          isMine ? "max-w-[75%] ml-auto bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900"
                         )}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
