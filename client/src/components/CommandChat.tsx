@@ -3365,7 +3365,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               </div>
                             </button>
                           )}
-                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
+                          <p className={cn("whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-sm leading-relaxed")}>
                             {(() => {
                               // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
                               const tokens: React.ReactNode[] = [];
