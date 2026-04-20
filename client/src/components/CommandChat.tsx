@@ -2750,8 +2750,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const claimedAt = (meta.claimedAt as number | null) ?? null;
 
                   const isThumbSms = utmSource === "thumbtack-sms";
-                  // Build body line: size · serviceType · source
-                  const bodyParts = [size, serviceType, utmSource].filter(Boolean);
+                  // Build written-out headline
+                  const sourceLabel = utmSource
+                    ? utmSource.toLowerCase() === "widget" || utmSource.toLowerCase() === "widget form"
+                      ? "Widget Form"
+                      : utmSource.toLowerCase() === "google"
+                        ? "Google"
+                        : utmSource.toLowerCase() === "yelp"
+                          ? "Yelp"
+                          : utmSource
+                    : null;
+                  const headlineParts: string[] = [];
+                  if (size) headlineParts.push(size);
+                  if (serviceType) headlineParts.push(serviceType);
+                  const headline = sourceLabel
+                    ? `New Lead Alert: ${sourceLabel}`
+                    : headlineParts.length > 0
+                      ? headlineParts.join(" / ")
+                      : "New Lead";
+                  const detailLine = headlineParts.length > 0 ? headlineParts.join(" / ") : "";
                   const subParts = [
                     price ? `Quoted at $${price}` : null,
                     claimedBy ? `Claimed by ${claimedBy}` : "no one has claimed yet",
@@ -2762,24 +2779,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         "w-full rounded-2xl px-5 py-4",
                         isThumbSms ? "bg-sky-50" : "bg-[#f0fdf4]"
                       )}>
-                        {/* Top row: name left, time right */}
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          {/* Left: name + phone */}
-                          <div className="min-w-0">
-                            <span className="text-xs text-slate-500 block mb-0.5">{leadName}</span>
-                            {leadPhone && <span className="text-xs text-slate-400">{leadPhone}</span>}
-                          </div>
-                          {/* Right: price + time */}
-                          <div className="text-right shrink-0">
-                            {price && <p className="text-base font-bold text-emerald-700 leading-none">${price}</p>}
-                            <span className="text-xs text-slate-400 mt-0.5 block">{fmtMsgTime(msg.createdAt)}</span>
-                          </div>
+                        {/* Top row: name + time inline */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs text-slate-500">{leadName}</span>
+                          {leadPhone && <span className="text-xs text-slate-400">· {leadPhone}</span>}
+                          <div className="flex-1" />
+                          <span className="text-xs text-slate-400 shrink-0">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        {/* Large body — service details */}
-                        <p className="text-lg font-bold text-slate-900 leading-snug mb-1">
-                          {bodyParts.join(" · ")}
+                        {/* Headline: written-out, bold, full width */}
+                        <p className="text-lg font-bold text-slate-900 leading-snug mb-1 w-full">
+                          {headline}
                         </p>
-                        {/* Subtext: claim status */}
+                        {/* Detail line: size / service if source-based headline */}
+                        {sourceLabel && detailLine && (
+                          <p className="text-sm text-slate-600 mb-1">{detailLine}</p>
+                        )}
+                        {/* Subtext: price + claim status */}
                         <p className="text-sm text-slate-500 mb-3">{subParts.join(" · ")}</p>
                         {/* Action icons row */}
                         <div className="flex items-center gap-3">
@@ -3336,11 +3351,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
                             <span className={cn(
-                              "text-xs font-semibold",
-                              isAlert || isMine ? "text-slate-400" : ""
+                              "text-xs",
+                              isAlert ? "text-slate-400 font-normal" : isMine ? "text-slate-400 font-semibold" : "font-semibold"
                             )} style={{ color: isAlert || isMine ? undefined : authorColor }}>
-                              {isMine ? "You" : msg.from}
-                              {!isMine && (
+                              {isAlert
+                                ? `${msg.from}${msg.role && msg.role !== "alert" ? " · " + (msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch") : ""}`
+                                : isMine ? "You" : msg.from
+                              }
+                              {!isAlert && !isMine && (
                                 <span className="font-normal text-slate-400 ml-1">
                                   · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
                                 </span>
@@ -3367,7 +3385,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               </div>
                             </button>
                           )}
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
                             {(() => {
                               // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
                               const tokens: React.ReactNode[] = [];
@@ -3425,32 +3443,34 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               ))}
                             </div>
                           )}
-                          <div className="flex items-center justify-end gap-1 mt-1.5">
-                            <p className={cn("text-[10px]", isAlert ? "text-slate-400" : "text-slate-400")}>
-                              {fmtMsgTime(msg.createdAt)}
-                            </p>
-                            {/* WhatsApp-style read receipt — only on my own messages */}
-                            {isMine && !isAlert && (() => {
-                              const seenBy = commandSeenByMap[msg.id] ?? [];
-                              return (
-                                <span
-                                  title={seenBy.length > 0 ? `Seen by ${seenBy.join(", ")}` : "Sent"}
-                                  className="inline-flex items-center shrink-0"
-                                >
-                                  {seenBy.length > 0 ? (
-                                    <svg width="18" height="11" viewBox="0 0 18 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Seen">
-                                      <path d="M1 5.5L4.5 9L10 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M5 5.5L8.5 9L14 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  ) : (
-                                    <svg width="12" height="11" viewBox="0 0 12 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sent">
-                                      <path d="M1 5.5L4.5 9L11 2" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  )}
-                                </span>
-                              );
-                            })()}
-                          </div>
+                          {!isAlert && (
+                            <div className="flex items-center justify-end gap-1 mt-1.5">
+                              <p className="text-[10px] text-slate-400">
+                                {fmtMsgTime(msg.createdAt)}
+                              </p>
+                              {/* WhatsApp-style read receipt — only on my own messages */}
+                              {isMine && (() => {
+                                const seenBy = commandSeenByMap[msg.id] ?? [];
+                                return (
+                                  <span
+                                    title={seenBy.length > 0 ? `Seen by ${seenBy.join(", ")}` : "Sent"}
+                                    className="inline-flex items-center shrink-0"
+                                  >
+                                    {seenBy.length > 0 ? (
+                                      <svg width="18" height="11" viewBox="0 0 18 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Seen">
+                                        <path d="M1 5.5L4.5 9L10 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M5 5.5L8.5 9L14 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    ) : (
+                                      <svg width="12" height="11" viewBox="0 0 12 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sent">
+                                        <path d="M1 5.5L4.5 9L11 2" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    )}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
                           {/* Reaction pills */}
                           {Object.keys(reactionGroups).length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
