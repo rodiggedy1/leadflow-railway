@@ -2797,8 +2797,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         {sourceLabel && detailLine && (
                           <p className="text-sm text-slate-600 mb-1">{detailLine}</p>
                         )}
-                        {/* Subtext: price + claim status */}
-                        <p className="text-sm text-slate-500 mb-3">{subParts.join(" · ")}</p>
+                        {/* Subtext: price + claim status + live wait timer */}
+                        <p className="text-sm text-slate-500 mb-3">
+                          {subParts.join(" · ")}
+                          {!claimedBy && (
+                            <> · waiting <ElapsedTimer arrivedAt={arrivedAt} /></>
+                          )}
+                        </p>
                         {/* Action icons row */}
                         <div className="flex items-center gap-3">
                           {leadPhone && (
