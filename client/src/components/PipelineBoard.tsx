@@ -339,20 +339,12 @@ function LeadCardContent({ lead, isSelected, onSelect, onMove, dragHandleProps }
 
         <div className="mt-3 flex items-center justify-between gap-2">
           <div className="text-xs text-slate-500">{lead.lastContact}</div>
-          <div className="flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <button
-              onClick={(e) => { e.stopPropagation(); onMove(lead, "follow"); }}
-              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Follow
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onMove(lead, "booked"); }}
-              className="rounded-xl bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
-            >
-              Book
-            </button>
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onMove(lead, "booked"); }}
+            className="shrink-0 rounded-xl bg-slate-900 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-slate-800"
+          >
+            Book
+          </button>
         </div>
       </div>
     </div>
