@@ -1785,9 +1785,7 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
   };
   await fetchWithRetry(1);
 
-  // Filter to outbound messages only
-  const outbound = messages.filter((m: any) => m.direction === "outgoing");
-  if (outbound.length === 0) return;
+  if (messages.length === 0) return;
 
   // Build userId → name map from OpenPhone users API (best-effort, cached per call)
   const opUserMap: Record<string, string> = {};
@@ -1818,23 +1816,29 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
   const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
 
   let added = 0;
-  for (const m of outbound) {
+  for (const m of messages) {
     const text: string = m.text ?? m.body ?? "";
-    if (!text.trim()) continue;
+    // Allow empty text for media-only messages (photos)
     const msgId: string = m.id ?? "";
     const msgTs = m.createdAt ? new Date(m.createdAt).getTime() : 0;
-    const senderName = (m.userId && opUserMap[m.userId]) ? opUserMap[m.userId] : "OpenPhone";
+    const isInbound = m.direction === "incoming";
+    const role = isInbound ? "user" : "assistant";
+    const senderName = isInbound ? undefined : ((m.userId && opUserMap[m.userId]) ? opUserMap[m.userId] : "OpenPhone");
 
     // Skip if already synced by ID
     if (msgId && syncedIds.has(msgId)) continue;
 
-    // Skip if identical content within 15s (covers messages sent from CS chat already stored)
-    const isDup = history.some(
-      (h: any) => h.role === "assistant" && h.content === text && Math.abs((h.ts ?? 0) - msgTs) < 15_000
-    );
-    if (isDup) continue;
+    // Skip if identical non-empty content within 15s (dedup for messages already stored via webhook)
+    if (text.trim()) {
+      const isDup = history.some(
+        (h: any) => h.role === role && h.content === text && Math.abs((h.ts ?? 0) - msgTs) < 15_000
+      );
+      if (isDup) continue;
+    }
 
-    history.push({ role: "assistant", content: text, ts: msgTs, senderName, opMsgId: msgId });
+    const entry: any = { role, content: text, ts: msgTs, opMsgId: msgId };
+    if (senderName) entry.senderName = senderName;
+    history.push(entry);
     added++;
   }
 
@@ -1849,7 +1853,7 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
     .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
     .where(eq(conversationSessions.id, sessionId));
 
-  console.log(`[CS Sync] Synced ${added} outbound message(s) from OpenPhone for session ${sessionId} (${leadPhone})`);
+  console.log(`[CS Sync] Synced ${added} message(s) from OpenPhone for session ${sessionId} (${leadPhone})`);
 
   // Broadcast SSE so CS inbox updates instantly
   const { broadcastOpsUpdate: broadcastOpsUpdate2 } = await import("./sseBroadcast");
