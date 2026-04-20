@@ -1806,10 +1806,20 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <aside className="w-[84px] shrink-0 bg-slate-950 rounded-[30px] border border-white/10 flex flex-col items-center px-3 py-4 gap-3 overflow-visible transition-all shadow-2xl shadow-slate-900/20">
+        <aside className={cn(
+          "shrink-0 rounded-[30px] flex flex-col items-center py-4 gap-3 overflow-visible transition-all",
+          activeTab === "cs"
+            ? "w-[50px] bg-white border border-slate-200 px-1.5 shadow-sm"
+            : "w-[84px] bg-slate-950 border border-white/10 px-3 shadow-2xl shadow-slate-900/20"
+        )}>
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-lg hover:bg-slate-100 transition"
+            className={cn(
+              "mb-1 flex items-center justify-center rounded-2xl transition",
+              activeTab === "cs"
+                ? "h-8 w-8 bg-slate-100 text-slate-700 hover:bg-slate-200 shadow-sm"
+                : "h-12 w-12 bg-white text-slate-900 shadow-lg hover:bg-slate-100"
+            )}
             title="Expand sidebar"
           >
             <ChevronRight className="w-5 h-5" />
@@ -1827,8 +1837,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 key={f.id}
                 onClick={() => setCsFilter(f.id)}
                 className={cn(
-                  "relative w-12 h-12 rounded-2xl flex items-center justify-center text-[11px] font-bold transition",
-                  csFilter === f.id ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
+                  cn("relative flex items-center justify-center rounded-2xl font-bold transition",
+                    activeTab === "cs" ? "w-8 h-8 text-[10px]" : "w-12 h-12 text-[11px]"
+                  ),
+                  activeTab === "cs"
+                    ? (csFilter === f.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900")
+                    : (csFilter === f.id ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white")
                 )}
                 title={f.label}
               >
@@ -1878,8 +1892,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             <button
               onClick={() => setAgentStatusOpen(v => !v)}
               className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center transition border",
-                agentStatusOpen ? "border-white/30 bg-white/20 text-white" : "border-white/15 bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
+                "rounded-2xl flex items-center justify-center transition border",
+                activeTab === "cs" ? "w-8 h-8" : "w-12 h-12",
+                activeTab === "cs"
+                  ? (agentStatusOpen ? "border-slate-300 bg-slate-200 text-slate-900" : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900")
+                  : (agentStatusOpen ? "border-white/30 bg-white/20 text-white" : "border-white/15 bg-white/8 text-white/80 hover:bg-white/14 hover:text-white")
               )}
               title="Agent status"
             >
@@ -1992,7 +2009,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
           {/* ── Page navigation shortcuts ── */}
           <div className="mt-auto flex flex-col items-center gap-2 pb-1">
-            <div className="w-7 h-px bg-slate-200 mb-1" />
+            <div className={cn("h-px bg-slate-200 mb-1", activeTab === "cs" ? "w-5" : "w-7")} />
             <a
               href="/admin/leads"
               target="_blank"

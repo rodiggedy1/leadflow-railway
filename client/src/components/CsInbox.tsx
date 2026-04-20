@@ -1330,9 +1330,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col bg-[#F0F2F5] px-4 md:px-6 pt-4 md:pt-4 pb-4 md:pb-4 text-slate-900">
+    <div className="h-full overflow-hidden flex flex-col text-slate-900">
       <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
-        <div className="grid grid-cols-1 xl:grid-cols-[280px_280px_minmax(0,1fr)_260px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-[14px] flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
@@ -1356,7 +1356,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search clients, leads, bookings"
-                  className="pl-9 h-11 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm shadow-none"
+                  className="pl-9 h-10 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-300 focus-visible:ring-slate-300 text-[11px] shadow-none"
                 />
               </div>
 
@@ -1743,7 +1743,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search cleaners, dispatch, field updates"
-                  className="pl-9 h-11 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-300 text-sm shadow-none"
+                  className="pl-9 h-10 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-300 focus-visible:ring-slate-300 text-[11px] shadow-none"
                 />
               </div>
 
@@ -2942,29 +2942,63 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="overflow-y-auto h-full bg-white rounded-[28px] border-0 shadow-none [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+          <div className="h-full bg-white rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col">
+            {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
+            {selected.queue === "Teams" ? (
+              <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12 border-2 border-teal-200">
+                    <AvatarFallback className="bg-teal-100 text-teal-700 font-semibold text-lg">
+                      {selected.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-semibold text-lg text-slate-900">{selected.name}</div>
+                    <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
+                      <Phone className="h-3.5 w-3.5" />
+                      {selected.phone}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const gradientPalette = [
+                      "from-violet-500 to-fuchsia-500",
+                      "from-rose-500 to-orange-400",
+                      "from-emerald-500 to-teal-500",
+                      "from-sky-500 to-cyan-500",
+                      "from-amber-500 to-yellow-400",
+                      "from-pink-500 to-rose-400",
+                      "from-indigo-500 to-blue-500",
+                      "from-teal-500 to-green-500",
+                    ];
+                    const ini = selected.initials || "?";
+                    const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
+                    return (
+                      <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
+                        {ini}
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <div className="font-semibold text-lg text-slate-900">{clientProfile?.name ?? selected.name}</div>
+                    <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
+                      <Phone className="h-3.5 w-3.5" />
+                      {selected.phone}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
                   <CardContent className="p-0">
-                    {/* Header */}
-                    <div className="p-5 bg-teal-50 border-b border-teal-200">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-12 w-12 border-2 border-teal-200">
-                          <AvatarFallback className="bg-teal-100 text-teal-700 font-semibold text-lg">
-                            {selected.initials}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-semibold text-lg text-slate-900">{selected.name}</div>
-                          <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
-                            <Phone className="h-3.5 w-3.5" />
-                            {selected.phone}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
 
                     {/* Today's jobs */}
                     <div className="p-5 bg-white space-y-3">
@@ -3190,14 +3224,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               <>
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
                   <CardContent className="p-0">
-                    <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 text-amber-800 font-medium">
-                        <TriangleAlert className="h-4 w-4" /> Flag as needs attention
-                      </div>
-                      <Badge className="rounded-full border border-amber-200 bg-white text-amber-700 hover:bg-white">
-                        Urgent
-                      </Badge>
-                    </div>
                     <div className="p-5 space-y-0 bg-white">
                       {/* Name + phone + address */}
                       <div>
@@ -3662,7 +3688,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </Card>
               </>
             )}
-          </div>
+          </div></div>
         </div>
       </div>
     </div>
